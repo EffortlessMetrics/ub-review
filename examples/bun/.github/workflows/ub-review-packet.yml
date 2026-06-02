@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload UB review packet
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ub-review-packet-${{ github.event.pull_request.number || github.run_id }}
           path: target/ub-review
