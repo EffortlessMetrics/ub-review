@@ -363,6 +363,10 @@ Acceptance:
   evidence fields;
 - no posting behavior changes yet.
 
+Initial implementation may derive observations from the current compiler outputs:
+validated inline comments, summary-only findings, and missing evidence. Dedicated
+model-emitted observations belong to the lane output split.
+
 ### 6. Lane output split
 
 Change lane output from findings-only to:
