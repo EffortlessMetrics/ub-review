@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -774,6 +774,17 @@ struct RefuterRunContext<'a> {
     model_calls_used: usize,
 }
 
+struct ModelLaneTask {
+    index: usize,
+    lane: LanePlan,
+    spec: ProviderSpec,
+}
+
+struct ModelLaneTaskResult {
+    index: usize,
+    result: Result<ModelCallOutcome<LaneModelOutput>>,
+}
+
 #[derive(Clone, Debug)]
 struct ModelAssignment {
     lane: LanePlan,
@@ -1199,6 +1210,9 @@ fn validate_run_args(args: &RunArgs) -> Result<()> {
     }
     if args.model_timeout_sec == 0 {
         bail!("--model-timeout-sec must be greater than zero");
+    }
+    if args.model_concurrency == 0 {
+        bail!("--model-concurrency must be greater than zero");
     }
     if args.review_body_max_bytes < 1_000 {
         bail!("--review-body-max-bytes must be at least 1000");
@@ -3142,77 +3156,96 @@ fn run_available_model_lanes(
     let model_dir = context.review_dir.join("model");
     fs::create_dir_all(&model_dir)?;
     let mut calls = 0usize;
-    for (index, assignment) in context.assignments.iter().enumerate() {
+    let mut next_assignment = 0usize;
+    loop {
         if calls >= context.args.max_model_calls
             || inline_comments.len() >= context.args.max_inline_comments
+            || next_assignment >= context.assignments.len()
         {
             break;
         }
-        let receipt = &mut model_lanes[index];
-        if receipt.status != "planned" {
-            continue;
-        }
-        let lane = &assignment.lane;
-        let Some((spec, fallback_from, preflight_reason)) =
-            selected_provider_spec(assignment, context.provider_preflights)
-        else {
-            receipt.status = "preflight_failed".to_owned();
-            receipt.reason =
-                "provider preflight did not succeed and no fallback was available".to_owned();
-            missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
-            continue;
-        };
-        if let Some(reason) = preflight_reason {
-            receipt.reason = reason;
-        }
-        if let Some(original) = fallback_from {
-            receipt.fallback_from = Some(original);
-        }
-        receipt.provider = spec.provider.key().to_owned();
-        receipt.model = spec.model.clone();
-        receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
-        let env_name = model_api_key_env(spec.provider);
-        if std::env::var_os(env_name).is_none() {
-            receipt.status = "missing_key".to_owned();
-            receipt.reason = format!(
-                "{env_name} not provided; {} lane output unavailable",
-                spec.provider.key()
-            );
-            missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
-            continue;
-        }
-        calls += 1;
-        let lane_dir = model_dir.join(&lane.id);
-        fs::create_dir_all(&lane_dir)?;
-        receipt.status = "running".to_owned();
-        match call_model_lane(
-            context.root,
-            &lane_dir,
-            lane,
-            &spec,
-            context.shared_context,
-            context.args,
-        ) {
-            Ok(outcome) => {
-                receipt.status = "ok".to_owned();
-                receipt.reason = "completed".to_owned();
-                receipt.duration_ms = Some(outcome.duration_ms);
-                receipt.http_status = outcome.http_status;
-                receipt.response_shape = Some(outcome.response_shape.clone());
-                apply_model_output(
-                    lane,
-                    outcome.output,
-                    context.line_map,
-                    context.args.max_inline_comments,
-                    inline_comments,
-                    summary_only_findings,
-                );
+
+        let mut wave = Vec::new();
+        while wave.len() < context.args.model_concurrency
+            && calls + wave.len() < context.args.max_model_calls
+            && next_assignment < context.assignments.len()
+        {
+            let index = next_assignment;
+            next_assignment += 1;
+            let assignment = &context.assignments[index];
+            let receipt = &mut model_lanes[index];
+            if receipt.status != "planned" {
+                continue;
             }
-            Err(err) => {
-                receipt.status = classify_model_error(&err);
-                receipt.reason = format!("{err:#}");
-                receipt.http_status = http_status_from_error(&err);
+            let lane = &assignment.lane;
+            let Some((spec, fallback_from, preflight_reason)) =
+                selected_provider_spec(assignment, context.provider_preflights)
+            else {
+                receipt.status = "preflight_failed".to_owned();
+                receipt.reason =
+                    "provider preflight did not succeed and no fallback was available".to_owned();
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+                continue;
+            };
+            if let Some(reason) = preflight_reason {
+                receipt.reason = reason;
+            }
+            if let Some(original) = fallback_from {
+                receipt.fallback_from = Some(original);
+            }
+            receipt.provider = spec.provider.key().to_owned();
+            receipt.model = spec.model.clone();
+            receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
+            let env_name = model_api_key_env(spec.provider);
+            if std::env::var_os(env_name).is_none() {
+                receipt.status = "missing_key".to_owned();
+                receipt.reason = format!(
+                    "{env_name} not provided; {} lane output unavailable",
+                    spec.provider.key()
+                );
+                missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+                continue;
+            }
+            receipt.status = "running".to_owned();
+            wave.push(ModelLaneTask {
+                index,
+                lane: lane.clone(),
+                spec,
+            });
+        }
+
+        if wave.is_empty() {
+            continue;
+        }
+
+        calls += wave.len();
+        let mut results = run_model_lane_tasks(&context, &model_dir, wave)?;
+        results.sort_by_key(|result| result.index);
+        for task_result in results {
+            let receipt = &mut model_lanes[task_result.index];
+            let lane = &context.assignments[task_result.index].lane;
+            match task_result.result {
+                Ok(outcome) => {
+                    receipt.status = "ok".to_owned();
+                    receipt.reason = "completed".to_owned();
+                    receipt.duration_ms = Some(outcome.duration_ms);
+                    receipt.http_status = outcome.http_status;
+                    receipt.response_shape = Some(outcome.response_shape.clone());
+                    apply_model_output(
+                        lane,
+                        outcome.output,
+                        context.line_map,
+                        context.args.max_inline_comments,
+                        inline_comments,
+                        summary_only_findings,
+                    );
+                }
+                Err(err) => {
+                    receipt.status = classify_model_error(&err);
+                    receipt.reason = format!("{err:#}");
+                    receipt.http_status = http_status_from_error(&err);
+                    missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+                }
             }
         }
     }
@@ -3224,6 +3257,56 @@ fn run_available_model_lanes(
         }
     }
     Ok(calls)
+}
+
+fn run_model_lane_tasks(
+    context: &ModelRunContext<'_>,
+    model_dir: &Path,
+    tasks: Vec<ModelLaneTask>,
+) -> Result<Vec<ModelLaneTaskResult>> {
+    if tasks.is_empty() {
+        return Ok(Vec::new());
+    }
+    let worker_count = context.args.model_concurrency.max(1).min(tasks.len());
+    let queue = Arc::new(Mutex::new(VecDeque::from(tasks)));
+    let (tx, rx) = mpsc::channel();
+    let results = thread::scope(|scope| {
+        for _ in 0..worker_count {
+            let queue = Arc::clone(&queue);
+            let tx = tx.clone();
+            scope.spawn(move || {
+                loop {
+                    let task = match queue.lock() {
+                        Ok(mut queue) => queue.pop_front(),
+                        Err(_) => None,
+                    };
+                    let Some(task) = task else {
+                        break;
+                    };
+                    let lane_dir = model_dir.join(&task.lane.id);
+                    let result = fs::create_dir_all(&lane_dir)
+                        .with_context(|| format!("create {}", lane_dir.display()))
+                        .and_then(|()| {
+                            call_model_lane(
+                                context.root,
+                                &lane_dir,
+                                &task.lane,
+                                &task.spec,
+                                context.shared_context,
+                                context.args,
+                            )
+                        });
+                    let _ = tx.send(ModelLaneTaskResult {
+                        index: task.index,
+                        result,
+                    });
+                }
+            });
+        }
+        drop(tx);
+        rx.into_iter().collect::<Vec<_>>()
+    });
+    Ok(results)
 }
 
 fn run_refuter_pass(
@@ -5202,7 +5285,7 @@ mod tests {
         model_json_payload, model_request_payload, model_response_shape, opencode_canary_spec,
         render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
         run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, write_sensor_status,
+        validate_inline_candidate, validate_run_args, write_sensor_status,
     };
 
     #[test]
@@ -5678,6 +5761,21 @@ index 1111111..2222222 100644
                 && assignment.spec.model == "deepseek-v4-flash"
                 && assignment.spec.endpoint_kind == super::ProviderEndpointKind::OpenAiChat
         }));
+    }
+
+    #[test]
+    fn zero_model_concurrency_is_rejected() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.model_concurrency = 0;
+
+        let result = validate_run_args(&args);
+
+        assert!(result.is_err());
+        assert!(
+            result
+                .err()
+                .is_some_and(|err| err.to_string().contains("--model-concurrency"))
+        );
     }
 
     #[test]
