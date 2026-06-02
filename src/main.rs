@@ -344,6 +344,31 @@ struct PostArgs {
     fail_on_post_error: bool,
 }
 
+#[derive(Debug, Serialize)]
+struct PostErrorReceipt {
+    schema_version: u32,
+    status: String,
+    error_kind: String,
+    failure_stage: String,
+    reason: String,
+    review_json: String,
+    review_json_exists: bool,
+    review_json_valid: bool,
+    review_event: Option<String>,
+    review_body_bytes: Option<usize>,
+    review_comment_count: Option<usize>,
+    repo: Option<String>,
+    repo_valid: bool,
+    pull_number: Option<u64>,
+    comments: Option<usize>,
+    http_status: Option<u16>,
+    token_present: bool,
+    payload_written: bool,
+    would_post: bool,
+    failure_tolerated: bool,
+    fail_on_post_error: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 struct Config {
@@ -1242,10 +1267,7 @@ fn cmd_post(args: PostArgs) -> Result<()> {
             Ok(())
         }
         Err(err) => {
-            let value = serde_json::json!({
-                "status": "failed",
-                "reason": err.to_string(),
-            });
+            let value = build_post_error_receipt(&args, &err);
             fs::write(
                 args.out.join("post-error.json"),
                 serde_json::to_vec_pretty(&value)?,
@@ -1261,6 +1283,104 @@ fn cmd_post(args: PostArgs) -> Result<()> {
             }
         }
     }
+}
+
+fn build_post_error_receipt(args: &PostArgs, err: &anyhow::Error) -> PostErrorReceipt {
+    let review_metadata = read_github_review_metadata(&args.review_json);
+    let repo_valid = args.repo.as_deref().is_some_and(is_valid_repo_slug);
+    let pull_number = args.pull_number.or_else(detect_pull_number_from_event);
+    let token_present = args
+        .github_token
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let review_json_valid = review_metadata.is_some();
+    let http_status = http_status_from_error(err);
+    let (error_kind, failure_stage) = classify_post_error(
+        args,
+        err,
+        repo_valid,
+        pull_number,
+        review_json_valid,
+        http_status,
+    );
+    let would_post = token_present && repo_valid && pull_number.is_some() && review_json_valid;
+    let payload_written = failure_stage == "network_post"
+        && args.out.join("github-review-post-payload.json").exists();
+    PostErrorReceipt {
+        schema_version: 1,
+        status: "failed".to_owned(),
+        error_kind,
+        failure_stage,
+        reason: format!("{err:#}"),
+        review_json: args.review_json.display().to_string(),
+        review_json_exists: args.review_json.exists(),
+        review_json_valid,
+        review_event: review_metadata.as_ref().map(|review| review.event.clone()),
+        review_body_bytes: review_metadata.as_ref().map(|review| review.body_bytes),
+        review_comment_count: review_metadata.as_ref().map(|review| review.comments),
+        repo: args.repo.clone(),
+        repo_valid,
+        pull_number,
+        comments: review_metadata.as_ref().map(|review| review.comments),
+        http_status,
+        token_present,
+        payload_written,
+        would_post,
+        failure_tolerated: !args.fail_on_post_error,
+        fail_on_post_error: args.fail_on_post_error,
+    }
+}
+
+fn classify_post_error(
+    args: &PostArgs,
+    err: &anyhow::Error,
+    repo_valid: bool,
+    pull_number: Option<u64>,
+    review_json_valid: bool,
+    http_status: Option<u16>,
+) -> (String, String) {
+    let token_present = args
+        .github_token
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty());
+    if !token_present {
+        return ("missing_token".to_owned(), "preflight".to_owned());
+    }
+    if !repo_valid {
+        return ("invalid_repo".to_owned(), "preflight".to_owned());
+    }
+    if pull_number.is_none() {
+        return ("missing_pull_number".to_owned(), "preflight".to_owned());
+    }
+    if !review_json_valid {
+        return (
+            "invalid_review_payload".to_owned(),
+            "payload_validation".to_owned(),
+        );
+    }
+    if http_status.is_some() {
+        return ("post_http_error".to_owned(), "network_post".to_owned());
+    }
+    let text = model_error_chain_text(err).to_ascii_lowercase();
+    if text.contains("curl") || text.contains("github review post failed") {
+        return ("post_failed".to_owned(), "network_post".to_owned());
+    }
+    ("failed".to_owned(), "unknown".to_owned())
+}
+
+struct GitHubReviewMetadata {
+    comments: usize,
+    event: String,
+    body_bytes: usize,
+}
+
+fn read_github_review_metadata(path: &Path) -> Option<GitHubReviewMetadata> {
+    let review: GitHubReview = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
+    Some(GitHubReviewMetadata {
+        comments: review.comments.len(),
+        event: review.event,
+        body_bytes: review.body.len(),
+    })
 }
 
 fn prepare_plan(
