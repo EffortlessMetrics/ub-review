@@ -22,7 +22,16 @@ def load_json(path: pathlib.Path):
         fail(f"invalid JSON in {path}: {error}")
 
 
-def require_single_ok_preflight(preflights) -> None:
+AUTH_HEADER_KEYS = {
+    "authorization",
+    "x-api-key",
+    "x_api_key",
+    "api-key",
+    "api_key",
+}
+
+
+def require_single_ok_preflight(preflights) -> dict:
     if not isinstance(preflights, list):
         fail("provider preflight status is not a JSON array")
     if len(preflights) != 1:
@@ -42,6 +51,7 @@ def require_single_ok_preflight(preflights) -> None:
             fail(f"provider preflight `{key}` expected {value!r}, got {receipt.get(key)!r}")
     if receipt.get("duration_ms", 0) <= 0:
         fail("provider preflight duration_ms must be positive")
+    return receipt
 
 
 def require_single_ok_lane(lanes) -> dict:
@@ -83,48 +93,97 @@ def require_metrics(metrics) -> None:
         fail("metrics did not record exactly one ok model lane")
 
 
+def sanitize_artifact_name(value: str) -> str:
+    return "".join(char if char.isalnum() or char in "-_" else "-" for char in value)
+
+
+def require_preflight_artifacts(root: pathlib.Path, receipt: dict) -> None:
+    label = sanitize_artifact_name(
+        f"{receipt['provider']}:{receipt['model']}:{receipt['endpoint_kind']}"
+    )
+    content = require_openai_call_artifacts(
+        root / "review/provider-preflight" / label,
+        "provider preflight",
+        receipt["model"],
+    )
+    expected_content = {
+        "summary": "preflight ok",
+        "inline_comments": [],
+        "summary_only_findings": [],
+    }
+    if content != expected_content:
+        fail(f"provider preflight content expected {expected_content!r}, got {content!r}")
+
+
 def require_ok_lane_artifacts(root: pathlib.Path, lane: dict) -> None:
     lane_id = lane.get("lane")
     if not isinstance(lane_id, str) or not lane_id:
         fail("ok model lane has no lane id")
-    lane_dir = root / "review/model" / lane_id
-    request_path = lane_dir / "request.json"
-    response_path = lane_dir / "response.json"
-    content_path = lane_dir / "content.json"
-    stderr_path = lane_dir / "stderr.txt"
+    require_openai_call_artifacts(
+        root / "review/model" / lane_id,
+        f"model lane {lane_id}",
+        "MiniMax-M3",
+    )
+
+
+def require_openai_call_artifacts(
+    call_dir: pathlib.Path, label: str, expected_model: str
+) -> dict:
+    request_path = call_dir / "request.json"
+    response_path = call_dir / "response.json"
+    content_path = call_dir / "content.json"
+    stderr_path = call_dir / "stderr.txt"
 
     request = load_json(request_path)
     response = load_json(response_path)
     content = load_json(content_path)
+    assert_no_auth_header_fields(request_path, request)
+    assert_no_auth_header_fields(response_path, response)
+    assert_no_auth_header_fields(content_path, content)
     stderr = stderr_path.read_text(encoding="utf-8")
     if stderr.strip():
-        fail(f"model lane stderr is not empty: {stderr_path}")
-    if request.get("model") != "MiniMax-M3":
-        fail("model request did not use MiniMax-M3")
+        fail(f"{label} stderr is not empty: {stderr_path}")
+    if request.get("model") != expected_model:
+        fail(f"{label} request did not use {expected_model}")
     if response.get("object") != "chat.completion":
-        fail("model response is not an OpenAI chat completion")
-    if response.get("model") != "MiniMax-M3":
-        fail("model response did not report MiniMax-M3")
+        fail(f"{label} response is not an OpenAI chat completion")
+    if response.get("model") != expected_model:
+        fail(f"{label} response did not report {expected_model}")
     choices = response.get("choices")
     if not isinstance(choices, list) or not choices:
-        fail("model response has no choices")
+        fail(f"{label} response has no choices")
     choice = choices[0]
     if choice.get("finish_reason") != "stop":
-        fail(f"model finish_reason expected 'stop', got {choice.get('finish_reason')!r}")
+        fail(
+            f"{label} finish_reason expected 'stop', got {choice.get('finish_reason')!r}"
+        )
     message = choice.get("message", {})
     assistant_content = message.get("content")
     if not isinstance(assistant_content, str) or not assistant_content.strip():
-        fail("model assistant content is empty")
+        fail(f"{label} assistant content is empty")
     try:
         parsed_content = json.loads(assistant_content)
     except json.JSONDecodeError as error:
-        fail(f"assistant content is not strict JSON: {error}")
+        fail(f"{label} assistant content is not strict JSON: {error}")
     if parsed_content != content:
-        fail("content.json does not match parsed assistant content")
+        fail(f"{label} content.json does not match parsed assistant content")
     usage = response.get("usage", {})
     for key in ["prompt_tokens", "completion_tokens", "total_tokens"]:
         if usage.get(key, 0) <= 0:
-            fail(f"model response usage.{key} must be positive")
+            fail(f"{label} response usage.{key} must be positive")
+    return content
+
+
+def assert_no_auth_header_fields(path: pathlib.Path, value) -> None:
+    if isinstance(value, dict):
+        for key, child in value.items():
+            normalized_key = key.strip().lower()
+            if normalized_key in AUTH_HEADER_KEYS:
+                fail(f"auth header field `{key}` found in {path}")
+            assert_no_auth_header_fields(path, child)
+    elif isinstance(value, list):
+        for child in value:
+            assert_no_auth_header_fields(path, child)
 
 
 def assert_no_auth_header_leak(root: pathlib.Path) -> None:
@@ -166,9 +225,10 @@ def main(argv: list[str]) -> int:
     review = load_json(root / "review/review.json")
     metrics = load_json(root / "review/metrics.json")
 
-    require_single_ok_preflight(preflights)
+    preflight = require_single_ok_preflight(preflights)
     ok_lane = require_single_ok_lane(review.get("model_lanes", []))
     require_metrics(metrics)
+    require_preflight_artifacts(root, preflight)
     require_ok_lane_artifacts(root, ok_lane)
 
     post_result = root / "review/post-result.json"
