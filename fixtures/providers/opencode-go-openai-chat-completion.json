@@ -1,0 +1,15 @@
+{
+  "id": "chatcmpl-opencode-go-openai",
+  "object": "chat.completion",
+  "model": "deepseek-v4-flash",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"summary\":\"opencode go openai ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

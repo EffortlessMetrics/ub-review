@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-non-json",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "This response is prose instead of the required JSON object."
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}
