@@ -663,6 +663,27 @@ struct ReviewMetrics {
     github_review_body_truncated: bool,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct Observation {
+    schema: String,
+    id: String,
+    lane: String,
+    question: String,
+    claim: String,
+    kind: String,
+    status: String,
+    severity: String,
+    confidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u32>,
+    fingerprint: String,
+    evidence: Vec<String>,
+    dedupe_key: String,
+    source: String,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct SensorMetrics {
     total: usize,
@@ -2510,6 +2531,8 @@ fn write_review_artifacts(
         summary_only_findings,
         body: artifact_body.clone(),
     };
+    let observations = build_observations(&review);
+    write_observation_artifacts(out, &observations)?;
     let metrics = build_review_metrics(out, diff, plan, &review, &github_review, elapsed);
 
     fs::write(
@@ -2641,6 +2664,205 @@ fn build_review_metrics(
             .body
             .contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim()),
     }
+}
+
+fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
+    let mut observations = Vec::new();
+    for comment in &review.inline_comments {
+        observations.push(make_observation(ObservationInput {
+            index: observations.len(),
+            lane: &comment.lane,
+            question: &comment.lane,
+            claim: &comment.body,
+            kind: infer_observation_kind(&comment.lane, &comment.body, &comment.evidence),
+            status: "confirmed",
+            severity: &comment.severity,
+            confidence: &comment.confidence,
+            path: Some(&comment.path),
+            line: Some(comment.line),
+            evidence: vec![comment.evidence.clone()],
+            source: "inline-comment",
+        }));
+    }
+    for finding in &review.summary_only_findings {
+        let parked = is_parked_follow_up(finding);
+        let kind = if parked {
+            "parked-follow-up"
+        } else {
+            infer_observation_kind(&finding.lane, &finding.reason, &finding.evidence)
+        };
+        let status = if parked { "parked" } else { "open" };
+        observations.push(make_observation(ObservationInput {
+            index: observations.len(),
+            lane: &finding.lane,
+            question: &finding.lane,
+            claim: &finding.reason,
+            kind,
+            status,
+            severity: &finding.severity,
+            confidence: &finding.confidence,
+            path: None,
+            line: None,
+            evidence: vec![finding.evidence.clone()],
+            source: "summary-only-finding",
+        }));
+    }
+    for issue in &review.missing_or_failed_sensor_evidence {
+        let claim = format!(
+            "Sensor `{}` evidence is `{}`: {}",
+            issue.sensor, issue.status, issue.reason
+        );
+        observations.push(make_observation(ObservationInput {
+            index: observations.len(),
+            lane: &format!("sensor-{}", issue.sensor),
+            question: "missing-sensor-evidence",
+            claim: &claim,
+            kind: "missing-evidence",
+            status: "open",
+            severity: "medium",
+            confidence: "high",
+            path: None,
+            line: None,
+            evidence: vec![issue.reason.clone()],
+            source: "missing-sensor-evidence",
+        }));
+    }
+    for issue in &review.missing_or_failed_model_evidence {
+        let claim = format!(
+            "Lane `{}` via `{}` model `{}` endpoint `{}` is `{}`: {}",
+            issue.lane,
+            issue.provider,
+            issue.model,
+            issue.endpoint_kind,
+            issue.status,
+            issue.reason
+        );
+        observations.push(make_observation(ObservationInput {
+            index: observations.len(),
+            lane: &issue.lane,
+            question: "missing-model-evidence",
+            claim: &claim,
+            kind: "missing-evidence",
+            status: "open",
+            severity: "medium",
+            confidence: "high",
+            path: None,
+            line: None,
+            evidence: vec![issue.reason.clone()],
+            source: "missing-model-evidence",
+        }));
+    }
+    observations
+}
+
+struct ObservationInput<'a> {
+    index: usize,
+    lane: &'a str,
+    question: &'a str,
+    claim: &'a str,
+    kind: &'a str,
+    status: &'a str,
+    severity: &'a str,
+    confidence: &'a str,
+    path: Option<&'a String>,
+    line: Option<u32>,
+    evidence: Vec<String>,
+    source: &'a str,
+}
+
+fn make_observation(input: ObservationInput<'_>) -> Observation {
+    let path = input.path.cloned();
+    let fingerprint_input = format!(
+        "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{}",
+        input.lane,
+        input.kind,
+        input.status,
+        input.claim,
+        path,
+        input.line,
+        input.evidence.join("\n")
+    );
+    let fingerprint = sha256_hex(fingerprint_input.as_bytes());
+    let short = &fingerprint[..12];
+    Observation {
+        schema: "ub-review.observation.v1".to_owned(),
+        id: format!("obs-{index:04}-{short}", index = input.index),
+        lane: input.lane.to_owned(),
+        question: input.question.to_owned(),
+        claim: input.claim.to_owned(),
+        kind: input.kind.to_owned(),
+        status: input.status.to_owned(),
+        severity: input.severity.to_owned(),
+        confidence: input.confidence.to_owned(),
+        path: path.clone(),
+        line: input.line,
+        fingerprint,
+        evidence: input.evidence,
+        dedupe_key: observation_dedupe_key(input.lane, input.kind, path.as_deref(), input.line),
+        source: input.source.to_owned(),
+    }
+}
+
+fn observation_dedupe_key(lane: &str, kind: &str, path: Option<&str>, line: Option<u32>) -> String {
+    match (path, line) {
+        (Some(path), Some(line)) => format!("{kind}:{path}:{line}"),
+        _ => format!("{kind}:{}", sanitize_artifact_name(lane)),
+    }
+}
+
+fn infer_observation_kind(lane: &str, claim: &str, evidence: &str) -> &'static str {
+    let lane = lane.to_ascii_lowercase();
+    let text = format!("{claim}\n{evidence}").to_ascii_lowercase();
+    if text.contains("missing") || text.contains("unavailable") || text.contains("skipped") {
+        "missing-evidence"
+    } else if text.contains("parked") || text.contains("follow-up") {
+        "parked-follow-up"
+    } else if lane.contains("test") || text.contains("test") || text.contains("oracle") {
+        "test-gap"
+    } else if lane.contains("source-route") || lane.contains("sibling") || text.contains("route") {
+        "source-route-gap"
+    } else if lane.contains("security") || text.contains("exploit") || text.contains("secret") {
+        "security-risk"
+    } else if text.contains("verify") || text.contains("confirm") || text.contains("question") {
+        "verification-question"
+    } else {
+        "bug"
+    }
+}
+
+fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Result<()> {
+    let observations_dir = out.join("observations");
+    if observations_dir.exists() {
+        fs::remove_dir_all(&observations_dir)
+            .with_context(|| format!("remove {}", observations_dir.display()))?;
+    }
+    fs::create_dir_all(&observations_dir)
+        .with_context(|| format!("create {}", observations_dir.display()))?;
+
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("observations.json"),
+        serde_json::to_vec_pretty(observations)?,
+    )?;
+
+    let mut by_lane: BTreeMap<&str, Vec<&Observation>> = BTreeMap::new();
+    for observation in observations {
+        by_lane
+            .entry(observation.lane.as_str())
+            .or_default()
+            .push(observation);
+    }
+    for (lane, lane_observations) in by_lane {
+        let path = observations_dir.join(format!("{}.ndjson", sanitize_artifact_name(lane)));
+        let mut text = String::new();
+        for observation in lane_observations {
+            text.push_str(&serde_json::to_string(observation)?);
+            text.push('\n');
+        }
+        fs::write(path, text)?;
+    }
+    Ok(())
 }
 
 fn sensor_status_for_metrics(out: &Path, sensor: &SensorPlan) -> String {
@@ -6162,16 +6384,17 @@ mod tests {
         RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
         ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_review_metrics, cap_review_body, classify_diff, collect_sensor_evidence_issues,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, opencode_canary_spec, provider_spec_for_lane_with_key_state,
-        render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        build_observations, build_review_metrics, cap_review_body, classify_diff,
+        collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
+        extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, opencode_canary_spec,
+        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
+        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, split_curl_http_status,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
         write_review_artifacts, write_sensor_status,
     };
 
@@ -7752,6 +7975,96 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.post_status, "not_attempted_by_run");
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
+    }
+
+    #[test]
+    fn observation_artifacts_include_aggregate_and_lane_ndjson() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = super::ReviewArtifacts {
+            shared_context_id: "abc123".to_owned(),
+            mode: "review-direct".to_owned(),
+            posting: "review".to_owned(),
+            model_mode: "auto".to_owned(),
+            provider_policy: "minimax-only".to_owned(),
+            model_provider_policy: "minimax-only".to_owned(),
+            lane_width: 10,
+            model_concurrency: 8,
+            max_model_calls: 18,
+            max_inline_comments: 8,
+            model_timeout_sec: 300,
+            ledger_path: String::new(),
+            ledger_max_bytes: 65_536,
+            provider_preflights: Vec::new(),
+            model_lanes: vec![model_lane_receipt("tests-oracle", "ok")],
+            missing_or_failed_sensor_evidence: vec![SensorEvidenceIssue {
+                sensor: "ripr".to_owned(),
+                status: "missing".to_owned(),
+                reason: "command not found".to_owned(),
+            }],
+            missing_or_failed_model_evidence: vec![ModelEvidenceIssue {
+                lane: "opposition".to_owned(),
+                provider: "minimax".to_owned(),
+                model: "MiniMax-M3".to_owned(),
+                endpoint_kind: "anthropic-messages".to_owned(),
+                status: "timed_out".to_owned(),
+                reason: "model call timed out".to_owned(),
+            }],
+            inline_comments: vec![ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "test/js/bun/md/md-edge-cases.test.ts".to_owned(),
+                line: 1145,
+                side: "RIGHT".to_owned(),
+                body: "[tests-oracle] The test reaches the helper but needs a red witness."
+                    .to_owned(),
+                evidence: "ripr excerpt".to_owned(),
+            }],
+            summary_only_findings: vec![SummaryOnlyFinding {
+                lane: "source-route".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "PBKDF2 sibling path is parked as follow-up, not current PR scope."
+                    .to_owned(),
+                evidence: "UB ledger excerpt".to_owned(),
+            }],
+            body: "artifact body".to_owned(),
+        };
+
+        let observations = build_observations(&review);
+        write_observation_artifacts(temp.path(), &observations)?;
+
+        let aggregate: Vec<super::Observation> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/observations.json"))?)?;
+        let lane_ndjson = fs::read_to_string(temp.path().join("observations/tests-oracle.ndjson"))?;
+
+        assert_eq!(aggregate.len(), 4);
+        assert!(lane_ndjson.contains("\"schema\":\"ub-review.observation.v1\""));
+        assert!(lane_ndjson.contains("\"kind\":\"test-gap\""));
+        assert!(aggregate.iter().any(|observation| {
+            observation.lane == "tests-oracle"
+                && observation.status == "confirmed"
+                && observation.path.as_deref() == Some("test/js/bun/md/md-edge-cases.test.ts")
+                && observation.line == Some(1145)
+                && observation.dedupe_key == "test-gap:test/js/bun/md/md-edge-cases.test.ts:1145"
+                && observation.evidence == vec!["ripr excerpt".to_owned()]
+        }));
+        assert!(aggregate.iter().any(|observation| {
+            observation.lane == "source-route"
+                && observation.kind == "parked-follow-up"
+                && observation.status == "parked"
+        }));
+        assert!(aggregate.iter().any(|observation| {
+            observation.lane == "sensor-ripr"
+                && observation.kind == "missing-evidence"
+                && observation.confidence == "high"
+        }));
+        assert!(aggregate.iter().any(|observation| {
+            observation.lane == "opposition"
+                && observation.kind == "missing-evidence"
+                && observation.question == "missing-model-evidence"
+        }));
+        Ok(())
     }
 
     #[test]
