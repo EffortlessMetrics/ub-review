@@ -308,6 +308,7 @@ runs:
         fi
         "${{ steps.runner.outputs.bin }}" post \
           --review-json "${{ inputs.out }}/review/github-review.json" \
+          --diff-patch "${{ inputs.out }}/input/diff.patch" \
           --out "${{ inputs.out }}/review" \
           "${extra[@]}"
 
