@@ -163,6 +163,9 @@ outputs:
   review-json-path:
     description: Path to the internal review artifact.
     value: ${{ steps.paths.outputs.review-json-path }}
+  metrics-json-path:
+    description: Path to the review metrics artifact.
+    value: ${{ steps.paths.outputs.metrics-json-path }}
   github-review-path:
     description: Path to the GitHub review payload artifact.
     value: ${{ steps.paths.outputs.github-review-path }}
@@ -324,4 +327,5 @@ runs:
         echo "summary-path=${{ inputs.out }}/running-summary.md" >> "$GITHUB_OUTPUT"
         echo "events-path=${{ inputs.out }}/events.ndjson" >> "$GITHUB_OUTPUT"
         echo "review-json-path=${{ inputs.out }}/review/review.json" >> "$GITHUB_OUTPUT"
+        echo "metrics-json-path=${{ inputs.out }}/review/metrics.json" >> "$GITHUB_OUTPUT"
         echo "github-review-path=${{ inputs.out }}/review/github-review.json" >> "$GITHUB_OUTPUT"

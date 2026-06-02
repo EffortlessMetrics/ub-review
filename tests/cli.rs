@@ -122,6 +122,7 @@ fn active_len_tracks_view_after_resize() {
         "sensors/ast-grep/ub-review-sensor-status.json",
         "review/shared_context.md",
         "review/provider-preflight-status.json",
+        "review/metrics.json",
         "review/review.json",
         "review/review.md",
         "review/github-review.json",
@@ -180,6 +181,91 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
     assert_eq!(review["max_model_calls"], 14);
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    let diff_context: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("input/diff-context.json"))?)?;
+    let plan_json: serde_json::Value = serde_json::from_slice(&fs::read(out.join("plan.json"))?)?;
+    assert_eq!(metrics["schema_version"], 1);
+    assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
+    assert_eq!(metrics["profile_name"], "gh-runner");
+    assert_eq!(
+        metrics["changed_files"],
+        diff_context["changed_files"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(metrics["diff_flags"], diff_context["flags"]);
+    assert_eq!(
+        metrics["lane_packets"],
+        plan_json["lanes"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(
+        metrics["sensors"]["total"],
+        plan_json["sensors"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(
+        metrics["sensors"]["planned"].as_u64().unwrap_or_default()
+            + metrics["sensors"]["skipped_by_plan"]
+                .as_u64()
+                .unwrap_or_default(),
+        metrics["sensors"]["total"].as_u64().unwrap_or_default()
+    );
+    assert_eq!(
+        sum_json_object_values(&metrics["sensors"]["status_counts"]),
+        metrics["sensors"]["total"].as_u64().unwrap_or_default()
+    );
+    assert_eq!(
+        metrics["models"]["model_lanes"],
+        review["model_lanes"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(metrics["models"]["model_lane_calls_attempted"], 0);
+    assert_eq!(metrics["models"]["provider_preflight_calls_attempted"], 0);
+    assert_eq!(metrics["models"]["model_fallbacks_used"], 0);
+    assert_eq!(
+        metrics["inline_comments"],
+        review["inline_comments"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(
+        metrics["summary_only_findings"],
+        review["summary_only_findings"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(
+        metrics["missing_or_failed_sensor_evidence"],
+        review["missing_or_failed_sensor_evidence"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(
+        metrics["missing_or_failed_model_evidence"],
+        review["missing_or_failed_model_evidence"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    assert_eq!(metrics["github_review_comments"], 0);
+    assert_eq!(
+        metrics["review_body_bytes"],
+        review["body"].as_str().map(str::len).unwrap_or_default()
+    );
+    assert_eq!(metrics["review_body_truncated"], false);
     assert!(
         review["missing_or_failed_sensor_evidence"]
             .as_array()
@@ -263,6 +349,13 @@ fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
 fn path_str(path: &Path) -> Result<&str> {
     path.to_str()
         .ok_or_else(|| anyhow::anyhow!("path is not valid UTF-8: {}", path.display()))
+}
+
+fn sum_json_object_values(value: &serde_json::Value) -> u64 {
+    value
+        .as_object()
+        .map(|values| values.values().filter_map(serde_json::Value::as_u64).sum())
+        .unwrap_or_default()
 }
 
 fn has_standalone_approval_line(text: &str) -> bool {
