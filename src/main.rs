@@ -3047,12 +3047,12 @@ fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidence
                 .as_ref()
                 .map(|receipt| receipt.status.clone())
                 .unwrap_or_else(|| "receipt-absent".to_owned());
-            if !is_sensor_evidence_issue(&status) {
-                return None;
-            }
             let reason = receipt
                 .map(|receipt| receipt.reason)
                 .unwrap_or_else(|| sensor.reason.clone());
+            if !is_sensor_evidence_issue(sensor, &status, &reason) {
+                return None;
+            }
             Some(SensorEvidenceIssue {
                 sensor: sensor.id.clone(),
                 status,
@@ -3062,8 +3062,16 @@ fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidence
         .collect()
 }
 
-fn is_sensor_evidence_issue(status: &str) -> bool {
-    !matches!(status, "ok")
+fn is_sensor_evidence_issue(sensor: &SensorPlan, status: &str, reason: &str) -> bool {
+    match status {
+        "ok" => false,
+        "skipped" => is_sensor_skipped_evidence_issue(sensor, reason),
+        _ => true,
+    }
+}
+
+fn is_sensor_skipped_evidence_issue(sensor: &SensorPlan, reason: &str) -> bool {
+    sensor.run || reason == "dry-run; sensor not executed" || reason.starts_with("box guard failed")
 }
 
 fn model_issue_from_receipt(receipt: &ModelLaneReceipt) -> ModelEvidenceIssue {
@@ -5300,13 +5308,13 @@ mod tests {
         PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs,
         ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, ToolClass, apply_refuter_output, cap_review_body, classify_diff,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_request_payload, model_response_shape,
-        opencode_canary_spec, render_ledger_context, render_review_body, render_summary,
-        right_side_diff_lines, run_command_to_files, run_sensor, split_curl_http_status,
-        validate_github_review_payload, validate_inline_candidate, validate_run_args,
-        write_sensor_status,
+        collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
+        extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload,
+        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
+        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
+        run_sensor, split_curl_http_status, validate_github_review_payload,
+        validate_inline_candidate, validate_run_args, write_sensor_status,
     };
 
     #[test]
@@ -5471,6 +5479,74 @@ mod tests {
             "- unsafe-review not installed; unsafe/native reviewability packet unavailable."
         ));
         assert!(!summary.contains("No ripr findings"));
+        Ok(())
+    }
+
+    #[test]
+    fn skipped_out_of_scope_sensors_are_not_missing_review_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let planned_dry_run = sensor_plan("tokmd", "tokmd", true);
+        let trigger_skipped = sensor_plan("ripr", "ripr", false);
+        let disabled = sensor_plan("semgrep", "semgrep", false);
+        let heavy = sensor_plan("miri", "cargo", false);
+
+        write_sensor_status(
+            &out,
+            &planned_dry_run,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["tokmd".to_owned()],
+                duration_ms: 0,
+                reason: "dry-run; sensor not executed",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        write_sensor_status(
+            &out,
+            &trigger_skipped,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["ripr".to_owned()],
+                duration_ms: 0,
+                reason: "trigger did not match this diff",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        write_sensor_status(
+            &out,
+            &disabled,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["semgrep".to_owned()],
+                duration_ms: 0,
+                reason: "disabled by config",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        write_sensor_status(
+            &out,
+            &heavy,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["cargo".to_owned(), "miri".to_owned()],
+                duration_ms: 0,
+                reason: "heavy/manual witness requires --allow-heavy",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![planned_dry_run, trigger_skipped, disabled, heavy]);
+
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].sensor, "tokmd");
+        assert_eq!(issues[0].status, "skipped");
+        assert_eq!(issues[0].reason, "dry-run; sensor not executed");
         Ok(())
     }
 
