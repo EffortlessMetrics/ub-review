@@ -628,6 +628,8 @@ struct ReviewSummaryReceipt {
 #[derive(Clone, Debug, Serialize)]
 struct ReviewMetrics {
     schema_version: u32,
+    wall_clock_ms: u128,
+    wall_clock_seconds: u64,
     shared_context_id: String,
     base: String,
     head: String,
@@ -648,10 +650,17 @@ struct ReviewMetrics {
     inline_comments: usize,
     github_review_comments: usize,
     summary_only_findings: usize,
+    off_diff_candidates_rejected: usize,
     missing_or_failed_sensor_evidence: usize,
     missing_or_failed_model_evidence: usize,
+    provider_evidence_failures: usize,
+    review_payload_status: String,
+    post_status: String,
     review_body_bytes: usize,
+    artifact_review_body_bytes: usize,
+    github_review_body_bytes: usize,
     review_body_truncated: bool,
+    github_review_body_truncated: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1243,6 +1252,7 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
 }
 
 fn cmd_run(args: RunArgs) -> Result<()> {
+    let run_started = Instant::now();
     validate_run_args(&args)?;
     let (config, diff, box_state, plan) = prepare_plan(&args.review, args.allow_heavy)?;
     print_plan(&plan, &box_state);
@@ -1276,6 +1286,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         &plan,
         &preliminary_summary,
         &args,
+        run_started.elapsed(),
     )?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
     fs::write(args.review.out.join("running-summary.md"), &summary)?;
@@ -2372,6 +2383,7 @@ fn render_claim_prompt(diff: &DiffContext) -> String {
     text
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_review_artifacts(
     root: &Path,
     out: &Path,
@@ -2380,6 +2392,7 @@ fn write_review_artifacts(
     plan: &Plan,
     running_summary: &str,
     args: &RunArgs,
+    elapsed: Duration,
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
@@ -2497,7 +2510,7 @@ fn write_review_artifacts(
         summary_only_findings,
         body: artifact_body.clone(),
     };
-    let metrics = build_review_metrics(out, diff, plan, &review, &github_review);
+    let metrics = build_review_metrics(out, diff, plan, &review, &github_review, elapsed);
 
     fs::write(
         review_dir.join("review.json"),
@@ -2539,6 +2552,7 @@ fn build_review_metrics(
     plan: &Plan,
     review: &ReviewArtifacts,
     github_review: &GitHubReview,
+    elapsed: Duration,
 ) -> ReviewMetrics {
     let sensor_statuses = plan
         .sensors
@@ -2558,6 +2572,8 @@ fn build_review_metrics(
 
     ReviewMetrics {
         schema_version: 1,
+        wall_clock_ms: elapsed.as_millis(),
+        wall_clock_seconds: elapsed.as_secs(),
         shared_context_id: review.shared_context_id.clone(),
         base: diff.base.clone(),
         head: diff.head.clone(),
@@ -2603,10 +2619,27 @@ fn build_review_metrics(
         inline_comments: review.inline_comments.len(),
         github_review_comments: github_review.comments.len(),
         summary_only_findings: review.summary_only_findings.len(),
+        off_diff_candidates_rejected: review
+            .summary_only_findings
+            .iter()
+            .filter(|finding| finding.reason.contains("line_valid=false"))
+            .count(),
         missing_or_failed_sensor_evidence: review.missing_or_failed_sensor_evidence.len(),
         missing_or_failed_model_evidence: review.missing_or_failed_model_evidence.len(),
+        provider_evidence_failures: review
+            .provider_preflights
+            .iter()
+            .filter(|receipt| is_model_evidence_issue(&receipt.status))
+            .count(),
+        review_payload_status: "prepared".to_owned(),
+        post_status: "not_attempted_by_run".to_owned(),
         review_body_bytes: review.body.len(),
+        artifact_review_body_bytes: review.body.len(),
+        github_review_body_bytes: github_review.body.len(),
         review_body_truncated: review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim()),
+        github_review_body_truncated: github_review
+            .body
+            .contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim()),
     }
 }
 
@@ -5254,6 +5287,7 @@ fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String>
         "- Changed files: `{}`\n",
         diff.changed_files.len()
     ));
+    render_review_efficiency_section(&mut text, out);
     text.push_str("\n## Sensors\n\n");
     text.push_str("| Sensor | Planned | Status | Reason | Receipt |\n");
     text.push_str("|---|---:|---|---|---|\n");
@@ -5331,6 +5365,80 @@ fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String>
     text.push_str("\n## Review posture\n\n");
     text.push_str("A one-line approval shortcut is a failure mode. A no-finding lane must include what it checked, its strongest failed objection, and residual risk. Missing sensor evidence is not proof of safety.\n");
     Ok(text)
+}
+
+fn render_review_efficiency_section(text: &mut String, out: &Path) {
+    let Some(metrics) = read_review_metrics(out) else {
+        return;
+    };
+    let runtime = metrics
+        .get("wall_clock_seconds")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_seconds)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let total_lanes = metrics
+        .pointer("/models/model_lanes")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let ok_lanes = metrics
+        .pointer("/models/model_lane_status_counts/ok")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let inline_comments = metrics
+        .get("github_review_comments")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let max_inline_comments = metrics
+        .get("max_inline_comments")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let off_diff_rejected = metrics
+        .get("off_diff_candidates_rejected")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let provider_failures = metrics
+        .get("provider_evidence_failures")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let payload_status = metrics
+        .get("review_payload_status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let post_status = metrics
+        .get("post_status")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+
+    text.push_str("\n## Review efficiency\n\n");
+    text.push_str(&format!("- Runtime: `{runtime}`\n"));
+    text.push_str(&format!("- Model lanes: `{ok_lanes}/{total_lanes}` ok\n"));
+    text.push_str(&format!(
+        "- Inline comments: `{inline_comments}/{max_inline_comments}`\n"
+    ));
+    text.push_str(&format!(
+        "- Off-diff candidates rejected: `{off_diff_rejected}`\n"
+    ));
+    text.push_str(&format!(
+        "- Provider evidence failures: `{provider_failures}`\n"
+    ));
+    text.push_str(&format!(
+        "- Review payload: `{payload_status}`; post: `{post_status}`\n"
+    ));
+}
+
+fn read_review_metrics(out: &Path) -> Option<serde_json::Value> {
+    let text = fs::read_to_string(out.join("review/metrics.json")).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn format_seconds(seconds: u64) -> String {
+    let minutes = seconds / 60;
+    let seconds = seconds % 60;
+    if minutes == 0 {
+        format!("{seconds}s")
+    } else {
+        format!("{minutes}m{seconds:02}s")
+    }
 }
 
 fn render_evidence_sections(text: &mut String, out: &Path, plan: &Plan) {
@@ -6053,15 +6161,15 @@ mod tests {
         NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, ProviderKindArg,
         RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
         ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
-        SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output, cap_review_body,
-        classify_diff, collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes,
-        direct_minimax_spec, extract_model_content, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_lane, model_request_payload, model_response_shape,
-        opencode_canary_spec, provider_spec_for_lane_with_key_state, render_ledger_context,
-        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        split_curl_http_status, validate_github_review_payload,
+        SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
+        build_review_metrics, cap_review_body, classify_diff, collect_sensor_evidence_issues,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, opencode_canary_spec, provider_spec_for_lane_with_key_state,
+        render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
         write_review_artifacts, write_sensor_status,
@@ -7540,18 +7648,110 @@ UB_REVIEW_HTTP_STATUS:429
             &plan,
             "running summary",
             &args,
+            std::time::Duration::from_secs(73),
         )?;
 
         let github_review: GitHubReview =
             serde_json::from_slice(&fs::read(out.join("review/github-review.json"))?)?;
         let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
+        let metrics: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+        let summary = render_summary(&out, &plan, &diff)?;
 
         assert!(!github_review.body.contains("## Model lanes"));
         assert!(artifact_body.contains("## Model lanes"));
         assert!(artifact_body.contains("Lane: `ub-memory-lifetime`"));
+        assert_eq!(metrics["wall_clock_seconds"], 73);
+        assert_eq!(metrics["wall_clock_ms"], 73_000);
+        assert_eq!(metrics["review_payload_status"], "prepared");
+        assert_eq!(metrics["post_status"], "not_attempted_by_run");
+        assert_eq!(
+            metrics["github_review_body_bytes"],
+            github_review.body.len()
+        );
+        assert_eq!(metrics["artifact_review_body_bytes"], artifact_body.len());
+        assert!(summary.contains("## Review efficiency"));
+        assert!(summary.contains("Runtime: `1m13s`"));
+        assert!(summary.contains("Review payload: `prepared`; post: `not_attempted_by_run`"));
         assert!(!has_standalone_approval_line(&github_review.body));
         assert!(!has_standalone_approval_line(&artifact_body));
         Ok(())
+    }
+
+    #[test]
+    fn review_metrics_count_efficiency_facts() {
+        let review = super::ReviewArtifacts {
+            shared_context_id: "abc123".to_owned(),
+            mode: "review-direct".to_owned(),
+            posting: "review".to_owned(),
+            model_mode: "auto".to_owned(),
+            provider_policy: "minimax-only".to_owned(),
+            model_provider_policy: "minimax-only".to_owned(),
+            lane_width: 10,
+            model_concurrency: 8,
+            max_model_calls: 18,
+            max_inline_comments: 8,
+            model_timeout_sec: 300,
+            ledger_path: String::new(),
+            ledger_max_bytes: 65_536,
+            provider_preflights: vec![
+                super::ProviderPreflightReceipt {
+                    provider: "minimax".to_owned(),
+                    model: "MiniMax-M3".to_owned(),
+                    endpoint_kind: "anthropic-messages".to_owned(),
+                    status: "ok".to_owned(),
+                    reason: "preflight ok".to_owned(),
+                    duration_ms: Some(100),
+                    http_status: Some(200),
+                    response_shape: Some("anthropic".to_owned()),
+                },
+                super::ProviderPreflightReceipt {
+                    provider: "opencode-go".to_owned(),
+                    model: "minimax-m3".to_owned(),
+                    endpoint_kind: "anthropic-messages".to_owned(),
+                    status: "missing_key".to_owned(),
+                    reason: "optional provider unavailable".to_owned(),
+                    duration_ms: None,
+                    http_status: None,
+                    response_shape: None,
+                },
+            ],
+            model_lanes: vec![model_lane_receipt("tests-oracle", "ok")],
+            missing_or_failed_sensor_evidence: Vec::new(),
+            missing_or_failed_model_evidence: Vec::new(),
+            inline_comments: Vec::new(),
+            summary_only_findings: vec![SummaryOnlyFinding {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "inline guard rejected src/lib.rs:99; severity_allowed=true confidence_allowed=true line_valid=false concise=true body_present=true evidence_present=true repo_relative=true".to_owned(),
+                evidence: "line map receipt".to_owned(),
+            }],
+            body: "artifact body".to_owned(),
+        };
+        let github_review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "pr body".to_owned(),
+            comments: Vec::new(),
+        };
+
+        let metrics = build_review_metrics(
+            Path::new("target/ub-review-test"),
+            &test_diff(),
+            &test_plan(Vec::new()),
+            &review,
+            &github_review,
+            std::time::Duration::from_secs(601),
+        );
+
+        assert_eq!(metrics.wall_clock_seconds, 601);
+        assert_eq!(metrics.wall_clock_ms, 601_000);
+        assert_eq!(metrics.off_diff_candidates_rejected, 1);
+        assert_eq!(metrics.provider_evidence_failures, 1);
+        assert_eq!(metrics.review_payload_status, "prepared");
+        assert_eq!(metrics.post_status, "not_attempted_by_run");
+        assert_eq!(metrics.github_review_body_bytes, "pr body".len());
+        assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
     }
 
     #[test]
