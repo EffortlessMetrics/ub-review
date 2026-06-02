@@ -270,7 +270,7 @@ struct RunArgs {
     #[arg(long, default_value_t = 10, env = "UB_REVIEW_LANE_WIDTH")]
     lane_width: usize,
     /// Per-model-call timeout in seconds.
-    #[arg(long, default_value_t = 180, env = "UB_REVIEW_MODEL_TIMEOUT_SEC")]
+    #[arg(long, default_value_t = 300, env = "UB_REVIEW_MODEL_TIMEOUT_SEC")]
     model_timeout_sec: u64,
     /// Optional read-only UB ledger path.
     #[arg(long, default_value = "", env = "UB_REVIEW_LEDGER_PATH")]
@@ -7519,7 +7519,7 @@ UB_REVIEW_HTTP_STATUS:429
             max_model_calls: 14,
             provider_policy: ModelProviderPolicy::MinimaxPrimary,
             lane_width: 10,
-            model_timeout_sec: 180,
+            model_timeout_sec: 300,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
             minimax_provider_kind: ProviderKindArg::Anthropic,
