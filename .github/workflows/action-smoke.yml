@@ -97,6 +97,9 @@ jobs:
             test -f "$POST_RESULT_PATH" || test -f "$POST_ERROR_PATH"
           fi
 
+      - name: Verify Bun artifact contract
+        run: python scripts/verify-bun-review-artifacts.py target/ub-review-smoke
+
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -136,6 +139,14 @@ jobs:
 
       - name: Verify MiniMax smoke artifacts
         run: python scripts/verify-model-smoke-artifacts.py target/ub-review-model-smoke "${EXPECTED_OK_LANES}"
+        env:
+          EXPECTED_OK_LANES: ${{ inputs.model_smoke_expected_ok_lanes || '1' }}
+
+      - name: Verify Bun artifact contract
+        run: >
+          python scripts/verify-bun-review-artifacts.py target/ub-review-model-smoke
+          --min-ok-model-lanes "${EXPECTED_OK_LANES}"
+          --require-no-model-evidence-failures
         env:
           EXPECTED_OK_LANES: ${{ inputs.model_smoke_expected_ok_lanes || '1' }}
 

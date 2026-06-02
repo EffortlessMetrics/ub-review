@@ -65,6 +65,14 @@ Start with `running-summary.md`, then inspect `review/review.md`, the lane
 packets under `lanes/`, and `review/post-result.json` or
 `review/post-error.json` for the grouped review posting trail.
 
+For the first Bun fork verification, download the artifact and run:
+
+```bash
+python scripts/verify-bun-review-artifacts.py target/ub-review \
+  --min-ok-model-lanes 10 \
+  --require-no-model-evidence-failures
+```
+
 ## CI budget rule
 
 The GitHub runner should prepare evidence once and avoid duplicated local
