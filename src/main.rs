@@ -3298,6 +3298,7 @@ where
     let env_name = model_api_key_env(spec.provider);
     let token = std::env::var(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
+    let auth_header = model_auth_header(spec, &token);
     let payload = model_request_payload(spec, prompt);
     let request_path = lane_dir.join("request.json");
     let response_path = lane_dir.join("response.json");
@@ -3307,7 +3308,7 @@ where
     let process_output = run_curl_json_post(
         root,
         &url,
-        &token,
+        &auth_header,
         &request_path,
         &["Accept: application/json", "Content-Type: application/json"],
         args.model_timeout_sec,
@@ -3745,10 +3746,21 @@ fn model_api_key_env(provider: ModelProvider) -> &'static str {
 
 fn model_api_url(spec: &ProviderSpec) -> String {
     match spec.provider {
-        ModelProvider::MiniMaxDirect => env_or_default(
-            "UB_REVIEW_MINIMAX_API_URL",
-            "https://api.minimax.io/anthropic",
-        ),
+        ModelProvider::MiniMaxDirect => {
+            if let Ok(value) = std::env::var("UB_REVIEW_MINIMAX_API_URL")
+                && !value.trim().is_empty()
+            {
+                return value;
+            }
+            match spec.endpoint_kind {
+                ProviderEndpointKind::AnthropicMessages => {
+                    "https://api.minimax.io/anthropic/v1/messages".to_owned()
+                }
+                ProviderEndpointKind::OpenAiChat => {
+                    "https://api.minimax.io/v1/chat/completions".to_owned()
+                }
+            }
+        }
         ModelProvider::OpenCodeGo => {
             if let Ok(value) = std::env::var("UB_REVIEW_OPENCODE_API_URL")
                 && !value.trim().is_empty()
@@ -3767,11 +3779,11 @@ fn model_api_url(spec: &ProviderSpec) -> String {
     }
 }
 
-fn env_or_default(name: &str, default: &str) -> String {
-    std::env::var(name)
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| default.to_owned())
+fn model_auth_header(spec: &ProviderSpec, token: &str) -> String {
+    match spec.provider {
+        ModelProvider::MiniMaxDirect => format!("X-Api-Key: {token}"),
+        ModelProvider::OpenCodeGo => format!("Authorization: Bearer {token}"),
+    }
 }
 
 fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value {
@@ -3845,7 +3857,7 @@ fn classify_model_error(err: &anyhow::Error) -> String {
 fn run_curl_json_post(
     root: &Path,
     url: &str,
-    token: &str,
+    auth_header: &str,
     request_path: &Path,
     headers: &[&str],
     timeout_sec: u64,
@@ -3879,11 +3891,7 @@ fn run_curl_json_post(
         for header in headers {
             writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
         }
-        writeln!(
-            stdin,
-            "header = \"Authorization: Bearer {}\"",
-            curl_config_quote(token)
-        )?;
+        writeln!(stdin, "header = \"{}\"", curl_config_quote(auth_header))?;
     }
     let output = child.wait_with_output().with_context(|| "wait for curl")?;
     let (stdout, http_status) = split_curl_http_status(output.stdout);
@@ -3960,7 +3968,7 @@ fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
     let output = run_curl_json_post(
         Path::new("."),
         &url,
-        token,
+        &format!("Authorization: Bearer {token}"),
         &post_payload,
         &[
             "Accept: application/vnd.github+json",
@@ -4729,10 +4737,11 @@ mod tests {
         RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
         apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
         default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
-        model_assignments, model_request_payload, model_response_shape, opencode_canary_spec,
-        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
-        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, write_sensor_status,
+        model_api_url, model_assignments, model_auth_header, model_request_payload,
+        model_response_shape, opencode_canary_spec, render_ledger_context, render_review_body,
+        render_summary, right_side_diff_lines, run_command_to_files, run_sensor,
+        split_curl_http_status, validate_github_review_payload, validate_inline_candidate,
+        write_sensor_status,
     };
 
     #[test]
@@ -5129,6 +5138,21 @@ index 1111111..2222222 100644
         assert_eq!(assignments[0].spec.provider, ModelProvider::MiniMaxDirect);
         assert_eq!(assignments[0].spec.model, "MiniMax-M3");
         assert!(assignments[0].fallback.is_none());
+    }
+
+    #[test]
+    fn direct_minimax_uses_messages_endpoint_and_api_key_header() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+
+        assert_eq!(
+            model_api_url(&spec),
+            "https://api.minimax.io/anthropic/v1/messages"
+        );
+        assert_eq!(
+            model_auth_header(&spec, "test-token"),
+            "X-Api-Key: test-token"
+        );
     }
 
     #[test]
