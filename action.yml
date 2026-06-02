@@ -169,6 +169,21 @@ outputs:
   github-review-path:
     description: Path to the GitHub review payload artifact.
     value: ${{ steps.paths.outputs.github-review-path }}
+  post-result-path:
+    description: Path to the successful grouped review post receipt.
+    value: ${{ steps.paths.outputs.post-result-path }}
+  post-error-path:
+    description: Path to the grouped review post error receipt.
+    value: ${{ steps.paths.outputs.post-error-path }}
+  post-payload-path:
+    description: Path to the exact grouped review payload submitted to GitHub.
+    value: ${{ steps.paths.outputs.post-payload-path }}
+  post-stdout-path:
+    description: Path to the GitHub review post response body artifact.
+    value: ${{ steps.paths.outputs.post-stdout-path }}
+  post-stderr-path:
+    description: Path to the GitHub review post stderr artifact.
+    value: ${{ steps.paths.outputs.post-stderr-path }}
 
 runs:
   using: composite
@@ -330,3 +345,8 @@ runs:
         echo "review-json-path=${{ inputs.out }}/review/review.json" >> "$GITHUB_OUTPUT"
         echo "metrics-json-path=${{ inputs.out }}/review/metrics.json" >> "$GITHUB_OUTPUT"
         echo "github-review-path=${{ inputs.out }}/review/github-review.json" >> "$GITHUB_OUTPUT"
+        echo "post-result-path=${{ inputs.out }}/review/post-result.json" >> "$GITHUB_OUTPUT"
+        echo "post-error-path=${{ inputs.out }}/review/post-error.json" >> "$GITHUB_OUTPUT"
+        echo "post-payload-path=${{ inputs.out }}/review/github-review-post-payload.json" >> "$GITHUB_OUTPUT"
+        echo "post-stdout-path=${{ inputs.out }}/review/post-stdout.json" >> "$GITHUB_OUTPUT"
+        echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"

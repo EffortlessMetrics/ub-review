@@ -49,7 +49,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: ./
+      - id: ub-review
+        uses: ./
         with:
           preset: bun-ub
           profile: gh-runner
@@ -66,17 +67,34 @@ jobs:
         shell: bash
         env:
           EXPECT_REVIEW_POST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+          SUMMARY_PATH: ${{ steps.ub-review.outputs.summary-path }}
+          GITHUB_REVIEW_PATH: ${{ steps.ub-review.outputs.github-review-path }}
+          POST_RESULT_PATH: ${{ steps.ub-review.outputs.post-result-path }}
+          POST_ERROR_PATH: ${{ steps.ub-review.outputs.post-error-path }}
+          POST_PAYLOAD_PATH: ${{ steps.ub-review.outputs.post-payload-path }}
+          POST_STDOUT_PATH: ${{ steps.ub-review.outputs.post-stdout-path }}
+          POST_STDERR_PATH: ${{ steps.ub-review.outputs.post-stderr-path }}
         run: |
           set -euo pipefail
 
-          test -f target/ub-review-smoke/running-summary.md
-          test -f target/ub-review-smoke/review/github-review.json
+          test "$SUMMARY_PATH" = "target/ub-review-smoke/running-summary.md"
+          test "$GITHUB_REVIEW_PATH" = "target/ub-review-smoke/review/github-review.json"
+          test "$POST_RESULT_PATH" = "target/ub-review-smoke/review/post-result.json"
+          test "$POST_ERROR_PATH" = "target/ub-review-smoke/review/post-error.json"
+          test "$POST_PAYLOAD_PATH" = "target/ub-review-smoke/review/github-review-post-payload.json"
+          test "$POST_STDOUT_PATH" = "target/ub-review-smoke/review/post-stdout.json"
+          test "$POST_STDERR_PATH" = "target/ub-review-smoke/review/post-stderr.txt"
+
+          test -f "$SUMMARY_PATH"
+          test -f "$GITHUB_REVIEW_PATH"
 
           if [[ "$EXPECT_REVIEW_POST" == "true" ]]; then
-            test -f target/ub-review-smoke/review/post-result.json
+            test -f "$POST_RESULT_PATH"
+            test -f "$POST_PAYLOAD_PATH"
+            test -f "$POST_STDOUT_PATH"
+            test -f "$POST_STDERR_PATH"
           else
-            test -f target/ub-review-smoke/review/post-result.json || \
-              test -f target/ub-review-smoke/review/post-error.json
+            test -f "$POST_RESULT_PATH" || test -f "$POST_ERROR_PATH"
           fi
 
       - uses: actions/upload-artifact@v7
