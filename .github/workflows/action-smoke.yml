@@ -1,0 +1,34 @@
+name: Action Smoke
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Local action smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: ./
+        with:
+          preset: bun-ub
+          profile: gh-runner
+          install-tools: 'false'
+          base: HEAD~1
+          head: HEAD
+          out: target/ub-review-smoke
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ub-review-smoke
+          path: target/ub-review-smoke
+          retention-days: 7

@@ -1,0 +1,10 @@
+id: rust-raw-pointer-access
+language: Rust
+message: raw pointer access; route to ub/security if changed
+severity: warning
+rule:
+  any:
+    - pattern: "$X.as_ptr()"
+    - pattern: "$X.as_mut_ptr()"
+    - pattern: "std::slice::from_raw_parts($$$ARGS)"
+    - pattern: "std::slice::from_raw_parts_mut($$$ARGS)"

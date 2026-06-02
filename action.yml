@@ -1,0 +1,327 @@
+name: UB Review
+
+description: >-
+  Build a box-aware UB/native-boundary evidence packet, run bounded model review
+  lanes when configured, and optionally post one grouped pull request review.
+
+branding:
+  icon: search
+  color: yellow
+
+inputs:
+  preset:
+    description: Repo preset. Currently `bun-ub` is the production/default preset.
+    default: bun-ub
+    required: false
+  profile:
+    description: Box profile. Use `gh-runner` on GitHub-hosted runners.
+    default: gh-runner
+    required: false
+  root:
+    description: Repository root to inspect.
+    default: .
+    required: false
+  base:
+    description: Base ref, usually `origin/${{ github.base_ref }}`.
+    default: origin/main
+    required: false
+  head:
+    description: Head ref.
+    default: HEAD
+    required: false
+  out:
+    description: Output directory for the packet.
+    default: target/ub-review
+    required: false
+  install-tools:
+    description: Best-effort install of advisory sensors.
+    default: 'true'
+    required: false
+  tool-bundle:
+    description: 'Sensor bundle to install: none, core, bun-fast, or full.'
+    default: core
+    required: false
+  setup-rust:
+    description: Install/select Rust 1.95.0 with rustup when available.
+    default: 'true'
+    required: false
+  install-mode:
+    description: 'Runner install mode for ub-review itself: auto, source, or path.'
+    default: auto
+    required: false
+  binary-path:
+    description: Existing ub-review binary path when install-mode=path.
+    default: ''
+    required: false
+  allow-heavy:
+    description: Allow heavy witnesses such as tests/builds/Miri/mutation. Disabled by default.
+    default: 'false'
+    required: false
+  posting:
+    description: 'Posting mode: artifact-only or review.'
+    default: review
+    required: false
+  mode:
+    description: 'Execution mode: review-direct, agent-investigate, or agent-patch. Only review-direct is implemented in v0.'
+    default: review-direct
+    required: false
+  github-token:
+    description: GitHub token with pull-request write permission when posting=review.
+    default: ''
+    required: false
+  minimax-api-key:
+    description: MiniMax provider API key for MiniMax M3 lanes.
+    default: ''
+    required: false
+  minimax-api-url:
+    description: Optional MiniMax API URL override.
+    default: ''
+    required: false
+  minimax-provider-kind:
+    description: 'MiniMax request/response family: anthropic or openai.'
+    default: anthropic
+    required: false
+  minimax-model:
+    description: MiniMax model name.
+    default: MiniMax-M3
+    required: false
+  opencode-api-key:
+    description: OpenCode Go API key for optional direct provider lanes.
+    default: ''
+    required: false
+  opencode-api-url:
+    description: Optional OpenCode Go API URL override.
+    default: ''
+    required: false
+  opencode-model:
+    description: OpenCode Go model for the canary lane.
+    default: minimax-m3
+    required: false
+  opencode-endpoint-kind:
+    description: 'OpenCode Go endpoint family: auto, openai-chat, or anthropic-messages.'
+    default: auto
+    required: false
+  model-mode:
+    description: 'Model mode: auto or off.'
+    default: auto
+    required: false
+  provider-policy:
+    description: 'Provider policy: minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
+    default: minimax-primary
+    required: false
+  lane-width:
+    description: 'Bun model lane width: 6, 10, or 20.'
+    default: '10'
+    required: false
+  model-timeout-sec:
+    description: Per-model-call timeout in seconds.
+    default: '180'
+    required: false
+  max-inline-comments:
+    description: Maximum validated inline comments in the grouped PR review.
+    default: '8'
+    required: false
+  model-concurrency:
+    description: Planned model lane concurrency.
+    default: '8'
+    required: false
+  max-model-calls:
+    description: Maximum model calls for review generation.
+    default: '14'
+    required: false
+  review-body-max-bytes:
+    description: Maximum bytes for the grouped PR review body.
+    default: '60000'
+    required: false
+  ledger-path:
+    description: Optional read-only UB ledger path to include in shared context.
+    default: ''
+    required: false
+  ledger-max-bytes:
+    description: Maximum UB ledger context bytes.
+    default: '65536'
+    required: false
+  fail-on-post-error:
+    description: Fail the action when posting the grouped PR review fails.
+    default: 'false'
+    required: false
+  github-summary:
+    description: Append running-summary.md to GITHUB_STEP_SUMMARY.
+    default: 'true'
+    required: false
+
+outputs:
+  out:
+    description: Output directory containing the UB review packet.
+    value: ${{ inputs.out }}
+  summary-path:
+    description: Path to the running summary markdown.
+    value: ${{ steps.paths.outputs.summary-path }}
+  events-path:
+    description: Path to the append-only event log.
+    value: ${{ steps.paths.outputs.events-path }}
+  review-json-path:
+    description: Path to the internal review artifact.
+    value: ${{ steps.paths.outputs.review-json-path }}
+  github-review-path:
+    description: Path to the GitHub review payload artifact.
+    value: ${{ steps.paths.outputs.github-review-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Select Rust toolchain
+      if: inputs['setup-rust'] == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v rustup >/dev/null 2>&1; then
+          rustup toolchain install 1.95.0 --profile minimal
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rustup default 1.95.0
+        elif ! command -v cargo >/dev/null 2>&1; then
+          echo "::error::cargo is unavailable and rustup is not installed"
+          exit 1
+        else
+          echo "::warning::rustup unavailable; using existing cargo/rustc"
+        fi
+
+    - name: Resolve ub-review runner
+      id: runner
+      shell: bash
+      env:
+        UB_REVIEW_INSTALL_MODE: ${{ inputs['install-mode'] }}
+        UB_REVIEW_BINARY_PATH: ${{ inputs['binary-path'] }}
+      run: |
+        set -euo pipefail
+
+        mode="${UB_REVIEW_INSTALL_MODE:-auto}"
+        bin_path="${UB_REVIEW_BINARY_PATH:-}"
+
+        if [[ "$mode" == "path" ]]; then
+          if [[ -z "$bin_path" || ! -x "$bin_path" ]]; then
+            echo "::error::install-mode=path requires executable binary-path"
+            exit 1
+          fi
+          echo "bin=$bin_path" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [[ "$mode" == "auto" ]] && command -v ub-review >/dev/null 2>&1; then
+          echo "bin=$(command -v ub-review)" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # Source mode is the bootstrap path. It is slower than a release binary,
+        # but token-free and deterministic enough for early adoption. Callers can
+        # cache ~/.cargo and CARGO_TARGET_DIR for faster follow-up runs.
+        workdir="${RUNNER_TEMP:-/tmp}/ub-review-action-src"
+        rm -rf "$workdir"
+        mkdir -p "$workdir"
+        cp -R "$GITHUB_ACTION_PATH/." "$workdir/"
+
+        echo "::group::Build ub-review from action source"
+        cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
+        cargo build --manifest-path "$workdir/Cargo.toml" --locked --release
+        echo "::endgroup::"
+
+        bin="$workdir/target/release/ub-review"
+        if [[ ! -x "$bin" ]]; then
+          echo "::error::ub-review binary was not produced at $bin"
+          exit 1
+        fi
+        echo "source-dir=$workdir" >> "$GITHUB_OUTPUT"
+        echo "bin=$bin" >> "$GITHUB_OUTPUT"
+
+    - name: Install advisory sensors
+      if: inputs['install-tools'] == 'true'
+      shell: bash
+      env:
+        UB_REVIEW_TOOL_BUNDLE: ${{ inputs['tool-bundle'] }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/install-gh-runner-tools.sh"
+
+    - name: Build UB review packet
+      shell: bash
+      env:
+        UB_REVIEW_PROFILE: ${{ inputs.profile }}
+        UB_REVIEW_PRESET: ${{ inputs.preset }}
+        UB_REVIEW_MINIMAX_API_KEY: ${{ inputs['minimax-api-key'] }}
+        UB_REVIEW_MINIMAX_API_URL: ${{ inputs['minimax-api-url'] }}
+        UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
+        UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
+      run: |
+        set -euo pipefail
+        extra=()
+        if [[ "${{ inputs['allow-heavy'] }}" == "true" ]]; then
+          extra+=(--allow-heavy)
+        fi
+
+        config="$GITHUB_ACTION_PATH/configs/bun-gh-runner.toml"
+        case "${{ inputs.preset }}" in
+          bun-ub|bun)
+            config="$GITHUB_ACTION_PATH/configs/bun-gh-runner.toml"
+            ;;
+          *)
+            echo "::warning::Unknown preset '${{ inputs.preset }}'; using bun-ub"
+            ;;
+        esac
+
+        "${{ steps.runner.outputs.bin }}" run \
+          --config "$config" \
+          --profile "${{ inputs.profile }}" \
+          --root "${{ inputs.root }}" \
+          --base "${{ inputs.base }}" \
+          --head "${{ inputs.head }}" \
+          --out "${{ inputs.out }}" \
+          --posting "${{ inputs.posting }}" \
+          --mode "${{ inputs.mode }}" \
+          --model-mode "${{ inputs['model-mode'] }}" \
+          --provider-policy "${{ inputs['provider-policy'] }}" \
+          --lane-width "${{ inputs['lane-width'] }}" \
+          --model-timeout-sec "${{ inputs['model-timeout-sec'] }}" \
+          --max-inline-comments "${{ inputs['max-inline-comments'] }}" \
+          --model-concurrency "${{ inputs['model-concurrency'] }}" \
+          --max-model-calls "${{ inputs['max-model-calls'] }}" \
+          --minimax-provider-kind "${{ inputs['minimax-provider-kind'] }}" \
+          --minimax-model "${{ inputs['minimax-model'] }}" \
+          --opencode-model "${{ inputs['opencode-model'] }}" \
+          --opencode-endpoint-kind "${{ inputs['opencode-endpoint-kind'] }}" \
+          --ledger-path "${{ inputs['ledger-path'] }}" \
+          --ledger-max-bytes "${{ inputs['ledger-max-bytes'] }}" \
+          --review-body-max-bytes "${{ inputs['review-body-max-bytes'] }}" \
+          --no-github-summary \
+          "${extra[@]}"
+
+    - name: Post grouped PR review
+      if: inputs.posting == 'review'
+      shell: bash
+      env:
+        UB_REVIEW_GITHUB_TOKEN: ${{ inputs['github-token'] }}
+      run: |
+        set -euo pipefail
+        extra=()
+        if [[ "${{ inputs['fail-on-post-error'] }}" == "true" ]]; then
+          extra+=(--fail-on-post-error)
+        fi
+        "${{ steps.runner.outputs.bin }}" post \
+          --review-json "${{ inputs.out }}/review/github-review.json" \
+          --out "${{ inputs.out }}/review" \
+          "${extra[@]}"
+
+    - name: Append UB review summary
+      if: always() && inputs['github-summary'] == 'true'
+      shell: bash
+      run: |
+        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "${{ inputs.out }}/running-summary.md" ]; then
+          cat "${{ inputs.out }}/running-summary.md" >> "$GITHUB_STEP_SUMMARY"
+        fi
+
+    - name: Set output paths
+      id: paths
+      if: always()
+      shell: bash
+      run: |
+        echo "summary-path=${{ inputs.out }}/running-summary.md" >> "$GITHUB_OUTPUT"
+        echo "events-path=${{ inputs.out }}/events.ndjson" >> "$GITHUB_OUTPUT"
+        echo "review-json-path=${{ inputs.out }}/review/review.json" >> "$GITHUB_OUTPUT"
+        echo "github-review-path=${{ inputs.out }}/review/github-review.json" >> "$GITHUB_OUTPUT"
