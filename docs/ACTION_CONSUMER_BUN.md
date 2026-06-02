@@ -59,6 +59,12 @@ The workflow uploads artifacts from the consumer repository:
     if-no-files-found: warn
 ```
 
+The action also exposes the core packet and posting artifact paths as outputs.
+For posting diagnostics, start with `post-result-path` when the grouped review
+posted and `post-error-path` when posting was skipped or failed. The full packet
+still includes `review/github-review-post-payload.json`, `review/post-stdout.json`,
+and `review/post-stderr.txt` for the exact request/response trail.
+
 ## Trigger policy
 
 For the Bun UB hunt:

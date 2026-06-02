@@ -156,6 +156,9 @@ target/ub-review/
     github-review.json
     post-result.json
     post-error.json
+    github-review-post-payload.json
+    post-stdout.json
+    post-stderr.txt
 
   events.ndjson
   running-summary.md
@@ -277,6 +280,22 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `ledger-max-bytes` | `65536` | Maximum ledger context bytes. |
 | `fail-on-post-error` | `false` | Fail the action when PR review posting fails. |
 | `github-summary` | `true` | Append running summary to job summary. |
+
+## Outputs
+
+| Output | Meaning |
+|---|---|
+| `out` | Output directory containing the full packet. |
+| `summary-path` | `running-summary.md`. |
+| `events-path` | Append-only `events.ndjson`. |
+| `review-json-path` | Internal `review/review.json`. |
+| `metrics-json-path` | Review metrics artifact. |
+| `github-review-path` | Prepared grouped review payload. |
+| `post-result-path` | Successful grouped review post receipt. |
+| `post-error-path` | Grouped review post error receipt. |
+| `post-payload-path` | Exact grouped review payload submitted to GitHub. |
+| `post-stdout-path` | GitHub post response body artifact. |
+| `post-stderr-path` | GitHub post stderr artifact. |
 
 ## Bootstrap note
 
