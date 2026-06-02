@@ -300,7 +300,46 @@ fn active_len_tracks_view_after_resize() {
             "1",
         ],
     )?;
-    assert!(out.join("review/post-error.json").exists());
+    let post_error_path = out.join("review/post-error.json");
+    assert!(post_error_path.exists());
+    let post_error_text = fs::read_to_string(&post_error_path)?;
+    let post_error: serde_json::Value = serde_json::from_str(&post_error_text)?;
+    assert_eq!(post_error["schema_version"], 1);
+    assert_eq!(post_error["status"], "failed");
+    assert_eq!(post_error["error_kind"], "missing_token");
+    assert_eq!(post_error["failure_stage"], "preflight");
+    assert_eq!(post_error["repo"], "EffortlessMetrics/ub-review");
+    assert_eq!(post_error["repo_valid"], true);
+    assert_eq!(post_error["pull_number"], 1);
+    assert_eq!(post_error["comments"], 0);
+    assert_eq!(post_error["review_comment_count"], 0);
+    assert_eq!(post_error["review_event"], "COMMENT");
+    assert!(
+        post_error["review_body_bytes"]
+            .as_u64()
+            .is_some_and(|bytes| bytes > 0)
+    );
+    assert_eq!(post_error["review_json_exists"], true);
+    assert_eq!(post_error["review_json_valid"], true);
+    assert_eq!(post_error["token_present"], false);
+    assert_eq!(post_error["payload_written"], false);
+    assert_eq!(post_error["would_post"], false);
+    assert_eq!(post_error["failure_tolerated"], true);
+    assert_eq!(post_error["fail_on_post_error"], false);
+    assert!(post_error["http_status"].is_null());
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("github token is required"))
+    );
+    assert!(
+        post_error["review_json"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("github-review.json"))
+    );
+    assert!(!post_error_text.contains("github_token"));
+    assert!(!post_error_text.contains("Authorization"));
+    assert!(!post_error_text.contains("Bearer"));
 
     for lane in [
         "ub",
