@@ -32,6 +32,23 @@ jobs:
           model-mode: off
           fail-on-post-error: 'false'
 
+      - name: Verify smoke artifacts
+        shell: bash
+        env:
+          EXPECT_REVIEW_POST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+        run: |
+          set -euo pipefail
+
+          test -f target/ub-review-smoke/running-summary.md
+          test -f target/ub-review-smoke/review/github-review.json
+
+          if [[ "$EXPECT_REVIEW_POST" == "true" ]]; then
+            test -f target/ub-review-smoke/review/post-result.json
+          else
+            test -f target/ub-review-smoke/review/post-result.json || \
+              test -f target/ub-review-smoke/review/post-error.json
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
