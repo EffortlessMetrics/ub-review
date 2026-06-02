@@ -576,6 +576,20 @@ struct ReviewArtifacts {
     body: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct ReviewSummaryReceipt {
+    #[serde(default)]
+    model_mode: String,
+    #[serde(default)]
+    provider_policy: String,
+    #[serde(default)]
+    lane_width: usize,
+    #[serde(default)]
+    provider_preflights: Vec<ProviderPreflightReceipt>,
+    #[serde(default)]
+    model_lanes: Vec<ModelLaneReceipt>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct ReviewMetrics {
     schema_version: u32,
@@ -1202,17 +1216,22 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     }
 
     write_lane_packets(&args.review.out, &diff, &plan, &event_log)?;
-    let summary = render_summary(&args.review.out, &plan, &diff)?;
-    fs::write(args.review.out.join("running-summary.md"), &summary)?;
+    let preliminary_summary = render_summary(&args.review.out, &plan, &diff)?;
+    fs::write(
+        args.review.out.join("running-summary.md"),
+        &preliminary_summary,
+    )?;
     write_review_artifacts(
         &args.review.root,
         &args.review.out,
         &config,
         &diff,
         &plan,
-        &summary,
+        &preliminary_summary,
         &args,
     )?;
+    let summary = render_summary(&args.review.out, &plan, &diff)?;
+    fs::write(args.review.out.join("running-summary.md"), &summary)?;
     if config.review.github_summary && !args.no_github_summary {
         append_github_step_summary(&summary)?;
     }
@@ -5025,6 +5044,7 @@ fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String>
         ));
     }
     render_evidence_sections(&mut text, out, plan);
+    render_model_status_sections(&mut text, out);
     text.push_str("\n## Lane packets\n\n");
     text.push_str("| Lane | Model | Packet |\n");
     text.push_str("|---|---|---|\n");
@@ -5148,6 +5168,117 @@ fn render_evidence_sections(text: &mut String, out: &Path, plan: &Plan) {
             text.push_str(&format!("- {}\n", escape_md(&item)));
         }
     }
+}
+
+fn render_model_status_sections(text: &mut String, out: &Path) {
+    let Some(review) = read_review_summary_receipt(out) else {
+        return;
+    };
+
+    text.push_str("\n## Provider preflights\n\n");
+    text.push_str(&format!(
+        "- Model mode: `{}`\n- Provider policy: `{}`\n- Lane width: `{}`\n\n",
+        review.model_mode, review.provider_policy, review.lane_width
+    ));
+    if review.provider_preflights.is_empty() {
+        text.push_str("- No provider preflight receipts were produced.\n");
+    } else {
+        text.push_str("| Provider | Model | Endpoint | Status | HTTP | Response | Reason |\n");
+        text.push_str("|---|---|---|---|---|---|---|\n");
+        for receipt in &review.provider_preflights {
+            text.push_str(&format!(
+                "| `{}` | `{}` | `{}` | `{}` | {} | {} | {} |\n",
+                receipt.provider,
+                receipt.model,
+                receipt.endpoint_kind,
+                receipt.status,
+                optional_u16_cell(receipt.http_status),
+                optional_str_cell(receipt.response_shape.as_deref()),
+                escape_md(&receipt.reason)
+            ));
+        }
+    }
+
+    text.push_str("\n## Model lane status\n\n");
+    if review.model_lanes.is_empty() {
+        text.push_str("- No model lane receipts were produced.\n");
+    } else {
+        text.push_str(
+            "| Lane | Provider | Model | Endpoint | Status | Fallback | HTTP | Reason |\n",
+        );
+        text.push_str("|---|---|---|---|---|---|---|---|\n");
+        for receipt in &review.model_lanes {
+            text.push_str(&format!(
+                "| `{}` | `{}` | `{}` | `{}` | `{}` | {} | {} | {} |\n",
+                receipt.lane,
+                receipt.provider,
+                receipt.model,
+                receipt.endpoint_kind,
+                receipt.status,
+                optional_str_cell(receipt.fallback_from.as_deref()),
+                optional_u16_cell(receipt.http_status),
+                escape_md(&receipt.reason)
+            ));
+        }
+    }
+
+    let missing_or_failed = model_status_evidence_issues(&review);
+    text.push_str("\n## Missing or failed model evidence\n\n");
+    if missing_or_failed.is_empty() {
+        text.push_str("- No planned model evidence is currently missing or failed.\n");
+    } else {
+        for item in missing_or_failed {
+            text.push_str(&format!("- {}\n", escape_md(&item)));
+        }
+    }
+}
+
+fn model_status_evidence_issues(review: &ReviewSummaryReceipt) -> Vec<String> {
+    let mut issues = Vec::new();
+    for receipt in &review.provider_preflights {
+        if is_model_evidence_issue(&receipt.status) {
+            issues.push(format!(
+                "Provider preflight `{}` model `{}` endpoint `{}`: `{}` - {}",
+                receipt.provider,
+                receipt.model,
+                receipt.endpoint_kind,
+                receipt.status,
+                receipt.reason
+            ));
+        }
+    }
+    for receipt in &review.model_lanes {
+        if is_model_receipt_evidence_issue(receipt) {
+            issues.push(format!(
+                "Lane `{}` via `{}` model `{}` endpoint `{}`: `{}` - {}",
+                receipt.lane,
+                receipt.provider,
+                receipt.model,
+                receipt.endpoint_kind,
+                receipt.status,
+                receipt.reason
+            ));
+        }
+    }
+    issues
+}
+
+fn read_review_summary_receipt(out: &Path) -> Option<ReviewSummaryReceipt> {
+    let text = fs::read_to_string(out.join("review/review.json")).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn optional_u16_cell(value: Option<u16>) -> String {
+    value
+        .map(|value| format!("`{value}`"))
+        .unwrap_or_else(|| "-".to_owned())
+}
+
+fn optional_str_cell(value: Option<&str>) -> String {
+    value
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| format!("`{}`", escape_md(value)))
+        .unwrap_or_else(|| "-".to_owned())
 }
 
 fn evidence_label(sensor_id: &str) -> &'static str {
@@ -5892,6 +6023,60 @@ mod tests {
         assert!(missing.contains("tokmd skipped; deterministic repository/diff packet unavailable; reason: dry-run; sensor not executed."));
         assert!(!missing.contains("ripr"));
         assert!(!missing.contains("No planned sensor evidence is currently missing."));
+        Ok(())
+    }
+
+    #[test]
+    fn running_summary_renders_model_receipt_status() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(out.join("review"))?;
+        fs::write(
+            out.join("review/review.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "model_mode": "auto",
+                "provider_policy": "minimax-only",
+                "lane_width": 10,
+                "provider_preflights": [
+                    {
+                        "provider": "minimax",
+                        "model": "MiniMax-M3",
+                        "endpoint_kind": "openai-chat",
+                        "status": "missing_key",
+                        "reason": "UB_REVIEW_MINIMAX_API_KEY not provided; provider unavailable",
+                        "duration_ms": null,
+                        "http_status": null,
+                        "response_shape": null
+                    }
+                ],
+                "model_lanes": [
+                    {
+                        "lane": "ub-memory-lifetime",
+                        "provider": "minimax",
+                        "model": "MiniMax-M3",
+                        "endpoint_kind": "openai-chat",
+                        "status": "missing_key",
+                        "reason": "UB_REVIEW_MINIMAX_API_KEY not provided; minimax lane output unavailable",
+                        "duration_ms": null,
+                        "http_status": null,
+                        "response_shape": null,
+                        "fallback_from": null
+                    }
+                ]
+            }))?,
+        )?;
+
+        let summary = render_summary(&out, &test_plan(Vec::new()), &test_diff())?;
+
+        assert!(summary.contains("## Provider preflights"));
+        assert!(summary.contains("- Provider policy: `minimax-only`"));
+        assert!(summary.contains("## Model lane status"));
+        assert!(summary.contains("`ub-memory-lifetime`"));
+        assert!(summary.contains("## Missing or failed model evidence"));
+        assert!(summary.contains("Provider preflight `minimax` model `MiniMax-M3`"));
+        assert!(summary.contains("Lane `ub-memory-lifetime` via `minimax` model `MiniMax-M3`"));
+        assert!(!summary.contains("No planned model evidence is currently missing or failed."));
+        assert!(!has_standalone_approval_line(&summary));
         Ok(())
     }
 

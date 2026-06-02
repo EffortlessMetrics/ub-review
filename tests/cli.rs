@@ -359,6 +359,11 @@ fn active_len_tracks_view_after_resize() {
     let summary = fs::read_to_string(out.join("running-summary.md"))?;
     assert!(!has_standalone_approval_line(&summary));
     assert!(summary.contains("## Missing evidence"));
+    assert!(summary.contains("## Provider preflights"));
+    assert!(summary.contains("## Model lane status"));
+    assert!(summary.contains("## Missing or failed model evidence"));
+    assert!(summary.contains("`ub-memory-lifetime`"));
+    assert!(summary.contains("MiniMax-M3"));
     assert!(summary.contains("## Lane packets"));
     Ok(())
 }
