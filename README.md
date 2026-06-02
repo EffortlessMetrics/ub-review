@@ -279,6 +279,13 @@ source on the runner. That is slower than the final release-binary path, but it
 keeps first adoption token-free and mechanically simple. The consuming workflow
 can cache Cargo registry and target directories if needed.
 
+## Codex lane notes
+
+Codex work should follow [docs/CODEX_FINISH.md](docs/CODEX_FINISH.md): one
+small green PR at a time, MiniMax M3 primary for v0, GLM skipped until
+approved, agent harnesses out of the hot path, and real sensor defects filed in
+the matching `*-swarm` repo instead of silently absorbed into `ub-review`.
+
 ## Local development
 
 ```bash
