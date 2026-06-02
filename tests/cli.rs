@@ -1,6 +1,10 @@
 use std::fs;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 
@@ -369,6 +373,193 @@ fn active_len_tracks_view_after_resize() {
 }
 
 #[test]
+fn model_auto_run_hits_fake_minimax_provider_and_writes_artifacts() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "bun-rab-mini"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn active_len(len: usize) -> usize {
+    len
+}
+"#,
+    )?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn active_len(len: usize) -> usize {
+    let ptr = &len as *const usize;
+    unsafe { *ptr }
+}
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "touch rust behavior"])?;
+
+    let dummy_key = "dummy-minimax-key-for-local-test";
+    let (provider_url, provider) = spawn_fake_openai_provider(2)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lane-width",
+            "6",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--max-inline-comments",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 2);
+    assert!(
+        provider_requests
+            .iter()
+            .all(|request| request
+                .contains("Authorization: Bearer dummy-minimax-key-for-local-test"))
+    );
+
+    let preflight_artifact_dir = out
+        .join("review/provider-preflight")
+        .join("minimax-MiniMax-M3-openai-chat");
+    let lane_artifact_dir = out.join("review/model/ub");
+    for path in [
+        preflight_artifact_dir.join("request.json"),
+        preflight_artifact_dir.join("response.json"),
+        preflight_artifact_dir.join("content.json"),
+        preflight_artifact_dir.join("stderr.txt"),
+        lane_artifact_dir.join("request.json"),
+        lane_artifact_dir.join("response.json"),
+        lane_artifact_dir.join("content.json"),
+        lane_artifact_dir.join("stderr.txt"),
+    ] {
+        assert!(path.exists(), "missing {}", path.display());
+        let text = fs::read_to_string(&path)?;
+        assert!(
+            !text.contains(dummy_key),
+            "secret leaked to {}",
+            path.display()
+        );
+        assert!(
+            !text.contains("Authorization"),
+            "auth header leaked to {}",
+            path.display()
+        );
+        assert!(
+            !text.contains("Bearer"),
+            "bearer header leaked to {}",
+            path.display()
+        );
+    }
+
+    let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("review/provider-preflight-status.json"),
+    )?)?;
+    let preflight = preflights
+        .as_array()
+        .and_then(|receipts| receipts.first())
+        .ok_or_else(|| anyhow::anyhow!("missing preflight receipt"))?;
+    assert_eq!(preflight["provider"], "minimax");
+    assert_eq!(preflight["model"], "MiniMax-M3");
+    assert_eq!(preflight["endpoint_kind"], "openai-chat");
+    assert_eq!(preflight["status"], "ok");
+    assert_eq!(preflight["http_status"], 200);
+    assert_eq!(preflight["response_shape"], "openai");
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    let model_lanes = review["model_lanes"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("model_lanes missing"))?;
+    let ub_lane = model_lanes
+        .iter()
+        .find(|lane| lane["lane"].as_str() == Some("ub"))
+        .ok_or_else(|| anyhow::anyhow!("ub model lane missing"))?;
+    assert_eq!(ub_lane["provider"], "minimax");
+    assert_eq!(ub_lane["model"], "MiniMax-M3");
+    assert_eq!(ub_lane["endpoint_kind"], "openai-chat");
+    assert_eq!(ub_lane["status"], "ok");
+    assert_eq!(ub_lane["http_status"], 200);
+    assert_eq!(ub_lane["response_shape"], "openai");
+    assert!(
+        review["summary_only_findings"]
+            .as_array()
+            .is_some_and(|findings| findings.iter().any(|finding| {
+                finding["lane"].as_str() == Some("ub")
+                    && finding["evidence"].as_str() == Some("lane model summary")
+            }))
+    );
+
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["models"]["provider_preflight_calls_attempted"], 1);
+    assert_eq!(metrics["models"]["model_lane_calls_attempted"], 1);
+    assert_eq!(
+        metrics["models"]["provider_preflight_status_counts"]["ok"],
+        1
+    );
+    assert_eq!(metrics["models"]["model_lane_status_counts"]["ok"], 1);
+
+    let summary = fs::read_to_string(out.join("running-summary.md"))?;
+    assert!(summary.contains(
+        "| `minimax` | `MiniMax-M3` | `openai-chat` | `ok` | `200` | `openai` | completed |"
+    ));
+    assert!(summary.contains("| `ub` | `minimax` | `MiniMax-M3` | `openai-chat` | `ok` |"));
+    assert!(!summary.contains(dummy_key));
+    Ok(())
+}
+
+#[test]
 fn post_receipt_marks_semantically_invalid_review_json_invalid() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
@@ -534,8 +725,114 @@ fn write_file(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
+fn spawn_fake_openai_provider(
+    expected_requests: usize,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
+    let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut requests = Vec::new();
+        while requests.len() < expected_requests {
+            match listener.accept() {
+                Ok((stream, _addr)) => requests.push(handle_fake_openai_request(stream)?),
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        bail!(
+                            "fake provider received {} of {} requests",
+                            requests.len(),
+                            expected_requests
+                        );
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(requests)
+    });
+    Ok((url, handle))
+}
+
+fn handle_fake_openai_request(mut stream: TcpStream) -> Result<String> {
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut headers = String::new();
+    loop {
+        let mut line = String::new();
+        let bytes = reader.read_line(&mut line)?;
+        if bytes == 0 {
+            bail!("fake provider request ended before headers finished");
+        }
+        headers.push_str(&line);
+        if line == "\r\n" || line == "\n" {
+            break;
+        }
+    }
+    let content_length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .unwrap_or_default();
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body)?;
+    let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
+    let lane_output = serde_json::json!({
+        "summary": "fake provider ok",
+        "inline_comments": [],
+        "summary_only_findings": []
+    });
+    let response_body = serde_json::to_vec(&serde_json::json!({
+        "choices": [
+            {
+                "message": {
+                    "content": lane_output.to_string()
+                }
+            }
+        ]
+    }))?;
+    write!(
+        stream,
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        response_body.len()
+    )?;
+    stream.write_all(&response_body)?;
+    Ok(request_text)
+}
+
+fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result<Vec<String>> {
+    handle
+        .join()
+        .map_err(|_| anyhow::anyhow!("fake provider thread panicked"))?
+}
+
 fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
     let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    if output.status.success() {
+        return Ok(());
+    }
+    bail!(
+        "{} {:?} failed\nstdout:\n{}\nstderr:\n{}",
+        program,
+        args,
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)]) -> Result<()> {
+    let mut command = Command::new(program);
+    command.args(args).current_dir(cwd);
+    for (name, value) in envs {
+        command.env(name, value);
+    }
+    let output = command.output()?;
     if output.status.success() {
         return Ok(());
     }
