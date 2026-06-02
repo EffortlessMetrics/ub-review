@@ -3361,29 +3361,31 @@ Endpoint kind: {endpoint_kind}
 Role: {role}
 Focus: {focus}
 
-Use the shared context below. Return strict JSON:
+Use the shared context below. Return only one strict JSON object:
 {{
-  "summary": "short lane summary",
+  "summary": "short lane summary, 300 chars max",
   "inline_comments": [
     {{
       "severity": "blocker|high|medium",
       "confidence": "high|medium-high",
       "path": "repo-relative/path.rs",
       "line": 123,
-      "body": "[{lane}] concise actionable finding with evidence or disproof condition",
-      "evidence": "artifact, diff, or invariant"
+      "body": "[{lane}] concise actionable finding, 400 chars max",
+      "evidence": "artifact, diff, or invariant, 240 chars max"
     }}
   ],
   "summary_only_findings": [
     {{
       "severity": "blocker|high|medium|low",
       "confidence": "high|medium-high|medium",
-      "reason": "why this should stay in the summary",
-      "evidence": "artifact, diff, or invariant"
+      "reason": "summary-only issue, 400 chars max",
+      "evidence": "artifact, diff, or invariant, 240 chars max"
     }}
   ]
 }}
 
+Hard caps: at most 2 inline_comments and at most 1 summary_only_findings item.
+If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
 Only propose inline comments for valid RIGHT-side changed or context lines in the PR diff.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
 
@@ -3820,6 +3822,7 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
                 ],
                 "max_completion_tokens": 4096,
                 "reasoning_split": true,
+                "response_format": {"type": "json_object"},
                 "temperature": 0.1,
                 "stream": false
             })
@@ -5383,6 +5386,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(payload["model"], "MiniMax-M3");
         assert_eq!(payload["max_completion_tokens"], 4096);
         assert_eq!(payload["reasoning_split"], true);
+        assert_eq!(payload["response_format"]["type"], "json_object");
         assert!(
             payload["messages"][0]["content"]
                 .as_str()
