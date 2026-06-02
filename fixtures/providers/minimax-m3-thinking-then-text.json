@@ -1,0 +1,21 @@
+{
+  "id": "fixture-minimax-thinking",
+  "type": "message",
+  "role": "assistant",
+  "model": "MiniMax-M3",
+  "content": [
+    {
+      "thinking": "The model may emit a thinking block before the text block.",
+      "type": "thinking"
+    },
+    {
+      "text": "{\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}",
+      "type": "text"
+    }
+  ],
+  "usage": {
+    "input_tokens": 85,
+    "output_tokens": 61
+  },
+  "stop_reason": "end_turn"
+}

@@ -3812,20 +3812,24 @@ fn extract_model_content(response: &serde_json::Value) -> Option<&str> {
     response
         .pointer("/choices/0/message/content")
         .and_then(serde_json::Value::as_str)
-        .or_else(|| {
-            response
-                .pointer("/content/0/text")
-                .and_then(serde_json::Value::as_str)
-        })
+        .or_else(|| anthropic_content_text(response))
         .or_else(|| response.get("text").and_then(serde_json::Value::as_str))
         .or_else(|| response.get("reply").and_then(serde_json::Value::as_str))
         .or_else(|| response.get("content").and_then(serde_json::Value::as_str))
 }
 
+fn anthropic_content_text(response: &serde_json::Value) -> Option<&str> {
+    response
+        .get("content")?
+        .as_array()?
+        .iter()
+        .find_map(|item| item.get("text").and_then(serde_json::Value::as_str))
+}
+
 fn model_response_shape(response: &serde_json::Value) -> &'static str {
     if response.pointer("/choices/0/message/content").is_some() {
         "openai"
-    } else if response.pointer("/content/0/text").is_some() {
+    } else if anthropic_content_text(response).is_some() {
         "anthropic"
     } else if response.get("reply").is_some() || response.get("content").is_some() {
         "provider-flat"
@@ -5214,6 +5218,9 @@ index 1111111..2222222 100644
         let opencode: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/opencode-go-m3-messages.json"
         ))?;
+        let minimax_thinking: serde_json::Value = serde_json::from_str(include_str!(
+            "../fixtures/providers/minimax-m3-thinking-then-text.json"
+        ))?;
         let malformed: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/malformed-no-content.json"
         ))?;
@@ -5233,6 +5240,13 @@ index 1111111..2222222 100644
             extract_model_content(&opencode),
             Some(
                 "{\"summary\":\"opencode go m3 ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+            )
+        );
+        assert_eq!(model_response_shape(&minimax_thinking), "anthropic");
+        assert_eq!(
+            extract_model_content(&minimax_thinking),
+            Some(
+                "{\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
             )
         );
         assert_eq!(model_response_shape(&malformed), "unknown");
