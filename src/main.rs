@@ -1293,7 +1293,9 @@ fn build_post_error_receipt(args: &PostArgs, err: &anyhow::Error) -> PostErrorRe
         .github_token
         .as_ref()
         .is_some_and(|value| !value.trim().is_empty());
-    let review_json_valid = review_metadata.is_some();
+    let review_json_valid = review_metadata
+        .as_ref()
+        .is_some_and(|metadata| metadata.valid);
     let http_status = http_status_from_error(err);
     let (error_kind, failure_stage) = classify_post_error(
         args,
@@ -1369,6 +1371,7 @@ fn classify_post_error(
 }
 
 struct GitHubReviewMetadata {
+    valid: bool,
     comments: usize,
     event: String,
     body_bytes: usize,
@@ -1376,7 +1379,9 @@ struct GitHubReviewMetadata {
 
 fn read_github_review_metadata(path: &Path) -> Option<GitHubReviewMetadata> {
     let review: GitHubReview = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
+    let valid = validate_github_review_payload(&review).is_ok();
     Some(GitHubReviewMetadata {
+        valid,
         comments: review.comments.len(),
         event: review.event,
         body_bytes: review.body.len(),
