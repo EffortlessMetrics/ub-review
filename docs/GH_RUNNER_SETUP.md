@@ -26,10 +26,10 @@ permissions:
 
 Sensor packet generation does not require secrets. Posting uses the scoped
 `github.token`. Default model review uses direct MiniMax M3 through
-`secrets.MINIMAX`. OpenCode Go is optional and used only as a direct provider
-lane through `secrets.OPENCODE`; the action does not shell out to OpenCode as an
-agent harness. GLM is skipped for v0. Missing model keys are recorded as missing
-review evidence.
+`secrets.MINIMAX`. The Bun v0 workflow uses `provider-policy: minimax-only`.
+OpenCode Go remains optional for later direct provider canary/deep modes; the
+action does not shell out to OpenCode as an agent harness. GLM is skipped for
+v0. Missing model keys are recorded as missing review evidence.
 
 The consuming workflow is responsible for:
 

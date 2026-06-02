@@ -93,9 +93,8 @@ jobs:
           github-token: ${{ github.token }}
           minimax-api-key: ${{ secrets.MINIMAX }}
           minimax-provider-kind: anthropic
-          opencode-api-key: ${{ secrets.OPENCODE }}
           model-mode: auto
-          provider-policy: minimax-primary
+          provider-policy: minimax-only
           lane-width: '10'
           model-timeout-sec: '300'
           max-inline-comments: '8'
@@ -114,11 +113,12 @@ jobs:
 ```
 
 Sensor packet generation does not require secrets. Posting the grouped PR review
-uses the scoped `github.token`. Default model review uses direct MiniMax M3
-through `secrets.MINIMAX`. OpenCode Go is optional and used only as a direct
-provider canary lane when configured; `ub-review` does not shell out to OpenCode
-as an agent harness. GLM is skipped for v0. Missing model keys are recorded as
-missing review evidence instead of treated as a clean run.
+uses the scoped `github.token`. The Bun v0 workflow uses direct MiniMax M3 for
+all 10 model lanes through `secrets.MINIMAX`. OpenCode Go remains an optional
+direct provider for later canary/deep modes, but it is not part of the Bun v0
+cutover workflow. `ub-review` does not shell out to OpenCode as an agent
+harness. GLM is skipped for v0. Missing model keys are recorded as missing review
+evidence instead of treated as a clean run.
 
 Use `EffortlessMetrics/ub-review@main` for the first Bun fork verification.
 After that run posts a useful review and uploads a complete packet, tag `v0`
@@ -200,12 +200,10 @@ The `bun-ub` preset creates six lane packets:
 
 Lane identity and model identity are separate. Static packet prefixes use lane
 names only; direct review mode records the provider/model separately in
-`review.json` and `review.md`. The default direct model pass uses 10 lanes:
-direct MiniMax M3 for the review lanes, with `opposition` optionally routed
-through OpenCode Go MiniMax M3 as a canary under `provider-policy:
-minimax-primary` when `OPENCODE` is present. Set `provider-policy:
-minimax-only` to force direct MiniMax for all lanes, or `opencode-go-wide` with
-`lane-width: '20'` for future DeepSeek V4 Flash candidate/refuter lanes.
+`review.json` and `review.md`. The Bun v0 direct model pass uses 10 lanes through
+direct MiniMax M3 with `provider-policy: minimax-only`. OpenCode Go canary/deep
+lanes remain available later through `provider-policy: minimax-primary`,
+`opencode-go-canary`, or `opencode-go-wide` once the provider key is proven.
 
 ## Sensors
 
