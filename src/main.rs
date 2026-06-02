@@ -682,6 +682,8 @@ struct ReviewArtifacts {
     missing_or_failed_model_evidence: Vec<ModelEvidenceIssue>,
     inline_comments: Vec<ReviewInlineComment>,
     summary_only_findings: Vec<SummaryOnlyFinding>,
+    observations: Vec<Observation>,
+    proof_requests: Vec<ProofRequest>,
     body: String,
 }
 
@@ -724,6 +726,8 @@ struct ReviewMetrics {
     inline_comments: usize,
     github_review_comments: usize,
     summary_only_findings: usize,
+    observations: usize,
+    proof_requests: usize,
     off_diff_candidates_rejected: usize,
     missing_or_failed_sensor_evidence: usize,
     missing_or_failed_model_evidence: usize,
@@ -756,6 +760,20 @@ struct Observation {
     evidence: Vec<String>,
     dedupe_key: String,
     source: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ProofRequest {
+    schema: String,
+    id: String,
+    lane: String,
+    requested_by: Vec<String>,
+    command: String,
+    reason: String,
+    cost: String,
+    timeout_sec: u64,
+    required: bool,
+    status: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -862,7 +880,15 @@ struct LaneModelOutput {
     #[serde(default)]
     inline_comments: Vec<ModelCandidateComment>,
     #[serde(default)]
+    candidate_findings: Vec<ModelCandidateComment>,
+    #[serde(default)]
     summary_only_findings: Vec<ModelCandidateFinding>,
+    #[serde(default)]
+    observations: Vec<ModelCandidateObservation>,
+    #[serde(default)]
+    failed_objections: Vec<ModelFailedObjection>,
+    #[serde(default)]
+    proof_requests: Vec<ModelProofRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -881,6 +907,53 @@ struct ModelCandidateFinding {
     confidence: String,
     reason: String,
     evidence: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelCandidateObservation {
+    claim: String,
+    #[serde(default)]
+    question: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    severity: Option<String>,
+    #[serde(default)]
+    confidence: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    line: Option<u32>,
+    #[serde(default)]
+    evidence: Vec<String>,
+    #[serde(default)]
+    dedupe_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelFailedObjection {
+    claim: String,
+    reason: String,
+    #[serde(default)]
+    evidence: Vec<String>,
+    #[serde(default)]
+    confidence: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelProofRequest {
+    command: String,
+    reason: String,
+    #[serde(default)]
+    cost: Option<String>,
+    #[serde(default)]
+    timeout_sec: Option<u64>,
+    #[serde(default)]
+    required: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2963,6 +3036,8 @@ fn write_review_artifacts(
         .collect::<Vec<_>>();
     let mut summary_only_findings = Vec::new();
     let mut inline_comments = Vec::new();
+    let mut model_observations = Vec::new();
+    let mut proof_requests = Vec::new();
 
     if matches!(args.model_mode, ModelMode::Auto) {
         run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
@@ -2984,6 +3059,8 @@ fn write_review_artifacts(
             &mut missing_or_failed_model_evidence,
             &mut inline_comments,
             &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
         )?;
         dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
         run_refuter_pass(
@@ -3066,23 +3143,27 @@ fn write_review_artifacts(
         missing_or_failed_model_evidence,
         inline_comments,
         summary_only_findings,
+        observations: model_observations,
+        proof_requests,
         body: artifact_body.clone(),
     };
-    let observations = build_observations(&review);
+    let observations = combined_observations(&review);
     write_observation_artifacts(out, &observations)?;
-    let metrics = build_review_metrics(
+    write_proof_request_artifacts(out, &review.proof_requests)?;
+    let metrics = build_review_metrics(ReviewMetricsInput {
         out,
         diff,
         plan,
-        &review,
-        if should_prepare_github_review {
+        review: &review,
+        github_review: if should_prepare_github_review {
             Some(&github_review)
         } else {
             None
         },
         review_payload_status,
+        observations_count: observations.len(),
         elapsed,
-    );
+    });
 
     fs::write(
         review_dir.join("review.json"),
@@ -3140,15 +3221,28 @@ fn write_github_review_payload(
     Ok(())
 }
 
-fn build_review_metrics(
-    out: &Path,
-    diff: &DiffContext,
-    plan: &Plan,
-    review: &ReviewArtifacts,
-    github_review: Option<&GitHubReview>,
-    review_payload_status: &str,
+struct ReviewMetricsInput<'a> {
+    out: &'a Path,
+    diff: &'a DiffContext,
+    plan: &'a Plan,
+    review: &'a ReviewArtifacts,
+    github_review: Option<&'a GitHubReview>,
+    review_payload_status: &'a str,
+    observations_count: usize,
     elapsed: Duration,
-) -> ReviewMetrics {
+}
+
+fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
+    let ReviewMetricsInput {
+        out,
+        diff,
+        plan,
+        review,
+        github_review,
+        review_payload_status,
+        observations_count,
+        elapsed,
+    } = input;
     let sensor_statuses = plan
         .sensors
         .iter()
@@ -3214,6 +3308,8 @@ fn build_review_metrics(
         inline_comments: review.inline_comments.len(),
         github_review_comments: github_review.map_or(0, |review| review.comments.len()),
         summary_only_findings: review.summary_only_findings.len(),
+        observations: observations_count,
+        proof_requests: review.proof_requests.len(),
         off_diff_candidates_rejected: review
             .summary_only_findings
             .iter()
@@ -3237,6 +3333,19 @@ fn build_review_metrics(
     }
 }
 
+fn combined_observations(review: &ReviewArtifacts) -> Vec<Observation> {
+    let mut observations = review.observations.clone();
+    observations.extend(build_observations(review));
+    for (index, observation) in observations.iter_mut().enumerate() {
+        let short = observation
+            .fingerprint
+            .get(..12)
+            .unwrap_or(&observation.fingerprint);
+        observation.id = format!("obs-{index:04}-{short}");
+    }
+    observations
+}
+
 fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
     let mut observations = Vec::new();
     for comment in &review.inline_comments {
@@ -3252,6 +3361,7 @@ fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
             path: Some(&comment.path),
             line: Some(comment.line),
             evidence: vec![comment.evidence.clone()],
+            dedupe_key: None,
             source: "inline-comment",
         }));
     }
@@ -3275,6 +3385,7 @@ fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
             path: None,
             line: None,
             evidence: vec![finding.evidence.clone()],
+            dedupe_key: None,
             source: "summary-only-finding",
         }));
     }
@@ -3295,6 +3406,7 @@ fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
             path: None,
             line: None,
             evidence: vec![issue.reason.clone()],
+            dedupe_key: None,
             source: "missing-sensor-evidence",
         }));
     }
@@ -3320,6 +3432,7 @@ fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
             path: None,
             line: None,
             evidence: vec![issue.reason.clone()],
+            dedupe_key: None,
             source: "missing-model-evidence",
         }));
     }
@@ -3338,6 +3451,7 @@ struct ObservationInput<'a> {
     path: Option<&'a String>,
     line: Option<u32>,
     evidence: Vec<String>,
+    dedupe_key: Option<&'a str>,
     source: &'a str,
 }
 
@@ -3369,7 +3483,14 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
         line: input.line,
         fingerprint,
         evidence: input.evidence,
-        dedupe_key: observation_dedupe_key(input.lane, input.kind, path.as_deref(), input.line),
+        dedupe_key: input
+            .dedupe_key
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| {
+                observation_dedupe_key(input.lane, input.kind, path.as_deref(), input.line)
+            }),
         source: input.source.to_owned(),
     }
 }
@@ -3433,6 +3554,45 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
         }
         fs::write(path, text)?;
     }
+    Ok(())
+}
+
+fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("proof_requests.json"),
+        serde_json::to_vec_pretty(proof_requests)?,
+    )?;
+
+    let mut ndjson = String::new();
+    for request in proof_requests {
+        ndjson.push_str(&serde_json::to_string(request)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("proof_requests.ndjson"), ndjson)?;
+
+    let mut plan = String::new();
+    plan.push_str("# Proof request plan\n\n");
+    if proof_requests.is_empty() {
+        plan.push_str("No proof requests were emitted by model lanes.\n");
+    } else {
+        plan.push_str("Proof requests are passive in this runner version. The proof broker has not executed these commands.\n\n");
+        for request in proof_requests {
+            plan.push_str(&format!(
+                "- `{}` from `{}`: `{}` ({}, timeout {}s, required={}, status={})\n  Reason: {}\n",
+                request.id,
+                request.lane,
+                request.command,
+                request.cost,
+                request.timeout_sec,
+                request.required,
+                request.status,
+                request.reason
+            ));
+        }
+    }
+    fs::write(review_dir.join("proof_plan.md"), plan)?;
     Ok(())
 }
 
@@ -4336,6 +4496,8 @@ fn run_available_model_lanes(
     missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
     inline_comments: &mut Vec<ReviewInlineComment>,
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+    model_observations: &mut Vec<Observation>,
+    proof_requests: &mut Vec<ProofRequest>,
 ) -> Result<usize> {
     let model_dir = context.review_dir.join("model");
     fs::create_dir_all(&model_dir)?;
@@ -4417,8 +4579,12 @@ fn run_available_model_lanes(
                         outcome.output,
                         context.line_map,
                         context.args.max_inline_comments,
-                        inline_comments,
-                        summary_only_findings,
+                        ModelOutputSinks {
+                            inline_comments,
+                            summary_only_findings,
+                            model_observations,
+                            proof_requests,
+                        },
                     );
                 }
                 Err(err) => {
@@ -4875,7 +5041,21 @@ Focus: {focus}
 Use the shared context below. Return only one strict JSON object:
 {{
   "summary": "short lane summary, 300 chars max",
-  "inline_comments": [
+  "observations": [
+    {{
+      "claim": "terse unique observation, 300 chars max",
+      "question": "{lane}",
+      "kind": "bug|verification-question|missing-evidence|test-gap|source-route-gap|security-risk|false-premise|parked-follow-up|resolved-check",
+      "status": "open|covered|confirmed|refuted|demoted|parked|duplicate",
+      "severity": "blocker|high|medium|low",
+      "confidence": "high|medium-high|medium|low",
+      "path": "optional repo-relative/path.rs",
+      "line": 123,
+      "evidence": ["artifact, diff, or invariant, 240 chars max"],
+      "dedupe_key": "stable coordination key when known"
+    }}
+  ],
+  "candidate_findings": [
     {{
       "severity": "blocker|high|medium",
       "confidence": "high|medium-high",
@@ -4892,12 +5072,31 @@ Use the shared context below. Return only one strict JSON object:
       "reason": "summary-only issue, 400 chars max",
       "evidence": "artifact, diff, or invariant, 240 chars max"
     }}
+  ],
+  "failed_objections": [
+    {{
+      "claim": "objection tested by this lane",
+      "reason": "why it did not hold",
+      "confidence": "high|medium-high|medium|low",
+      "kind": "resolved-check|false-premise",
+      "evidence": ["artifact, diff, or invariant"]
+    }}
+  ],
+  "proof_requests": [
+    {{
+      "command": "focused command requested from central proof broker",
+      "reason": "why this proof would matter",
+      "cost": "focused-test|focused-build|manual",
+      "timeout_sec": 300,
+      "required": false
+    }}
   ]
 }}
 
-Hard caps: at most 2 inline_comments and at most 1 summary_only_findings item.
+Hard caps: at most 3 observations, 2 candidate_findings, 1 summary_only_findings item, 2 failed_objections, and 1 proof_request.
 If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
-Only propose inline comments for valid RIGHT-side changed or context lines in the PR diff.
+Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
+Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
 
 {shared_context}"#,
@@ -4911,21 +5110,54 @@ Do not guess line numbers. Do not use deletion-side comments. Do not output a st
     )
 }
 
+struct ModelOutputSinks<'a> {
+    inline_comments: &'a mut Vec<ReviewInlineComment>,
+    summary_only_findings: &'a mut Vec<SummaryOnlyFinding>,
+    model_observations: &'a mut Vec<Observation>,
+    proof_requests: &'a mut Vec<ProofRequest>,
+}
+
 fn apply_model_output(
     lane: &LanePlan,
     output: LaneModelOutput,
     line_map: &BTreeSet<(String, u32)>,
     max_inline: usize,
-    inline_comments: &mut Vec<ReviewInlineComment>,
-    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+    sinks: ModelOutputSinks<'_>,
 ) {
+    let ModelOutputSinks {
+        inline_comments,
+        summary_only_findings,
+        model_observations,
+        proof_requests,
+    } = sinks;
     if let Some(summary) = output.summary {
         summary_only_findings.push(validate_lane_model_summary(lane, &summary));
     }
     for candidate in output.summary_only_findings {
         summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
     }
-    for candidate in output.inline_comments {
+    for observation in output.observations {
+        model_observations.push(validate_model_observation(
+            lane,
+            observation,
+            model_observations.len(),
+        ));
+    }
+    for objection in output.failed_objections {
+        model_observations.push(validate_failed_objection(
+            lane,
+            objection,
+            model_observations.len(),
+        ));
+    }
+    for request in output.proof_requests {
+        proof_requests.push(validate_proof_request(lane, request, proof_requests.len()));
+    }
+    for candidate in output
+        .candidate_findings
+        .into_iter()
+        .chain(output.inline_comments)
+    {
         if is_candidate_only_lane(&lane.id) {
             summary_only_findings.push(SummaryOnlyFinding {
                 lane: lane.id.clone(),
@@ -4957,6 +5189,199 @@ fn apply_model_output(
             Err(finding) => summary_only_findings.push(finding),
         }
     }
+}
+
+fn validate_model_observation(
+    lane: &LanePlan,
+    candidate: ModelCandidateObservation,
+    index: usize,
+) -> Observation {
+    let claim = non_empty_or(
+        candidate.claim.trim(),
+        "model observation guard rejected empty claim",
+    );
+    let evidence = non_empty_evidence(candidate.evidence, "model observation");
+    let kind = candidate
+        .kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|kind| allowed_observation_kind(kind))
+        .unwrap_or_else(|| infer_observation_kind(&lane.id, &claim, &evidence.join("\n")));
+    let status = candidate
+        .status
+        .as_deref()
+        .map(str::trim)
+        .filter(|status| allowed_observation_status(status))
+        .unwrap_or("open");
+    let severity = candidate
+        .severity
+        .as_deref()
+        .map(str::trim)
+        .filter(|severity| matches!(*severity, "blocker" | "high" | "medium" | "low"))
+        .unwrap_or("low");
+    let confidence = candidate
+        .confidence
+        .as_deref()
+        .map(str::trim)
+        .filter(|confidence| matches!(*confidence, "high" | "medium-high" | "medium" | "low"))
+        .unwrap_or("medium");
+    let path = candidate
+        .path
+        .as_deref()
+        .map(normalize_repo_path)
+        .filter(|path| !path.is_empty());
+    make_observation(ObservationInput {
+        index,
+        lane: &lane.id,
+        question: candidate.question.as_deref().unwrap_or(lane.id.as_str()),
+        claim: &claim,
+        kind,
+        status,
+        severity,
+        confidence,
+        path: path.as_ref(),
+        line: candidate.line,
+        evidence,
+        dedupe_key: candidate.dedupe_key.as_deref(),
+        source: "model-observation",
+    })
+}
+
+fn validate_failed_objection(
+    lane: &LanePlan,
+    objection: ModelFailedObjection,
+    index: usize,
+) -> Observation {
+    let claim = non_empty_or(
+        objection.claim.trim(),
+        "model failed objection missing claim",
+    );
+    let reason = non_empty_or(
+        objection.reason.trim(),
+        "model failed objection missing reason",
+    );
+    let full_claim = format!("{claim}; refuted because: {reason}");
+    let evidence = non_empty_evidence(objection.evidence, "failed objection audit");
+    let kind = objection
+        .kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|kind| allowed_observation_kind(kind))
+        .unwrap_or_else(|| {
+            if reason.to_ascii_lowercase().contains("false premise") {
+                "false-premise"
+            } else {
+                "resolved-check"
+            }
+        });
+    let confidence = objection
+        .confidence
+        .as_deref()
+        .map(str::trim)
+        .filter(|confidence| matches!(*confidence, "high" | "medium-high" | "medium" | "low"))
+        .unwrap_or("medium");
+    make_observation(ObservationInput {
+        index,
+        lane: &lane.id,
+        question: "failed-objection",
+        claim: &full_claim,
+        kind,
+        status: "refuted",
+        severity: "low",
+        confidence,
+        path: None,
+        line: None,
+        evidence,
+        dedupe_key: None,
+        source: "model-failed-objection",
+    })
+}
+
+fn validate_proof_request(
+    lane: &LanePlan,
+    request: ModelProofRequest,
+    index: usize,
+) -> ProofRequest {
+    let command = request.command.trim().replace(['\r', '\n'], " ");
+    let reason = non_empty_or(request.reason.trim(), "model proof request missing reason");
+    let status = if command.is_empty() {
+        "invalid"
+    } else {
+        "requested"
+    };
+    let command = non_empty_or(&command, "<missing command>");
+    let cost = request
+        .cost
+        .as_deref()
+        .map(str::trim)
+        .filter(|cost| !cost.is_empty())
+        .unwrap_or("focused-test")
+        .to_owned();
+    let timeout_sec = request.timeout_sec.unwrap_or(300).clamp(1, 900);
+    let fingerprint = sha256_hex(
+        format!(
+            "{}\n{}\n{}\n{}\n{}",
+            lane.id, command, reason, cost, timeout_sec
+        )
+        .as_bytes(),
+    );
+    let short = &fingerprint[..12];
+    ProofRequest {
+        schema: "ub-review.proof_request.v1".to_owned(),
+        id: format!("proof-{index:04}-{short}"),
+        lane: lane.id.clone(),
+        requested_by: vec![lane.id.clone()],
+        command,
+        reason,
+        cost,
+        timeout_sec,
+        required: request.required.unwrap_or(false),
+        status: status.to_owned(),
+    }
+}
+
+fn non_empty_or(value: &str, fallback: &str) -> String {
+    let value = value.trim();
+    if value.is_empty() {
+        fallback.to_owned()
+    } else {
+        value.to_owned()
+    }
+}
+
+fn non_empty_evidence(values: Vec<String>, fallback: &str) -> Vec<String> {
+    let cleaned = values
+        .into_iter()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
+        .collect::<Vec<_>>();
+    if cleaned.is_empty() {
+        vec![fallback.to_owned()]
+    } else {
+        cleaned
+    }
+}
+
+fn allowed_observation_kind(value: &str) -> bool {
+    matches!(
+        value,
+        "bug"
+            | "verification-question"
+            | "missing-evidence"
+            | "test-gap"
+            | "source-route-gap"
+            | "security-risk"
+            | "false-premise"
+            | "parked-follow-up"
+            | "resolved-check"
+    )
+}
+
+fn allowed_observation_status(value: &str) -> bool {
+    matches!(
+        value,
+        "open" | "covered" | "confirmed" | "refuted" | "demoted" | "parked" | "duplicate"
+    )
 }
 
 fn is_candidate_only_lane(lane_id: &str) -> bool {
@@ -7271,13 +7696,14 @@ mod tests {
     use super::{
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
         LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
-        ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, ModelRunContext,
-        NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, ProviderKindArg,
-        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
-        ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
-        SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_observations, build_review_metrics, build_tokmd_sensor_commands, cap_review_body,
-        classify_diff, cmd_post, collect_sensor_evidence_issues, dedupe_inline_comments,
+        ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
+        ModelRunContext, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs,
+        ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
+        apply_model_output, apply_refuter_output, build_review_metrics,
+        build_tokmd_sensor_commands, cap_review_body, classify_diff, cmd_post,
+        collect_sensor_evidence_issues, combined_observations, dedupe_inline_comments,
         default_lanes, direct_minimax_spec, extract_model_content, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
         model_auth_header, model_json_payload, model_lane, model_request_payload,
@@ -7287,7 +7713,8 @@ mod tests {
         run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
-        write_observation_artifacts, write_review_artifacts, write_sensor_status,
+        write_observation_artifacts, write_proof_request_artifacts, write_review_artifacts,
+        write_sensor_status,
     };
 
     #[test]
@@ -7832,18 +8259,28 @@ index 1111111..2222222 100644
                     .to_owned(),
                 evidence: "diff hunk".to_owned(),
             }],
+            candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
+            observations: Vec::new(),
+            failed_objections: Vec::new(),
+            proof_requests: Vec::new(),
         };
         let mut inline_comments = Vec::new();
         let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
 
         apply_model_output(
             &lane,
             output,
             &line_map,
             8,
-            &mut inline_comments,
-            &mut summary_only_findings,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut model_observations,
+                proof_requests: &mut proof_requests,
+            },
         );
 
         assert!(inline_comments.is_empty());
@@ -7858,6 +8295,122 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn lane_output_split_accepts_observations_candidates_and_proof_requests() -> Result<()> {
+        let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+        let line_map = right_side_diff_lines(patch);
+        let lane = model_lane(
+            "tests-oracle",
+            "Test oracle review",
+            &["tokmd", "ripr"],
+            "Check test proof.",
+        );
+        let json = r#"{
+  "summary": "Checked red/green and route proof.",
+  "observations": [
+    {
+      "claim": "The new test needs a witnessed old-main red run.",
+      "question": "red-green",
+      "kind": "missing-evidence",
+      "status": "open",
+      "severity": "medium",
+      "confidence": "high",
+      "evidence": ["PR body claims old code fails"],
+      "dedupe_key": "markdown-red-green-witness"
+    }
+  ],
+  "candidate_findings": [
+    {
+      "severity": "medium",
+      "confidence": "medium-high",
+      "path": "src/lib.rs",
+      "line": 2,
+      "body": "[tests-oracle] The changed pointer path needs a test oracle.",
+      "evidence": "diff hunk"
+    }
+  ],
+  "failed_objections": [
+    {
+      "claim": "Box::from(slice) can return None on allocation failure",
+      "reason": "false premise: allocation failure does not return None",
+      "confidence": "high",
+      "kind": "false-premise",
+      "evidence": ["Rust allocation semantics"]
+    }
+  ],
+  "proof_requests": [
+    {
+      "command": "bun test test/js/bun/md/md-edge-cases.test.ts",
+      "reason": "Need a focused green witness on HEAD",
+      "cost": "focused-test",
+      "timeout_sec": 300,
+      "required": false
+    }
+  ]
+}"#;
+        let output: LaneModelOutput = serde_json::from_str(json)?;
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+
+        apply_model_output(
+            &lane,
+            output,
+            &line_map,
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+            },
+        );
+
+        assert_eq!(inline_comments.len(), 1);
+        assert_eq!(inline_comments[0].lane, "tests-oracle");
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(observations.len(), 2);
+        assert!(observations.iter().any(|observation| {
+            observation.kind == "missing-evidence"
+                && observation.dedupe_key == "markdown-red-green-witness"
+                && observation.source == "model-observation"
+        }));
+        assert!(observations.iter().any(|observation| {
+            observation.kind == "false-premise"
+                && observation.status == "refuted"
+                && observation.source == "model-failed-objection"
+        }));
+        assert_eq!(proof_requests.len(), 1);
+        assert_eq!(proof_requests[0].schema, "ub-review.proof_request.v1");
+        assert_eq!(proof_requests[0].status, "requested");
+        assert_eq!(
+            proof_requests[0].requested_by,
+            vec!["tests-oracle".to_owned()]
+        );
+
+        let temp = tempfile::tempdir()?;
+        write_proof_request_artifacts(temp.path(), &proof_requests)?;
+        let proof_json: Vec<super::ProofRequest> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
+        let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
+        let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
+        assert_eq!(proof_json.len(), 1);
+        assert!(proof_plan.contains("Proof requests are passive"));
+        assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
+        Ok(())
+    }
+
+    #[test]
     fn lane_model_summary_rejects_standalone_approval_language() -> Result<()> {
         let lane = default_lanes()
             .into_iter()
@@ -7867,18 +8420,28 @@ index 1111111..2222222 100644
             let output = LaneModelOutput {
                 summary: Some(summary.to_owned()),
                 inline_comments: Vec::new(),
+                candidate_findings: Vec::new(),
                 summary_only_findings: Vec::new(),
+                observations: Vec::new(),
+                failed_objections: Vec::new(),
+                proof_requests: Vec::new(),
             };
             let mut inline_comments = Vec::new();
             let mut summary_only_findings = Vec::new();
+            let mut model_observations = Vec::new();
+            let mut proof_requests = Vec::new();
 
             apply_model_output(
                 &lane,
                 output,
                 &BTreeSet::new(),
                 8,
-                &mut inline_comments,
-                &mut summary_only_findings,
+                ModelOutputSinks {
+                    inline_comments: &mut inline_comments,
+                    summary_only_findings: &mut summary_only_findings,
+                    model_observations: &mut model_observations,
+                    proof_requests: &mut proof_requests,
+                },
             );
 
             assert!(inline_comments.is_empty());
@@ -8087,6 +8650,8 @@ index 1111111..2222222 100644
             evidence: "test setup".to_owned(),
         }];
         let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
         let line_map = BTreeSet::new();
 
         let calls = run_available_model_lanes(
@@ -8103,11 +8668,15 @@ index 1111111..2222222 100644
             &mut missing_or_failed_model_evidence,
             &mut inline_comments,
             &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
         )?;
 
         assert_eq!(calls, 0);
         assert_eq!(inline_comments.len(), 1);
         assert!(summary_only_findings.is_empty());
+        assert!(model_observations.is_empty());
+        assert!(proof_requests.is_empty());
         assert_eq!(
             model_lanes
                 .iter()
@@ -8615,7 +9184,11 @@ index 1111111..2222222 100644
 
         assert_eq!(parsed.summary.as_deref(), Some("fenced ok"));
         assert!(parsed.inline_comments.is_empty());
+        assert!(parsed.candidate_findings.is_empty());
         assert!(parsed.summary_only_findings.is_empty());
+        assert!(parsed.observations.is_empty());
+        assert!(parsed.failed_objections.is_empty());
+        assert!(parsed.proof_requests.is_empty());
         assert!(
             serde_json::from_str::<LaneModelOutput>(&model_json_payload("Here is the JSON:\n{}"))
                 .is_err()
@@ -8945,6 +9518,8 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "inline guard rejected src/lib.rs:99; severity_allowed=true confidence_allowed=true line_valid=false concise=true body_present=true evidence_present=true repo_relative=true".to_owned(),
                 evidence: "line map receipt".to_owned(),
             }],
+            observations: Vec::new(),
+            proof_requests: Vec::new(),
             body: "artifact body".to_owned(),
         };
         let github_review = GitHubReview {
@@ -8953,15 +9528,18 @@ UB_REVIEW_HTTP_STATUS:429
             comments: Vec::new(),
         };
 
-        let metrics = build_review_metrics(
-            Path::new("target/ub-review-test"),
-            &test_diff(),
-            &test_plan(Vec::new()),
-            &review,
-            Some(&github_review),
-            "prepared",
-            std::time::Duration::from_secs(601),
-        );
+        let diff = test_diff();
+        let plan = test_plan(Vec::new());
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: Path::new("target/ub-review-test"),
+            diff: &diff,
+            plan: &plan,
+            review: &review,
+            github_review: Some(&github_review),
+            review_payload_status: "prepared",
+            observations_count: 0,
+            elapsed: std::time::Duration::from_secs(601),
+        });
 
         assert_eq!(metrics.wall_clock_seconds, 601);
         assert_eq!(metrics.wall_clock_ms, 601_000);
@@ -8969,6 +9547,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.provider_evidence_failures, 1);
         assert_eq!(metrics.review_payload_status, "prepared");
         assert_eq!(metrics.post_status, "not_attempted_by_run");
+        assert_eq!(metrics.observations, 0);
+        assert_eq!(metrics.proof_requests, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
     }
@@ -9024,10 +9604,12 @@ UB_REVIEW_HTTP_STATUS:429
                     .to_owned(),
                 evidence: "UB ledger excerpt".to_owned(),
             }],
+            observations: Vec::new(),
+            proof_requests: Vec::new(),
             body: "artifact body".to_owned(),
         };
 
-        let observations = build_observations(&review);
+        let observations = combined_observations(&review);
         write_observation_artifacts(temp.path(), &observations)?;
 
         let aggregate: Vec<super::Observation> =

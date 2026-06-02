@@ -89,6 +89,10 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/metrics.json",
         "review/review.json",
         "review/review.md",
+        "review/observations.json",
+        "review/proof_requests.json",
+        "review/proof_plan.md",
+        "proof_requests.ndjson",
     ]:
         require_file(root / path)
     if not (root / "review/github-review.json").exists() and not (
@@ -208,7 +212,7 @@ def require_github_comment(comment: dict, index: int) -> None:
     no_standalone_approval_line(body, pathlib.Path("review/github-review.json"))
 
 
-def require_metrics(root: pathlib.Path, review: dict) -> None:
+def require_metrics(root: pathlib.Path, review: dict) -> dict:
     metrics = load_json(root / "review/metrics.json")
     if metrics.get("schema_version") != 1:
         fail(f"metrics schema_version expected 1, got {metrics.get('schema_version')!r}")
@@ -222,6 +226,24 @@ def require_metrics(root: pathlib.Path, review: dict) -> None:
         fail("metrics inline_comments does not match review.json")
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
+    if not isinstance(metrics.get("observations"), int):
+        fail("metrics observations is not an integer")
+    if not isinstance(metrics.get("proof_requests"), int):
+        fail("metrics proof_requests is not an integer")
+    observations = load_json(root / "review/observations.json")
+    if not isinstance(observations, list):
+        fail("review/observations.json is not an array")
+    if metrics.get("observations") != len(observations):
+        fail("metrics observations does not match review/observations.json")
+    proof_requests = load_json(root / "review/proof_requests.json")
+    if not isinstance(proof_requests, list):
+        fail("review/proof_requests.json is not an array")
+    if metrics.get("proof_requests") != len(proof_requests):
+        fail("metrics proof_requests does not match review/proof_requests.json")
+    if review.get("proof_requests", []) != proof_requests:
+        fail("review proof_requests does not match review/proof_requests.json")
+    require_proof_request_ndjson(root, proof_requests)
+    require_observation_files(root, observations)
     if (root / "review/github-review-skip.json").exists():
         if metrics.get("review_payload_status") != "skipped_empty_smoke":
             fail("metrics review_payload_status does not match github-review-skip.json")
@@ -233,6 +255,140 @@ def require_metrics(root: pathlib.Path, review: dict) -> None:
     if not isinstance(models, dict):
         fail("metrics.models is missing")
     return metrics
+
+
+def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict]) -> None:
+    for request in proof_requests:
+        require_proof_request_schema(request)
+    ndjson_path = root / "proof_requests.ndjson"
+    text = read_text(ndjson_path)
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) != len(proof_requests):
+        fail("proof_requests.ndjson line count does not match review/proof_requests.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid proof_requests.ndjson line {index + 1}: {error}")
+        if parsed != proof_requests[index]:
+            fail(f"proof_requests.ndjson line {index + 1} does not match JSON artifact")
+    proof_plan = read_text(root / "review/proof_plan.md")
+    if "# Proof request plan" not in proof_plan:
+        fail("review/proof_plan.md missing heading")
+    if proof_requests and "Proof requests are passive" not in proof_plan:
+        fail("review/proof_plan.md does not mark proof requests as passive")
+    if not proof_requests and "No proof requests were emitted" not in proof_plan:
+        fail("review/proof_plan.md missing empty proof request note")
+
+
+def require_observation_files(root: pathlib.Path, observations: list[dict]) -> None:
+    observation_dir = root / "observations"
+    if not observation_dir.is_dir():
+        fail("missing observations directory")
+    for observation in observations:
+        require_observation_schema(observation)
+    lanes = {observation["lane"] for observation in observations}
+    for lane in lanes:
+        path = observation_dir / f"{sanitize_artifact_name(lane)}.ndjson"
+        require_file(path)
+        lane_observations = []
+        for line_number, line in enumerate(read_text(path).splitlines(), start=1):
+            if not line.strip():
+                continue
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError as error:
+                fail(f"invalid observation NDJSON {path}:{line_number}: {error}")
+            if parsed.get("lane") != lane:
+                fail(f"observation NDJSON {path}:{line_number} has wrong lane")
+            require_observation_schema(parsed)
+            lane_observations.append(parsed)
+        expected = [observation for observation in observations if observation["lane"] == lane]
+        if lane_observations != expected:
+            fail(f"observation NDJSON {path} does not match review/observations.json")
+
+
+def require_observation_schema(observation: dict) -> None:
+    if observation.get("schema") != "ub-review.observation.v1":
+        fail(f"observation has wrong schema: {observation!r}")
+    for field in [
+        "id",
+        "lane",
+        "question",
+        "claim",
+        "kind",
+        "status",
+        "severity",
+        "confidence",
+        "fingerprint",
+        "dedupe_key",
+        "source",
+    ]:
+        if not isinstance(observation.get(field), str) or not observation[field]:
+            fail(f"observation missing string field {field}: {observation!r}")
+    if observation["kind"] not in {
+        "bug",
+        "verification-question",
+        "missing-evidence",
+        "test-gap",
+        "source-route-gap",
+        "security-risk",
+        "false-premise",
+        "parked-follow-up",
+        "resolved-check",
+    }:
+        fail(f"observation has unsupported kind: {observation!r}")
+    if observation["status"] not in {
+        "open",
+        "covered",
+        "confirmed",
+        "refuted",
+        "demoted",
+        "parked",
+        "duplicate",
+    }:
+        fail(f"observation has unsupported status: {observation!r}")
+    if observation["severity"] not in {"blocker", "high", "medium", "low"}:
+        fail(f"observation has unsupported severity: {observation!r}")
+    if observation["confidence"] not in {"high", "medium-high", "medium", "low"}:
+        fail(f"observation has unsupported confidence: {observation!r}")
+    if not re.fullmatch(r"[0-9a-f]{64}", observation["fingerprint"]):
+        fail(f"observation fingerprint is not a SHA-256 hex digest: {observation!r}")
+    evidence = observation.get("evidence")
+    if not isinstance(evidence, list) or not all(isinstance(item, str) for item in evidence):
+        fail(f"observation evidence is not a string array: {observation!r}")
+    path = observation.get("path")
+    if path is not None and (not isinstance(path, str) or path.startswith(("/", "\\"))):
+        fail(f"observation path is not repo-relative: {observation!r}")
+    line = observation.get("line")
+    if line is not None and (not isinstance(line, int) or line <= 0):
+        fail(f"observation line is invalid: {observation!r}")
+
+
+def require_proof_request_schema(request: dict) -> None:
+    if request.get("schema") != "ub-review.proof_request.v1":
+        fail(f"proof request has wrong schema: {request!r}")
+    for field in ["id", "lane", "command", "reason", "cost", "status"]:
+        if not isinstance(request.get(field), str) or not request[field]:
+            fail(f"proof request missing string field {field}: {request!r}")
+    requested_by = request.get("requested_by")
+    if not isinstance(requested_by, list) or not all(
+        isinstance(item, str) and item for item in requested_by
+    ):
+        fail(f"proof request requested_by is not a non-empty string array: {request!r}")
+    if request["lane"] not in requested_by:
+        fail(f"proof request lane is not listed in requested_by: {request!r}")
+    timeout = request.get("timeout_sec")
+    if not isinstance(timeout, int) or timeout <= 0 or timeout > 900:
+        fail(f"proof request timeout_sec is invalid: {request!r}")
+    if not isinstance(request.get("required"), bool):
+        fail(f"proof request required is not boolean: {request!r}")
+    if request["status"] not in {"requested", "invalid"}:
+        fail(f"proof request has unsupported status: {request!r}")
+
+
+def sanitize_artifact_name(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in value)
 
 
 def require_sensor_receipts(root: pathlib.Path) -> None:

@@ -129,6 +129,9 @@ fn active_len_tracks_view_after_resize() {
         "review/metrics.json",
         "review/review.json",
         "review/review.md",
+        "review/proof_requests.json",
+        "review/proof_plan.md",
+        "proof_requests.ndjson",
         "review/github-review.json",
     ] {
         assert!(out.join(path).exists(), "missing {}", path);
