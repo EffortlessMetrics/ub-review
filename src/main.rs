@@ -3798,7 +3798,8 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
     match spec.endpoint_kind {
         ProviderEndpointKind::AnthropicMessages => serde_json::json!({
             "model": spec.model,
-            "max_tokens": 4096,
+            "max_tokens": model_max_tokens(spec),
+            "system": "Return one compact JSON object in the final text block. Do not include markdown fences or prose outside JSON.",
             "temperature": 0.1,
             "messages": [
                 {"role": "user", "content": prompt}
@@ -3813,6 +3814,13 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
             "temperature": 0.1,
             "stream": false
         }),
+    }
+}
+
+fn model_max_tokens(spec: &ProviderSpec) -> u32 {
+    match spec.endpoint_kind {
+        ProviderEndpointKind::AnthropicMessages => 16_384,
+        ProviderEndpointKind::OpenAiChat => 4096,
     }
 }
 
@@ -5338,7 +5346,12 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert!(payload["max_tokens"].is_number());
+        assert_eq!(payload["max_tokens"], 16_384);
+        assert!(
+            payload["system"]
+                .as_str()
+                .is_some_and(|system| system.contains("final text block"))
+        );
         assert!(payload["messages"].is_array());
         assert!(payload["messages"][0]["content"].as_str().is_some());
         assert!(payload.get("stream").is_none());
@@ -5351,7 +5364,12 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "minimax-m3");
-        assert!(payload["max_tokens"].is_number());
+        assert_eq!(payload["max_tokens"], 16_384);
+        assert!(
+            payload["system"]
+                .as_str()
+                .is_some_and(|system| system.contains("final text block"))
+        );
         assert!(payload["messages"][0]["content"].as_str().is_some());
         assert!(payload.get("stream").is_none());
     }
