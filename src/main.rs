@@ -3738,13 +3738,7 @@ fn apply_model_output(
         });
     }
     for candidate in output.summary_only_findings {
-        summary_only_findings.push(SummaryOnlyFinding {
-            lane: lane.id.clone(),
-            severity: candidate.severity,
-            confidence: candidate.confidence,
-            reason: candidate.reason,
-            evidence: candidate.evidence,
-        });
+        summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
     }
     for candidate in output.inline_comments {
         if inline_comments.len() >= max_inline {
@@ -3763,6 +3757,42 @@ fn apply_model_output(
         match validate_inline_candidate(lane, candidate, line_map) {
             Ok(comment) => inline_comments.push(comment),
             Err(finding) => summary_only_findings.push(finding),
+        }
+    }
+}
+
+fn validate_summary_only_candidate(
+    lane: &LanePlan,
+    candidate: ModelCandidateFinding,
+) -> SummaryOnlyFinding {
+    let severity = candidate.severity.trim().to_owned();
+    let confidence = candidate.confidence.trim().to_owned();
+    let reason = candidate.reason.trim().to_owned();
+    let evidence = candidate.evidence.trim().to_owned();
+    let severity_allowed = matches!(severity.as_str(), "blocker" | "high" | "medium" | "low");
+    let confidence_allowed = matches!(confidence.as_str(), "high" | "medium-high" | "medium");
+    let reason_present = !reason.is_empty();
+    let evidence_present = !evidence.is_empty();
+    let concise = reason.chars().count() <= 1_200 && evidence.chars().count() <= 1_200;
+
+    if severity_allowed && confidence_allowed && reason_present && evidence_present && concise {
+        SummaryOnlyFinding {
+            lane: lane.id.clone(),
+            severity,
+            confidence,
+            reason,
+            evidence,
+        }
+    } else {
+        SummaryOnlyFinding {
+            lane: lane.id.clone(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: format!(
+                "summary-only guard rejected candidate; severity_allowed={} confidence_allowed={} reason_present={} evidence_present={} concise={}",
+                severity_allowed, confidence_allowed, reason_present, evidence_present, concise
+            ),
+            evidence: "model summary-only candidate guardrail".to_owned(),
         }
     }
 }
@@ -5355,18 +5385,19 @@ mod tests {
 
     use super::{
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
-        LaneModelOutput, LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode,
-        ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan,
-        PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs,
-        ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
-        SummaryOnlyFinding, ToolClass, apply_refuter_output, cap_review_body, classify_diff,
-        collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload,
-        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
-        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
-        run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, validate_run_args, write_sensor_status,
+        LaneModelOutput, LanePlan, ModelCandidateComment, ModelCandidateFinding,
+        ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE,
+        OpenCodeEndpointKindArg, Plan, PostingMode, ProviderKindArg, RefuterDecision,
+        RefuterOutput, ReviewArgs, ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_refuter_output,
+        cap_review_body, classify_diff, collect_sensor_evidence_issues, dedupe_inline_comments,
+        default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_request_payload, model_response_shape, opencode_canary_spec,
+        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
+        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        write_sensor_status,
     };
 
     #[test]
@@ -5641,6 +5672,44 @@ mod tests {
         assert_eq!(issues[0].sensor, "tokmd");
         assert_eq!(issues[0].status, "skipped");
         assert_eq!(issues[0].reason, "dry-run; sensor not executed");
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_guard_rejects_unsupported_model_findings() -> Result<()> {
+        let lane = default_lanes()
+            .into_iter()
+            .find(|lane| lane.id == "tests")
+            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
+
+        let accepted = validate_summary_only_candidate(
+            &lane,
+            ModelCandidateFinding {
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "The test reaches the helper but does not reveal the changed behavior."
+                    .to_owned(),
+                evidence: "ripr summary excerpt".to_owned(),
+            },
+        );
+        assert_eq!(accepted.severity, "medium");
+        assert_eq!(accepted.confidence, "medium-high");
+        assert_eq!(accepted.evidence, "ripr summary excerpt");
+
+        let rejected = validate_summary_only_candidate(
+            &lane,
+            ModelCandidateFinding {
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: " ".to_owned(),
+                evidence: "".to_owned(),
+            },
+        );
+        assert_eq!(rejected.severity, "low");
+        assert_eq!(rejected.confidence, "medium");
+        assert!(rejected.reason.contains("reason_present=false"));
+        assert!(rejected.reason.contains("evidence_present=false"));
+        assert_eq!(rejected.evidence, "model summary-only candidate guardrail");
         Ok(())
     }
 
