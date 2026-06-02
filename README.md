@@ -262,7 +262,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `model-mode` | `auto` | `auto` or `off`. |
 | `provider-policy` | `minimax-primary` | `minimax-primary`, `minimax-only`, `opencode-go-canary`, `opencode-go-wide`, or `auto`. |
 | `lane-width` | `10` | Bun model lane width: `6`, `10`, or `20`. |
-| `model-timeout-sec` | `180` | Per-model-call timeout. |
+| `model-timeout-sec` | `300` | Per-model-call timeout. |
 | `max-inline-comments` | `8` | Upper bound for validated inline comments. |
 | `model-concurrency` | `8` | Planned model lane concurrency. |
 | `max-model-calls` | `14` | Upper bound for model review calls. |

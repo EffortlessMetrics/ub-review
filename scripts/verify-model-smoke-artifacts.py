@@ -30,6 +30,22 @@ AUTH_HEADER_KEYS = {
     "api_key",
 }
 
+ENDPOINT_EXPECTATIONS = {
+    "openai-chat": {
+        "response_shape": "openai",
+    },
+    "anthropic-messages": {
+        "response_shape": "anthropic",
+    },
+}
+
+
+def endpoint_expectation(endpoint_kind: str) -> dict:
+    expectation = ENDPOINT_EXPECTATIONS.get(endpoint_kind)
+    if expectation is None:
+        fail(f"unsupported endpoint_kind {endpoint_kind!r}")
+    return expectation
+
 
 def require_single_ok_preflight(preflights) -> dict:
     if not isinstance(preflights, list):
@@ -40,15 +56,20 @@ def require_single_ok_preflight(preflights) -> dict:
     expected = {
         "provider": "minimax",
         "model": "MiniMax-M3",
-        "endpoint_kind": "openai-chat",
         "status": "ok",
         "reason": "completed",
         "http_status": 200,
-        "response_shape": "openai",
     }
     for key, value in expected.items():
         if receipt.get(key) != value:
             fail(f"provider preflight `{key}` expected {value!r}, got {receipt.get(key)!r}")
+    endpoint_kind = receipt.get("endpoint_kind")
+    expectation = endpoint_expectation(endpoint_kind)
+    if receipt.get("response_shape") != expectation["response_shape"]:
+        fail(
+            "provider preflight `response_shape` expected "
+            f"{expectation['response_shape']!r}, got {receipt.get('response_shape')!r}"
+        )
     if receipt.get("duration_ms", 0) <= 0:
         fail("provider preflight duration_ms must be positive")
     return receipt
@@ -71,13 +92,18 @@ def require_ok_lane_receipt(lane: dict) -> None:
     expected = {
         "provider": "minimax",
         "model": "MiniMax-M3",
-        "endpoint_kind": "openai-chat",
         "http_status": 200,
-        "response_shape": "openai",
     }
     for key, value in expected.items():
         if lane.get(key) != value:
             fail(f"ok model lane `{key}` expected {value!r}, got {lane.get(key)!r}")
+    endpoint_kind = lane.get("endpoint_kind")
+    expectation = endpoint_expectation(endpoint_kind)
+    if lane.get("response_shape") != expectation["response_shape"]:
+        fail(
+            "ok model lane `response_shape` expected "
+            f"{expectation['response_shape']!r}, got {lane.get('response_shape')!r}"
+        )
     if lane.get("duration_ms", 0) <= 0:
         fail("ok model lane duration_ms must be positive")
     if lane.get("fallback_from") is not None:
@@ -116,10 +142,11 @@ def require_preflight_artifacts(root: pathlib.Path, receipt: dict) -> None:
     label = sanitize_artifact_name(
         f"{receipt['provider']}:{receipt['model']}:{receipt['endpoint_kind']}"
     )
-    content = require_openai_call_artifacts(
+    content = require_model_call_artifacts(
         root / "review/provider-preflight" / label,
         "provider preflight",
         receipt["model"],
+        receipt["endpoint_kind"],
     )
     expected_content = {
         "summary": "preflight ok",
@@ -134,15 +161,16 @@ def require_ok_lane_artifacts(root: pathlib.Path, lane: dict) -> None:
     lane_id = lane.get("lane")
     if not isinstance(lane_id, str) or not lane_id:
         fail("ok model lane has no lane id")
-    require_openai_call_artifacts(
+    require_model_call_artifacts(
         root / "review/model" / lane_id,
         f"model lane {lane_id}",
         "MiniMax-M3",
+        lane["endpoint_kind"],
     )
 
 
-def require_openai_call_artifacts(
-    call_dir: pathlib.Path, label: str, expected_model: str
+def require_model_call_artifacts(
+    call_dir: pathlib.Path, label: str, expected_model: str, endpoint_kind: str
 ) -> dict:
     request_path = call_dir / "request.json"
     response_path = call_dir / "response.json"
@@ -160,6 +188,20 @@ def require_openai_call_artifacts(
         fail(f"{label} stderr is not empty: {stderr_path}")
     if request.get("model") != expected_model:
         fail(f"{label} request did not use {expected_model}")
+    if endpoint_kind == "openai-chat":
+        parsed_content = require_openai_response_content(response, label, expected_model)
+    elif endpoint_kind == "anthropic-messages":
+        parsed_content = require_anthropic_response_content(response, label, expected_model)
+    else:
+        fail(f"{label} has unsupported endpoint_kind {endpoint_kind!r}")
+    if parsed_content != content:
+        fail(f"{label} content.json does not match parsed assistant content")
+    return content
+
+
+def require_openai_response_content(
+    response: dict, label: str, expected_model: str
+) -> dict:
     if response.get("object") != "chat.completion":
         fail(f"{label} response is not an OpenAI chat completion")
     if response.get("model") != expected_model:
@@ -180,13 +222,48 @@ def require_openai_call_artifacts(
         parsed_content = json.loads(assistant_content)
     except json.JSONDecodeError as error:
         fail(f"{label} assistant content is not strict JSON: {error}")
-    if parsed_content != content:
-        fail(f"{label} content.json does not match parsed assistant content")
     usage = response.get("usage", {})
     for key in ["prompt_tokens", "completion_tokens", "total_tokens"]:
         if usage.get(key, 0) <= 0:
             fail(f"{label} response usage.{key} must be positive")
-    return content
+    return parsed_content
+
+
+def require_anthropic_response_content(
+    response: dict, label: str, expected_model: str
+) -> dict:
+    if response.get("type") != "message":
+        fail(f"{label} response is not an Anthropic message")
+    if response.get("role") != "assistant":
+        fail(f"{label} response role expected 'assistant', got {response.get('role')!r}")
+    if response.get("model") != expected_model:
+        fail(f"{label} response did not report {expected_model}")
+    if response.get("stop_reason") != "end_turn":
+        fail(
+            f"{label} stop_reason expected 'end_turn', got {response.get('stop_reason')!r}"
+        )
+    content_blocks = response.get("content")
+    if not isinstance(content_blocks, list) or not content_blocks:
+        fail(f"{label} response has no content blocks")
+    text_blocks = [
+        block.get("text")
+        for block in content_blocks
+        if isinstance(block, dict) and block.get("type") == "text"
+    ]
+    assistant_content = next(
+        (text for text in text_blocks if isinstance(text, str) and text.strip()), None
+    )
+    if assistant_content is None:
+        fail(f"{label} assistant text content is empty")
+    try:
+        parsed_content = json.loads(assistant_content)
+    except json.JSONDecodeError as error:
+        fail(f"{label} assistant content is not strict JSON: {error}")
+    usage = response.get("usage", {})
+    for key in ["input_tokens", "output_tokens"]:
+        if usage.get(key, 0) <= 0:
+            fail(f"{label} response usage.{key} must be positive")
+    return parsed_content
 
 
 def assert_no_auth_header_fields(path: pathlib.Path, value) -> None:

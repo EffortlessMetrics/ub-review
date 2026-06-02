@@ -115,7 +115,7 @@ inputs:
     required: false
   model-timeout-sec:
     description: Per-model-call timeout in seconds.
-    default: '180'
+    default: '300'
     required: false
   max-inline-comments:
     description: Maximum validated inline comments in the grouped PR review.
