@@ -717,12 +717,166 @@ index 1111111..2222222 100644
     Ok(())
 }
 
+#[test]
+fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let out = temp.path().join("post");
+    let token = "test-token-redacted";
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Decision\n\nNo blocking finding after checking.\n\n## Residual risk\n\n- Live GitHub posting was not exercised by this fixture.",
+            "comments": []
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_api()?;
+
+    run(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            token,
+            "--github-api-url",
+            &github_api_url,
+        ],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    assert_eq!(requests.len(), 1);
+    let request_text = &requests[0];
+    assert!(
+        request_text
+            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews HTTP/1.1")
+    );
+    assert!(request_text.contains("Authorization: Bearer test-token-redacted"));
+    assert!(request_text.contains("\"event\": \"COMMENT\""));
+    assert!(request_text.contains("\"comments\": []"));
+
+    let post_result_path = out.join("post-result.json");
+    assert!(post_result_path.exists());
+    assert!(!out.join("post-error.json").exists());
+    assert!(out.join("github-review-post-payload.json").exists());
+    assert!(out.join("post-stdout.json").exists());
+    assert!(out.join("post-stderr.txt").exists());
+
+    let post_result_text = fs::read_to_string(&post_result_path)?;
+    let post_result: serde_json::Value = serde_json::from_str(&post_result_text)?;
+    assert_eq!(post_result["schema_version"], 1);
+    assert_eq!(post_result["status"], "ok");
+    assert_eq!(post_result["repo"], "EffortlessMetrics/ub-review");
+    assert_eq!(post_result["repo_valid"], true);
+    assert_eq!(post_result["pull_number"], 123);
+    assert_eq!(post_result["comments"], 0);
+    assert_eq!(post_result["review_json_exists"], true);
+    assert_eq!(post_result["review_json_valid"], true);
+    assert_eq!(post_result["review_event"], "COMMENT");
+    assert_eq!(post_result["review_comment_count"], 0);
+    assert_eq!(post_result["diff_patch_exists"], false);
+    assert_eq!(post_result["http_status"], 201);
+    assert_eq!(post_result["token_present"], true);
+    assert_eq!(post_result["payload_written"], true);
+    assert_eq!(post_result["post_stdout_written"], true);
+    assert_eq!(post_result["post_stderr_written"], true);
+    assert_eq!(post_result["response"]["id"], 987);
+    assert_eq!(post_result["response"]["state"], "COMMENTED");
+
+    for path in [
+        post_result_path,
+        out.join("github-review-post-payload.json"),
+        out.join("post-stdout.json"),
+        out.join("post-stderr.txt"),
+    ] {
+        let text = fs::read_to_string(path)?;
+        assert!(!text.contains(token));
+        assert!(!text.contains("Authorization"));
+        assert!(!text.contains("Bearer"));
+    }
+    Ok(())
+}
+
 fn write_file(path: &Path, text: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, text)?;
     Ok(())
+}
+
+fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let url = format!("http://{}", listener.local_addr()?);
+    let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        loop {
+            match listener.accept() {
+                Ok((stream, _addr)) => return Ok(vec![handle_fake_github_request(stream)?]),
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        bail!("fake GitHub API received no requests");
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    });
+    Ok((url, handle))
+}
+
+fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut headers = String::new();
+    loop {
+        let mut line = String::new();
+        let bytes = reader.read_line(&mut line)?;
+        if bytes == 0 {
+            bail!("fake GitHub request ended before headers finished");
+        }
+        headers.push_str(&line);
+        if line == "\r\n" || line == "\n" {
+            break;
+        }
+    }
+    let content_length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .unwrap_or_default();
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body)?;
+    let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
+    let response_body = serde_json::to_vec(&serde_json::json!({
+        "id": 987,
+        "state": "COMMENTED",
+        "body": "fake review posted"
+    }))?;
+    write!(
+        stream,
+        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        response_body.len()
+    )?;
+    stream.write_all(&response_body)?;
+    Ok(request_text)
 }
 
 fn spawn_fake_openai_provider(
