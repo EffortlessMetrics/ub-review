@@ -79,7 +79,7 @@ inputs:
     required: false
   minimax-provider-kind:
     description: 'MiniMax request/response family: anthropic or openai.'
-    default: anthropic
+    default: openai
     required: false
   minimax-model:
     description: MiniMax model name.

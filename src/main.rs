@@ -282,7 +282,7 @@ struct RunArgs {
     #[arg(
         long,
         value_enum,
-        default_value = "anthropic",
+        default_value = "openai",
         env = "UB_REVIEW_MINIMAX_PROVIDER_KIND"
     )]
     minimax_provider_kind: ProviderKindArg,
@@ -3789,7 +3789,12 @@ fn model_api_url(spec: &ProviderSpec) -> String {
 
 fn model_auth_header(spec: &ProviderSpec, token: &str) -> String {
     match spec.provider {
-        ModelProvider::MiniMaxDirect => format!("X-Api-Key: {token}"),
+        ModelProvider::MiniMaxDirect
+            if spec.endpoint_kind == ProviderEndpointKind::AnthropicMessages =>
+        {
+            format!("X-Api-Key: {token}")
+        }
+        ModelProvider::MiniMaxDirect => format!("Authorization: Bearer {token}"),
         ModelProvider::OpenCodeGo => format!("Authorization: Bearer {token}"),
     }
 }
@@ -3806,6 +3811,19 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
                 {"role": "user", "content": prompt}
             ],
         }),
+        ProviderEndpointKind::OpenAiChat if spec.provider == ModelProvider::MiniMaxDirect => {
+            serde_json::json!({
+                "model": spec.model,
+                "messages": [
+                    {"role": "system", "content": "Return strict JSON only. Do not include markdown fences or prose outside JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_completion_tokens": 2048,
+                "reasoning_split": true,
+                "temperature": 0.1,
+                "stream": false
+            })
+        }
         ProviderEndpointKind::OpenAiChat => serde_json::json!({
             "model": spec.model,
             "messages": [
@@ -5182,8 +5200,24 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn direct_minimax_uses_messages_endpoint_and_api_key_header() {
+    fn direct_minimax_openai_uses_chat_endpoint_and_bearer_header() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+
+        assert_eq!(
+            model_api_url(&spec),
+            "https://api.minimax.io/v1/chat/completions"
+        );
+        assert_eq!(
+            model_auth_header(&spec, "test-token"),
+            "Authorization: Bearer test-token"
+        );
+    }
+
+    #[test]
+    fn direct_minimax_anthropic_uses_messages_endpoint_and_api_key_header() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
         let spec = direct_minimax_spec(&args);
 
         assert_eq!(
@@ -5341,8 +5375,28 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn minimax_anthropic_payload_uses_anthropic_shape() {
+    fn minimax_openai_payload_uses_chat_shape() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+        let payload = model_request_payload(&spec, "packet");
+
+        assert_eq!(payload["model"], "MiniMax-M3");
+        assert_eq!(payload["max_completion_tokens"], 2048);
+        assert_eq!(payload["reasoning_split"], true);
+        assert!(
+            payload["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|system| system.contains("strict JSON"))
+        );
+        assert!(payload["messages"][1]["content"].as_str().is_some());
+        assert_eq!(payload["stream"], false);
+        assert!(payload.get("max_tokens").is_none());
+    }
+
+    #[test]
+    fn minimax_anthropic_payload_uses_messages_shape() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
         let spec = direct_minimax_spec(&args);
         let payload = model_request_payload(&spec, "packet");
 
@@ -5487,7 +5541,7 @@ UB_REVIEW_HTTP_STATUS:429
             model_timeout_sec: 180,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
-            minimax_provider_kind: ProviderKindArg::Anthropic,
+            minimax_provider_kind: ProviderKindArg::Openai,
             minimax_model: "MiniMax-M3".to_owned(),
             opencode_model: "minimax-m3".to_owned(),
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,
