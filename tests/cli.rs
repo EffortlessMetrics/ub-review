@@ -378,6 +378,131 @@ fn active_len_tracks_view_after_resize() {
 }
 
 #[test]
+fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    write_file(
+        &repo.join("README.md"),
+        "# cache warm fixture\n\nThis repo only needs a committed tree.\n",
+    )?;
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    let cache = temp.path().join("cache");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "cache",
+            "warm",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD",
+            "--out",
+            path_str(&cache)?,
+        ],
+    )?;
+
+    let manifest_path = cache.join("latest-manifest.json");
+    let manifest: serde_json::Value = serde_json::from_slice(&fs::read(&manifest_path)?)?;
+    let base_tree_sha = manifest["base_tree_sha"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("cache warm manifest missing base_tree_sha"))?;
+    assert_eq!(base_tree_sha.len(), 40);
+    assert!(base_tree_sha.chars().all(|ch| ch.is_ascii_hexdigit()));
+    assert_eq!(manifest["profile"], "gh-runner");
+    assert_eq!(manifest["base"], "HEAD");
+    assert!(
+        manifest["profile_hash"]
+            .as_str()
+            .is_some_and(|hash| hash.len() == 64)
+    );
+    assert_eq!(
+        manifest["tools"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default(),
+        4
+    );
+
+    let base_dir = cache.join("bases").join(base_tree_sha);
+    assert!(base_dir.join("manifest.json").exists());
+    for tool in ["tokmd", "ripr", "unsafe-review", "ast-grep"] {
+        assert!(
+            cache
+                .join("rules")
+                .join(tool)
+                .join("manifest.json")
+                .exists(),
+            "missing rule cache manifest for {tool}"
+        );
+        assert!(
+            base_dir.join(tool).join("manifest.json").exists(),
+            "missing base cache manifest for {tool}"
+        );
+    }
+
+    run(
+        temp.path(),
+        bin,
+        &[
+            "doctor",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD",
+            "--cache-dir",
+            path_str(&cache)?,
+        ],
+    )?;
+    Ok(())
+}
+
+#[test]
+fn doctor_require_core_tools_fails_missing_standard_image_tool() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(
+        &config,
+        r#"profile = "gh-runner"
+
+[tools.tokmd]
+id = "tokmd"
+command = "ub-review-test-missing-tokmd"
+"#,
+    )?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "doctor",
+            "--config",
+            path_str(&config)?,
+            "--require-core-tools",
+        ],
+    )?;
+    assert!(output.contains("required core review tools missing from standard image"));
+    assert!(output.contains("tokmd"));
+    Ok(())
+}
+
+#[test]
 fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
@@ -1101,6 +1226,18 @@ fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)])
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
+    let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    if !output.status.success() {
+        return Ok(format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    bail!("{program} {args:?} unexpectedly succeeded");
 }
 
 fn path_str(path: &Path) -> Result<&str> {

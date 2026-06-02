@@ -17,6 +17,42 @@ ban_standalone_approval = true
 require_zero_finding_audit = true
 enable_default_lanes = true
 
+[tools.tokmd]
+enabled = true
+class = "packet"
+default = "always"
+weight = 2
+timeout_sec = 300
+artifact_budget_mb = 192
+requires_lease = false
+
+[tools.ripr]
+enabled = true
+class = "static"
+default = "rust-behavior-or-tests-changed"
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.unsafe-review]
+enabled = true
+class = "static"
+default = "unsafe-or-native-risk-changed"
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.ast-grep]
+enabled = true
+class = "search"
+default = "source-changed"
+weight = 1
+timeout_sec = 60
+artifact_budget_mb = 64
+requires_lease = false
+
 # Keep the first GH-runner pass lean. Missing commands are already treated as
 # explicit missing evidence, but disabling uncommon tools keeps the plan quieter.
 [tools.semgrep]
