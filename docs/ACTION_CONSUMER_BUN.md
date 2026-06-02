@@ -48,7 +48,7 @@ permissions:
 The workflow uploads artifacts from the consumer repository:
 
 ```yaml
-- uses: actions/upload-artifact@v4
+- uses: actions/upload-artifact@v7
   if: always()
   with:
     name: ub-review-packet-${{ github.event.pull_request.number }}
