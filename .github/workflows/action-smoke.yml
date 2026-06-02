@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   smoke:
@@ -25,6 +26,10 @@ jobs:
           base: HEAD~1
           head: HEAD
           out: target/ub-review-smoke
+          posting: review
+          github-token: ${{ github.token }}
+          model-mode: off
+          fail-on-post-error: 'false'
 
       - uses: actions/upload-artifact@v4
         if: always()
