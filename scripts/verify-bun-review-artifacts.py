@@ -89,9 +89,16 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/metrics.json",
         "review/review.json",
         "review/review.md",
-        "review/github-review.json",
     ]:
         require_file(root / path)
+    if not (root / "review/github-review.json").exists() and not (
+        root / "review/github-review-skip.json"
+    ).exists():
+        fail("neither github-review.json nor github-review-skip.json exists")
+    if (root / "review/github-review.json").exists() and (
+        root / "review/github-review-skip.json"
+    ).exists():
+        fail("both github-review.json and github-review-skip.json exist")
 
     for sensor in SENSORS:
         require_file(root / "sensors" / sensor / "ub-review-sensor-status.json")
@@ -120,7 +127,6 @@ def require_summary(root: pathlib.Path) -> None:
 
 def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
     review = load_json(root / "review/review.json")
-    github_review = load_json(root / "review/github-review.json")
     review_body = read_text(root / "review/review.md")
     shared_context = read_text(root / "review/shared_context.md")
 
@@ -151,24 +157,36 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
             fail(f"review.md missing {heading}")
     no_standalone_approval_line(review_body, root / "review/review.md")
 
-    if github_review.get("event") != "COMMENT":
-        fail(f"github-review.json event expected COMMENT, got {github_review.get('event')!r}")
-    body = github_review.get("body")
-    if not isinstance(body, str) or "## Decision" not in body:
-        fail("github-review.json body is missing the review summary")
-    no_standalone_approval_line(body, root / "review/github-review.json")
-    comments = github_review.get("comments")
-    if not isinstance(comments, list):
-        fail("github-review.json comments is not an array")
-    if max_inline_comments is None:
-        max_inline_comments = int(review.get("max_inline_comments", 8))
-    if len(comments) > max_inline_comments:
-        fail(
-            f"github-review.json has {len(comments)} comments, "
-            f"over max {max_inline_comments}"
-        )
-    for index, comment in enumerate(comments):
-        require_github_comment(comment, index)
+    github_review_path = root / "review/github-review.json"
+    github_skip_path = root / "review/github-review-skip.json"
+    if github_review_path.exists():
+        github_review = load_json(github_review_path)
+        if github_review.get("event") != "COMMENT":
+            fail(f"github-review.json event expected COMMENT, got {github_review.get('event')!r}")
+        body = github_review.get("body")
+        if not isinstance(body, str) or "## Decision" not in body:
+            fail("github-review.json body is missing the review summary")
+        no_standalone_approval_line(body, github_review_path)
+        comments = github_review.get("comments")
+        if not isinstance(comments, list):
+            fail("github-review.json comments is not an array")
+        if max_inline_comments is None:
+            max_inline_comments = int(review.get("max_inline_comments", 8))
+        if len(comments) > max_inline_comments:
+            fail(
+                f"github-review.json has {len(comments)} comments, "
+                f"over max {max_inline_comments}"
+            )
+        for index, comment in enumerate(comments):
+            require_github_comment(comment, index)
+    else:
+        skip = load_json(github_skip_path)
+        if skip.get("status") != "skipped":
+            fail(f"github-review-skip.json status expected skipped, got {skip.get('status')!r}")
+        if skip.get("review_payload_status") != "skipped_empty_smoke":
+            fail(
+                "github-review-skip.json review_payload_status expected skipped_empty_smoke"
+            )
 
     return review
 
@@ -204,6 +222,13 @@ def require_metrics(root: pathlib.Path, review: dict) -> None:
         fail("metrics inline_comments does not match review.json")
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
+    if (root / "review/github-review-skip.json").exists():
+        if metrics.get("review_payload_status") != "skipped_empty_smoke":
+            fail("metrics review_payload_status does not match github-review-skip.json")
+        if metrics.get("github_review_body_bytes") != 0:
+            fail("metrics github_review_body_bytes must be 0 for skipped review payloads")
+        if metrics.get("github_review_comments") != 0:
+            fail("metrics github_review_comments must be 0 for skipped review payloads")
     models = metrics.get("models")
     if not isinstance(models, dict):
         fail("metrics.models is missing")
@@ -259,8 +284,12 @@ def require_post_receipt(root: pathlib.Path) -> None:
         fail("neither post-result.json nor post-error.json exists")
     if post_result.exists():
         receipt = load_json(post_result)
+        if receipt.get("status") == "skipped":
+            if receipt.get("review_payload_status") != "skipped_empty_smoke":
+                fail("post-result.json skipped receipt has wrong review_payload_status")
+            return
         if receipt.get("status") != "ok":
-            fail(f"post-result.json status expected ok, got {receipt.get('status')!r}")
+            fail(f"post-result.json status expected ok or skipped, got {receipt.get('status')!r}")
         if receipt.get("review_json_valid") is not True:
             fail("post-result.json did not mark review_json_valid true")
         if receipt.get("off_diff_comment_count") not in (None, 0):
@@ -283,6 +312,7 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/review.json",
         root / "review/review.md",
         root / "review/github-review.json",
+        root / "review/github-review-skip.json",
         root / "review/post-result.json",
         root / "review/post-error.json",
         root / "review/post-stdout.json",
