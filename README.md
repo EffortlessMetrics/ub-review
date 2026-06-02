@@ -321,6 +321,16 @@ small green PR at a time, MiniMax M3 primary for v0, GLM skipped until
 approved, agent harnesses out of the hot path, and real sensor defects filed in
 the matching `*-swarm` repo instead of silently absorbed into `ub-review`.
 
+## Roadmap and calibration
+
+Track the next steps in [docs/ROADMAP.md](docs/ROADMAP.md). The roadmap records
+the v0 Bun smoke proof, cleanup work, PR body cleanup, profile extraction path,
+and the planned resource-aware orchestrator with proof and resource brokers.
+
+Use [docs/calibration/bun-ub-review-ledger.md](docs/calibration/bun-ub-review-ledger.md)
+to record acted-on findings, false premises, parked follow-ups, and review
+compiler tuning notes from real Bun fork runs.
+
 ## Local development
 
 ```bash
