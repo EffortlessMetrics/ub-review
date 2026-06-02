@@ -144,6 +144,7 @@ target/ub-review/
 
   review/
     shared_context.md
+    metrics.json
     review.json
     review.md
     github-review.json

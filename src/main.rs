@@ -551,6 +551,54 @@ struct ReviewArtifacts {
     body: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ReviewMetrics {
+    schema_version: u32,
+    shared_context_id: String,
+    base: String,
+    head: String,
+    profile_name: String,
+    mode: String,
+    posting: String,
+    model_mode: String,
+    provider_policy: String,
+    lane_width: usize,
+    model_concurrency: usize,
+    max_model_calls: usize,
+    max_inline_comments: usize,
+    changed_files: usize,
+    diff_flags: DiffFlags,
+    lane_packets: usize,
+    sensors: SensorMetrics,
+    models: ModelMetrics,
+    inline_comments: usize,
+    github_review_comments: usize,
+    summary_only_findings: usize,
+    missing_or_failed_sensor_evidence: usize,
+    missing_or_failed_model_evidence: usize,
+    review_body_bytes: usize,
+    review_body_truncated: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SensorMetrics {
+    total: usize,
+    planned: usize,
+    skipped_by_plan: usize,
+    status_counts: BTreeMap<String, usize>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ModelMetrics {
+    provider_preflights: usize,
+    provider_preflight_status_counts: BTreeMap<String, usize>,
+    provider_preflight_calls_attempted: usize,
+    model_lanes: usize,
+    model_lane_status_counts: BTreeMap<String, usize>,
+    model_lane_calls_attempted: usize,
+    model_fallbacks_used: usize,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ModelLaneReceipt {
     lane: String,
@@ -2165,10 +2213,15 @@ fn write_review_artifacts(
         summary_only_findings,
         body: body.clone(),
     };
+    let metrics = build_review_metrics(out, diff, plan, &review, &github_review);
 
     fs::write(
         review_dir.join("review.json"),
         serde_json::to_vec_pretty(&review)?,
+    )?;
+    fs::write(
+        review_dir.join("metrics.json"),
+        serde_json::to_vec_pretty(&metrics)?,
     )?;
     fs::write(
         review_dir.join("provider-preflight-status.json"),
@@ -2180,6 +2233,119 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&github_review)?,
     )?;
     Ok(())
+}
+
+fn build_review_metrics(
+    out: &Path,
+    diff: &DiffContext,
+    plan: &Plan,
+    review: &ReviewArtifacts,
+    github_review: &GitHubReview,
+) -> ReviewMetrics {
+    let sensor_statuses = plan
+        .sensors
+        .iter()
+        .map(|sensor| sensor_status_for_metrics(out, sensor))
+        .collect::<Vec<_>>();
+    let preflight_statuses = review
+        .provider_preflights
+        .iter()
+        .map(|receipt| receipt.status.as_str())
+        .collect::<Vec<_>>();
+    let model_lane_statuses = review
+        .model_lanes
+        .iter()
+        .map(|receipt| receipt.status.as_str())
+        .collect::<Vec<_>>();
+
+    ReviewMetrics {
+        schema_version: 1,
+        shared_context_id: review.shared_context_id.clone(),
+        base: diff.base.clone(),
+        head: diff.head.clone(),
+        profile_name: plan.profile_name.clone(),
+        mode: review.mode.clone(),
+        posting: review.posting.clone(),
+        model_mode: review.model_mode.clone(),
+        provider_policy: review.provider_policy.clone(),
+        lane_width: review.lane_width,
+        model_concurrency: review.model_concurrency,
+        max_model_calls: review.max_model_calls,
+        max_inline_comments: review.max_inline_comments,
+        changed_files: diff.changed_files.len(),
+        diff_flags: diff.flags.clone(),
+        lane_packets: plan.lanes.len(),
+        sensors: SensorMetrics {
+            total: plan.sensors.len(),
+            planned: plan.sensors.iter().filter(|sensor| sensor.run).count(),
+            skipped_by_plan: plan.sensors.iter().filter(|sensor| !sensor.run).count(),
+            status_counts: status_counts(sensor_statuses.iter().map(String::as_str)),
+        },
+        models: ModelMetrics {
+            provider_preflights: review.provider_preflights.len(),
+            provider_preflight_status_counts: status_counts(preflight_statuses.iter().copied()),
+            provider_preflight_calls_attempted: review
+                .provider_preflights
+                .iter()
+                .filter(|receipt| model_call_attempted_status(&receipt.status))
+                .count(),
+            model_lanes: review.model_lanes.len(),
+            model_lane_status_counts: status_counts(model_lane_statuses.iter().copied()),
+            model_lane_calls_attempted: review
+                .model_lanes
+                .iter()
+                .filter(|receipt| model_call_attempted_status(&receipt.status))
+                .count(),
+            model_fallbacks_used: review
+                .model_lanes
+                .iter()
+                .filter(|receipt| receipt.fallback_from.is_some())
+                .count(),
+        },
+        inline_comments: review.inline_comments.len(),
+        github_review_comments: github_review.comments.len(),
+        summary_only_findings: review.summary_only_findings.len(),
+        missing_or_failed_sensor_evidence: review.missing_or_failed_sensor_evidence.len(),
+        missing_or_failed_model_evidence: review.missing_or_failed_model_evidence.len(),
+        review_body_bytes: review.body.len(),
+        review_body_truncated: review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim()),
+    }
+}
+
+fn sensor_status_for_metrics(out: &Path, sensor: &SensorPlan) -> String {
+    let status_path = out
+        .join("sensors")
+        .join(&sensor.id)
+        .join("ub-review-sensor-status.json");
+    read_sensor_receipt(&status_path)
+        .map(|receipt| receipt.status)
+        .unwrap_or_else(|| {
+            if sensor.run {
+                "receipt-absent".to_owned()
+            } else {
+                "skipped".to_owned()
+            }
+        })
+}
+
+fn status_counts<'a>(statuses: impl Iterator<Item = &'a str>) -> BTreeMap<String, usize> {
+    let mut counts = BTreeMap::new();
+    for status in statuses {
+        *counts.entry(status.to_owned()).or_insert(0) += 1;
+    }
+    counts
+}
+
+fn model_call_attempted_status(status: &str) -> bool {
+    matches!(
+        status,
+        "ok" | "failed"
+            | "invalid_json"
+            | "timed_out"
+            | "rate_limited"
+            | "auth_failed"
+            | "bad_envelope"
+    )
 }
 
 fn render_shared_context(
