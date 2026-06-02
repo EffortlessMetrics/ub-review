@@ -377,6 +377,33 @@ struct PostErrorReceipt {
     fail_on_post_error: bool,
 }
 
+#[derive(Debug, Serialize)]
+struct PostResultReceipt {
+    schema_version: u32,
+    status: String,
+    repo: String,
+    repo_valid: bool,
+    pull_number: u64,
+    comments: usize,
+    review_json: String,
+    review_json_exists: bool,
+    review_json_valid: bool,
+    review_event: Option<String>,
+    review_body_bytes: Option<usize>,
+    review_comment_count: Option<usize>,
+    diff_patch: String,
+    diff_patch_exists: bool,
+    diff_patch_valid: bool,
+    diff_line_count: Option<usize>,
+    off_diff_comment_count: Option<usize>,
+    http_status: Option<u16>,
+    token_present: bool,
+    payload_written: bool,
+    post_stdout_written: bool,
+    post_stderr_written: bool,
+    response: serde_json::Value,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 struct Config {
@@ -4930,7 +4957,7 @@ fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
     text[start..end].parse::<u16>().ok()
 }
 
-fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
+fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let token = args
         .github_token
         .as_ref()
@@ -4990,14 +5017,45 @@ fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
             stderr_text
         );
     }
-    Ok(serde_json::json!({
-        "status": "ok",
-        "repo": repo,
-        "pull_number": pull_number,
-        "comments": review.comments.len(),
-        "http_status": output.http_status,
-        "response": response,
-    }))
+    let review_metadata = read_github_review_metadata(args);
+    Ok(PostResultReceipt {
+        schema_version: 1,
+        status: "ok".to_owned(),
+        repo: repo.clone(),
+        repo_valid: true,
+        pull_number,
+        comments: review.comments.len(),
+        review_json: args.review_json.display().to_string(),
+        review_json_exists: args.review_json.exists(),
+        review_json_valid: review_metadata
+            .as_ref()
+            .is_some_and(|metadata| metadata.valid),
+        review_event: review_metadata.as_ref().map(|review| review.event.clone()),
+        review_body_bytes: review_metadata.as_ref().map(|review| review.body_bytes),
+        review_comment_count: review_metadata.as_ref().map(|review| review.comments),
+        diff_patch: review_metadata
+            .as_ref()
+            .map(|review| review.diff_patch.display().to_string())
+            .unwrap_or_else(|| post_diff_patch_path(args).display().to_string()),
+        diff_patch_exists: review_metadata
+            .as_ref()
+            .is_some_and(|review| review.diff_patch_exists),
+        diff_patch_valid: review_metadata
+            .as_ref()
+            .is_some_and(|review| review.diff_patch_valid),
+        diff_line_count: review_metadata
+            .as_ref()
+            .and_then(|review| review.diff_line_count),
+        off_diff_comment_count: review_metadata
+            .as_ref()
+            .and_then(|review| review.off_diff_comment_count),
+        http_status: output.http_status,
+        token_present: true,
+        payload_written: post_payload.exists(),
+        post_stdout_written: args.out.join("post-stdout.json").exists(),
+        post_stderr_written: args.out.join("post-stderr.txt").exists(),
+        response,
+    })
 }
 
 fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
