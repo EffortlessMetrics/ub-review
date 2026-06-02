@@ -22,7 +22,7 @@ inputs:
     default: .
     required: false
   base:
-    description: Base ref, usually `origin/${{ github.base_ref }}`.
+    description: Base ref, usually an origin remote branch for the PR target.
     default: origin/main
     required: false
   head:
