@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::process::{Command as ProcessCommand, Stdio};
+use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -558,6 +558,7 @@ struct ModelLaneReceipt {
     status: String,
     reason: String,
     duration_ms: Option<u128>,
+    http_status: Option<u16>,
     response_shape: Option<String>,
     fallback_from: Option<String>,
 }
@@ -570,6 +571,7 @@ struct ProviderPreflightReceipt {
     status: String,
     reason: String,
     duration_ms: Option<u128>,
+    http_status: Option<u16>,
     response_shape: Option<String>,
 }
 
@@ -665,6 +667,13 @@ struct CommandStatus {
     duration_ms: u128,
 }
 
+struct HttpPostOutput {
+    status: ExitStatus,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+    http_status: Option<u16>,
+}
+
 struct SensorStatusWrite<'a> {
     status: &'a str,
     argv: &'a [String],
@@ -742,6 +751,7 @@ impl ProviderSpec {
 struct ModelCallOutcome {
     output: LaneModelOutput,
     duration_ms: u128,
+    http_status: Option<u16>,
     response_shape: String,
 }
 
@@ -2715,6 +2725,7 @@ fn build_model_lane_receipts(
                 status: status.to_owned(),
                 reason,
                 duration_ms: None,
+                http_status: None,
                 response_shape: None,
                 fallback_from: None,
             }
@@ -2757,6 +2768,7 @@ fn build_provider_preflight_receipts(
                 status: status.to_owned(),
                 reason,
                 duration_ms: None,
+                http_status: None,
                 response_shape: None,
             }
         })
@@ -2827,11 +2839,13 @@ fn run_provider_preflights(
                 receipt.status = "ok".to_owned();
                 receipt.reason = "completed".to_owned();
                 receipt.duration_ms = Some(outcome.duration_ms);
+                receipt.http_status = outcome.http_status;
                 receipt.response_shape = Some(outcome.response_shape);
             }
             Err(err) => {
                 receipt.status = classify_model_error(&err);
                 receipt.reason = format!("{err:#}");
+                receipt.http_status = http_status_from_error(&err);
             }
         }
     }
@@ -2934,6 +2948,7 @@ fn run_available_model_lanes(
                 receipt.status = "ok".to_owned();
                 receipt.reason = "completed".to_owned();
                 receipt.duration_ms = Some(outcome.duration_ms);
+                receipt.http_status = outcome.http_status;
                 receipt.response_shape = Some(outcome.response_shape.clone());
                 apply_model_output(
                     lane,
@@ -2947,6 +2962,7 @@ fn run_available_model_lanes(
             Err(err) => {
                 receipt.status = classify_model_error(&err);
                 receipt.reason = format!("{err:#}");
+                receipt.http_status = http_status_from_error(&err);
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
             }
         }
@@ -3049,10 +3065,13 @@ fn call_model_prompt(
     fs::write(&response_path, &output.stdout)?;
     fs::write(&stderr_path, &output.stderr)?;
     if !output.status.success() {
+        let response_text = String::from_utf8_lossy(&output.stdout);
         bail!(
-            "model curl exited {:?}: {}",
+            "model curl exited {:?} with http status {:?}: stderr: {}; stdout: {}",
             output.status.code(),
-            String::from_utf8_lossy(&output.stderr)
+            output.http_status,
+            String::from_utf8_lossy(&output.stderr),
+            response_text
         );
     }
     let response: serde_json::Value = serde_json::from_slice(&output.stdout)
@@ -3062,11 +3081,12 @@ fn call_model_prompt(
         .ok_or_else(|| anyhow::anyhow!("model response did not contain assistant content"))?;
     let content_path = lane_dir.join("content.json");
     fs::write(&content_path, content.as_bytes())?;
-    let output = serde_json::from_str(content)
+    let lane_output = serde_json::from_str(content)
         .with_context(|| format!("parse {}", content_path.display()))?;
     Ok(ModelCallOutcome {
-        output,
+        output: lane_output,
         duration_ms,
+        http_status: output.http_status,
         response_shape,
     })
 }
@@ -3496,12 +3516,14 @@ fn run_curl_json_post(
     request_path: &Path,
     headers: &[&str],
     timeout_sec: u64,
-) -> Result<std::process::Output> {
+) -> Result<HttpPostOutput> {
     let mut child = ProcessCommand::new("curl")
         .arg("-sS")
         .arg("--fail-with-body")
         .arg("--max-time")
         .arg(timeout_sec.to_string())
+        .arg("-w")
+        .arg("\nUB_REVIEW_HTTP_STATUS:%{http_code}\n")
         .arg("-X")
         .arg("POST")
         .arg("-K")
@@ -3530,11 +3552,46 @@ fn run_curl_json_post(
             curl_config_quote(token)
         )?;
     }
-    child.wait_with_output().with_context(|| "wait for curl")
+    let output = child.wait_with_output().with_context(|| "wait for curl")?;
+    let (stdout, http_status) = split_curl_http_status(output.stdout);
+    Ok(HttpPostOutput {
+        status: output.status,
+        stdout,
+        stderr: output.stderr,
+        http_status,
+    })
 }
 
 fn curl_config_quote(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+fn split_curl_http_status(stdout: Vec<u8>) -> (Vec<u8>, Option<u16>) {
+    const MARKER: &[u8] = b"\nUB_REVIEW_HTTP_STATUS:";
+    let Some(position) = stdout
+        .windows(MARKER.len())
+        .rposition(|window| window == MARKER)
+    else {
+        return (stdout, None);
+    };
+    let status_bytes = &stdout[position + MARKER.len()..];
+    let Ok(status_text) = std::str::from_utf8(status_bytes) else {
+        return (stdout, None);
+    };
+    let Ok(status) = status_text.trim().parse::<u16>() else {
+        return (stdout, None);
+    };
+    let mut body = stdout;
+    body.truncate(position);
+    (body, Some(status))
+}
+
+fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
+    let text = format!("{err:#}");
+    let needle = "http status Some(";
+    let start = text.find(needle)? + needle.len();
+    let end = text[start..].find(')')? + start;
+    text[start..end].parse::<u16>().ok()
 }
 
 fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
@@ -3591,8 +3648,9 @@ fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
     });
     if !output.status.success() {
         bail!(
-            "GitHub review post failed with exit code {:?}: {}",
+            "GitHub review post failed with exit code {:?} and http status {:?}: {}",
             output.status.code(),
+            output.http_status,
             stderr_text
         );
     }
@@ -3601,6 +3659,7 @@ fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
         "repo": repo,
         "pull_number": pull_number,
         "comments": review.comments.len(),
+        "http_status": output.http_status,
         "response": response,
     }))
 }
@@ -4335,10 +4394,11 @@ mod tests {
         ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostingMode,
         ProviderKindArg, ReviewArgs, ReviewInlineComment, RunArgs, RunMode, SensorPlan,
         SensorStatusWrite, SummaryOnlyFinding, ToolClass, cap_review_body, classify_diff,
-        default_lanes, direct_minimax_spec, extract_model_content, model_assignments,
-        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
-        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
-        run_sensor, validate_github_review_payload, validate_inline_candidate, write_sensor_status,
+        default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
+        model_assignments, model_request_payload, model_response_shape, opencode_canary_spec,
+        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
+        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
+        validate_inline_candidate, write_sensor_status,
     };
 
     #[test]
@@ -4696,6 +4756,33 @@ index 1111111..2222222 100644
         assert_eq!(model_response_shape(&malformed), "unknown");
         assert!(extract_model_content(&malformed).is_none());
         Ok(())
+    }
+
+    #[test]
+    fn curl_http_status_marker_is_stripped_from_body() {
+        let (body, status) = split_curl_http_status(br#"{"error":"rate"}"#.to_vec());
+        assert_eq!(body, br#"{"error":"rate"}"#);
+        assert_eq!(status, None);
+
+        let (body, status) = split_curl_http_status(
+            br#"{"error":"rate"}
+UB_REVIEW_HTTP_STATUS:429
+"#
+            .to_vec(),
+        );
+
+        assert_eq!(body, br#"{"error":"rate"}"#);
+        assert_eq!(status, Some(429));
+    }
+
+    #[test]
+    fn model_error_exposes_http_status_for_receipts() {
+        let err = anyhow::anyhow!(
+            "model curl exited Some(22) with http status Some(401): stderr: unauthorized"
+        );
+
+        assert_eq!(http_status_from_error(&err), Some(401));
+        assert_eq!(super::classify_model_error(&err), "auth_failed");
     }
 
     #[test]
