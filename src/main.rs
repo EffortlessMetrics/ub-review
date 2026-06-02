@@ -3863,9 +3863,7 @@ fn validate_inline_candidate(
     let concise = body.chars().count() <= 1_200;
     let body_present = !body_text.is_empty();
     let evidence_present = !evidence.is_empty();
-    let repo_relative = !path.is_empty()
-        && !Path::new(&path).is_absolute()
-        && !path.split('/').any(|part| part == "..");
+    let repo_relative = is_repo_relative_path(&path);
 
     if allowed_severity
         && allowed_confidence
@@ -4601,17 +4599,41 @@ fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
         if comment.side != "RIGHT" {
             bail!("github review comments must use side=RIGHT");
         }
-        if comment.path.trim().is_empty() || Path::new(&comment.path).is_absolute() {
+        if !is_repo_relative_path(&comment.path) {
             bail!("github review comment path must be repo-relative");
         }
         if comment.line == 0 {
             bail!("github review comment line must be positive");
+        }
+        if comment.body.trim().is_empty() {
+            bail!("github review comment body must not be empty");
+        }
+        if comment.body.chars().count() > 1_200 {
+            bail!("github review comment body must be 1200 chars or fewer");
+        }
+        if !has_lane_prefix(&comment.body) {
+            bail!("github review comment body must start with a lane prefix");
         }
         if has_standalone_approval_line(&comment.body) {
             bail!("github review comment contains standalone approval language");
         }
     }
     Ok(())
+}
+
+fn is_repo_relative_path(path: &str) -> bool {
+    let path = normalize_repo_path(path);
+    !path.is_empty()
+        && !Path::new(&path).is_absolute()
+        && !path.split('/').any(|part| part.is_empty() || part == "..")
+}
+
+fn has_lane_prefix(body: &str) -> bool {
+    let trimmed = body.trim_start();
+    trimmed.starts_with('[')
+        && trimmed
+            .find(']')
+            .is_some_and(|position| position > 1 && position <= 32)
 }
 
 fn is_valid_repo_slug(value: &str) -> bool {
@@ -5849,6 +5871,42 @@ index 1111111..2222222 100644
             ..ok.clone()
         };
         assert!(validate_github_review_payload(&bad_side).is_err());
+
+        let parent_path = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                path: "../src/lib.rs".to_owned(),
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        assert!(validate_github_review_payload(&parent_path).is_err());
+
+        let empty_body = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                body: " ".to_owned(),
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        assert!(validate_github_review_payload(&empty_body).is_err());
+
+        let missing_prefix = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                body: "This test reaches the helper but does not assert the boundary.".to_owned(),
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        assert!(validate_github_review_payload(&missing_prefix).is_err());
+
+        let overlong_body = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                body: format!("[tests] {}", "x".repeat(1_201)),
+                ..ok.comments[0].clone()
+            }],
+            ..ok
+        };
+        assert!(validate_github_review_payload(&overlong_body).is_err());
         Ok(())
     }
 
