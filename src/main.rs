@@ -5298,6 +5298,7 @@ If there is no blocker/high/medium actionable issue, use empty arrays and put th
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
+Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure does not return `None`, an empty box, or a recoverable fallback. If that objection arises, return it as a refuted false-premise failed_objection, not as a candidate finding.
 
 {shared_context}"#,
         lane = lane.id,
@@ -5331,10 +5332,30 @@ fn apply_model_output(
         proof_requests,
     } = sinks;
     if let Some(summary) = output.summary {
-        summary_only_findings.push(validate_lane_model_summary(lane, &summary));
+        if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
+            lane,
+            &summary,
+            vec!["lane model summary".to_owned()],
+            None,
+            None,
+            model_observations.len(),
+            "model-false-premise-guard",
+        ) {
+            model_observations.push(observation);
+        } else {
+            summary_only_findings.push(validate_lane_model_summary(lane, &summary));
+        }
     }
     for candidate in output.summary_only_findings {
-        summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
+        if let Some(observation) = box_from_allocation_false_premise_observation_from_summary_only(
+            lane,
+            &candidate,
+            model_observations.len(),
+        ) {
+            model_observations.push(observation);
+        } else {
+            summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
+        }
     }
     for observation in output.observations {
         model_observations.push(validate_model_observation(
@@ -5358,6 +5379,14 @@ fn apply_model_output(
         .into_iter()
         .chain(output.inline_comments)
     {
+        if let Some(observation) = box_from_allocation_false_premise_observation_from_candidate(
+            lane,
+            &candidate,
+            model_observations.len(),
+        ) {
+            model_observations.push(observation);
+            continue;
+        }
         if is_candidate_only_lane(&lane.id) {
             summary_only_findings.push(SummaryOnlyFinding {
                 lane: lane.id.clone(),
@@ -5430,6 +5459,17 @@ fn validate_model_observation(
         .as_deref()
         .map(normalize_repo_path)
         .filter(|path| !path.is_empty());
+    if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
+        lane,
+        &format!("{claim}\n{}", evidence.join("\n")),
+        evidence.clone(),
+        path.as_ref(),
+        candidate.line,
+        index,
+        "model-false-premise-guard",
+    ) {
+        return observation;
+    }
     make_observation(ObservationInput {
         index,
         lane: &lane.id,
@@ -5462,6 +5502,17 @@ fn validate_failed_objection(
     );
     let full_claim = format!("{claim}; refuted because: {reason}");
     let evidence = non_empty_evidence(objection.evidence, "failed objection audit");
+    if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
+        lane,
+        &format!("{full_claim}\n{}", evidence.join("\n")),
+        evidence.clone(),
+        None,
+        None,
+        index,
+        "model-failed-objection",
+    ) {
+        return observation;
+    }
     let kind = objection
         .kind
         .as_deref()
@@ -5495,6 +5546,100 @@ fn validate_failed_objection(
         dedupe_key: None,
         source: "model-failed-objection",
     })
+}
+
+const BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY: &str = "rust-box-from-allocation-failure";
+const BOX_FROM_ALLOCATION_FALSE_PREMISE_CLAIM: &str = "`Box::from(slice)` allocation failure does not return `None`; recoverable fallback claims are dropped.";
+
+fn box_from_allocation_false_premise_observation_from_candidate(
+    lane: &LanePlan,
+    candidate: &ModelCandidateComment,
+    index: usize,
+) -> Option<Observation> {
+    let text = format!("{}\n{}", candidate.body, candidate.evidence);
+    let path = normalize_repo_path(&candidate.path);
+    let path = if path.is_empty() { None } else { Some(path) };
+    box_from_allocation_false_premise_observation_from_text(
+        lane,
+        &text,
+        vec![candidate.evidence.clone()],
+        path.as_ref(),
+        Some(candidate.line),
+        index,
+        "model-false-premise-guard",
+    )
+}
+
+fn box_from_allocation_false_premise_observation_from_summary_only(
+    lane: &LanePlan,
+    candidate: &ModelCandidateFinding,
+    index: usize,
+) -> Option<Observation> {
+    box_from_allocation_false_premise_observation_from_text(
+        lane,
+        &format!("{}\n{}", candidate.reason, candidate.evidence),
+        vec![candidate.evidence.clone()],
+        None,
+        None,
+        index,
+        "model-false-premise-guard",
+    )
+}
+
+fn box_from_allocation_false_premise_observation_from_text(
+    lane: &LanePlan,
+    text: &str,
+    evidence: Vec<String>,
+    path: Option<&String>,
+    line: Option<u32>,
+    index: usize,
+    source: &str,
+) -> Option<Observation> {
+    if !is_box_from_allocation_false_premise(text) {
+        return None;
+    }
+    let mut evidence = non_empty_evidence(evidence, "model false-premise guard");
+    let invariant =
+        "Rust allocation semantics: Box::from(&[u8]) does not return None on allocation failure.";
+    if !evidence.iter().any(|item| item == invariant) {
+        evidence.push(invariant.to_owned());
+    }
+    Some(make_observation(ObservationInput {
+        index,
+        lane: &lane.id,
+        question: "false-premise",
+        claim: BOX_FROM_ALLOCATION_FALSE_PREMISE_CLAIM,
+        kind: "false-premise",
+        status: "refuted",
+        severity: "low",
+        confidence: "high",
+        path,
+        line,
+        evidence,
+        dedupe_key: Some(BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY),
+        source,
+    }))
+}
+
+fn is_box_from_allocation_false_premise(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    let compact = lower
+        .chars()
+        .filter(|ch| !ch.is_whitespace() && *ch != '`')
+        .collect::<String>();
+    let mentions_box_from =
+        compact.contains("box::from(") || compact.contains("box::<[u8]>::from(");
+    let mentions_allocation = lower.contains("allocation failure")
+        || lower.contains("allocation fails")
+        || lower.contains("alloc failure")
+        || lower.contains("out of memory")
+        || lower.contains("oom");
+    let mentions_recoverable_result = lower.contains("none")
+        || lower.contains("empty box")
+        || lower.contains("fallback")
+        || lower.contains("fall through")
+        || lower.contains("fallthrough");
+    mentions_box_from && mentions_allocation && mentions_recoverable_result
 }
 
 fn validate_proof_request(
@@ -8791,6 +8936,134 @@ index 1111111..2222222 100644
         assert_eq!(proof_json.len(), 1);
         assert!(proof_plan.contains("Proof requests are passive"));
         assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
+        Ok(())
+    }
+
+    #[test]
+    fn box_from_allocation_false_premise_candidate_is_refuted_not_inline() -> Result<()> {
+        let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn snapshot() {
++    let bytes = Box::<[u8]>::from(slice());
+ }
+";
+        let line_map = right_side_diff_lines(patch);
+        let lane = model_lane(
+            "ub-active-view",
+            "Active view review",
+            &["tokmd", "unsafe-review"],
+            "Check active-view/backing-store safety.",
+        );
+        let json = r#"{
+  "candidate_findings": [
+    {
+      "severity": "high",
+      "confidence": "high",
+      "path": "src/lib.rs",
+      "line": 2,
+      "body": "[ub-active-view] If Box::<[u8]>::from(pinned.slice()) returns None on allocation failure, this can fall back to a borrowed live slice.",
+      "evidence": "diff hunk claims allocation failure can fall through"
+    }
+  ]
+}"#;
+        let output: LaneModelOutput = serde_json::from_str(json)?;
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+
+        apply_model_output(
+            &lane,
+            output,
+            &line_map,
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+            },
+        );
+
+        assert!(inline_comments.is_empty());
+        assert!(summary_only_findings.is_empty());
+        assert_eq!(observations.len(), 1);
+        let observation = &observations[0];
+        assert_eq!(observation.kind, "false-premise");
+        assert_eq!(observation.status, "refuted");
+        assert_eq!(observation.severity, "low");
+        assert_eq!(observation.confidence, "high");
+        assert_eq!(observation.dedupe_key, "rust-box-from-allocation-failure");
+        assert_eq!(observation.source, "model-false-premise-guard");
+        assert_eq!(observation.path.as_deref(), Some("src/lib.rs"));
+        assert_eq!(observation.line, Some(2));
+        assert!(observation.claim.contains("does not return `None`"));
+        Ok(())
+    }
+
+    #[test]
+    fn box_from_allocation_false_premise_observation_is_forced_refuted() -> Result<()> {
+        let lane = model_lane(
+            "ub-active-view",
+            "Active view review",
+            &["tokmd", "unsafe-review"],
+            "Check active-view/backing-store safety.",
+        );
+        let json = r#"{
+  "observations": [
+    {
+      "claim": "Box::<[u8]>::from(pinned.slice()) can return None on allocation failure and then fall back to borrowed bytes.",
+      "question": "fallback-path",
+      "kind": "bug",
+      "status": "open",
+      "severity": "high",
+      "confidence": "medium-high",
+      "path": "src/lib.rs",
+      "line": 2,
+      "evidence": ["model premise"]
+    }
+  ]
+}"#;
+        let output: LaneModelOutput = serde_json::from_str(json)?;
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+
+        apply_model_output(
+            &lane,
+            output,
+            &BTreeSet::new(),
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+            },
+        );
+
+        assert!(inline_comments.is_empty());
+        assert!(summary_only_findings.is_empty());
+        assert_eq!(observations.len(), 1);
+        let observation = &observations[0];
+        assert_eq!(observation.kind, "false-premise");
+        assert_eq!(observation.status, "refuted");
+        assert_eq!(observation.severity, "low");
+        assert_eq!(observation.confidence, "high");
+        assert_eq!(observation.dedupe_key, "rust-box-from-allocation-failure");
+        assert_eq!(observation.source, "model-false-premise-guard");
+        assert_eq!(observation.question, "false-premise");
+        assert!(
+            observation
+                .evidence
+                .iter()
+                .any(|item| item.contains("does not return None"))
+        );
         Ok(())
     }
 
