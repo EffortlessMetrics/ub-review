@@ -776,6 +776,21 @@ struct ProofRequest {
     status: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ProofRequestGroup {
+    schema: String,
+    id: String,
+    command: String,
+    cost: String,
+    timeout_sec: u64,
+    required: bool,
+    status: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+    reasons: Vec<String>,
+    duplicate_count: usize,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct SensorMetrics {
     total: usize,
@@ -3575,9 +3590,14 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
 fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let proof_groups = proof_request_groups(proof_requests);
     fs::write(
         review_dir.join("proof_requests.json"),
         serde_json::to_vec_pretty(proof_requests)?,
+    )?;
+    fs::write(
+        review_dir.join("proof_request_groups.json"),
+        serde_json::to_vec_pretty(&proof_groups)?,
     )?;
 
     let mut ndjson = String::new();
@@ -3593,22 +3613,79 @@ fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) ->
         plan.push_str("No proof requests were emitted by model lanes.\n");
     } else {
         plan.push_str("Proof requests are passive in this runner version. The proof broker has not executed these commands.\n\n");
-        for request in proof_requests {
+        plan.push_str(&format!(
+            "Grouped proof broker tasks: {} unique from {} request(s).\n\n",
+            proof_groups.len(),
+            proof_requests.len()
+        ));
+        for group in &proof_groups {
             plan.push_str(&format!(
-                "- `{}` from `{}`: `{}` ({}, timeout {}s, required={}, status={})\n  Reason: {}\n",
-                request.id,
-                request.lane,
-                request.command,
-                request.cost,
-                request.timeout_sec,
-                request.required,
-                request.status,
-                request.reason
+                "- `{}` requested by `{}`: `{}` ({}, timeout {}s, required={}, status={}, merged_requests={})\n",
+                group.id,
+                group.requested_by.join(", "),
+                group.command,
+                group.cost,
+                group.timeout_sec,
+                group.required,
+                group.status,
+                group.duplicate_count
             ));
+            for reason in &group.reasons {
+                plan.push_str(&format!("  - Reason: {}\n", escape_md(reason)));
+            }
         }
     }
     fs::write(review_dir.join("proof_plan.md"), plan)?;
     Ok(())
+}
+
+fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGroup> {
+    let mut groups = BTreeMap::<(String, String, u64), ProofRequestGroup>::new();
+    for request in proof_requests {
+        let key = (
+            request.command.clone(),
+            request.cost.clone(),
+            request.timeout_sec,
+        );
+        let fingerprint = sha256_hex(
+            format!(
+                "{}\n{}\n{}",
+                request.command, request.cost, request.timeout_sec
+            )
+            .as_bytes(),
+        );
+        let group = groups.entry(key).or_insert_with(|| ProofRequestGroup {
+            schema: "ub-review.proof_request_group.v1".to_owned(),
+            id: format!("proof-group-{}", &fingerprint[..12]),
+            command: request.command.clone(),
+            cost: request.cost.clone(),
+            timeout_sec: request.timeout_sec,
+            required: false,
+            status: "invalid".to_owned(),
+            requested_by: Vec::new(),
+            request_ids: Vec::new(),
+            reasons: Vec::new(),
+            duplicate_count: 0,
+        });
+        group.required |= request.required;
+        if request.status == "requested" {
+            group.status = "requested".to_owned();
+        }
+        push_unique(&mut group.requested_by, &request.lane);
+        for lane in &request.requested_by {
+            push_unique(&mut group.requested_by, lane);
+        }
+        push_unique(&mut group.request_ids, &request.id);
+        push_unique(&mut group.reasons, &request.reason);
+        group.duplicate_count += 1;
+    }
+    groups.into_values().collect()
+}
+
+fn push_unique(values: &mut Vec<String>, value: &str) {
+    if !values.iter().any(|existing| existing == value) {
+        values.push(value.to_owned());
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -8227,12 +8304,12 @@ mod tests {
         LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
         ModelRunContext, NO_LGTM_POSTURE, Observation, OpenCodeEndpointKindArg, Plan, PostArgs,
-        PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
-        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_model_output, apply_refuter_output, build_review_metrics,
-        build_tokmd_sensor_commands, cap_review_body, classify_diff, cmd_post,
-        collect_sensor_evidence_issues, combined_observations, dedupe_inline_comments,
+        PostingMode, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
+        RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience, ReviewInlineComment,
+        ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
+        SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
+        build_review_metrics, build_tokmd_sensor_commands, cap_review_body, classify_diff,
+        cmd_post, collect_sensor_evidence_issues, combined_observations, dedupe_inline_comments,
         default_lanes, direct_minimax_spec, extract_model_content, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
         model_auth_header, model_json_payload, model_lane, model_request_payload,
@@ -8931,11 +9008,85 @@ index 1111111..2222222 100644
         write_proof_request_artifacts(temp.path(), &proof_requests)?;
         let proof_json: Vec<super::ProofRequest> =
             serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
+        let proof_groups: Vec<ProofRequestGroup> = serde_json::from_slice(&fs::read(
+            temp.path().join("review/proof_request_groups.json"),
+        )?)?;
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
         assert_eq!(proof_json.len(), 1);
+        assert_eq!(proof_groups.len(), 1);
+        assert_eq!(proof_groups[0].duplicate_count, 1);
         assert!(proof_plan.contains("Proof requests are passive"));
         assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
+        Ok(())
+    }
+
+    #[test]
+    fn proof_request_artifacts_group_duplicate_commands_once() -> Result<()> {
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-tests-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts".to_owned(),
+                reason: "Need old-main red witness.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-opposition-001".to_owned(),
+                lane: "opposition".to_owned(),
+                requested_by: vec!["opposition".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts".to_owned(),
+                reason: "Confirm the same focused test before posting.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            },
+        ];
+
+        let temp = tempfile::tempdir()?;
+        write_proof_request_artifacts(temp.path(), &proof_requests)?;
+
+        let proof_json: Vec<super::ProofRequest> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
+        let proof_groups: Vec<ProofRequestGroup> = serde_json::from_slice(&fs::read(
+            temp.path().join("review/proof_request_groups.json"),
+        )?)?;
+        let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
+        let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
+
+        assert_eq!(proof_json.len(), 2);
+        assert_eq!(proof_ndjson.lines().count(), 2);
+        assert_eq!(proof_groups.len(), 1);
+        let group = &proof_groups[0];
+        assert_eq!(group.schema, "ub-review.proof_request_group.v1");
+        assert_eq!(
+            group.command,
+            "bun test test/js/bun/md/md-edge-cases.test.ts"
+        );
+        assert_eq!(
+            group.requested_by,
+            vec!["tests-oracle".to_owned(), "opposition".to_owned()]
+        );
+        assert_eq!(
+            group.request_ids,
+            vec![
+                "proof-tests-001".to_owned(),
+                "proof-opposition-001".to_owned()
+            ]
+        );
+        assert_eq!(group.reasons.len(), 2);
+        assert_eq!(group.duplicate_count, 2);
+        assert!(group.required);
+        assert_eq!(group.status, "requested");
+        assert!(proof_plan.contains("Grouped proof broker tasks: 1 unique from 2 request(s)."));
+        assert!(proof_plan.contains("merged_requests=2"));
         Ok(())
     }
 

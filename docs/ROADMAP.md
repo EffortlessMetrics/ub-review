@@ -447,6 +447,7 @@ Add proof request artifacts without running commands yet:
 
 ```text
 proof_requests.ndjson
+review/proof_request_groups.json
 proof_plan.md
 ```
 

@@ -175,6 +175,7 @@ target/ub-review/
     merged_observations.json
     dropped_observations.json
     proof_requests.json
+    proof_request_groups.json
     proof_plan.md
     github-review.json
     github-review-skip.json
