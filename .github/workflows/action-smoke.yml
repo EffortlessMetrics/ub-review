@@ -91,6 +91,9 @@ jobs:
           max-inline-comments: '2'
           fail-on-post-error: 'false'
 
+      - name: Verify MiniMax smoke artifacts
+        run: python scripts/verify-model-smoke-artifacts.py target/ub-review-model-smoke
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
