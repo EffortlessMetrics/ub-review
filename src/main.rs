@@ -866,6 +866,18 @@ struct ModelLaneTaskResult {
     result: Result<ModelCallOutcome<LaneModelOutput>>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReviewBodyAudience {
+    PullRequest,
+    Artifact,
+}
+
+impl ReviewBodyAudience {
+    fn include_successful_lane_table(self) -> bool {
+        matches!(self, Self::Artifact)
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ModelAssignment {
     lane: LanePlan,
@@ -2426,7 +2438,7 @@ fn write_review_artifacts(
         )?;
     }
 
-    let body = render_review_body(
+    let artifact_body = render_review_body(
         &shared_context_id,
         plan,
         diff,
@@ -2436,10 +2448,23 @@ fn write_review_artifacts(
         &inline_comments,
         &summary_only_findings,
         args.review_body_max_bytes,
+        ReviewBodyAudience::Artifact,
+    );
+    let pr_body = render_review_body(
+        &shared_context_id,
+        plan,
+        diff,
+        &model_lanes,
+        &missing_or_failed_sensor_evidence,
+        &missing_or_failed_model_evidence,
+        &inline_comments,
+        &summary_only_findings,
+        args.review_body_max_bytes,
+        ReviewBodyAudience::PullRequest,
     );
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
-        body: body.clone(),
+        body: pr_body,
         comments: inline_comments
             .iter()
             .map(|comment| GitHubReviewComment {
@@ -2470,7 +2495,7 @@ fn write_review_artifacts(
         missing_or_failed_model_evidence,
         inline_comments,
         summary_only_findings,
-        body: body.clone(),
+        body: artifact_body.clone(),
     };
     let metrics = build_review_metrics(out, diff, plan, &review, &github_review);
 
@@ -2486,7 +2511,7 @@ fn write_review_artifacts(
         review_dir.join("provider-preflight-status.json"),
         serde_json::to_vec_pretty(&review.provider_preflights)?,
     )?;
-    fs::write(review_dir.join("review.md"), body)?;
+    fs::write(review_dir.join("review.md"), artifact_body)?;
     write_github_review_payload(&review_dir, &github_review, &line_map)?;
     Ok(())
 }
@@ -4284,6 +4309,7 @@ fn render_review_body(
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
     review_body_max_bytes: usize,
+    audience: ReviewBodyAudience,
 ) -> String {
     let mut text = String::new();
     text.push_str("# UB Review\n\n");
@@ -4405,16 +4431,18 @@ fn render_review_body(
         }
     }
 
-    text.push_str("\n## Model lanes\n\n");
-    for lane in model_lanes {
-        text.push_str(&format!(
-            "- Lane: `{}`\n  Provider: `{}`\n  Model: `{}`\n  Status: `{}` - {}\n",
-            lane.lane,
-            lane.provider,
-            lane.model,
-            lane.status,
-            escape_md(&lane.reason)
-        ));
+    if audience.include_successful_lane_table() {
+        text.push_str("\n## Model lanes\n\n");
+        for lane in model_lanes {
+            text.push_str(&format!(
+                "- Lane: `{}`\n  Provider: `{}`\n  Model: `{}`\n  Status: `{}` - {}\n",
+                lane.lane,
+                lane.provider,
+                lane.model,
+                lane.status,
+                escape_md(&lane.reason)
+            ));
+        }
     }
     cap_review_body(text, review_body_max_bytes)
 }
@@ -6023,19 +6051,20 @@ mod tests {
         LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, ModelRunContext,
         NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, ProviderKindArg,
-        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewInlineComment,
-        RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        ToolClass, apply_model_output, apply_refuter_output, cap_review_body, classify_diff,
-        collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, opencode_canary_spec,
-        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
-        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, split_curl_http_status,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_sensor_status,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
+        ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
+        SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output, cap_review_body,
+        classify_diff, collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes,
+        direct_minimax_spec, extract_model_content, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        opencode_canary_spec, provider_spec_for_lane_with_key_state, render_ledger_context,
+        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
+        split_curl_http_status, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        write_review_artifacts, write_sensor_status,
     };
 
     #[test]
@@ -7430,6 +7459,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
             60_000,
+            ReviewBodyAudience::PullRequest,
         );
 
         assert!(body.contains("## Decision"));
@@ -7442,8 +7472,86 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.contains("## Missing or failed evidence"));
         assert!(body.contains("Sensor `ripr`: `missing` - command not found"));
         assert!(body.contains("rate_limited"));
+        assert!(!body.contains("## Model lanes"));
         assert!(body.contains("## No blocking finding after checking"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_omits_successful_model_lane_roster() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[model_lane_receipt("ub-memory-lifetime", "ok")],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Decision"));
+        assert!(!body.contains("## Model lanes"));
+        assert!(!body.contains("Lane: `ub-memory-lifetime`"));
+        assert!(!body.contains("Provider: `minimax`"));
+        assert!(!body.contains("Model: `MiniMax-M3`"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn artifact_review_body_keeps_model_lane_roster() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[model_lane_receipt("ub-memory-lifetime", "ok")],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            60_000,
+            ReviewBodyAudience::Artifact,
+        );
+
+        assert!(body.contains("## Model lanes"));
+        assert!(body.contains("Lane: `ub-memory-lifetime`"));
+        assert!(body.contains("Provider: `minimax`"));
+        assert!(body.contains("Model: `MiniMax-M3`"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn review_artifacts_split_pr_body_from_artifact_body() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let config = Config::default();
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let mut args = test_run_args(out.clone());
+        args.model_mode = ModelMode::Off;
+
+        write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &plan,
+            "running summary",
+            &args,
+        )?;
+
+        let github_review: GitHubReview =
+            serde_json::from_slice(&fs::read(out.join("review/github-review.json"))?)?;
+        let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
+
+        assert!(!github_review.body.contains("## Model lanes"));
+        assert!(artifact_body.contains("## Model lanes"));
+        assert!(artifact_body.contains("Lane: `ub-memory-lifetime`"));
+        assert!(!has_standalone_approval_line(&github_review.body));
+        assert!(!has_standalone_approval_line(&artifact_body));
+        Ok(())
     }
 
     #[test]
@@ -7465,6 +7573,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "UB ledger excerpt".to_owned(),
             }],
             60_000,
+            ReviewBodyAudience::PullRequest,
         );
 
         assert!(body.contains("## Parked follow-ups"));
@@ -7504,6 +7613,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "RIPR proof gap excerpt".to_owned(),
             }],
             1_000,
+            ReviewBodyAudience::PullRequest,
         );
 
         assert!(body.len() <= 1_000);

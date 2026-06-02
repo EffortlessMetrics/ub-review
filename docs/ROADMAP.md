@@ -80,6 +80,17 @@ read files while a model call is running, so the runner owns observation reads
 and writes. The runner injects relevant existing observations into prompts and
 collects new observations from model output.
 
+Standard mode should optimize for review quality under a hard runtime budget, not
+minimum wall time. The target is 8-10 minutes with a 15-minute hard cap on
+GitHub-hosted runners. That extra time should buy coordination and confirmation:
+
+```text
+model lanes: 10
+follow-up budget: 4-6 calls
+focused proof budget: 1-2 commands
+inline comments: max 8
+```
+
 Standard mode should keep the current speed shape:
 
 ```text
