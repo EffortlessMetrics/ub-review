@@ -18,10 +18,12 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
     mode: review-direct
     github-token: ${{ github.token }}
     minimax-api-key: ${{ secrets.MINIMAX }}
+    minimax-provider-kind: anthropic
     opencode-api-key: ${{ secrets.OPENCODE }}
     model-mode: auto
     provider-policy: minimax-primary
     lane-width: '10'
+    model-timeout-sec: '300'
     max-inline-comments: '8'
     model-concurrency: '8'
     max-model-calls: '14'

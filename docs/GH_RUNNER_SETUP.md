@@ -4,11 +4,17 @@
 repositories.
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@v0
+- uses: EffortlessMetrics/ub-review@main
   with:
     preset: bun-ub
     profile: gh-runner
+    minimax-provider-kind: anthropic
+    model-timeout-sec: '300'
 ```
+
+Use `@main` for the first live Bun fork verification. After that run proves the
+review and artifact path, tag `v0` in this repository and switch the Bun
+workflow to `EffortlessMetrics/ub-review@v0`.
 
 For Bun review posting, the consuming workflow should set:
 

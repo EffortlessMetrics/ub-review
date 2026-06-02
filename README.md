@@ -64,7 +64,7 @@ permissions:
 jobs:
   packet:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - uses: actions/checkout@v5
@@ -78,7 +78,7 @@ jobs:
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@v0
+        uses: EffortlessMetrics/ub-review@main
         with:
           preset: bun-ub
           profile: gh-runner
@@ -92,10 +92,12 @@ jobs:
           mode: review-direct
           github-token: ${{ github.token }}
           minimax-api-key: ${{ secrets.MINIMAX }}
+          minimax-provider-kind: anthropic
           opencode-api-key: ${{ secrets.OPENCODE }}
           model-mode: auto
           provider-policy: minimax-primary
           lane-width: '10'
+          model-timeout-sec: '300'
           max-inline-comments: '8'
           model-concurrency: '8'
           max-model-calls: '14'
@@ -117,6 +119,10 @@ through `secrets.MINIMAX`. OpenCode Go is optional and used only as a direct
 provider canary lane when configured; `ub-review` does not shell out to OpenCode
 as an agent harness. GLM is skipped for v0. Missing model keys are recorded as
 missing review evidence instead of treated as a clean run.
+
+Use `EffortlessMetrics/ub-review@main` for the first Bun fork verification.
+After that run posts a useful review and uploads a complete packet, tag `v0`
+and switch the Bun workflow to `EffortlessMetrics/ub-review@v0`.
 
 ## What it writes
 

@@ -5,11 +5,16 @@ The first production use of `ub-review` is the Bun UB hunt.
 The Bun fork should consume this repository as a GitHub Action:
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@v0
+- uses: EffortlessMetrics/ub-review@main
   with:
     preset: bun-ub
     profile: gh-runner
+    minimax-provider-kind: anthropic
+    model-timeout-sec: '300'
 ```
+
+Use `@main` until the first Bun fork verification succeeds. After tagging `v0`,
+pin the Bun workflow to `EffortlessMetrics/ub-review@v0`.
 
 The action is no-token and read-only by default. It writes a packet under
 `target/ub-review`, appends `running-summary.md` to the job summary, and lets the
