@@ -3800,6 +3800,7 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
             "model": spec.model,
             "max_tokens": model_max_tokens(spec),
             "system": "Return one compact JSON object in the final text block. Do not include markdown fences or prose outside JSON.",
+            "thinking": {"type": "adaptive"},
             "temperature": 0.1,
             "messages": [
                 {"role": "user", "content": prompt}
@@ -3819,7 +3820,7 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
 
 fn model_max_tokens(spec: &ProviderSpec) -> u32 {
     match spec.endpoint_kind {
-        ProviderEndpointKind::AnthropicMessages => 16_384,
+        ProviderEndpointKind::AnthropicMessages => 4096,
         ProviderEndpointKind::OpenAiChat => 4096,
     }
 }
@@ -5346,7 +5347,8 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert_eq!(payload["max_tokens"], 16_384);
+        assert_eq!(payload["max_tokens"], 4096);
+        assert_eq!(payload["thinking"]["type"], "adaptive");
         assert!(
             payload["system"]
                 .as_str()
@@ -5364,7 +5366,8 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "minimax-m3");
-        assert_eq!(payload["max_tokens"], 16_384);
+        assert_eq!(payload["max_tokens"], 4096);
+        assert_eq!(payload["thinking"]["type"], "adaptive");
         assert!(
             payload["system"]
                 .as_str()
