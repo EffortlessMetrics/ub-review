@@ -3412,10 +3412,7 @@ fn run_available_model_lanes(
     let mut calls = 0usize;
     let mut next_assignment = 0usize;
     loop {
-        if calls >= context.args.max_model_calls
-            || inline_comments.len() >= context.args.max_inline_comments
-            || next_assignment >= context.assignments.len()
-        {
+        if calls >= context.args.max_model_calls || next_assignment >= context.assignments.len() {
             break;
         }
 
@@ -3506,8 +3503,7 @@ fn run_available_model_lanes(
     for receipt in model_lanes {
         if receipt.status == "planned" {
             receipt.status = "skipped".to_owned();
-            receipt.reason =
-                "model call budget or inline comment cap reached before lane execution".to_owned();
+            receipt.reason = "model call budget reached before lane execution".to_owned();
             if is_model_receipt_evidence_issue(receipt) {
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
             }
@@ -4675,7 +4671,7 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
                     {"role": "system", "content": "Return strict JSON only. Do not include markdown fences or prose outside JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                "max_completion_tokens": 4096,
+                "max_completion_tokens": model_max_tokens(spec),
                 "reasoning_split": true,
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1,
@@ -4695,9 +4691,12 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
 }
 
 fn model_max_tokens(spec: &ProviderSpec) -> u32 {
-    match spec.endpoint_kind {
-        ProviderEndpointKind::AnthropicMessages => 4096,
-        ProviderEndpointKind::OpenAiChat => 4096,
+    match spec.provider {
+        ModelProvider::MiniMaxDirect => 8192,
+        ModelProvider::OpenCodeGo => match spec.endpoint_kind {
+            ProviderEndpointKind::AnthropicMessages => 4096,
+            ProviderEndpointKind::OpenAiChat => 4096,
+        },
     }
 }
 
@@ -5933,21 +5932,21 @@ mod tests {
 
     use super::{
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
-        LaneModelOutput, LanePlan, ModelCandidateComment, ModelCandidateFinding,
-        ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE,
-        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ReviewArgs, ReviewInlineComment, RunArgs, RunMode,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_model_output, apply_refuter_output, cap_review_body, classify_diff,
+        LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
+        ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, ModelRunContext,
+        NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, ProviderKindArg,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewInlineComment,
+        RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
+        ToolClass, apply_model_output, apply_refuter_output, cap_review_body, classify_diff,
         collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
         model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
         model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
-        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
-        run_refuter_pass, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
-        write_sensor_status,
+        render_review_body, render_summary, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, split_curl_http_status,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_github_review_payload, write_sensor_status,
     };
 
     #[test]
@@ -6649,6 +6648,79 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn model_lane_scheduling_ignores_inline_comment_cap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_inline_comments = 1;
+        args.max_model_calls = 2;
+        args.model_concurrency = 2;
+        let spec = direct_minimax_spec(&args);
+        let assignments = vec![
+            ModelAssignment {
+                lane: lane_plan("security"),
+                spec: spec.clone(),
+                fallback: None,
+            },
+            ModelAssignment {
+                lane: lane_plan("opposition"),
+                spec,
+                fallback: None,
+            },
+        ];
+        let mut model_lanes = vec![
+            model_lane_receipt("security", "planned"),
+            model_lane_receipt("opposition", "planned"),
+        ];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] Existing inline candidate fills the post cap.".to_owned(),
+            evidence: "test setup".to_owned(),
+        }];
+        let mut summary_only_findings = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &[],
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        )?;
+
+        assert_eq!(calls, 0);
+        assert_eq!(inline_comments.len(), 1);
+        assert!(summary_only_findings.is_empty());
+        assert_eq!(
+            model_lanes
+                .iter()
+                .map(|receipt| receipt.status.as_str())
+                .collect::<Vec<_>>(),
+            vec!["preflight_failed", "preflight_failed"]
+        );
+        assert_eq!(missing_or_failed_model_evidence.len(), 2);
+        assert!(
+            missing_or_failed_model_evidence
+                .iter()
+                .all(|issue| !issue.reason.contains("inline comment cap"))
+        );
+        Ok(())
+    }
+
+    #[test]
     fn refuter_drops_high_confidence_false_positive() {
         let mut inline_comments = vec![ReviewInlineComment {
             lane: "ub-active-view".to_owned(),
@@ -7176,7 +7248,7 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert_eq!(payload["max_completion_tokens"], 4096);
+        assert_eq!(payload["max_completion_tokens"], 8192);
         assert_eq!(payload["reasoning_split"], true);
         assert_eq!(payload["response_format"]["type"], "json_object");
         assert!(
@@ -7197,7 +7269,7 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert_eq!(payload["max_tokens"], 4096);
+        assert_eq!(payload["max_tokens"], 8192);
         assert_eq!(payload["thinking"]["type"], "adaptive");
         assert!(
             payload["system"]
@@ -7367,6 +7439,17 @@ UB_REVIEW_HTTP_STATUS:429
             http_status: None,
             response_shape: None,
             fallback_from: None,
+        }
+    }
+
+    fn lane_plan(id: &str) -> LanePlan {
+        LanePlan {
+            id: id.to_owned(),
+            role: "Test lane".to_owned(),
+            model: "custom:MiniMax-M3".to_owned(),
+            model_display: "MiniMax-M3".to_owned(),
+            receives: Vec::new(),
+            focus: "Check focused review evidence.".to_owned(),
         }
     }
 
