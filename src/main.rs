@@ -25,6 +25,7 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init(args) => cmd_init(args),
         Command::Doctor(args) => cmd_doctor(args),
+        Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
         Command::Run(args) => cmd_run(args),
         Command::Summary(args) => cmd_summary(args),
@@ -47,6 +48,8 @@ enum Command {
     Init(InitArgs),
     /// Print box detection and tool availability.
     Doctor(DoctorArgs),
+    /// Inspect or prepare ub-review caches.
+    Cache(CacheArgs),
     /// Build and print a run plan without executing sensors.
     Plan(PlanArgs),
     /// Build packets, run eligible sensors, and render lane packets.
@@ -202,6 +205,40 @@ struct DoctorArgs {
     config: PathBuf,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     profile: Option<ProfileArg>,
+    #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
+    root: PathBuf,
+    #[arg(long, env = "UB_REVIEW_BASE")]
+    base: Option<String>,
+    #[arg(long, env = "UB_REVIEW_CACHE_DIR")]
+    cache_dir: Option<PathBuf>,
+    #[arg(long, env = "UB_REVIEW_REQUIRE_CORE_TOOLS")]
+    require_core_tools: bool,
+}
+
+#[derive(Debug, Args)]
+struct CacheArgs {
+    #[command(subcommand)]
+    command: CacheCommand,
+}
+
+#[derive(Debug, Subcommand)]
+enum CacheCommand {
+    /// Create the cache directory skeleton and base-tree manifest.
+    Warm(CacheWarmArgs),
+}
+
+#[derive(Debug, Args)]
+struct CacheWarmArgs {
+    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
+    config: PathBuf,
+    #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
+    profile: Option<ProfileArg>,
+    #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
+    root: PathBuf,
+    #[arg(long, default_value = "origin/main", env = "UB_REVIEW_BASE")]
+    base: String,
+    #[arg(long = "out", env = "UB_REVIEW_CACHE_DIR")]
+    cache_dir: Option<PathBuf>,
 }
 
 #[derive(Debug, Args)]
@@ -416,6 +453,29 @@ struct GitHubReviewSkipReceipt {
     summary_only_findings: usize,
     missing_or_failed_sensor_evidence: usize,
     missing_or_failed_model_evidence: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CacheWarmManifest {
+    schema_version: u32,
+    profile: String,
+    profile_hash: String,
+    base: String,
+    base_tree_sha: String,
+    cache_root: String,
+    base_cache_dir: String,
+    rules_cache_dir: String,
+    tools: Vec<ToolCacheReceipt>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ToolCacheReceipt {
+    tool: String,
+    command: String,
+    status: String,
+    version: Option<String>,
+    rule_cache_dir: String,
+    base_cache_dir: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -880,6 +940,13 @@ struct SensorStatusWrite<'a> {
     timed_out: bool,
 }
 
+struct SensorSubcommand {
+    label: String,
+    argv: Vec<String>,
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
+}
+
 struct ModelRunContext<'a> {
     root: &'a Path,
     review_dir: &'a Path,
@@ -1261,9 +1328,30 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
     let config = Config::load_or_default(&args.config, args.profile.as_ref().map(ProfileArg::key))?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
+    let cache_root = cache_root_path(args.cache_dir.as_ref());
+    let profile_hash = profile_config_hash(&config)?;
+    let require_core_tools = args.require_core_tools || env_flag("UB_REVIEW_STANDARD_IMAGE");
+    let mut missing_required = Vec::new();
     println!("Profile: {}", profile.name);
     println!("Box: {}", box_state.summary_line());
     println!("Limits: {}", profile.limits.summary_line());
+    println!("Cache root: {}", cache_root.display());
+    println!("Profile hash: {}", profile_hash);
+    if let Some(base) = args.base.as_deref() {
+        match git_tree_sha(&args.root, base) {
+            Ok(tree) => {
+                let base_dir = base_cache_dir(&cache_root, &tree);
+                let hit = base_dir.join("manifest.json").exists();
+                println!(
+                    "Base cache: {} {} ({})",
+                    if hit { "hit" } else { "miss" },
+                    tree,
+                    base_dir.display()
+                );
+            }
+            Err(err) => println!("Base cache: unknown ({err:#})"),
+        }
+    }
     println!();
     println!("Tools:");
     for tool in config.tools.values() {
@@ -1272,8 +1360,110 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
         } else {
             "missing"
         };
-        println!("  {:<16} {:<8} {}", tool.id, status, tool.command);
+        let version = command_version(&tool.command).unwrap_or_else(|| "-".to_owned());
+        let rule_hit = cache_root
+            .join("rules")
+            .join(&tool.id)
+            .join("manifest.json")
+            .exists();
+        println!(
+            "  {:<16} {:<8} {:<24} version={} rule-cache={}",
+            tool.id,
+            status,
+            tool.command,
+            version,
+            if rule_hit { "hit" } else { "miss" }
+        );
+        if require_core_tools && is_core_review_tool(&tool.id) && status == "missing" {
+            missing_required.push(tool.id.clone());
+        }
     }
+    if !missing_required.is_empty() {
+        bail!(
+            "required core review tools missing from standard image: {}",
+            missing_required.join(", ")
+        );
+    }
+    Ok(())
+}
+
+fn cmd_cache(args: CacheArgs) -> Result<()> {
+    match args.command {
+        CacheCommand::Warm(args) => cmd_cache_warm(args),
+    }
+}
+
+fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
+    let config = Config::load_or_default(&args.config, args.profile.as_ref().map(ProfileArg::key))?;
+    let profile = config.selected_profile()?;
+    let cache_root = cache_root_path(args.cache_dir.as_ref());
+    let profile_hash = profile_config_hash(&config)?;
+    let base_tree_sha = git_tree_sha(&args.root, &args.base)?;
+    let base_dir = base_cache_dir(&cache_root, &base_tree_sha);
+    let rules_dir = cache_root.join("rules");
+    fs::create_dir_all(&base_dir)?;
+    fs::create_dir_all(&rules_dir)?;
+
+    let mut tools = Vec::new();
+    for tool_id in CORE_REVIEW_TOOLS {
+        let Some(tool) = config.tools.get(tool_id) else {
+            continue;
+        };
+        let rule_dir = rules_dir.join(&tool.id);
+        let tool_base_dir = base_dir.join(&tool.id);
+        fs::create_dir_all(&rule_dir)?;
+        fs::create_dir_all(&tool_base_dir)?;
+        let version = command_version(&tool.command);
+        let tool_manifest = serde_json::json!({
+            "schema_version": 1,
+            "tool": tool.id,
+            "command": tool.command,
+            "version": version.clone(),
+            "profile_hash": profile_hash,
+            "base_tree_sha": base_tree_sha,
+        });
+        fs::write(
+            rule_dir.join("manifest.json"),
+            serde_json::to_vec_pretty(&tool_manifest)?,
+        )?;
+        fs::write(
+            tool_base_dir.join("manifest.json"),
+            serde_json::to_vec_pretty(&tool_manifest)?,
+        )?;
+        tools.push(ToolCacheReceipt {
+            tool: tool.id.clone(),
+            command: tool.command.clone(),
+            status: if version.is_some() {
+                "found".to_owned()
+            } else {
+                "missing".to_owned()
+            },
+            version,
+            rule_cache_dir: rule_dir.display().to_string(),
+            base_cache_dir: tool_base_dir.display().to_string(),
+        });
+    }
+    let manifest = CacheWarmManifest {
+        schema_version: 1,
+        profile: profile.name.clone(),
+        profile_hash,
+        base: args.base,
+        base_tree_sha: base_tree_sha.clone(),
+        cache_root: cache_root.display().to_string(),
+        base_cache_dir: base_dir.display().to_string(),
+        rules_cache_dir: rules_dir.display().to_string(),
+        tools,
+    };
+    fs::write(
+        base_dir.join("manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+    fs::write(
+        cache_root.join("latest-manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+    println!("warmed cache {}", base_dir.display());
+    println!("base tree {}", base_tree_sha);
     Ok(())
 }
 
@@ -2099,6 +2289,9 @@ fn run_sensor(
         "sensor_started",
         serde_json::json!({"sensor": sensor.id, "argv": argv}),
     )?;
+    if sensor.id == "tokmd" {
+        return run_tokmd_sensor(root, out, &dir, sensor, event_log, plan, &argv);
+    }
     let stdout_path = dir.join("stdout.txt");
     let stderr_path = dir.join("stderr.txt");
     let result = run_command_to_files(root, &argv, sensor.timeout_sec, &stdout_path, &stderr_path);
@@ -2155,17 +2348,149 @@ fn run_sensor(
     Ok(())
 }
 
+fn run_tokmd_sensor(
+    root: &Path,
+    out: &Path,
+    dir: &Path,
+    sensor: &SensorPlan,
+    event_log: &EventLog,
+    plan: &Plan,
+    aggregate_argv: &[String],
+) -> Result<()> {
+    let commands = build_tokmd_sensor_commands(root, dir, plan);
+    fs::write(
+        dir.join("commands.json"),
+        serde_json::to_vec_pretty(&commands_json(&commands))?,
+    )?;
+    let aggregate_stdout_path = dir.join("stdout.txt");
+    let aggregate_stderr_path = dir.join("stderr.txt");
+    fs::write(&aggregate_stdout_path, b"")?;
+    fs::write(&aggregate_stderr_path, b"")?;
+
+    let started = Instant::now();
+    let mut failures = Vec::new();
+    let mut timed_out = false;
+    let mut exit_code = Some(0);
+    for command in &commands {
+        event_log.append(
+            "sensor_subcommand_started",
+            serde_json::json!({"sensor": sensor.id, "label": command.label, "argv": command.argv}),
+        )?;
+        let result = run_command_to_files(
+            root,
+            &command.argv,
+            sensor.timeout_sec,
+            &command.stdout_path,
+            &command.stderr_path,
+        );
+        match result {
+            Ok(result) => {
+                append_file(
+                    &aggregate_stdout_path,
+                    &format!(
+                        "$ {}\nstatus={} duration_ms={}\n\n",
+                        display_command(&command.argv),
+                        result.reason,
+                        result.duration_ms
+                    ),
+                )?;
+                append_existing_file(&aggregate_stdout_path, &command.stdout_path)?;
+                append_file(&aggregate_stdout_path, "\n")?;
+                append_existing_file(&aggregate_stderr_path, &command.stderr_path)?;
+                if result.timed_out {
+                    timed_out = true;
+                }
+                if !result.success {
+                    if exit_code == Some(0) {
+                        exit_code = result.exit_code;
+                    }
+                    failures.push(format!("{} {}", command.label, result.reason));
+                }
+                event_log.append(
+                    if result.success {
+                        "sensor_subcommand_completed"
+                    } else {
+                        "sensor_subcommand_failed"
+                    },
+                    serde_json::json!({"sensor": sensor.id, "label": command.label, "exit_code": result.exit_code, "timed_out": result.timed_out, "reason": result.reason}),
+                )?;
+            }
+            Err(err) => {
+                let reason = format!("{err:#}");
+                failures.push(format!("{} {reason}", command.label));
+                if exit_code == Some(0) {
+                    exit_code = None;
+                }
+                event_log.append(
+                    "sensor_subcommand_failed",
+                    serde_json::json!({"sensor": sensor.id, "label": command.label, "reason": reason}),
+                )?;
+            }
+        }
+    }
+
+    let duration_ms = started.elapsed().as_millis();
+    let context_path = dir.join("context.md");
+    if !context_path.exists() {
+        fs::write(
+            &context_path,
+            "No existing changed paths were available for bounded tokmd context.\n",
+        )?;
+    }
+
+    let (status, reason) = if failures.is_empty() {
+        ("ok", format!("{} tokmd receipts completed", commands.len()))
+    } else if timed_out {
+        (
+            "timed_out",
+            format!(
+                "tokmd subcommands timed out or failed: {}",
+                failures.join("; ")
+            ),
+        )
+    } else {
+        (
+            "failed",
+            format!("tokmd subcommands failed: {}", failures.join("; ")),
+        )
+    };
+    write_sensor_status(
+        out,
+        sensor,
+        SensorStatusWrite {
+            status,
+            argv: aggregate_argv,
+            duration_ms,
+            reason: &reason,
+            exit_code,
+            timed_out,
+        },
+    )?;
+    event_log.append(
+        if failures.is_empty() {
+            "sensor_completed"
+        } else {
+            "sensor_failed"
+        },
+        serde_json::json!({"sensor": sensor.id, "reason": reason}),
+    )?;
+    Ok(())
+}
+
 fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) -> Vec<String> {
     match sensor.id.as_str() {
         "tokmd" => vec![
             "tokmd".to_owned(),
+            "bundle".to_owned(),
+            "analyze".to_owned(),
             "cockpit".to_owned(),
+            "context".to_owned(),
             "--base".to_owned(),
             plan.base.clone(),
             "--head".to_owned(),
             plan.head.clone(),
-            "--review-packet-dir".to_owned(),
-            dir.join("review").display().to_string(),
+            "--out".to_owned(),
+            dir.display().to_string(),
         ],
         "ripr" => vec![
             "ripr".to_owned(),
@@ -2244,6 +2569,171 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
         "cppcheck" => vec!["cppcheck".to_owned(), "--version".to_owned()],
         other => vec![other.to_owned(), "--version".to_owned()],
     }
+}
+
+fn build_tokmd_sensor_commands(root: &Path, dir: &Path, plan: &Plan) -> Vec<SensorSubcommand> {
+    let absolute_dir = absolute_path(dir);
+    let mut commands = vec![
+        SensorSubcommand {
+            label: "analyze-md".to_owned(),
+            argv: vec![
+                "tokmd".to_owned(),
+                "analyze".to_owned(),
+                "--preset".to_owned(),
+                "estimate".to_owned(),
+                "--effort-base-ref".to_owned(),
+                plan.base.clone(),
+                "--effort-head-ref".to_owned(),
+                plan.head.clone(),
+                "--format".to_owned(),
+                "md".to_owned(),
+                "--no-progress".to_owned(),
+                ".".to_owned(),
+            ],
+            stdout_path: dir.join("analyze.md"),
+            stderr_path: dir.join("analyze.stderr.txt"),
+        },
+        SensorSubcommand {
+            label: "analyze-json".to_owned(),
+            argv: vec![
+                "tokmd".to_owned(),
+                "analyze".to_owned(),
+                "--preset".to_owned(),
+                "estimate".to_owned(),
+                "--effort-base-ref".to_owned(),
+                plan.base.clone(),
+                "--effort-head-ref".to_owned(),
+                plan.head.clone(),
+                "--format".to_owned(),
+                "json".to_owned(),
+                "--no-progress".to_owned(),
+                ".".to_owned(),
+            ],
+            stdout_path: dir.join("analyze.json"),
+            stderr_path: dir.join("analyze-json.stderr.txt"),
+        },
+        SensorSubcommand {
+            label: "cockpit-md".to_owned(),
+            argv: vec![
+                "tokmd".to_owned(),
+                "cockpit".to_owned(),
+                "--base".to_owned(),
+                plan.base.clone(),
+                "--head".to_owned(),
+                plan.head.clone(),
+                "--format".to_owned(),
+                "md".to_owned(),
+                "--no-progress".to_owned(),
+            ],
+            stdout_path: dir.join("cockpit.md"),
+            stderr_path: dir.join("cockpit.stderr.txt"),
+        },
+        SensorSubcommand {
+            label: "cockpit-json".to_owned(),
+            argv: vec![
+                "tokmd".to_owned(),
+                "cockpit".to_owned(),
+                "--base".to_owned(),
+                plan.base.clone(),
+                "--head".to_owned(),
+                plan.head.clone(),
+                "--format".to_owned(),
+                "json".to_owned(),
+                "--no-progress".to_owned(),
+            ],
+            stdout_path: dir.join("cockpit.json"),
+            stderr_path: dir.join("cockpit-json.stderr.txt"),
+        },
+    ];
+    let context_paths = changed_paths_for_tokmd_context(root, plan);
+    if !context_paths.is_empty() {
+        let mut argv = vec![
+            "tokmd".to_owned(),
+            "context".to_owned(),
+            "--budget".to_owned(),
+            "64k".to_owned(),
+            "--mode".to_owned(),
+            "bundle".to_owned(),
+            "--output".to_owned(),
+            absolute_dir.join("context.md").display().to_string(),
+            "--force".to_owned(),
+            "--no-progress".to_owned(),
+        ];
+        argv.extend(context_paths);
+        commands.push(SensorSubcommand {
+            label: "context-md".to_owned(),
+            argv,
+            stdout_path: dir.join("context.stdout.txt"),
+            stderr_path: dir.join("context.stderr.txt"),
+        });
+    }
+    commands
+}
+
+fn absolute_path(path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| PathBuf::from("."))
+            .join(path)
+    }
+}
+
+fn changed_paths_for_tokmd_context(root: &Path, plan: &Plan) -> Vec<String> {
+    git_lines(
+        root,
+        &[
+            "diff",
+            "--name-only",
+            &format!("{}...{}", plan.base, plan.head),
+        ],
+    )
+    .or_else(|_| git_lines(root, &["diff", "--name-only", &plan.base, &plan.head]))
+    .unwrap_or_default()
+    .into_iter()
+    .filter(|path| root.join(path).is_file())
+    .take(40)
+    .collect()
+}
+
+fn commands_json(commands: &[SensorSubcommand]) -> serde_json::Value {
+    serde_json::Value::Array(
+        commands
+            .iter()
+            .map(|command| {
+                serde_json::json!({
+                    "label": command.label,
+                    "command": display_command(&command.argv),
+                    "stdout": command.stdout_path.display().to_string(),
+                    "stderr": command.stderr_path.display().to_string(),
+                })
+            })
+            .collect(),
+    )
+}
+
+fn append_file(path: &Path, text: &str) -> Result<()> {
+    use std::io::Write as _;
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("open {}", path.display()))?;
+    file.write_all(text.as_bytes())?;
+    Ok(())
+}
+
+fn append_existing_file(target: &Path, source: &Path) -> Result<()> {
+    if !source.exists() {
+        return Ok(());
+    }
+    let text = fs::read_to_string(source).unwrap_or_else(|_| String::new());
+    if text.is_empty() {
+        return Ok(());
+    }
+    append_file(target, &text)
 }
 
 fn run_command_to_files(
@@ -2336,7 +2826,14 @@ fn ensure_sensor_text_receipts(dir: &Path) -> Result<()> {
 fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
     let mut outputs = vec!["stdout.txt".to_owned(), "stderr.txt".to_owned()];
     match sensor.id.as_str() {
-        "tokmd" => outputs.push("review/".to_owned()),
+        "tokmd" => outputs.extend([
+            "commands.json".to_owned(),
+            "analyze.md".to_owned(),
+            "analyze.json".to_owned(),
+            "cockpit.md".to_owned(),
+            "cockpit.json".to_owned(),
+            "context.md".to_owned(),
+        ]),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
         _ => {}
     }
@@ -6234,6 +6731,80 @@ fn has_standalone_approval_line(text: &str) -> bool {
     })
 }
 
+const CORE_REVIEW_TOOLS: [&str; 4] = ["tokmd", "ripr", "unsafe-review", "ast-grep"];
+
+fn is_core_review_tool(tool_id: &str) -> bool {
+    CORE_REVIEW_TOOLS.contains(&tool_id)
+}
+
+fn cache_root_path(value: Option<&PathBuf>) -> PathBuf {
+    value
+        .cloned()
+        .or_else(|| std::env::var_os("UB_REVIEW_CACHE_DIR").map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from(".cache/ub-review"))
+}
+
+fn base_cache_dir(cache_root: &Path, base_tree_sha: &str) -> PathBuf {
+    cache_root.join("bases").join(base_tree_sha)
+}
+
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .ok()
+        .map(|value| {
+            matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn profile_config_hash(config: &Config) -> Result<String> {
+    Ok(sha256_hex(&serde_json::to_vec(config)?))
+}
+
+fn git_tree_sha(root: &Path, rev: &str) -> Result<String> {
+    let output = ProcessCommand::new("git")
+        .arg("rev-parse")
+        .arg(format!("{rev}^{{tree}}"))
+        .current_dir(root)
+        .output()
+        .with_context(|| format!("run git rev-parse for {rev}"))?;
+    if !output.status.success() {
+        bail!(
+            "git rev-parse failed for {} in {}: {}",
+            rev,
+            root.display(),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    let tree = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+    if tree.is_empty() {
+        bail!("git rev-parse returned an empty tree sha for {rev}");
+    }
+    Ok(tree)
+}
+
+fn command_version(command: &str) -> Option<String> {
+    if !command_on_path(command) {
+        return None;
+    }
+    let output = ProcessCommand::new(command)
+        .arg("--version")
+        .output()
+        .ok()?;
+    let text = if output.stdout.is_empty() {
+        String::from_utf8_lossy(&output.stderr).to_string()
+    } else {
+        String::from_utf8_lossy(&output.stdout).to_string()
+    };
+    text.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.chars().take(160).collect())
+}
+
 fn command_on_path(command: &str) -> bool {
     if command.contains('/') || command.contains('\\') {
         return Path::new(command).exists();
@@ -6705,15 +7276,15 @@ mod tests {
         RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
         ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_observations, build_review_metrics, cap_review_body, classify_diff, cmd_post,
-        collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_lane, model_request_payload, model_response_shape,
-        opencode_canary_spec, provider_spec_for_lane_with_key_state, render_ledger_context,
-        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        split_curl_http_status, validate_github_review_payload,
+        build_observations, build_review_metrics, build_tokmd_sensor_commands, cap_review_body,
+        classify_diff, cmd_post, collect_sensor_evidence_issues, dedupe_inline_comments,
+        default_lanes, direct_minimax_spec, extract_model_content, github_review_skip_path,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, opencode_canary_spec, provider_spec_for_lane_with_key_state,
+        render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
         write_observation_artifacts, write_review_artifacts, write_sensor_status,
@@ -6770,6 +7341,69 @@ mod tests {
             .get("ripr")
             .ok_or_else(|| anyhow::anyhow!("ripr tool policy missing"))?;
         assert!(ripr.enabled);
+        Ok(())
+    }
+
+    #[test]
+    fn tokmd_sensor_commands_use_on_diff_analyze_cockpit_and_context() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let repo = temp.path().join("repo");
+        fs::create_dir_all(repo.join("src"))?;
+        fs::write(repo.join("src/lib.rs"), "pub fn value() -> usize { 1 }\n")?;
+        run_test_command(&repo, "git", &["init"])?;
+        run_test_command(
+            &repo,
+            "git",
+            &["config", "user.email", "ub-review@example.invalid"],
+        )?;
+        run_test_command(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+        run_test_command(&repo, "git", &["add", "."])?;
+        run_test_command(&repo, "git", &["commit", "-m", "baseline"])?;
+        fs::write(repo.join("src/lib.rs"), "pub fn value() -> usize { 2 }\n")?;
+        run_test_command(&repo, "git", &["add", "."])?;
+        run_test_command(&repo, "git", &["commit", "-m", "touch source"])?;
+
+        let plan = test_plan(vec![sensor_plan("tokmd", "tokmd", true)]);
+        let dir = temp.path().join("out/sensors/tokmd");
+        let commands = build_tokmd_sensor_commands(&repo, &dir, &plan);
+        let command_texts = commands
+            .iter()
+            .map(|command| command.argv.join(" "))
+            .collect::<Vec<_>>();
+
+        assert!(command_texts.iter().any(|command| command.contains(
+            "tokmd analyze --preset estimate --effort-base-ref HEAD~1 --effort-head-ref HEAD"
+        )));
+        assert!(
+            command_texts
+                .iter()
+                .any(|command| command.contains("tokmd cockpit --base HEAD~1 --head HEAD"))
+        );
+        assert!(
+            command_texts
+                .iter()
+                .any(|command| command.contains("tokmd context"))
+        );
+        assert!(
+            command_texts
+                .iter()
+                .any(|command| command.contains("src/lib.rs"))
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|command| command.stdout_path.ends_with("analyze.md"))
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|command| command.stdout_path.ends_with("cockpit.json"))
+        );
+        assert!(
+            commands
+                .iter()
+                .any(|command| command.argv.iter().any(|arg| arg.ends_with("context.md")))
+        );
         Ok(())
     }
 
@@ -8519,6 +9153,23 @@ UB_REVIEW_HTTP_STATUS:429
             weight: 1,
             requires_lease: false,
         }
+    }
+
+    fn run_test_command(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
+        let output = ProcessCommand::new(program)
+            .args(args)
+            .current_dir(cwd)
+            .output()?;
+        if output.status.success() {
+            return Ok(());
+        }
+        Err(anyhow::anyhow!(
+            "{} {:?} failed\nstdout:\n{}\nstderr:\n{}",
+            program,
+            args,
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ))
     }
 
     fn model_lane_receipt(lane: &str, status: &str) -> super::ModelLaneReceipt {

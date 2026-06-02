@@ -99,8 +99,34 @@ pass 2: observation-aware refuter/finalizer
 pass 3: review compiler
 ```
 
-Deep mode can later add targeted confirmation questions. Do not replace direct
-model fanout with agent-style filesystem access.
+The first pass should start read-only lanes immediately against the stable
+packet:
+
+```text
+diff map
+changed files
+shared_context.md
+sensor status
+available cached receipts
+lane prompt
+```
+
+Do not block every lane on every sensor, proof command, or follow-up. Direct
+provider lanes cannot read `observations/*.ndjson` while a model call is already
+running, so the runner owns the shared-memory turn:
+
+```text
+phase 1: read-only lanes start immediately
+phase 2: runner reads observations, proof receipts, sensor deltas, and targeted
+         excerpts
+phase 3: runner injects relevant deltas into bounded follow-up prompts
+phase 4: refuter/compiler produces one review
+```
+
+This keeps the fast first pass while letting the second turn reduce repetition,
+refute false premises, and coordinate proof requests. Deep mode can later add
+targeted confirmation questions or staggered waves. Do not replace direct model
+fanout with agent-style filesystem access.
 
 The core control loop should become:
 
@@ -621,7 +647,28 @@ Acceptance:
 - report is factual and evidence-backed;
 - it identifies tuning work without broadening the product.
 
-### 20. Release binary path
+### 20. Sensor image and base cache
+
+Make the standard runner image supply the core evidence tools before review
+time.
+
+Acceptance:
+
+- `tokmd`, `ripr`, `unsafe-review`, and `ast-grep` are installed on the
+  standard image and visible on `PATH`;
+- `tokmd` is versioned for the Bun profile and emits on-diff `analyze`,
+  compact `cockpit`, and bounded changed-file `context` receipts;
+- `tokmd analyze --preset bun-ub` replaces the current verified effort-delta
+  preset after `tokmd` exposes that preset
+  (`EffortlessMetrics/tokmd-swarm#182`);
+- `ub-review doctor --require-core-tools` fails image drift early;
+- `ub-review cache warm` writes a base-tree manifest keyed by base tree SHA,
+  profile hash, and tool versions;
+- GitHub-hosted fallback still records missing evidence instead of claiming a
+  clean review;
+- no fake heavyweight index is created for tools that do not expose one.
+
+### 21. Release binary path
 
 Move the action from source build by default to release binary download with
 source build fallback.
@@ -632,7 +679,7 @@ Acceptance:
 - no correctness depends on a durable cache;
 - source fallback still works.
 
-### 21. Deep mode
+### 22. Deep mode
 
 Add more candidate/refuter pressure without increasing PR noise.
 
