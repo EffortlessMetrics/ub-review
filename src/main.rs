@@ -3334,8 +3334,16 @@ where
         .ok_or_else(|| anyhow::anyhow!("model response did not contain assistant content"))?;
     let content_path = lane_dir.join("content.json");
     fs::write(&content_path, content.as_bytes())?;
-    let parsed_output = serde_json::from_str(content)
-        .with_context(|| format!("parse {}", content_path.display()))?;
+    let json_payload = model_json_payload(content);
+    let parse_path = if json_payload == content {
+        content_path
+    } else {
+        let normalized_path = lane_dir.join("content-normalized.json");
+        fs::write(&normalized_path, json_payload.as_bytes())?;
+        normalized_path
+    };
+    let parsed_output = serde_json::from_str(&json_payload)
+        .with_context(|| format!("parse {}", parse_path.display()))?;
     Ok(ModelCallOutcome {
         output: parsed_output,
         duration_ms,
@@ -3836,6 +3844,26 @@ fn model_response_shape(response: &serde_json::Value) -> &'static str {
     } else {
         "unknown"
     }
+}
+
+fn model_json_payload(content: &str) -> String {
+    let trimmed = content.trim();
+    strip_markdown_json_fence(trimmed)
+        .map(str::trim)
+        .unwrap_or(content)
+        .to_owned()
+}
+
+fn strip_markdown_json_fence(trimmed: &str) -> Option<&str> {
+    let body = trimmed.strip_prefix("```")?;
+    let newline = body.find('\n')?;
+    let (info, rest_with_newline) = body.split_at(newline);
+    let info = info.trim();
+    if !info.is_empty() && !info.eq_ignore_ascii_case("json") {
+        return None;
+    }
+    let rest = rest_with_newline.strip_prefix('\n')?.trim_end();
+    rest.strip_suffix("```")
 }
 
 fn classify_model_error(err: &anyhow::Error) -> String {
@@ -4735,17 +4763,17 @@ mod tests {
 
     use super::{
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
-        LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode, ModelProvider,
-        ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostingMode,
-        ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs, ReviewInlineComment, RunArgs,
-        RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
+        LaneModelOutput, LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode,
+        ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan,
+        PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs,
+        ReviewInlineComment, RunArgs, RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
+        ToolClass, apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
         default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
-        model_api_url, model_assignments, model_auth_header, model_request_payload,
-        model_response_shape, opencode_canary_spec, render_ledger_context, render_review_body,
-        render_summary, right_side_diff_lines, run_command_to_files, run_sensor,
-        split_curl_http_status, validate_github_review_payload, validate_inline_candidate,
-        write_sensor_status,
+        model_api_url, model_assignments, model_auth_header, model_json_payload,
+        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
+        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
+        run_sensor, split_curl_http_status, validate_github_review_payload,
+        validate_inline_candidate, write_sensor_status,
     };
 
     #[test]
@@ -5251,6 +5279,28 @@ index 1111111..2222222 100644
         );
         assert_eq!(model_response_shape(&malformed), "unknown");
         assert!(extract_model_content(&malformed).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn model_json_payload_accepts_markdown_json_fence() -> Result<()> {
+        let fenced = r#"```json
+{
+  "summary": "fenced ok",
+  "inline_comments": [],
+  "summary_only_findings": []
+}
+```"#;
+
+        let parsed: LaneModelOutput = serde_json::from_str(&model_json_payload(fenced))?;
+
+        assert_eq!(parsed.summary.as_deref(), Some("fenced ok"));
+        assert!(parsed.inline_comments.is_empty());
+        assert!(parsed.summary_only_findings.is_empty());
+        assert!(
+            serde_json::from_str::<LaneModelOutput>(&model_json_payload("Here is the JSON:\n{}"))
+                .is_err()
+        );
         Ok(())
     }
 
