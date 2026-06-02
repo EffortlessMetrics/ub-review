@@ -3801,18 +3801,120 @@ fn is_parked_follow_up(finding: &SummaryOnlyFinding) -> bool {
         || evidence.contains("follow-up")
 }
 
-fn cap_review_body(mut text: String, max_bytes: usize) -> String {
+const REVIEW_BODY_TRUNCATED_SUFFIX: &str = "\n\n[review body truncated; see review artifacts]\n";
+const REVIEW_BODY_REQUIRED_HEADINGS: [&str; 7] = [
+    "## Decision",
+    "## Confirmed findings",
+    "## Summary-only findings",
+    "## Failed objections",
+    "## Residual risk",
+    "## Parked follow-ups",
+    "## Missing or failed evidence",
+];
+
+fn cap_review_body(text: String, max_bytes: usize) -> String {
     if text.len() <= max_bytes {
         return text;
     }
-    let suffix = "\n\n[review body truncated; see review artifacts]\n";
-    let keep = max_bytes.saturating_sub(suffix.len()).max(1);
+    if REVIEW_BODY_REQUIRED_HEADINGS
+        .iter()
+        .all(|heading| text.contains(heading))
+        && let Some(compact) = compact_review_body_sections(&text, max_bytes)
+    {
+        return compact;
+    }
+    cap_text_prefix(text, max_bytes)
+}
+
+fn compact_review_body_sections(text: &str, max_bytes: usize) -> Option<String> {
+    for section_budget in [180, 120, 80, 48, 0] {
+        let mut compact = String::new();
+        if let Some(first_heading) = first_required_heading_index(text) {
+            let prefix = text[..first_heading].trim_end();
+            append_review_excerpt(&mut compact, prefix, 220);
+            compact.push('\n');
+        }
+        for (index, heading) in REVIEW_BODY_REQUIRED_HEADINGS.iter().enumerate() {
+            compact.push('\n');
+            compact.push_str(heading);
+            compact.push_str("\n\n");
+            let next_heading = REVIEW_BODY_REQUIRED_HEADINGS.get(index + 1).copied();
+            let section = review_body_section(text, heading, next_heading)?;
+            append_review_excerpt(&mut compact, section, section_budget);
+        }
+        compact.push_str(REVIEW_BODY_TRUNCATED_SUFFIX);
+        if compact.len() <= max_bytes {
+            return Some(compact);
+        }
+    }
+    None
+}
+
+fn first_required_heading_index(text: &str) -> Option<usize> {
+    REVIEW_BODY_REQUIRED_HEADINGS
+        .iter()
+        .filter_map(|heading| text.find(heading))
+        .min()
+}
+
+fn review_body_section<'a>(
+    text: &'a str,
+    heading: &str,
+    next_heading: Option<&str>,
+) -> Option<&'a str> {
+    let start = text.find(heading)? + heading.len();
+    let rest = &text[start..];
+    let end = next_heading.and_then(|heading| rest.find(heading));
+    Some(end.map_or(rest, |end| &rest[..end]))
+}
+
+fn append_review_excerpt(out: &mut String, text: &str, max_bytes: usize) {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        out.push_str("- See review artifacts for full section.\n");
+        return;
+    }
+    let line = trimmed
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .unwrap_or("- See review artifacts for full section.");
+    if max_bytes == 0 {
+        out.push_str("- See review artifacts for full section.\n");
+        return;
+    }
+    let mut excerpt = utf8_prefix(line, max_bytes);
+    if excerpt.is_empty() {
+        excerpt = "- See review artifacts for full section.".to_owned();
+    }
+    out.push_str(&excerpt);
+    if line.len() > excerpt.len() {
+        out.push_str(" ...");
+    }
+    out.push('\n');
+}
+
+fn utf8_prefix(text: &str, max_bytes: usize) -> String {
+    if text.len() <= max_bytes {
+        return text.to_owned();
+    }
+    let mut boundary = max_bytes.min(text.len());
+    while !text.is_char_boundary(boundary) {
+        boundary = boundary.saturating_sub(1);
+    }
+    text[..boundary].to_owned()
+}
+
+fn cap_text_prefix(mut text: String, max_bytes: usize) -> String {
+    let keep = max_bytes
+        .saturating_sub(REVIEW_BODY_TRUNCATED_SUFFIX.len())
+        .max(1);
     let mut boundary = keep.min(text.len());
     while !text.is_char_boundary(boundary) {
         boundary = boundary.saturating_sub(1);
     }
     text.truncate(boundary);
-    text.push_str(suffix);
+    text.push_str(REVIEW_BODY_TRUNCATED_SUFFIX);
     text
 }
 
@@ -5638,6 +5740,47 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert!(capped.ends_with("[review body truncated; see review artifacts]\n"));
         assert!(capped.is_char_boundary(capped.len()));
+    }
+
+    #[test]
+    fn review_body_cap_preserves_required_sections() {
+        let long_text = "changed Rust native boundary evidence ".repeat(100);
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[SensorEvidenceIssue {
+                sensor: "unsafe-review".to_owned(),
+                status: "missing".to_owned(),
+                reason: long_text.clone(),
+            }],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: long_text,
+                evidence: "RIPR proof gap excerpt".to_owned(),
+            }],
+            1_000,
+        );
+
+        assert!(body.len() <= 1_000);
+        for heading in [
+            "## Decision",
+            "## Confirmed findings",
+            "## Summary-only findings",
+            "## Failed objections",
+            "## Residual risk",
+            "## Parked follow-ups",
+            "## Missing or failed evidence",
+        ] {
+            assert!(body.contains(heading), "missing {heading}");
+        }
+        assert!(body.ends_with("[review body truncated; see review artifacts]\n"));
+        assert!(!has_standalone_approval_line(&body));
     }
 
     fn sensor_plan(id: &str, command: &str, run: bool) -> SensorPlan {
