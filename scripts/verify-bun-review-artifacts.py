@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import pathlib
 import re
@@ -90,6 +91,9 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/review.json",
         "review/review.md",
         "review/observations.json",
+        "review/unique_observations.json",
+        "review/merged_observations.json",
+        "review/dropped_observations.json",
         "review/proof_requests.json",
         "review/proof_plan.md",
         "proof_requests.ndjson",
@@ -235,6 +239,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("review/observations.json is not an array")
     if metrics.get("observations") != len(observations):
         fail("metrics observations does not match review/observations.json")
+    require_observation_summary_artifacts(root, observations)
     proof_requests = load_json(root / "review/proof_requests.json")
     if not isinstance(proof_requests, list):
         fail("review/proof_requests.json is not an array")
@@ -306,6 +311,256 @@ def require_observation_files(root: pathlib.Path, observations: list[dict]) -> N
         expected = [observation for observation in observations if observation["lane"] == lane]
         if lane_observations != expected:
             fail(f"observation NDJSON {path} does not match review/observations.json")
+
+
+def require_observation_summary_artifacts(
+    root: pathlib.Path, observations: list[dict]
+) -> None:
+    unique = load_json(root / "review/unique_observations.json")
+    merged = load_json(root / "review/merged_observations.json")
+    dropped = load_json(root / "review/dropped_observations.json")
+    if not isinstance(unique, list):
+        fail("review/unique_observations.json is not an array")
+    if not isinstance(merged, list):
+        fail("review/merged_observations.json is not an array")
+    if not isinstance(dropped, list):
+        fail("review/dropped_observations.json is not an array")
+
+    expected_unique, expected_merged, expected_dropped = expected_observation_groups(
+        observations
+    )
+    if unique != expected_unique:
+        fail("unique_observations.json does not match raw observation grouping")
+    if merged != expected_merged:
+        fail("merged_observations.json does not match raw observation grouping")
+    if dropped != expected_dropped:
+        fail("dropped_observations.json does not match raw observation grouping")
+
+    observation_ids = {
+        observation["id"]
+        for observation in observations
+        if isinstance(observation.get("id"), str)
+    }
+    unique_observation_ids: set[str] = set()
+    group_ids: set[str] = set()
+    duplicate_count = 0
+    for group in unique:
+        require_observation_group_schema(group)
+        group_ids.add(group["id"])
+        ids = group["observation_ids"]
+        for observation_id in ids:
+            if observation_id not in observation_ids:
+                fail(f"unique observation group references unknown observation: {group!r}")
+        unique_observation_ids.update(ids)
+        if group["duplicate_count"] != max(0, len(ids) - 1):
+            fail(f"unique observation group duplicate_count is wrong: {group!r}")
+        duplicate_count += group["duplicate_count"]
+    if unique_observation_ids != observation_ids:
+        fail("unique_observations.json does not cover the raw observation ids exactly")
+
+    dropped_ids = set()
+    for record in merged:
+        require_merged_observation_schema(record, group_ids, observation_ids)
+    for record in dropped:
+        require_dropped_observation_schema(record, group_ids, observation_ids)
+        if record["observation_id"] in dropped_ids:
+            fail(f"dropped observation is listed more than once: {record!r}")
+        dropped_ids.add(record["observation_id"])
+    if len(dropped) != duplicate_count:
+        fail("dropped_observations.json count does not match grouped duplicate count")
+
+
+def expected_observation_groups(
+    observations: list[dict],
+) -> tuple[list[dict], list[dict], list[dict]]:
+    groups: list[dict] = []
+    indexes: dict[str, int] = {}
+    for observation in observations:
+        key = observation.get("dedupe_key") or observation.get("fingerprint")
+        if not isinstance(key, str) or not key:
+            fail(f"observation cannot be grouped: {observation!r}")
+        if key in indexes:
+            merge_expected_observation_group(groups[indexes[key]], observation)
+        else:
+            group_id = expected_observation_group_id(len(groups), key)
+            groups.append(
+                {
+                    "schema": "ub-review.observation_group.v1",
+                    "id": group_id,
+                    "dedupe_key": key,
+                    "claim": observation["claim"],
+                    "kind": observation["kind"],
+                    "status": observation["status"],
+                    "severity": observation["severity"],
+                    "confidence": observation["confidence"],
+                    "path": observation.get("path"),
+                    "line": observation.get("line"),
+                    "evidence": observation.get("evidence", [])[:3],
+                    "lanes": [observation["lane"]],
+                    "sources": [observation["source"]],
+                    "observation_ids": [observation["id"]],
+                    "duplicate_count": 0,
+                }
+            )
+            indexes[key] = len(groups) - 1
+
+    merged = []
+    dropped = []
+    by_id = {observation["id"]: observation for observation in observations}
+    for group in groups:
+        ids = group["observation_ids"]
+        if len(ids) <= 1:
+            continue
+        duplicate_ids = ids[1:]
+        merged.append(
+            {
+                "schema": "ub-review.merged_observation.v1",
+                "group_id": group["id"],
+                "dedupe_key": group["dedupe_key"],
+                "kept_observation_id": ids[0],
+                "merged_observation_ids": duplicate_ids,
+                "lanes": group["lanes"],
+                "reason": "merged_duplicate_dedupe_key",
+            }
+        )
+        for observation_id in duplicate_ids:
+            dropped.append(
+                {
+                    "schema": "ub-review.dropped_observation.v1",
+                    "observation_id": observation_id,
+                    "group_id": group["id"],
+                    "dedupe_key": group["dedupe_key"],
+                    "lane": by_id[observation_id]["lane"],
+                    "reason": "merged_into_unique_observation",
+                }
+            )
+    return groups, merged, dropped
+
+
+def merge_expected_observation_group(group: dict, observation: dict) -> None:
+    if severity_rank(observation["severity"]) > severity_rank(group["severity"]):
+        group["severity"] = observation["severity"]
+    if confidence_rank(observation["confidence"]) > confidence_rank(group["confidence"]):
+        group["confidence"] = observation["confidence"]
+    if observation_status_rank(observation["status"]) > observation_status_rank(group["status"]):
+        group["status"] = observation["status"]
+    if group.get("path") is None:
+        group["path"] = observation.get("path")
+    if group.get("line") is None:
+        group["line"] = observation.get("line")
+    if observation["lane"] not in group["lanes"]:
+        group["lanes"].append(observation["lane"])
+    if observation["source"] not in group["sources"]:
+        group["sources"].append(observation["source"])
+    group["observation_ids"].append(observation["id"])
+    group["duplicate_count"] = max(0, len(group["observation_ids"]) - 1)
+    for evidence in observation.get("evidence", []):
+        if len(group["evidence"]) >= 3:
+            break
+        if evidence not in group["evidence"]:
+            group["evidence"].append(evidence)
+
+
+def expected_observation_group_id(index: int, dedupe_key: str) -> str:
+    digest = hashlib.sha256(dedupe_key.encode("utf-8")).hexdigest()
+    return f"obsgrp-{index:04d}-{digest[:12]}"
+
+
+def severity_rank(value: str) -> int:
+    return {
+        "blocker": 4,
+        "high": 3,
+        "medium": 2,
+        "low": 1,
+    }.get(value, 0)
+
+
+def confidence_rank(value: str) -> int:
+    return {
+        "high": 3,
+        "medium-high": 2,
+        "medium": 1,
+        "low": 0,
+    }.get(value, 0)
+
+
+def observation_status_rank(value: str) -> int:
+    return {
+        "refuted": 7,
+        "confirmed": 6,
+        "parked": 5,
+        "demoted": 4,
+        "open": 3,
+        "covered": 2,
+        "duplicate": 1,
+    }.get(value, 0)
+
+
+def require_observation_group_schema(group: dict) -> None:
+    if group.get("schema") != "ub-review.observation_group.v1":
+        fail(f"observation group has wrong schema: {group!r}")
+    for field in [
+        "id",
+        "dedupe_key",
+        "claim",
+        "kind",
+        "status",
+        "severity",
+        "confidence",
+    ]:
+        if not isinstance(group.get(field), str) or not group[field]:
+            fail(f"observation group missing string field {field}: {group!r}")
+    for field in ["evidence", "lanes", "sources", "observation_ids"]:
+        values = group.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item for item in values
+        ):
+            fail(f"observation group {field} is not a non-empty string array: {group!r}")
+    if not isinstance(group.get("duplicate_count"), int) or group["duplicate_count"] < 0:
+        fail(f"observation group duplicate_count is invalid: {group!r}")
+    path = group.get("path")
+    if path is not None and (not isinstance(path, str) or path.startswith(("/", "\\"))):
+        fail(f"observation group path is not repo-relative: {group!r}")
+    line = group.get("line")
+    if line is not None and (not isinstance(line, int) or line <= 0):
+        fail(f"observation group line is invalid: {group!r}")
+
+
+def require_merged_observation_schema(
+    record: dict, group_ids: set[str], observation_ids: set[str]
+) -> None:
+    if record.get("schema") != "ub-review.merged_observation.v1":
+        fail(f"merged observation has wrong schema: {record!r}")
+    for field in ["group_id", "dedupe_key", "kept_observation_id", "reason"]:
+        if not isinstance(record.get(field), str) or not record[field]:
+            fail(f"merged observation missing string field {field}: {record!r}")
+    if record["group_id"] not in group_ids:
+        fail(f"merged observation references unknown group: {record!r}")
+    if record["kept_observation_id"] not in observation_ids:
+        fail(f"merged observation references unknown kept observation: {record!r}")
+    for field in ["merged_observation_ids", "lanes"]:
+        values = record.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item for item in values
+        ):
+            fail(f"merged observation {field} is not a non-empty string array: {record!r}")
+    for observation_id in record["merged_observation_ids"]:
+        if observation_id not in observation_ids:
+            fail(f"merged observation references unknown duplicate: {record!r}")
+
+
+def require_dropped_observation_schema(
+    record: dict, group_ids: set[str], observation_ids: set[str]
+) -> None:
+    if record.get("schema") != "ub-review.dropped_observation.v1":
+        fail(f"dropped observation has wrong schema: {record!r}")
+    for field in ["observation_id", "group_id", "dedupe_key", "lane", "reason"]:
+        if not isinstance(record.get(field), str) or not record[field]:
+            fail(f"dropped observation missing string field {field}: {record!r}")
+    if record["group_id"] not in group_ids:
+        fail(f"dropped observation references unknown group: {record!r}")
+    if record["observation_id"] not in observation_ids:
+        fail(f"dropped observation references unknown observation: {record!r}")
 
 
 def require_observation_schema(observation: dict) -> None:
@@ -519,11 +774,19 @@ def main(argv: list[str]) -> int:
         for lane in review.get("model_lanes", [])
         if lane.get("status") == "ok" and lane.get("lane") != "refuter"
     ]
+    observations = load_json(root / "review/observations.json")
+    unique_observations = load_json(root / "review/unique_observations.json")
+    merged_observations = load_json(root / "review/merged_observations.json")
+    dropped_observations = load_json(root / "review/dropped_observations.json")
     print(
         "Bun review artifact contract verified: "
         f"root={root} "
         f"shared_context={review['shared_context_id']} "
         f"inline_comments={len(review.get('inline_comments', []))} "
+        f"observations={len(observations)} "
+        f"unique_observations={len(unique_observations)} "
+        f"merged_observations={len(merged_observations)} "
+        f"dropped_observations={len(dropped_observations)} "
         f"ok_model_lanes={','.join(ok_lanes)}"
     )
     return 0

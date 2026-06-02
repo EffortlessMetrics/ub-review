@@ -3539,6 +3539,19 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
         review_dir.join("observations.json"),
         serde_json::to_vec_pretty(observations)?,
     )?;
+    let observation_summary = observation_summary_artifacts(observations);
+    fs::write(
+        review_dir.join("unique_observations.json"),
+        serde_json::to_vec_pretty(&observation_summary.unique)?,
+    )?;
+    fs::write(
+        review_dir.join("merged_observations.json"),
+        serde_json::to_vec_pretty(&observation_summary.merged)?,
+    )?;
+    fs::write(
+        review_dir.join("dropped_observations.json"),
+        serde_json::to_vec_pretty(&observation_summary.dropped)?,
+    )?;
 
     let mut by_lane: BTreeMap<&str, Vec<&Observation>> = BTreeMap::new();
     for observation in observations {
@@ -3598,8 +3611,11 @@ fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) ->
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-struct ReviewObservationItem {
+#[derive(Clone, Debug, Serialize)]
+struct ObservationGroup {
+    schema: String,
+    id: String,
+    dedupe_key: String,
     claim: String,
     kind: String,
     status: String,
@@ -3609,22 +3625,52 @@ struct ReviewObservationItem {
     line: Option<u32>,
     evidence: Vec<String>,
     lanes: Vec<String>,
+    sources: Vec<String>,
+    observation_ids: Vec<String>,
+    duplicate_count: usize,
 }
 
-fn unique_review_observations(observations: &[Observation]) -> Vec<ReviewObservationItem> {
+#[derive(Clone, Debug, Serialize)]
+struct MergedObservationRecord {
+    schema: String,
+    group_id: String,
+    dedupe_key: String,
+    kept_observation_id: String,
+    merged_observation_ids: Vec<String>,
+    lanes: Vec<String>,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct DroppedObservationRecord {
+    schema: String,
+    observation_id: String,
+    group_id: String,
+    dedupe_key: String,
+    lane: String,
+    reason: String,
+}
+
+struct ObservationSummaryArtifacts {
+    unique: Vec<ObservationGroup>,
+    merged: Vec<MergedObservationRecord>,
+    dropped: Vec<DroppedObservationRecord>,
+}
+
+fn observation_summary_artifacts(observations: &[Observation]) -> ObservationSummaryArtifacts {
     let mut indexes = BTreeMap::new();
-    let mut items = Vec::<ReviewObservationItem>::new();
+    let mut groups = Vec::<ObservationGroup>::new();
     for observation in observations {
-        let key = if observation.dedupe_key.trim().is_empty() {
-            observation.fingerprint.clone()
-        } else {
-            observation.dedupe_key.clone()
-        };
+        let key = observation_group_key(observation);
         if let Some(index) = indexes.get(&key).copied() {
-            merge_review_observation(&mut items[index], observation);
+            merge_review_observation(&mut groups[index], observation);
         } else {
-            indexes.insert(key, items.len());
-            items.push(ReviewObservationItem {
+            let group_id = observation_group_id(groups.len(), &key);
+            indexes.insert(key.clone(), groups.len());
+            groups.push(ObservationGroup {
+                schema: "ub-review.observation_group.v1".to_owned(),
+                id: group_id,
+                dedupe_key: key,
                 claim: observation.claim.clone(),
                 kind: observation.kind.clone(),
                 status: observation.status.clone(),
@@ -3634,37 +3680,105 @@ fn unique_review_observations(observations: &[Observation]) -> Vec<ReviewObserva
                 line: observation.line,
                 evidence: observation.evidence.iter().take(3).cloned().collect(),
                 lanes: vec![observation.lane.clone()],
+                sources: vec![observation.source.clone()],
+                observation_ids: vec![observation.id.clone()],
+                duplicate_count: 0,
             });
         }
     }
-    items
+    let merged = groups
+        .iter()
+        .filter(|group| group.observation_ids.len() > 1)
+        .map(|group| MergedObservationRecord {
+            schema: "ub-review.merged_observation.v1".to_owned(),
+            group_id: group.id.clone(),
+            dedupe_key: group.dedupe_key.clone(),
+            kept_observation_id: group.observation_ids[0].clone(),
+            merged_observation_ids: group.observation_ids[1..].to_vec(),
+            lanes: group.lanes.clone(),
+            reason: "merged_duplicate_dedupe_key".to_owned(),
+        })
+        .collect::<Vec<_>>();
+    let observation_lanes = observations
+        .iter()
+        .map(|observation| (observation.id.as_str(), observation.lane.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    let dropped = groups
+        .iter()
+        .flat_map(|group| {
+            group
+                .observation_ids
+                .iter()
+                .skip(1)
+                .map(|observation_id| DroppedObservationRecord {
+                    schema: "ub-review.dropped_observation.v1".to_owned(),
+                    observation_id: observation_id.clone(),
+                    group_id: group.id.clone(),
+                    dedupe_key: group.dedupe_key.clone(),
+                    lane: observation_lanes
+                        .get(observation_id.as_str())
+                        .copied()
+                        .unwrap_or("unknown")
+                        .to_owned(),
+                    reason: "merged_into_unique_observation".to_owned(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    ObservationSummaryArtifacts {
+        unique: groups,
+        merged,
+        dropped,
+    }
 }
 
-fn merge_review_observation(item: &mut ReviewObservationItem, observation: &Observation) {
-    if severity_rank(&observation.severity) > severity_rank(&item.severity) {
-        item.severity = observation.severity.clone();
+fn unique_review_observations(observations: &[Observation]) -> Vec<ObservationGroup> {
+    observation_summary_artifacts(observations).unique
+}
+
+fn observation_group_key(observation: &Observation) -> String {
+    if observation.dedupe_key.trim().is_empty() {
+        observation.fingerprint.clone()
+    } else {
+        observation.dedupe_key.clone()
     }
-    if confidence_rank(&observation.confidence) > confidence_rank(&item.confidence) {
-        item.confidence = observation.confidence.clone();
+}
+
+fn observation_group_id(index: usize, dedupe_key: &str) -> String {
+    let digest = sha256_hex(dedupe_key.as_bytes());
+    format!("obsgrp-{index:04}-{}", &digest[..12])
+}
+
+fn merge_review_observation(group: &mut ObservationGroup, observation: &Observation) {
+    if severity_rank(&observation.severity) > severity_rank(&group.severity) {
+        group.severity = observation.severity.clone();
     }
-    if observation_status_rank(&observation.status) > observation_status_rank(&item.status) {
-        item.status = observation.status.clone();
+    if confidence_rank(&observation.confidence) > confidence_rank(&group.confidence) {
+        group.confidence = observation.confidence.clone();
     }
-    if item.path.is_none() {
-        item.path = observation.path.clone();
+    if observation_status_rank(&observation.status) > observation_status_rank(&group.status) {
+        group.status = observation.status.clone();
     }
-    if item.line.is_none() {
-        item.line = observation.line;
+    if group.path.is_none() {
+        group.path = observation.path.clone();
     }
-    if !item.lanes.contains(&observation.lane) {
-        item.lanes.push(observation.lane.clone());
+    if group.line.is_none() {
+        group.line = observation.line;
     }
+    if !group.lanes.contains(&observation.lane) {
+        group.lanes.push(observation.lane.clone());
+    }
+    if !group.sources.contains(&observation.source) {
+        group.sources.push(observation.source.clone());
+    }
+    group.observation_ids.push(observation.id.clone());
+    group.duplicate_count = group.observation_ids.len().saturating_sub(1);
     for evidence in &observation.evidence {
-        if item.evidence.len() >= 3 {
+        if group.evidence.len() >= 3 {
             break;
         }
-        if !item.evidence.contains(evidence) {
-            item.evidence.push(evidence.clone());
+        if !group.evidence.contains(evidence) {
+            group.evidence.push(evidence.clone());
         }
     }
 }
@@ -6071,13 +6185,13 @@ fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
         || text.contains("proof")
 }
 
-fn is_verification_observation(observation: &ReviewObservationItem) -> bool {
+fn is_verification_observation(observation: &ObservationGroup) -> bool {
     observation.kind == "verification-question"
         || matches!(observation.kind.as_str(), "test-gap" | "source-route-gap")
         || text_is_verification_question(&observation.claim)
 }
 
-fn is_refuted_observation(observation: &ReviewObservationItem) -> bool {
+fn is_refuted_observation(observation: &ObservationGroup) -> bool {
     observation.status == "refuted"
         || matches!(
             observation.kind.as_str(),
@@ -6085,15 +6199,15 @@ fn is_refuted_observation(observation: &ReviewObservationItem) -> bool {
         )
 }
 
-fn is_missing_evidence_observation(observation: &ReviewObservationItem) -> bool {
+fn is_missing_evidence_observation(observation: &ObservationGroup) -> bool {
     observation.kind == "missing-evidence"
 }
 
-fn is_parked_observation(observation: &ReviewObservationItem) -> bool {
+fn is_parked_observation(observation: &ObservationGroup) -> bool {
     observation.status == "parked" || observation.kind == "parked-follow-up"
 }
 
-fn has_actionable_observation(observations: &[ReviewObservationItem]) -> bool {
+fn has_actionable_observation(observations: &[ObservationGroup]) -> bool {
     observations.iter().any(|observation| {
         !is_refuted_observation(observation)
             && !is_missing_evidence_observation(observation)
@@ -6115,7 +6229,7 @@ fn text_is_verification_question(text: &str) -> bool {
 
 fn summary_finding_matches_observations(
     finding: &SummaryOnlyFinding,
-    observations: &[ReviewObservationItem],
+    observations: &[ObservationGroup],
 ) -> bool {
     let summary = normalized_review_text(&format!("{} {}", finding.reason, finding.evidence));
     observations.iter().any(|observation| {
@@ -6140,7 +6254,7 @@ fn normalized_review_text(value: &str) -> String {
         .join(" ")
 }
 
-fn render_review_observation(text: &mut String, observation: &ReviewObservationItem) {
+fn render_review_observation(text: &mut String, observation: &ObservationGroup) {
     let lanes = observation.lanes.join(", ");
     let location = match (&observation.path, observation.line) {
         (Some(path), Some(line)) => format!(" at `{path}`:{line}"),
@@ -9877,7 +9991,26 @@ UB_REVIEW_HTTP_STATUS:429
                     .to_owned(),
                 evidence: "UB ledger excerpt".to_owned(),
             }],
-            observations: Vec::new(),
+            observations: vec![
+                test_observation(
+                    "tests-oracle",
+                    "The new test needs a witnessed old-main red run.",
+                    "missing-evidence",
+                    "open",
+                    "medium",
+                    "high",
+                    "markdown-red-green-witness",
+                ),
+                test_observation(
+                    "opposition",
+                    "The new test needs a witnessed old-main red run.",
+                    "missing-evidence",
+                    "open",
+                    "medium",
+                    "medium-high",
+                    "markdown-red-green-witness",
+                ),
+            ],
             proof_requests: Vec::new(),
             body: "artifact body".to_owned(),
         };
@@ -9887,9 +10020,25 @@ UB_REVIEW_HTTP_STATUS:429
 
         let aggregate: Vec<super::Observation> =
             serde_json::from_slice(&fs::read(temp.path().join("review/observations.json"))?)?;
+        let unique: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/unique_observations.json"),
+        )?)?;
+        let merged: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/merged_observations.json"),
+        )?)?;
+        let dropped: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/dropped_observations.json"),
+        )?)?;
         let lane_ndjson = fs::read_to_string(temp.path().join("observations/tests-oracle.ndjson"))?;
 
-        assert_eq!(aggregate.len(), 4);
+        assert_eq!(aggregate.len(), 6);
+        assert_eq!(unique.as_array().map(Vec::len), Some(5));
+        assert_eq!(merged.as_array().map(Vec::len), Some(1));
+        assert_eq!(dropped.as_array().map(Vec::len), Some(1));
+        assert_eq!(unique[0]["schema"], "ub-review.observation_group.v1");
+        assert_eq!(unique[0]["duplicate_count"], 1);
+        assert_eq!(merged[0]["schema"], "ub-review.merged_observation.v1");
+        assert_eq!(dropped[0]["schema"], "ub-review.dropped_observation.v1");
         assert!(lane_ndjson.contains("\"schema\":\"ub-review.observation.v1\""));
         assert!(lane_ndjson.contains("\"kind\":\"test-gap\""));
         assert!(aggregate.iter().any(|observation| {

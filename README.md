@@ -160,12 +160,24 @@ target/ub-review/
     opposition.md
     security.md
 
+  observations/
+    tests-oracle.ndjson
+    source-route.ndjson
+    ...
+
   review/
     shared_context.md
     metrics.json
     review.json
     review.md
+    observations.json
+    unique_observations.json
+    merged_observations.json
+    dropped_observations.json
+    proof_requests.json
+    proof_plan.md
     github-review.json
+    github-review-skip.json
     post-result.json
     post-error.json
     github-review-post-payload.json
@@ -173,6 +185,7 @@ target/ub-review/
     post-stderr.txt
 
   events.ndjson
+  proof_requests.ndjson
   running-summary.md
 ```
 
