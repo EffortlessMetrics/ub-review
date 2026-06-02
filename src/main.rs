@@ -2460,12 +2460,20 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&review.provider_preflights)?,
     )?;
     fs::write(review_dir.join("review.md"), body)?;
-    write_github_review_payload(&review_dir, &github_review)?;
+    write_github_review_payload(&review_dir, &github_review, &line_map)?;
     Ok(())
 }
 
-fn write_github_review_payload(review_dir: &Path, github_review: &GitHubReview) -> Result<()> {
-    validate_github_review_payload(github_review)?;
+fn write_github_review_payload(
+    review_dir: &Path,
+    github_review: &GitHubReview,
+    right_lines: &BTreeSet<(String, u32)>,
+) -> Result<()> {
+    validate_github_review_payload_for_right_lines(
+        github_review,
+        right_lines,
+        "generated diff context",
+    )?;
     fs::write(
         review_dir.join("github-review.json"),
         serde_json::to_vec_pretty(github_review)?,
@@ -5024,13 +5032,26 @@ fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
 
 fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubReview) -> Result<()> {
     validate_github_review_payload(review)?;
+    let diff_patch = post_diff_patch_path(args);
     if review.comments.is_empty() {
         return Ok(());
     }
-    let diff_patch = post_diff_patch_path(args);
     let patch = fs::read_to_string(&diff_patch)
         .with_context(|| format!("read {}", diff_patch.display()))?;
     let right_lines = right_side_diff_lines(&patch);
+    validate_github_review_payload_for_right_lines(
+        review,
+        &right_lines,
+        &diff_patch.display().to_string(),
+    )
+}
+
+fn validate_github_review_payload_for_right_lines(
+    review: &GitHubReview,
+    right_lines: &BTreeSet<(String, u32)>,
+    source: &str,
+) -> Result<()> {
+    validate_github_review_payload(review)?;
     for comment in &review.comments {
         let path = normalize_repo_path(&comment.path);
         if !right_lines.contains(&(path.clone(), comment.line)) {
@@ -5038,7 +5059,7 @@ fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubRevie
                 "github review comment {}:{} is not a valid RIGHT-side diff line in {}",
                 path,
                 comment.line,
-                diff_patch.display()
+                source
             );
         }
     }
@@ -6658,6 +6679,18 @@ index 1111111..2222222 100644
 
     #[test]
     fn github_review_payload_requires_comment_event_and_right_side() -> Result<()> {
+        let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+        let line_map = right_side_diff_lines(patch);
         let ok = GitHubReview {
             event: "COMMENT".to_owned(),
             body: "## Decision\n\n- No blocking finding after bounded review; evidence is incomplete.\n\n## No blocking finding after checking\n\n- packet\n\n## Failed objections\n\n- missing evidence is listed separately\n\n## Residual risk\n\n- human review".to_owned(),
@@ -6671,8 +6704,22 @@ index 1111111..2222222 100644
         validate_github_review_payload(&ok)?;
 
         let temp = tempfile::tempdir()?;
-        write_github_review_payload(temp.path(), &ok)?;
+        write_github_review_payload(temp.path(), &ok, &line_map)?;
         assert!(temp.path().join("github-review.json").exists());
+
+        let stale_line = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                line: 99,
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        let stale_line_out = tempfile::tempdir()?;
+        let err = write_github_review_payload(stale_line_out.path(), &stale_line, &line_map)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly wrote github-review.json"))?;
+        assert!(err.to_string().contains("not a valid RIGHT-side diff line"));
+        assert!(!stale_line_out.path().join("github-review.json").exists());
 
         let bad_event = GitHubReview {
             event: "APPROVE".to_owned(),
@@ -6680,7 +6727,7 @@ index 1111111..2222222 100644
         };
         assert!(validate_github_review_payload(&bad_event).is_err());
         let bad_event_out = tempfile::tempdir()?;
-        assert!(write_github_review_payload(bad_event_out.path(), &bad_event).is_err());
+        assert!(write_github_review_payload(bad_event_out.path(), &bad_event, &line_map).is_err());
         assert!(!bad_event_out.path().join("github-review.json").exists());
 
         let bad_side = GitHubReview {
@@ -6692,7 +6739,7 @@ index 1111111..2222222 100644
         };
         assert!(validate_github_review_payload(&bad_side).is_err());
         let bad_out = tempfile::tempdir()?;
-        assert!(write_github_review_payload(bad_out.path(), &bad_side).is_err());
+        assert!(write_github_review_payload(bad_out.path(), &bad_side, &line_map).is_err());
         assert!(!bad_out.path().join("github-review.json").exists());
 
         let parent_path = GitHubReview {
