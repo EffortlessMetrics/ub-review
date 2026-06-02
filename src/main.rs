@@ -3088,6 +3088,7 @@ fn write_review_artifacts(
         &missing_or_failed_model_evidence,
         &inline_comments,
         &summary_only_findings,
+        &model_observations,
         args.review_body_max_bytes,
         ReviewBodyAudience::Artifact,
     );
@@ -3100,6 +3101,7 @@ fn write_review_artifacts(
         &missing_or_failed_model_evidence,
         &inline_comments,
         &summary_only_findings,
+        &model_observations,
         args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
@@ -3594,6 +3596,90 @@ fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) ->
     }
     fs::write(review_dir.join("proof_plan.md"), plan)?;
     Ok(())
+}
+
+#[derive(Clone, Debug)]
+struct ReviewObservationItem {
+    claim: String,
+    kind: String,
+    status: String,
+    severity: String,
+    confidence: String,
+    path: Option<String>,
+    line: Option<u32>,
+    evidence: Vec<String>,
+    lanes: Vec<String>,
+}
+
+fn unique_review_observations(observations: &[Observation]) -> Vec<ReviewObservationItem> {
+    let mut indexes = BTreeMap::new();
+    let mut items = Vec::<ReviewObservationItem>::new();
+    for observation in observations {
+        let key = if observation.dedupe_key.trim().is_empty() {
+            observation.fingerprint.clone()
+        } else {
+            observation.dedupe_key.clone()
+        };
+        if let Some(index) = indexes.get(&key).copied() {
+            merge_review_observation(&mut items[index], observation);
+        } else {
+            indexes.insert(key, items.len());
+            items.push(ReviewObservationItem {
+                claim: observation.claim.clone(),
+                kind: observation.kind.clone(),
+                status: observation.status.clone(),
+                severity: observation.severity.clone(),
+                confidence: observation.confidence.clone(),
+                path: observation.path.clone(),
+                line: observation.line,
+                evidence: observation.evidence.iter().take(3).cloned().collect(),
+                lanes: vec![observation.lane.clone()],
+            });
+        }
+    }
+    items
+}
+
+fn merge_review_observation(item: &mut ReviewObservationItem, observation: &Observation) {
+    if severity_rank(&observation.severity) > severity_rank(&item.severity) {
+        item.severity = observation.severity.clone();
+    }
+    if confidence_rank(&observation.confidence) > confidence_rank(&item.confidence) {
+        item.confidence = observation.confidence.clone();
+    }
+    if observation_status_rank(&observation.status) > observation_status_rank(&item.status) {
+        item.status = observation.status.clone();
+    }
+    if item.path.is_none() {
+        item.path = observation.path.clone();
+    }
+    if item.line.is_none() {
+        item.line = observation.line;
+    }
+    if !item.lanes.contains(&observation.lane) {
+        item.lanes.push(observation.lane.clone());
+    }
+    for evidence in &observation.evidence {
+        if item.evidence.len() >= 3 {
+            break;
+        }
+        if !item.evidence.contains(evidence) {
+            item.evidence.push(evidence.clone());
+        }
+    }
+}
+
+fn observation_status_rank(value: &str) -> u8 {
+    match value {
+        "refuted" => 7,
+        "confirmed" => 6,
+        "parked" => 5,
+        "demoted" => 4,
+        "open" => 3,
+        "covered" => 2,
+        "duplicate" => 1,
+        _ => 0,
+    }
 }
 
 fn sensor_status_for_metrics(out: &Path, sensor: &SensorPlan) -> String {
@@ -5600,6 +5686,7 @@ fn render_review_body(
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
+    observations: &[Observation],
     review_body_max_bytes: usize,
     audience: ReviewBodyAudience,
 ) -> String {
@@ -5612,6 +5699,7 @@ fn render_review_body(
             missing_or_failed_model_evidence,
             inline_comments,
             summary_only_findings,
+            observations,
             review_body_max_bytes,
         );
     }
@@ -5761,21 +5849,66 @@ fn render_pull_request_review_body(
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
+    observations: &[Observation],
     review_body_max_bytes: usize,
 ) -> String {
     let mut text = String::new();
+    let observation_items = unique_review_observations(observations);
+    let refuted_observations = observation_items
+        .iter()
+        .filter(|observation| is_refuted_observation(observation))
+        .collect::<Vec<_>>();
+    let missing_observations = observation_items
+        .iter()
+        .filter(|observation| is_missing_evidence_observation(observation))
+        .collect::<Vec<_>>();
+    let parked_observations = observation_items
+        .iter()
+        .filter(|observation| is_parked_observation(observation))
+        .collect::<Vec<_>>();
+    let verification_observations = observation_items
+        .iter()
+        .filter(|observation| {
+            !is_refuted_observation(observation)
+                && !is_missing_evidence_observation(observation)
+                && !is_parked_observation(observation)
+                && is_verification_observation(observation)
+        })
+        .collect::<Vec<_>>();
+    let concern_observations = observation_items
+        .iter()
+        .filter(|observation| {
+            !is_refuted_observation(observation)
+                && !is_missing_evidence_observation(observation)
+                && !is_parked_observation(observation)
+                && !is_verification_observation(observation)
+        })
+        .collect::<Vec<_>>();
     let parked = summary_only_findings
         .iter()
-        .filter(|finding| is_parked_follow_up(finding))
+        .filter(|finding| {
+            is_parked_follow_up(finding)
+                && !summary_finding_matches_observations(finding, &observation_items)
+        })
         .collect::<Vec<_>>();
     let verification_questions = summary_only_findings
         .iter()
-        .filter(|finding| !is_parked_follow_up(finding) && is_verification_question(finding))
+        .filter(|finding| {
+            !is_parked_follow_up(finding)
+                && is_verification_question(finding)
+                && !summary_finding_matches_observations(finding, &observation_items)
+        })
         .collect::<Vec<_>>();
     let summary_concerns = summary_only_findings
         .iter()
-        .filter(|finding| !is_parked_follow_up(finding) && !is_verification_question(finding))
+        .filter(|finding| {
+            !is_parked_follow_up(finding)
+                && !is_verification_question(finding)
+                && !summary_finding_matches_observations(finding, &observation_items)
+        })
         .collect::<Vec<_>>();
+    let has_review_value = has_actionable_review_finding(inline_comments, summary_only_findings)
+        || has_actionable_observation(&observation_items);
 
     text.push_str("# UB Review\n\n");
     text.push_str(&format!("- Shared context: `{shared_context_id}`\n"));
@@ -5788,7 +5921,7 @@ fn render_pull_request_review_body(
 
     text.push_str("\n## Decision\n\n");
     text.push_str("- ");
-    if has_actionable_review_finding(inline_comments, summary_only_findings) {
+    if has_review_value {
         text.push_str(
             "Needs reviewer attention before upstream: grounded findings or verification concerns remain.\n",
         );
@@ -5806,8 +5939,12 @@ fn render_pull_request_review_body(
 
     if inline_comments.is_empty()
         && verification_questions.is_empty()
+        && verification_observations.is_empty()
         && summary_concerns.is_empty()
+        && concern_observations.is_empty()
         && parked.is_empty()
+        && parked_observations.is_empty()
+        && refuted_observations.is_empty()
     {
         text.push_str("\n## Review result\n\n");
         text.push_str(
@@ -5833,6 +5970,9 @@ fn render_pull_request_review_body(
 
     if !verification_questions.is_empty() {
         text.push_str("\n## Verification questions\n\n");
+        for observation in &verification_observations {
+            render_review_observation(&mut text, observation);
+        }
         for finding in verification_questions {
             text.push_str(&format!(
                 "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
@@ -5843,10 +5983,18 @@ fn render_pull_request_review_body(
                 escape_md(&finding.evidence)
             ));
         }
+    } else if !verification_observations.is_empty() {
+        text.push_str("\n## Verification questions\n\n");
+        for observation in &verification_observations {
+            render_review_observation(&mut text, observation);
+        }
     }
 
     if !summary_concerns.is_empty() {
         text.push_str("\n## Summary-only concerns\n\n");
+        for observation in &concern_observations {
+            render_review_observation(&mut text, observation);
+        }
         for finding in summary_concerns {
             text.push_str(&format!(
                 "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
@@ -5857,10 +6005,25 @@ fn render_pull_request_review_body(
                 escape_md(&finding.evidence)
             ));
         }
+    } else if !concern_observations.is_empty() {
+        text.push_str("\n## Summary-only concerns\n\n");
+        for observation in &concern_observations {
+            render_review_observation(&mut text, observation);
+        }
+    }
+
+    if !refuted_observations.is_empty() {
+        text.push_str("\n## Refuted / dropped\n\n");
+        for observation in &refuted_observations {
+            render_review_observation(&mut text, observation);
+        }
     }
 
     if !parked.is_empty() {
         text.push_str("\n## Parked follow-ups\n\n");
+        for observation in &parked_observations {
+            render_review_observation(&mut text, observation);
+        }
         for finding in parked {
             text.push_str(&format!(
                 "- `[{}]` {} Evidence: {}\n",
@@ -5869,14 +6032,24 @@ fn render_pull_request_review_body(
                 escape_md(&finding.evidence)
             ));
         }
+    } else if !parked_observations.is_empty() {
+        text.push_str("\n## Parked follow-ups\n\n");
+        for observation in &parked_observations {
+            render_review_observation(&mut text, observation);
+        }
     }
 
     text.push_str("\n## Residual risk\n\n");
     text.push_str("- A human should still inspect unsafe/native seams, test-oracle strength, and any unavailable evidence before relying on this review.\n");
 
-    if !missing_or_failed_sensor_evidence.is_empty() || !missing_or_failed_model_evidence.is_empty()
+    if !missing_or_failed_sensor_evidence.is_empty()
+        || !missing_or_failed_model_evidence.is_empty()
+        || !missing_observations.is_empty()
     {
         text.push_str("\n## Missing evidence\n\n");
+        for observation in &missing_observations {
+            render_review_observation(&mut text, observation);
+        }
         render_compact_missing_evidence(
             &mut text,
             missing_or_failed_sensor_evidence,
@@ -5896,6 +6069,103 @@ fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
         || text.contains("witness")
         || text.contains("red/green")
         || text.contains("proof")
+}
+
+fn is_verification_observation(observation: &ReviewObservationItem) -> bool {
+    observation.kind == "verification-question"
+        || matches!(observation.kind.as_str(), "test-gap" | "source-route-gap")
+        || text_is_verification_question(&observation.claim)
+}
+
+fn is_refuted_observation(observation: &ReviewObservationItem) -> bool {
+    observation.status == "refuted"
+        || matches!(
+            observation.kind.as_str(),
+            "false-premise" | "resolved-check"
+        )
+}
+
+fn is_missing_evidence_observation(observation: &ReviewObservationItem) -> bool {
+    observation.kind == "missing-evidence"
+}
+
+fn is_parked_observation(observation: &ReviewObservationItem) -> bool {
+    observation.status == "parked" || observation.kind == "parked-follow-up"
+}
+
+fn has_actionable_observation(observations: &[ReviewObservationItem]) -> bool {
+    observations.iter().any(|observation| {
+        !is_refuted_observation(observation)
+            && !is_missing_evidence_observation(observation)
+            && !is_parked_observation(observation)
+            && matches!(observation.severity.as_str(), "blocker" | "high" | "medium")
+    })
+}
+
+fn text_is_verification_question(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    text.contains("verify")
+        || text.contains("verification")
+        || text.contains("confirm")
+        || text.contains("question")
+        || text.contains("witness")
+        || text.contains("red/green")
+        || text.contains("proof")
+}
+
+fn summary_finding_matches_observations(
+    finding: &SummaryOnlyFinding,
+    observations: &[ReviewObservationItem],
+) -> bool {
+    let summary = normalized_review_text(&format!("{} {}", finding.reason, finding.evidence));
+    observations.iter().any(|observation| {
+        let claim = normalized_review_text(&observation.claim);
+        claim.len() >= 24 && (summary.contains(&claim) || claim.contains(&summary))
+    })
+}
+
+fn normalized_review_text(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                ' '
+            }
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn render_review_observation(text: &mut String, observation: &ReviewObservationItem) {
+    let lanes = observation.lanes.join(", ");
+    let location = match (&observation.path, observation.line) {
+        (Some(path), Some(line)) => format!(" at `{path}`:{line}"),
+        (Some(path), None) => format!(" at `{path}`"),
+        _ => String::new(),
+    };
+    let evidence = if observation.evidence.is_empty() {
+        "model observation".to_owned()
+    } else {
+        observation
+            .evidence
+            .iter()
+            .map(|value| escape_md(value))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    text.push_str(&format!(
+        "- `[{}]` `{}` `{}`{}: {} Evidence: {}\n",
+        escape_md(&lanes),
+        observation.severity,
+        observation.confidence,
+        location,
+        escape_md(&observation.claim),
+        evidence
+    ));
 }
 
 fn render_compact_missing_evidence(
@@ -7697,9 +7967,9 @@ mod tests {
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
         LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
-        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs,
-        ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
+        ModelRunContext, NO_LGTM_POSTURE, Observation, OpenCodeEndpointKindArg, Plan, PostArgs,
+        PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
+        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
         SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
         apply_model_output, apply_refuter_output, build_review_metrics,
         build_tokmd_sensor_commands, cap_review_body, classify_diff, cmd_post,
@@ -7710,7 +7980,7 @@ mod tests {
         model_response_shape, opencode_canary_spec, provider_spec_for_lane_with_key_state,
         render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, split_curl_http_status, validate_github_review_payload,
+        run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
         write_observation_artifacts, write_proof_request_artifacts, write_review_artifacts,
@@ -9356,6 +9626,7 @@ UB_REVIEW_HTTP_STATUS:429
             }],
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -9386,6 +9657,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ModelEvidenceIssue],
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -9409,6 +9681,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ModelEvidenceIssue],
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
             60_000,
             ReviewBodyAudience::Artifact,
         );
@@ -9663,6 +9936,7 @@ UB_REVIEW_HTTP_STATUS:429
                     .to_owned(),
                 evidence: "UB ledger excerpt".to_owned(),
             }],
+            &[] as &[Observation],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -9671,6 +9945,82 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.contains("PBKDF2 sibling path is parked as follow-up"));
         assert!(!body.contains("## Summary-only findings"));
         assert!(!body.contains("## Summary-only concerns"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_dedupes_observations_before_rendering() {
+        let observations = vec![
+            test_observation(
+                "tests-oracle",
+                "The new test needs a witnessed old-main red run.",
+                "missing-evidence",
+                "open",
+                "medium",
+                "high",
+                "markdown-red-green-witness",
+            ),
+            test_observation(
+                "opposition",
+                "The new test needs a witnessed old-main red run.",
+                "missing-evidence",
+                "open",
+                "medium",
+                "medium-high",
+                "markdown-red-green-witness",
+            ),
+            test_observation(
+                "ub-active-view",
+                "Box::from(slice) can return None on allocation failure; refuted because: allocation failure does not return None",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "rust-box-from-allocation-failure",
+            ),
+            test_observation(
+                "source-route",
+                "Confirm a typed-array view over a resizable ArrayBuffer carries the resizable flag through PinnedView.",
+                "verification-question",
+                "open",
+                "medium",
+                "medium-high",
+                "typed-array-rab-resizable-flag",
+            ),
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The new test needs a witnessed old-main red run.".to_owned(),
+                evidence: "duplicate lane summary".to_owned(),
+            }],
+            &observations,
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert_eq!(
+            body.matches("The new test needs a witnessed old-main red run.")
+                .count(),
+            1
+        );
+        assert!(body.contains("`[tests-oracle, opposition]`"));
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains("typed-array view over a resizable ArrayBuffer"));
+        assert!(body.contains("## Refuted / dropped"));
+        assert!(body.contains("Box::from(slice) can return None"));
+        assert!(body.contains("## Missing evidence"));
+        assert!(!body.contains("duplicate lane summary"));
+        assert!(!body.contains("## Model lanes"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -9704,6 +10054,7 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: long_text,
                 evidence: "RIPR proof gap excerpt".to_owned(),
             }],
+            &[] as &[Observation],
             1_000,
             ReviewBodyAudience::Artifact,
         );
@@ -9766,6 +10117,35 @@ UB_REVIEW_HTTP_STATUS:429
             http_status: None,
             response_shape: None,
             fallback_from: None,
+        }
+    }
+
+    fn test_observation(
+        lane: &str,
+        claim: &str,
+        kind: &str,
+        status: &str,
+        severity: &str,
+        confidence: &str,
+        dedupe_key: &str,
+    ) -> Observation {
+        let fingerprint = sha256_hex(format!("{lane}\n{kind}\n{status}\n{claim}").as_bytes());
+        Observation {
+            schema: "ub-review.observation.v1".to_owned(),
+            id: format!("obs-test-{}", &fingerprint[..12]),
+            lane: lane.to_owned(),
+            question: lane.to_owned(),
+            claim: claim.to_owned(),
+            kind: kind.to_owned(),
+            status: status.to_owned(),
+            severity: severity.to_owned(),
+            confidence: confidence.to_owned(),
+            path: None,
+            line: None,
+            fingerprint,
+            evidence: vec![format!("{lane} observation evidence")],
+            dedupe_key: dedupe_key.to_owned(),
+            source: "model-observation".to_owned(),
         }
     }
 
