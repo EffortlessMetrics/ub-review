@@ -109,7 +109,7 @@ jobs:
           model-mode: auto
           provider-policy: minimax-only
           minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
-          minimax-provider-kind: openai
+          minimax-provider-kind: anthropic
           lane-width: ${{ inputs.model_smoke_lane_width || '6' }}
           max-model-calls: ${{ inputs.model_smoke_max_model_calls || '1' }}
           model-concurrency: ${{ inputs.model_smoke_model_concurrency || '1' }}

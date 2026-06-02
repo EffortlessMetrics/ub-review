@@ -282,7 +282,7 @@ struct RunArgs {
     #[arg(
         long,
         value_enum,
-        default_value = "openai",
+        default_value = "anthropic",
         env = "UB_REVIEW_MINIMAX_PROVIDER_KIND"
     )]
     minimax_provider_kind: ProviderKindArg,
@@ -4654,16 +4654,23 @@ fn model_auth_header(spec: &ProviderSpec, token: &str) -> String {
 
 fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value {
     match spec.endpoint_kind {
-        ProviderEndpointKind::AnthropicMessages => serde_json::json!({
-            "model": spec.model,
-            "max_tokens": model_max_tokens(spec),
-            "system": "Return one compact JSON object in the final text block. Do not include markdown fences or prose outside JSON.",
-            "thinking": {"type": "adaptive"},
-            "temperature": 0.1,
-            "messages": [
-                {"role": "user", "content": prompt}
-            ],
-        }),
+        ProviderEndpointKind::AnthropicMessages => {
+            let thinking_type = if spec.provider == ModelProvider::MiniMaxDirect {
+                "disabled"
+            } else {
+                "adaptive"
+            };
+            serde_json::json!({
+                "model": spec.model,
+                "max_tokens": model_max_tokens(spec),
+                "system": "Return one compact JSON object in the final text block. Do not include markdown fences or prose outside JSON.",
+                "thinking": {"type": thinking_type},
+                "temperature": 0.1,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+            })
+        }
         ProviderEndpointKind::OpenAiChat if spec.provider == ModelProvider::MiniMaxDirect => {
             serde_json::json!({
                 "model": spec.model,
@@ -4691,12 +4698,9 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
 }
 
 fn model_max_tokens(spec: &ProviderSpec) -> u32 {
-    match spec.provider {
-        ModelProvider::MiniMaxDirect => 8192,
-        ModelProvider::OpenCodeGo => match spec.endpoint_kind {
-            ProviderEndpointKind::AnthropicMessages => 4096,
-            ProviderEndpointKind::OpenAiChat => 4096,
-        },
+    match spec.endpoint_kind {
+        ProviderEndpointKind::AnthropicMessages => 4096,
+        ProviderEndpointKind::OpenAiChat => 4096,
     }
 }
 
@@ -6951,7 +6955,8 @@ index 1111111..2222222 100644
 
     #[test]
     fn direct_minimax_openai_uses_chat_endpoint_and_bearer_header() {
-        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Openai;
         let spec = direct_minimax_spec(&args);
 
         assert_eq!(
@@ -7243,12 +7248,13 @@ UB_REVIEW_HTTP_STATUS:429
 
     #[test]
     fn minimax_openai_payload_uses_chat_shape() {
-        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Openai;
         let spec = direct_minimax_spec(&args);
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert_eq!(payload["max_completion_tokens"], 8192);
+        assert_eq!(payload["max_completion_tokens"], 4096);
         assert_eq!(payload["reasoning_split"], true);
         assert_eq!(payload["response_format"]["type"], "json_object");
         assert!(
@@ -7269,8 +7275,8 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert_eq!(payload["max_tokens"], 8192);
-        assert_eq!(payload["thinking"]["type"], "adaptive");
+        assert_eq!(payload["max_tokens"], 4096);
+        assert_eq!(payload["thinking"]["type"], "disabled");
         assert!(
             payload["system"]
                 .as_str()
@@ -7516,7 +7522,7 @@ UB_REVIEW_HTTP_STATUS:429
             model_timeout_sec: 180,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
-            minimax_provider_kind: ProviderKindArg::Openai,
+            minimax_provider_kind: ProviderKindArg::Anthropic,
             minimax_model: "MiniMax-M3".to_owned(),
             opencode_model: "minimax-m3".to_owned(),
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,
