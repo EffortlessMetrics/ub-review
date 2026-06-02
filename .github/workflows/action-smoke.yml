@@ -55,7 +55,7 @@ jobs:
               test -f target/ub-review-smoke/review/post-error.json
           fi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ub-review-smoke
@@ -94,7 +94,7 @@ jobs:
       - name: Verify MiniMax smoke artifacts
         run: python scripts/verify-model-smoke-artifacts.py target/ub-review-model-smoke
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ub-review-model-smoke

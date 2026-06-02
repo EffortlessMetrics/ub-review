@@ -102,7 +102,7 @@ jobs:
           fail-on-post-error: 'false'
           allow-heavy: 'false'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ub-review-packet-${{ github.event.pull_request.number || github.run_id }}
