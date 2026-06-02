@@ -3894,6 +3894,19 @@ fn apply_model_output(
         summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
     }
     for candidate in output.inline_comments {
+        if is_candidate_only_lane(&lane.id) {
+            summary_only_findings.push(SummaryOnlyFinding {
+                lane: lane.id.clone(),
+                severity: candidate.severity,
+                confidence: candidate.confidence,
+                reason: format!(
+                    "candidate-only lane emitted inline candidate for {}:{}; kept summary-only",
+                    candidate.path, candidate.line
+                ),
+                evidence: candidate.evidence,
+            });
+            continue;
+        }
         if inline_comments.len() >= max_inline {
             summary_only_findings.push(SummaryOnlyFinding {
                 lane: lane.id.clone(),
@@ -3912,6 +3925,10 @@ fn apply_model_output(
             Err(finding) => summary_only_findings.push(finding),
         }
     }
+}
+
+fn is_candidate_only_lane(lane_id: &str) -> bool {
+    is_opencode_fast_lane(lane_id)
 }
 
 fn validate_summary_only_candidate(
@@ -5547,14 +5564,15 @@ mod tests {
         OpenCodeEndpointKindArg, Plan, PostingMode, ProviderKindArg, RefuterDecision,
         RefuterOutput, RefuterRunContext, ReviewArgs, ReviewInlineComment, RunArgs, RunMode,
         SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_refuter_output, cap_review_body, classify_diff, collect_sensor_evidence_issues,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_request_payload, model_response_shape,
-        opencode_canary_spec, render_ledger_context, render_review_body, render_summary,
-        right_side_diff_lines, run_command_to_files, run_refuter_pass, run_sensor,
-        split_curl_http_status, validate_github_review_payload, validate_inline_candidate,
-        validate_run_args, validate_summary_only_candidate, write_sensor_status,
+        apply_model_output, apply_refuter_output, cap_review_body, classify_diff,
+        collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
+        extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
+        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
+        run_refuter_pass, run_sensor, split_curl_http_status, validate_github_review_payload,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        write_sensor_status,
     };
 
     #[test]
@@ -5949,6 +5967,62 @@ index 1111111..2222222 100644
         );
         assert!(empty_body.is_err_and(|finding| { finding.reason.contains("body_present=false") }));
         Ok(())
+    }
+
+    #[test]
+    fn candidate_only_lanes_cannot_emit_inline_comments() {
+        let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+        let line_map = right_side_diff_lines(patch);
+        let lane = model_lane(
+            "source-route-fast",
+            "Fast source-route candidate generation",
+            &["tokmd", "ast-grep"],
+            "Generate candidate-only public API route and helper caller gaps.",
+        );
+        let output = LaneModelOutput {
+            summary: None,
+            inline_comments: vec![ModelCandidateComment {
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                body: "[source-route-fast] This is line-valid but must stay candidate-only."
+                    .to_owned(),
+                evidence: "diff hunk".to_owned(),
+            }],
+            summary_only_findings: Vec::new(),
+        };
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+
+        apply_model_output(
+            &lane,
+            output,
+            &line_map,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
+
+        assert!(inline_comments.is_empty());
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(summary_only_findings[0].lane, "source-route-fast");
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .contains("candidate-only lane emitted inline candidate")
+        );
+        assert_eq!(summary_only_findings[0].evidence, "diff hunk");
     }
 
     #[test]
