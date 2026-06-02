@@ -86,13 +86,22 @@ jobs:
           test "$POST_STDERR_PATH" = "target/ub-review-smoke/review/post-stderr.txt"
 
           test -f "$SUMMARY_PATH"
-          test -f "$GITHUB_REVIEW_PATH"
+          GITHUB_REVIEW_SKIP_PATH="${GITHUB_REVIEW_PATH%.json}-skip.json"
+          test -f "$GITHUB_REVIEW_PATH" || test -f "$GITHUB_REVIEW_SKIP_PATH"
+          if [[ -f "$GITHUB_REVIEW_PATH" && -f "$GITHUB_REVIEW_SKIP_PATH" ]]; then
+            echo "::error::both github review payload and skip receipt exist"
+            exit 1
+          fi
 
           if [[ "$EXPECT_REVIEW_POST" == "true" ]]; then
             test -f "$POST_RESULT_PATH"
-            test -f "$POST_PAYLOAD_PATH"
-            test -f "$POST_STDOUT_PATH"
-            test -f "$POST_STDERR_PATH"
+            if [[ -f "$GITHUB_REVIEW_PATH" ]]; then
+              test -f "$POST_PAYLOAD_PATH"
+              test -f "$POST_STDOUT_PATH"
+              test -f "$POST_STDERR_PATH"
+            else
+              python -c 'import json,sys; from pathlib import Path; receipt=json.loads(Path(sys.argv[1]).read_text()); assert receipt.get("status") == "skipped", receipt' "$POST_RESULT_PATH"
+            fi
           else
             test -f "$POST_RESULT_PATH" || test -f "$POST_ERROR_PATH"
           fi

@@ -404,6 +404,20 @@ struct PostResultReceipt {
     response: serde_json::Value,
 }
 
+#[derive(Debug, Serialize)]
+struct GitHubReviewSkipReceipt {
+    schema_version: u32,
+    status: String,
+    reason: String,
+    review_payload_status: String,
+    github_review_json: String,
+    model_mode: String,
+    inline_comments: usize,
+    summary_only_findings: usize,
+    missing_or_failed_sensor_evidence: usize,
+    missing_or_failed_model_evidence: usize,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 struct Config {
@@ -1362,6 +1376,19 @@ fn cmd_summary(args: SummaryArgs) -> Result<()> {
 
 fn cmd_post(args: PostArgs) -> Result<()> {
     fs::create_dir_all(&args.out)?;
+    if !args.review_json.exists()
+        && let Some(skip) = read_github_review_skip_receipt(&args.review_json)
+    {
+        fs::write(
+            args.out.join("post-result.json"),
+            serde_json::to_vec_pretty(&skip)?,
+        )?;
+        println!(
+            "skipped GitHub review post; wrote {}/post-result.json",
+            args.out.display()
+        );
+        return Ok(());
+    }
     match post_github_review(&args) {
         Ok(value) => {
             fs::write(
@@ -1388,6 +1415,12 @@ fn cmd_post(args: PostArgs) -> Result<()> {
             }
         }
     }
+}
+
+fn read_github_review_skip_receipt(review_json: &Path) -> Option<serde_json::Value> {
+    let skip_path = github_review_skip_path(review_json);
+    let text = fs::read_to_string(skip_path).ok()?;
+    serde_json::from_str(&text).ok()
 }
 
 fn build_post_error_receipt(args: &PostArgs, err: &anyhow::Error) -> PostErrorReceipt {
@@ -2509,6 +2542,13 @@ fn write_review_artifacts(
             })
             .collect(),
     };
+    let should_prepare_github_review =
+        should_prepare_github_review_payload(args, &inline_comments, &summary_only_findings);
+    let review_payload_status = if should_prepare_github_review {
+        "prepared"
+    } else {
+        "skipped_empty_smoke"
+    };
     let review = ReviewArtifacts {
         shared_context_id,
         mode: args.mode.key().to_owned(),
@@ -2533,7 +2573,19 @@ fn write_review_artifacts(
     };
     let observations = build_observations(&review);
     write_observation_artifacts(out, &observations)?;
-    let metrics = build_review_metrics(out, diff, plan, &review, &github_review, elapsed);
+    let metrics = build_review_metrics(
+        out,
+        diff,
+        plan,
+        &review,
+        if should_prepare_github_review {
+            Some(&github_review)
+        } else {
+            None
+        },
+        review_payload_status,
+        elapsed,
+    );
 
     fs::write(
         review_dir.join("review.json"),
@@ -2548,8 +2600,30 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&review.provider_preflights)?,
     )?;
     fs::write(review_dir.join("review.md"), artifact_body)?;
-    write_github_review_payload(&review_dir, &github_review, &line_map)?;
+    if should_prepare_github_review {
+        write_github_review_payload(&review_dir, &github_review, &line_map)?;
+    } else {
+        write_github_review_skip_receipt(
+            &review_dir,
+            build_github_review_skip_receipt(
+                args,
+                &review,
+                "No reviewer-facing findings, verification questions, residual risk, or model review ran; diagnostics remain in artifacts.",
+            ),
+        )?;
+    }
     Ok(())
+}
+
+fn should_prepare_github_review_payload(
+    args: &RunArgs,
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+) -> bool {
+    if has_reviewer_value(inline_comments, summary_only_findings) {
+        return true;
+    }
+    !matches!(args.model_mode, ModelMode::Off)
 }
 
 fn write_github_review_payload(
@@ -2574,7 +2648,8 @@ fn build_review_metrics(
     diff: &DiffContext,
     plan: &Plan,
     review: &ReviewArtifacts,
-    github_review: &GitHubReview,
+    github_review: Option<&GitHubReview>,
+    review_payload_status: &str,
     elapsed: Duration,
 ) -> ReviewMetrics {
     let sensor_statuses = plan
@@ -2640,7 +2715,7 @@ fn build_review_metrics(
                 .count(),
         },
         inline_comments: review.inline_comments.len(),
-        github_review_comments: github_review.comments.len(),
+        github_review_comments: github_review.map_or(0, |review| review.comments.len()),
         summary_only_findings: review.summary_only_findings.len(),
         off_diff_candidates_rejected: review
             .summary_only_findings
@@ -2654,15 +2729,14 @@ fn build_review_metrics(
             .iter()
             .filter(|receipt| is_model_evidence_issue(&receipt.status))
             .count(),
-        review_payload_status: "prepared".to_owned(),
+        review_payload_status: review_payload_status.to_owned(),
         post_status: "not_attempted_by_run".to_owned(),
         review_body_bytes: review.body.len(),
         artifact_review_body_bytes: review.body.len(),
-        github_review_body_bytes: github_review.body.len(),
+        github_review_body_bytes: github_review.map_or(0, |review| review.body.len()),
         review_body_truncated: review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim()),
         github_review_body_truncated: github_review
-            .body
-            .contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim()),
+            .is_some_and(|review| review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim())),
     }
 }
 
@@ -2899,6 +2973,47 @@ fn model_call_attempted_status(status: &str) -> bool {
             | "auth_failed"
             | "bad_envelope"
     )
+}
+
+fn write_github_review_skip_receipt(
+    review_dir: &Path,
+    receipt: GitHubReviewSkipReceipt,
+) -> Result<()> {
+    let review_json = review_dir.join("github-review.json");
+    if review_json.exists() {
+        fs::remove_file(&review_json)?;
+    }
+    fs::write(
+        github_review_skip_path(&review_json),
+        serde_json::to_vec_pretty(&receipt)?,
+    )?;
+    Ok(())
+}
+
+fn build_github_review_skip_receipt(
+    args: &RunArgs,
+    review: &ReviewArtifacts,
+    reason: &str,
+) -> GitHubReviewSkipReceipt {
+    GitHubReviewSkipReceipt {
+        schema_version: 1,
+        status: "skipped".to_owned(),
+        reason: reason.to_owned(),
+        review_payload_status: "skipped_empty_smoke".to_owned(),
+        github_review_json: "review/github-review.json".to_owned(),
+        model_mode: args.model_mode.key().to_owned(),
+        inline_comments: review.inline_comments.len(),
+        summary_only_findings: review.summary_only_findings.len(),
+        missing_or_failed_sensor_evidence: review.missing_or_failed_sensor_evidence.len(),
+        missing_or_failed_model_evidence: review.missing_or_failed_model_evidence.len(),
+    }
+}
+
+fn github_review_skip_path(review_json: &Path) -> PathBuf {
+    review_json
+        .parent()
+        .map(|dir| dir.join("github-review-skip.json"))
+        .unwrap_or_else(|| PathBuf::from("github-review-skip.json"))
 }
 
 fn render_shared_context(
@@ -4566,6 +4681,19 @@ fn render_review_body(
     review_body_max_bytes: usize,
     audience: ReviewBodyAudience,
 ) -> String {
+    if matches!(audience, ReviewBodyAudience::PullRequest) {
+        return render_pull_request_review_body(
+            shared_context_id,
+            plan,
+            diff,
+            missing_or_failed_sensor_evidence,
+            missing_or_failed_model_evidence,
+            inline_comments,
+            summary_only_findings,
+            review_body_max_bytes,
+        );
+    }
+
     let mut text = String::new();
     text.push_str("# UB Review\n\n");
     text.push_str(&format!("- Shared context: `{shared_context_id}`\n"));
@@ -4702,6 +4830,192 @@ fn render_review_body(
     cap_review_body(text, review_body_max_bytes)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn render_pull_request_review_body(
+    shared_context_id: &str,
+    plan: &Plan,
+    diff: &DiffContext,
+    missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
+    missing_or_failed_model_evidence: &[ModelEvidenceIssue],
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+    review_body_max_bytes: usize,
+) -> String {
+    let mut text = String::new();
+    let parked = summary_only_findings
+        .iter()
+        .filter(|finding| is_parked_follow_up(finding))
+        .collect::<Vec<_>>();
+    let verification_questions = summary_only_findings
+        .iter()
+        .filter(|finding| !is_parked_follow_up(finding) && is_verification_question(finding))
+        .collect::<Vec<_>>();
+    let summary_concerns = summary_only_findings
+        .iter()
+        .filter(|finding| !is_parked_follow_up(finding) && !is_verification_question(finding))
+        .collect::<Vec<_>>();
+
+    text.push_str("# UB Review\n\n");
+    text.push_str(&format!("- Shared context: `{shared_context_id}`\n"));
+    text.push_str(&format!("- Profile: `{}`\n", plan.profile_name));
+    text.push_str(&format!(
+        "- Changed files: `{}`\n",
+        diff.changed_files.len()
+    ));
+    text.push_str(&format!("- Inline comments: `{}`\n", inline_comments.len()));
+
+    text.push_str("\n## Decision\n\n");
+    text.push_str("- ");
+    if has_actionable_review_finding(inline_comments, summary_only_findings) {
+        text.push_str(
+            "Needs reviewer attention before upstream: grounded findings or verification concerns remain.\n",
+        );
+    } else if !missing_or_failed_sensor_evidence.is_empty()
+        || !missing_or_failed_model_evidence.is_empty()
+    {
+        text.push_str(
+            "No review findings were produced in this degraded pass; unavailable evidence is listed below.\n",
+        );
+    } else {
+        text.push_str(
+            "No blocking finding from this review pass; residual risk remains for human review.\n",
+        );
+    }
+
+    if inline_comments.is_empty()
+        && verification_questions.is_empty()
+        && summary_concerns.is_empty()
+        && parked.is_empty()
+    {
+        text.push_str("\n## Review result\n\n");
+        text.push_str(
+            "- No validated code findings or verification questions survived this run.\n",
+        );
+    }
+
+    if !inline_comments.is_empty() {
+        text.push_str("\n## Findings\n\n");
+        for comment in inline_comments {
+            text.push_str(&format!(
+                "- `[{}]` `{}` `{}` at `{}`:{}: {} Evidence: {}\n",
+                comment.lane,
+                comment.severity,
+                comment.confidence,
+                comment.path,
+                comment.line,
+                escape_md(&comment.body),
+                escape_md(&comment.evidence)
+            ));
+        }
+    }
+
+    if !verification_questions.is_empty() {
+        text.push_str("\n## Verification questions\n\n");
+        for finding in verification_questions {
+            text.push_str(&format!(
+                "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
+                finding.lane,
+                finding.severity,
+                finding.confidence,
+                escape_md(&finding.reason),
+                escape_md(&finding.evidence)
+            ));
+        }
+    }
+
+    if !summary_concerns.is_empty() {
+        text.push_str("\n## Summary-only concerns\n\n");
+        for finding in summary_concerns {
+            text.push_str(&format!(
+                "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
+                finding.lane,
+                finding.severity,
+                finding.confidence,
+                escape_md(&finding.reason),
+                escape_md(&finding.evidence)
+            ));
+        }
+    }
+
+    if !parked.is_empty() {
+        text.push_str("\n## Parked follow-ups\n\n");
+        for finding in parked {
+            text.push_str(&format!(
+                "- `[{}]` {} Evidence: {}\n",
+                finding.lane,
+                escape_md(&finding.reason),
+                escape_md(&finding.evidence)
+            ));
+        }
+    }
+
+    text.push_str("\n## Residual risk\n\n");
+    text.push_str("- A human should still inspect unsafe/native seams, test-oracle strength, and any unavailable evidence before relying on this review.\n");
+
+    if !missing_or_failed_sensor_evidence.is_empty() || !missing_or_failed_model_evidence.is_empty()
+    {
+        text.push_str("\n## Missing evidence\n\n");
+        render_compact_missing_evidence(
+            &mut text,
+            missing_or_failed_sensor_evidence,
+            missing_or_failed_model_evidence,
+        );
+    }
+
+    cap_review_body(text, review_body_max_bytes)
+}
+
+fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
+    let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
+    text.contains("verify")
+        || text.contains("verification")
+        || text.contains("confirm")
+        || text.contains("question")
+        || text.contains("witness")
+        || text.contains("red/green")
+        || text.contains("proof")
+}
+
+fn render_compact_missing_evidence(
+    text: &mut String,
+    sensor_issues: &[SensorEvidenceIssue],
+    model_issues: &[ModelEvidenceIssue],
+) {
+    text.push_str(&format!(
+        "- Review confidence is reduced: `{}` sensor evidence item(s) and `{}` model evidence item(s) were unavailable. Full setup diagnostics are in the review artifacts.\n",
+        sensor_issues.len(),
+        model_issues.len()
+    ));
+    for issue in sensor_issues.iter().take(4) {
+        text.push_str(&format!(
+            "- Sensor `{}` unavailable: `{}` - {}\n",
+            issue.sensor,
+            issue.status,
+            escape_md(&issue.reason)
+        ));
+    }
+    if sensor_issues.len() > 4 {
+        text.push_str(&format!(
+            "- `{}` additional sensor evidence item(s) omitted from the PR body.\n",
+            sensor_issues.len() - 4
+        ));
+    }
+    for issue in model_issues.iter().take(4) {
+        text.push_str(&format!(
+            "- Model lane `{}` unavailable: `{}` - {}\n",
+            issue.lane,
+            issue.status,
+            escape_md(&issue.reason)
+        ));
+    }
+    if model_issues.len() > 4 {
+        text.push_str(&format!(
+            "- `{}` additional model evidence item(s) omitted from the PR body.\n",
+            model_issues.len() - 4
+        ));
+    }
+}
+
 fn review_decision(
     missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
@@ -4729,6 +5043,13 @@ fn has_actionable_review_finding(
         || summary_only_findings
             .iter()
             .any(|finding| matches!(finding.severity.as_str(), "blocker" | "high" | "medium"))
+}
+
+fn has_reviewer_value(
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+) -> bool {
+    !inline_comments.is_empty() || !summary_only_findings.is_empty()
 }
 
 fn is_parked_follow_up(finding: &SummaryOnlyFinding) -> bool {
@@ -6384,18 +6705,18 @@ mod tests {
         RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
         ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_observations, build_review_metrics, cap_review_body, classify_diff,
+        build_observations, build_review_metrics, cap_review_body, classify_diff, cmd_post,
         collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, opencode_canary_spec,
-        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
-        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, split_curl_http_status,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
-        write_review_artifacts, write_sensor_status,
+        extract_model_content, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        opencode_canary_spec, provider_spec_for_lane_with_key_state, render_ledger_context,
+        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
+        split_curl_http_status, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        write_observation_artifacts, write_review_artifacts, write_sensor_status,
     };
 
     #[test]
@@ -7368,6 +7689,45 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn post_command_accepts_explicit_skip_receipt_without_token() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_json = temp.path().join("review").join("github-review.json");
+        let review_dir = review_json
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("review json parent missing"))?;
+        fs::create_dir_all(review_dir)?;
+        fs::write(
+            github_review_skip_path(&review_json),
+            serde_json::json!({
+                "schema_version": 1,
+                "status": "skipped",
+                "reason": "empty smoke review",
+                "review_payload_status": "skipped_empty_smoke"
+            })
+            .to_string(),
+        )?;
+        let args = PostArgs {
+            review_json,
+            diff_patch: None,
+            out: temp.path().join("post"),
+            github_token: None,
+            repo: None,
+            pull_number: None,
+            github_api_url: "https://api.github.com".to_owned(),
+            fail_on_post_error: true,
+        };
+
+        cmd_post(args)?;
+
+        let result: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("post/post-result.json"))?)?;
+        assert_eq!(result["status"], "skipped");
+        assert_eq!(result["review_payload_status"], "skipped_empty_smoke");
+        assert!(!temp.path().join("post/post-error.json").exists());
+        Ok(())
+    }
+
+    #[test]
     fn ledger_context_reads_configured_file_bounded() -> Result<()> {
         let temp = tempfile::tempdir()?;
         fs::write(
@@ -7794,17 +8154,17 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Decision"));
-        assert!(body.contains("evidence is incomplete"));
-        assert!(body.contains("## Confirmed findings"));
-        assert!(body.contains("## Summary-only findings"));
-        assert!(body.contains("## Failed objections"));
+        assert!(body.contains("degraded pass"));
+        assert!(body.contains("## Review result"));
         assert!(body.contains("## Residual risk"));
-        assert!(body.contains("## Parked follow-ups"));
-        assert!(body.contains("## Missing or failed evidence"));
-        assert!(body.contains("Sensor `ripr`: `missing` - command not found"));
+        assert!(body.contains("## Missing evidence"));
+        assert!(body.contains("Sensor `ripr` unavailable: `missing` - command not found"));
         assert!(body.contains("rate_limited"));
         assert!(!body.contains("## Model lanes"));
-        assert!(body.contains("## No blocking finding after checking"));
+        assert!(!body.contains("## Confirmed findings"));
+        assert!(!body.contains("## Summary-only findings"));
+        assert!(!body.contains("## Failed objections"));
+        assert!(!body.contains("## No blocking finding after checking"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -7854,7 +8214,7 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn review_artifacts_split_pr_body_from_artifact_body() -> Result<()> {
+    fn model_off_empty_smoke_writes_skip_receipt_instead_of_review_payload() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
         let config = Config::default();
@@ -7874,29 +8234,30 @@ UB_REVIEW_HTTP_STATUS:429
             std::time::Duration::from_secs(73),
         )?;
 
-        let github_review: GitHubReview =
-            serde_json::from_slice(&fs::read(out.join("review/github-review.json"))?)?;
         let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
         let metrics: serde_json::Value =
             serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+        let skip: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/github-review-skip.json"))?)?;
         let summary = render_summary(&out, &plan, &diff)?;
 
-        assert!(!github_review.body.contains("## Model lanes"));
+        assert!(!out.join("review/github-review.json").exists());
         assert!(artifact_body.contains("## Model lanes"));
         assert!(artifact_body.contains("Lane: `ub-memory-lifetime`"));
+        assert_eq!(skip["status"], "skipped");
+        assert_eq!(skip["review_payload_status"], "skipped_empty_smoke");
         assert_eq!(metrics["wall_clock_seconds"], 73);
         assert_eq!(metrics["wall_clock_ms"], 73_000);
-        assert_eq!(metrics["review_payload_status"], "prepared");
+        assert_eq!(metrics["review_payload_status"], "skipped_empty_smoke");
         assert_eq!(metrics["post_status"], "not_attempted_by_run");
-        assert_eq!(
-            metrics["github_review_body_bytes"],
-            github_review.body.len()
-        );
+        assert_eq!(metrics["github_review_body_bytes"], 0);
+        assert_eq!(metrics["github_review_comments"], 0);
         assert_eq!(metrics["artifact_review_body_bytes"], artifact_body.len());
         assert!(summary.contains("## Review efficiency"));
         assert!(summary.contains("Runtime: `1m13s`"));
-        assert!(summary.contains("Review payload: `prepared`; post: `not_attempted_by_run`"));
-        assert!(!has_standalone_approval_line(&github_review.body));
+        assert!(
+            summary.contains("Review payload: `skipped_empty_smoke`; post: `not_attempted_by_run`")
+        );
         assert!(!has_standalone_approval_line(&artifact_body));
         Ok(())
     }
@@ -7963,7 +8324,8 @@ UB_REVIEW_HTTP_STATUS:429
             &test_diff(),
             &test_plan(Vec::new()),
             &review,
-            &github_review,
+            Some(&github_review),
+            "prepared",
             std::time::Duration::from_secs(601),
         );
 
@@ -8091,7 +8453,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert!(body.contains("## Parked follow-ups"));
         assert!(body.contains("PBKDF2 sibling path is parked as follow-up"));
-        assert!(body.contains("## Summary-only findings"));
+        assert!(!body.contains("## Summary-only findings"));
+        assert!(!body.contains("## Summary-only concerns"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -8126,7 +8489,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "RIPR proof gap excerpt".to_owned(),
             }],
             1_000,
-            ReviewBodyAudience::PullRequest,
+            ReviewBodyAudience::Artifact,
         );
 
         assert!(body.len() <= 1_000);

@@ -142,12 +142,9 @@ fn active_len_tracks_view_after_resize() {
         .ok_or_else(|| anyhow::anyhow!("github review body missing"))?;
     let required_headings = [
         "## Decision",
-        "## Confirmed findings",
-        "## Summary-only findings",
-        "## Failed objections",
+        "## Review result",
         "## Residual risk",
-        "## Parked follow-ups",
-        "## Missing or failed evidence",
+        "## Missing evidence",
     ];
     let mut previous_heading_index = 0;
     for heading in required_headings {
@@ -162,7 +159,15 @@ fn active_len_tracks_view_after_resize() {
         previous_heading_index = heading_index;
     }
     assert!(!github_review_body.contains("## Missing or failed model evidence"));
+    assert!(!github_review_body.contains("## Confirmed findings"));
+    assert!(!github_review_body.contains("## Summary-only findings"));
+    assert!(!github_review_body.contains("## Failed objections"));
+    assert!(!github_review_body.contains("## Model lanes"));
     assert!(!has_standalone_approval_line(github_review_body));
+    let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
+    assert!(artifact_body.contains("## Confirmed findings"));
+    assert!(artifact_body.contains("## Missing or failed evidence"));
+    assert!(artifact_body.contains("## Model lanes"));
     assert_eq!(
         github_review["comments"]
             .as_array()
