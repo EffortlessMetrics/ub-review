@@ -4,6 +4,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]
   workflow_dispatch:
+    inputs:
+      run_model_smoke:
+        description: Run the MiniMax model smoke with repository secrets.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -58,7 +64,7 @@ jobs:
 
   model-smoke:
     name: MiniMax model smoke
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ub-review-model-smoke')
+    if: (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ub-review-model-smoke')) || (github.event_name == 'workflow_dispatch' && inputs.run_model_smoke == true)
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
