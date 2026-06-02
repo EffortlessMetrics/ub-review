@@ -320,6 +320,9 @@ struct PostArgs {
     /// Prepared GitHub review payload.
     #[arg(long, default_value = "target/ub-review/review/github-review.json")]
     review_json: PathBuf,
+    /// Diff patch used to validate RIGHT-side inline comment lines.
+    #[arg(long, env = "UB_REVIEW_DIFF_PATCH")]
+    diff_patch: Option<PathBuf>,
     /// Directory for post-result.json or post-error.json.
     #[arg(long, default_value = "target/ub-review/review")]
     out: PathBuf,
@@ -357,6 +360,11 @@ struct PostErrorReceipt {
     review_event: Option<String>,
     review_body_bytes: Option<usize>,
     review_comment_count: Option<usize>,
+    diff_patch: String,
+    diff_patch_exists: bool,
+    diff_patch_valid: bool,
+    diff_line_count: Option<usize>,
+    off_diff_comment_count: Option<usize>,
     repo: Option<String>,
     repo_valid: bool,
     pull_number: Option<u64>,
@@ -1312,7 +1320,7 @@ fn cmd_post(args: PostArgs) -> Result<()> {
 }
 
 fn build_post_error_receipt(args: &PostArgs, err: &anyhow::Error) -> PostErrorReceipt {
-    let review_metadata = read_github_review_metadata(&args.review_json);
+    let review_metadata = read_github_review_metadata(args);
     let repo_valid = args.repo.as_deref().is_some_and(is_valid_repo_slug);
     let pull_number = args.pull_number.or_else(detect_pull_number_from_event);
     let token_present = args
@@ -1346,6 +1354,22 @@ fn build_post_error_receipt(args: &PostArgs, err: &anyhow::Error) -> PostErrorRe
         review_event: review_metadata.as_ref().map(|review| review.event.clone()),
         review_body_bytes: review_metadata.as_ref().map(|review| review.body_bytes),
         review_comment_count: review_metadata.as_ref().map(|review| review.comments),
+        diff_patch: review_metadata
+            .as_ref()
+            .map(|review| review.diff_patch.display().to_string())
+            .unwrap_or_else(|| post_diff_patch_path(args).display().to_string()),
+        diff_patch_exists: review_metadata
+            .as_ref()
+            .is_some_and(|review| review.diff_patch_exists),
+        diff_patch_valid: review_metadata
+            .as_ref()
+            .is_some_and(|review| review.diff_patch_valid),
+        diff_line_count: review_metadata
+            .as_ref()
+            .and_then(|review| review.diff_line_count),
+        off_diff_comment_count: review_metadata
+            .as_ref()
+            .and_then(|review| review.off_diff_comment_count),
         repo: args.repo.clone(),
         repo_valid,
         pull_number,
@@ -1401,17 +1425,60 @@ struct GitHubReviewMetadata {
     comments: usize,
     event: String,
     body_bytes: usize,
+    diff_patch: PathBuf,
+    diff_patch_exists: bool,
+    diff_patch_valid: bool,
+    diff_line_count: Option<usize>,
+    off_diff_comment_count: Option<usize>,
 }
 
-fn read_github_review_metadata(path: &Path) -> Option<GitHubReviewMetadata> {
-    let review: GitHubReview = serde_json::from_slice(&fs::read(path).ok()?).ok()?;
-    let valid = validate_github_review_payload(&review).is_ok();
+fn read_github_review_metadata(args: &PostArgs) -> Option<GitHubReviewMetadata> {
+    let review: GitHubReview = serde_json::from_slice(&fs::read(&args.review_json).ok()?).ok()?;
+    let diff_patch = post_diff_patch_path(args);
+    let diff_metadata = review_diff_metadata(&diff_patch, &review);
+    let diff_valid = review.comments.is_empty()
+        || diff_metadata
+            .as_ref()
+            .is_some_and(|metadata| metadata.off_diff_comment_count == 0);
+    let valid = validate_github_review_payload(&review).is_ok() && diff_valid;
     Some(GitHubReviewMetadata {
         valid,
         comments: review.comments.len(),
         event: review.event,
         body_bytes: review.body.len(),
+        diff_patch,
+        diff_patch_exists: diff_metadata.is_some(),
+        diff_patch_valid: diff_metadata.is_some(),
+        diff_line_count: diff_metadata
+            .as_ref()
+            .map(|metadata| metadata.diff_line_count),
+        off_diff_comment_count: diff_metadata.map(|metadata| metadata.off_diff_comment_count),
     })
+}
+
+struct ReviewDiffMetadata {
+    diff_line_count: usize,
+    off_diff_comment_count: usize,
+}
+
+fn review_diff_metadata(diff_patch: &Path, review: &GitHubReview) -> Option<ReviewDiffMetadata> {
+    let patch = fs::read_to_string(diff_patch).ok()?;
+    let right_lines = right_side_diff_lines(&patch);
+    Some(ReviewDiffMetadata {
+        diff_line_count: right_lines.len(),
+        off_diff_comment_count: off_diff_comment_count(review, &right_lines),
+    })
+}
+
+fn off_diff_comment_count(review: &GitHubReview, right_lines: &BTreeSet<(String, u32)>) -> usize {
+    review
+        .comments
+        .iter()
+        .filter(|comment| {
+            let path = normalize_repo_path(&comment.path);
+            !right_lines.contains(&(path, comment.line))
+        })
+        .count()
 }
 
 fn prepare_plan(
@@ -4873,7 +4940,7 @@ fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
             .with_context(|| format!("read {}", args.review_json.display()))?,
     )
     .with_context(|| format!("parse {}", args.review_json.display()))?;
-    validate_github_review_payload(&review)?;
+    validate_github_review_payload_for_post(args, &review)?;
     let post_payload = args.out.join("github-review-post-payload.json");
     fs::write(&post_payload, serde_json::to_vec_pretty(&review)?)?;
     let url = format!(
@@ -4953,6 +5020,48 @@ fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
         }
     }
     Ok(())
+}
+
+fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubReview) -> Result<()> {
+    validate_github_review_payload(review)?;
+    if review.comments.is_empty() {
+        return Ok(());
+    }
+    let diff_patch = post_diff_patch_path(args);
+    let patch = fs::read_to_string(&diff_patch)
+        .with_context(|| format!("read {}", diff_patch.display()))?;
+    let right_lines = right_side_diff_lines(&patch);
+    for comment in &review.comments {
+        let path = normalize_repo_path(&comment.path);
+        if !right_lines.contains(&(path.clone(), comment.line)) {
+            bail!(
+                "github review comment {}:{} is not a valid RIGHT-side diff line in {}",
+                path,
+                comment.line,
+                diff_patch.display()
+            );
+        }
+    }
+    Ok(())
+}
+
+fn post_diff_patch_path(args: &PostArgs) -> PathBuf {
+    if let Some(path) = &args.diff_patch {
+        return path.clone();
+    }
+    if let Some(review_dir) = args.review_json.parent()
+        && review_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "review")
+        && let Some(run_dir) = review_dir.parent()
+    {
+        return run_dir.join("input").join("diff.patch");
+    }
+    args.out
+        .parent()
+        .map(|run_dir| run_dir.join("input").join("diff.patch"))
+        .unwrap_or_else(|| PathBuf::from("target/ub-review/input/diff.patch"))
 }
 
 fn is_repo_relative_path(path: &str) -> bool {
@@ -5805,7 +5914,7 @@ mod tests {
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
         LaneModelOutput, LanePlan, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE,
-        OpenCodeEndpointKindArg, Plan, PostingMode, ProviderKindArg, RefuterDecision,
+        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, ProviderKindArg, RefuterDecision,
         RefuterOutput, RefuterRunContext, ReviewArgs, ReviewInlineComment, RunArgs, RunMode,
         SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
         apply_model_output, apply_refuter_output, cap_review_body, classify_diff,
@@ -5815,8 +5924,9 @@ mod tests {
         model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
         render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
         run_refuter_pass, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_sensor_status,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        write_sensor_status,
     };
 
     #[test]
@@ -6620,6 +6730,72 @@ index 1111111..2222222 100644
             ..ok
         };
         assert!(validate_github_review_payload(&overlong_body).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn github_review_post_payload_requires_recorded_right_diff_line() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff_patch = temp.path().join("diff.patch");
+        fs::write(
+            &diff_patch,
+            "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+",
+        )?;
+        let args = PostArgs {
+            review_json: temp.path().join("github-review.json"),
+            diff_patch: Some(diff_patch),
+            out: temp.path().join("post"),
+            github_token: Some("token".to_owned()),
+            repo: Some("EffortlessMetrics/ub-review".to_owned()),
+            pull_number: Some(1),
+            github_api_url: "https://api.github.com".to_owned(),
+            fail_on_post_error: false,
+        };
+        let ok = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "Review body".to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[tests] This test reaches the helper but not the boundary.".to_owned(),
+            }],
+        };
+        validate_github_review_payload_for_post(&args, &ok)?;
+
+        let stale_line = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                line: 99,
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        let err = validate_github_review_payload_for_post(&args, &stale_line)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly passed diff validation"))?;
+        assert!(err.to_string().contains("not a valid RIGHT-side diff line"));
+
+        let wrong_file = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                path: "src/other.rs".to_owned(),
+                ..ok.comments[0].clone()
+            }],
+            ..ok
+        };
+        let err = validate_github_review_payload_for_post(&args, &wrong_file)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("wrong file unexpectedly passed diff validation"))?;
+        assert!(err.to_string().contains("not a valid RIGHT-side diff line"));
         Ok(())
     }
 

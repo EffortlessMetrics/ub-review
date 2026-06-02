@@ -428,6 +428,104 @@ fn post_receipt_marks_semantically_invalid_review_json_invalid() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn post_receipt_rejects_off_diff_inline_comment_before_payload_write() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let diff_patch = temp.path().join("input/diff.patch");
+    let out = temp.path().join("post");
+    let token = "test-token-redacted";
+    write_file(
+        &diff_patch,
+        "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+",
+    )?;
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "Review body",
+            "comments": [
+                {
+                    "path": "src/lib.rs",
+                    "line": 99,
+                    "side": "RIGHT",
+                    "body": "[tests] This test reaches the helper but not the boundary."
+                }
+            ]
+        }))?,
+    )?;
+
+    run(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--diff-patch",
+            path_str(&diff_patch)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "1",
+            "--github-token",
+            token,
+        ],
+    )?;
+
+    let post_error_path = out.join("post-error.json");
+    assert!(post_error_path.exists());
+    assert!(!out.join("github-review-post-payload.json").exists());
+    let post_error_text = fs::read_to_string(post_error_path)?;
+    let post_error: serde_json::Value = serde_json::from_str(&post_error_text)?;
+    assert_eq!(post_error["status"], "failed");
+    assert_eq!(post_error["error_kind"], "invalid_review_payload");
+    assert_eq!(post_error["failure_stage"], "payload_validation");
+    assert_eq!(post_error["review_json_exists"], true);
+    assert_eq!(post_error["review_json_valid"], false);
+    assert_eq!(post_error["review_event"], "COMMENT");
+    assert_eq!(post_error["review_comment_count"], 1);
+    assert_eq!(post_error["repo_valid"], true);
+    assert_eq!(post_error["pull_number"], 1);
+    assert_eq!(post_error["token_present"], true);
+    assert_eq!(post_error["would_post"], false);
+    assert_eq!(post_error["payload_written"], false);
+    assert_eq!(post_error["diff_patch_exists"], true);
+    assert_eq!(post_error["diff_patch_valid"], true);
+    assert_eq!(post_error["off_diff_comment_count"], 1);
+    assert!(
+        post_error["diff_line_count"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    );
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("not a valid RIGHT-side diff line"))
+    );
+    assert!(
+        post_error["diff_patch"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("diff.patch"))
+    );
+    assert!(!post_error_text.contains(token));
+    assert!(!post_error_text.contains("Authorization"));
+    assert!(!post_error_text.contains("Bearer"));
+    Ok(())
+}
+
 fn write_file(path: &Path, text: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
