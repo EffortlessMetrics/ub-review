@@ -1,0 +1,42 @@
+# Bun-specific GitHub runner profile.
+# Non-posting, no provider tokens, no PR write token. Produces advisory artifacts.
+
+profile = "gh-runner"
+
+[repo]
+ledger = ""
+base = "origin/main"
+head = "HEAD"
+
+[review]
+posting_engine = "artifact"
+custom_poster = false
+ban_standalone_approval = true
+require_zero_finding_audit = true
+enable_default_lanes = true
+
+# Keep the first GH-runner pass lean. Missing commands are already treated as
+# explicit missing evidence, but disabling uncommon tools keeps the plan quieter.
+[tools.semgrep]
+enabled = false
+
+[tools.osv-scanner]
+enabled = false
+
+[tools.cargo-audit]
+enabled = false
+
+[tools.cargo-deny]
+enabled = false
+
+[tools.shellcheck]
+enabled = false
+
+[tools.cppcheck]
+enabled = false
+
+[tools.zizmor]
+enabled = false
+
+[tools.gitleaks]
+enabled = false

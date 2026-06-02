@@ -1,0 +1,12 @@
+{
+  "id": "msg-test-opencode-go-m3",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"summary\":\"opencode go m3 ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+    }
+  ],
+  "stop_reason": "end_turn"
+}

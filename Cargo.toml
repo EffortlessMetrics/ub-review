@@ -1,0 +1,39 @@
+[package]
+name = "ub-review"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "No-token evidence packet runner for UB-focused PR review."
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/EffortlessMetrics/ub-review"
+readme = "README.md"
+keywords = ["review", "rust", "pr", "ub", "ci"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive", "env"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+sha2 = "0.10"
+toml = "0.9"
+wait-timeout = "0.2"
+
+[dev-dependencies]
+tempfile = "3.12"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+
+[[bin]]
+name = "ub-review"
+path = "src/main.rs"

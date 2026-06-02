@@ -1,0 +1,12 @@
+{
+  "id": "msg-test-minimax",
+  "type": "message",
+  "role": "assistant",
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"summary\":\"m3 ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+    }
+  ],
+  "stop_reason": "end_turn"
+}

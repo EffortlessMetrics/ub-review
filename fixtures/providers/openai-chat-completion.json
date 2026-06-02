@@ -1,0 +1,14 @@
+{
+  "id": "chatcmpl-test-openai",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"summary\":\"openai ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

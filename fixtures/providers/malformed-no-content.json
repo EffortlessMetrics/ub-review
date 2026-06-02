@@ -1,0 +1,5 @@
+{
+  "id": "bad-envelope",
+  "object": "chat.completion",
+  "choices": []
+}

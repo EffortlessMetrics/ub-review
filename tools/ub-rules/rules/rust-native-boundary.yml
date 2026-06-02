@@ -1,0 +1,11 @@
+id: rust-native-boundary-raw-pointer
+language: Rust
+message: Raw pointer / native-boundary pattern in changed Rust code. Route to ub/security lanes.
+severity: warning
+rule:
+  any:
+    - pattern: unsafe { $$$ }
+    - pattern: $X.as_ptr()
+    - pattern: $X.as_mut_ptr()
+    - pattern: std::slice::from_raw_parts($$$)
+    - pattern: std::slice::from_raw_parts_mut($$$)
