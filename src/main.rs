@@ -3073,11 +3073,22 @@ fn model_assignments(plan: &Plan, args: &RunArgs) -> Vec<ModelAssignment> {
 }
 
 fn provider_spec_for_lane(lane: &LanePlan, args: &RunArgs) -> ProviderSpec {
+    provider_spec_for_lane_with_key_state(
+        lane,
+        args,
+        model_api_key_present(ModelProvider::OpenCodeGo),
+    )
+}
+
+fn provider_spec_for_lane_with_key_state(
+    lane: &LanePlan,
+    args: &RunArgs,
+    opencode_key_present: bool,
+) -> ProviderSpec {
     match args.provider_policy {
         ModelProviderPolicy::MinimaxOnly => direct_minimax_spec(args),
         ModelProviderPolicy::Auto | ModelProviderPolicy::MinimaxPrimary
-            if lane.id == "opposition"
-                && std::env::var_os("UB_REVIEW_OPENCODE_API_KEY").is_some() =>
+            if lane.id == "opposition" && opencode_key_present =>
         {
             opencode_canary_spec(args)
         }
@@ -3171,7 +3182,7 @@ fn build_model_lane_receipts(
                 ModelMode::Off => ("skipped", "model-mode off".to_owned()),
                 ModelMode::Auto => {
                     let primary_env = model_api_key_env(spec.provider);
-                    if std::env::var_os(primary_env).is_some() {
+                    if env_value_present(primary_env) {
                         (
                             "planned",
                             format!(
@@ -3181,7 +3192,7 @@ fn build_model_lane_receipts(
                         )
                     } else if let Some(fallback) = &assignment.fallback {
                         let fallback_env = model_api_key_env(fallback.provider);
-                        if std::env::var_os(fallback_env).is_some() {
+                        if env_value_present(fallback_env) {
                             (
                                 "planned",
                                 format!(
@@ -3241,7 +3252,7 @@ fn build_provider_preflight_receipts(
                 ModelMode::Off => ("skipped", "model-mode off".to_owned()),
                 ModelMode::Auto => {
                     let env_name = model_api_key_env(spec.provider);
-                    if std::env::var_os(env_name).is_some() {
+                    if env_value_present(env_name) {
                         ("planned", format!("{env_name} present; preflight planned"))
                     } else {
                         (
@@ -3475,7 +3486,7 @@ fn run_available_model_lanes(
             receipt.model = spec.model.clone();
             receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             let env_name = model_api_key_env(spec.provider);
-            if std::env::var_os(env_name).is_none() {
+            if !env_value_present(env_name) {
                 receipt.status = "missing_key".to_owned();
                 receipt.reason = format!(
                     "{env_name} not provided; {} lane output unavailable",
@@ -3644,7 +3655,7 @@ fn run_refuter_pass(
         return Ok(());
     }
     let env_name = model_api_key_env(spec.provider);
-    if std::env::var_os(env_name).is_none() {
+    if !env_value_present(env_name) {
         receipt.status = "missing_key".to_owned();
         receipt.reason = format!("{env_name} not provided; refuter output unavailable");
         missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
@@ -3904,7 +3915,7 @@ where
     T: DeserializeOwned,
 {
     let env_name = model_api_key_env(spec.provider);
-    let token = std::env::var(env_name).with_context(|| format!("{env_name} missing"))?;
+    let token = env_value(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
     let auth_header = model_auth_header(spec, &token);
     let payload = model_request_payload(spec, prompt);
@@ -4630,6 +4641,21 @@ fn model_api_key_env(provider: ModelProvider) -> &'static str {
         ModelProvider::MiniMaxDirect => "UB_REVIEW_MINIMAX_API_KEY",
         ModelProvider::OpenCodeGo => "UB_REVIEW_OPENCODE_API_KEY",
     }
+}
+
+fn model_api_key_present(provider: ModelProvider) -> bool {
+    env_value_present(model_api_key_env(provider))
+}
+
+fn env_value_present(name: &str) -> bool {
+    env_value(name).is_some()
+}
+
+fn env_value(name: &str) -> Option<String> {
+    std::env::var(name)
+        .ok()
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 fn model_api_url(spec: &ProviderSpec) -> String {
@@ -6003,8 +6029,9 @@ mod tests {
         collect_sensor_evidence_issues, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, http_status_from_error, is_model_receipt_evidence_issue,
         model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
-        render_review_body, render_summary, right_side_diff_lines, run_available_model_lanes,
+        model_request_payload, model_response_shape, opencode_canary_spec,
+        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
+        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
         run_command_to_files, run_refuter_pass, run_sensor, split_curl_http_status,
         validate_github_review_payload, validate_github_review_payload_for_post,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
@@ -7068,6 +7095,23 @@ index 1111111..2222222 100644
             assignment.lane.id == "security"
                 && assignment.spec.provider == ModelProvider::MiniMaxDirect
         }));
+        Ok(())
+    }
+
+    #[test]
+    fn minimax_primary_ignores_empty_opencode_key() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::MinimaxPrimary;
+        args.lane_width = 10;
+        let opposition_lane = review_lanes_for_args(&test_plan(Vec::new()), &args)
+            .into_iter()
+            .find(|lane| lane.id == "opposition")
+            .ok_or_else(|| anyhow::anyhow!("opposition lane missing"))?;
+
+        let spec = provider_spec_for_lane_with_key_state(&opposition_lane, &args, false);
+
+        assert_eq!(spec.provider, ModelProvider::MiniMaxDirect);
+        assert_eq!(spec.model, "MiniMax-M3");
         Ok(())
     }
 
