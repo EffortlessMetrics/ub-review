@@ -3367,6 +3367,11 @@ fn run_refuter_pass(
         if is_model_receipt_evidence_issue(&receipt) {
             missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
         }
+        demote_inline_candidates_for_refuter_unavailable(
+            &receipt.reason,
+            inline_comments,
+            summary_only_findings,
+        );
         model_lanes.push(receipt);
         return Ok(());
     }
@@ -3375,6 +3380,11 @@ fn run_refuter_pass(
         receipt.reason = provider_preflight_reason(&spec, context.provider_preflights)
             .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
         missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        demote_inline_candidates_for_refuter_unavailable(
+            &receipt.reason,
+            inline_comments,
+            summary_only_findings,
+        );
         model_lanes.push(receipt);
         return Ok(());
     }
@@ -3383,6 +3393,11 @@ fn run_refuter_pass(
         receipt.status = "missing_key".to_owned();
         receipt.reason = format!("{env_name} not provided; refuter output unavailable");
         missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        demote_inline_candidates_for_refuter_unavailable(
+            &receipt.reason,
+            inline_comments,
+            summary_only_findings,
+        );
         model_lanes.push(receipt);
         return Ok(());
     }
@@ -3411,10 +3426,28 @@ fn run_refuter_pass(
             receipt.reason = format!("{err:#}");
             receipt.http_status = http_status_from_error(&err);
             missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+            demote_inline_candidates_for_refuter_unavailable(
+                &receipt.reason,
+                inline_comments,
+                summary_only_findings,
+            );
         }
     }
     model_lanes.push(receipt);
     Ok(())
+}
+
+fn demote_inline_candidates_for_refuter_unavailable(
+    reason: &str,
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+) {
+    for comment in std::mem::take(inline_comments) {
+        summary_only_findings.push(summary_from_refuted_inline(
+            comment,
+            &format!("refuter unavailable; candidate kept summary-only: {reason}"),
+        ));
+    }
 }
 
 fn call_model_refuter(
@@ -5388,16 +5421,16 @@ mod tests {
         LaneModelOutput, LanePlan, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelMode, ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE,
         OpenCodeEndpointKindArg, Plan, PostingMode, ProviderKindArg, RefuterDecision,
-        RefuterOutput, ReviewArgs, ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_refuter_output,
-        cap_review_body, classify_diff, collect_sensor_evidence_issues, dedupe_inline_comments,
-        default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_request_payload, model_response_shape, opencode_canary_spec,
-        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
-        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        write_sensor_status,
+        RefuterOutput, RefuterRunContext, ReviewArgs, ReviewInlineComment, RunArgs, RunMode,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
+        apply_refuter_output, cap_review_body, classify_diff, collect_sensor_evidence_issues,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_request_payload, model_response_shape,
+        opencode_canary_spec, render_ledger_context, render_review_body, render_summary,
+        right_side_diff_lines, run_command_to_files, run_refuter_pass, run_sensor,
+        split_curl_http_status, validate_github_review_payload, validate_inline_candidate,
+        validate_run_args, validate_summary_only_candidate, write_sensor_status,
     };
 
     #[test]
@@ -5887,6 +5920,63 @@ index 1111111..2222222 100644
                 .iter()
                 .any(|finding| finding.reason.contains("returned no decision"))
         );
+    }
+
+    #[test]
+    fn refuter_unavailable_demotes_pending_inline_candidates() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 3;
+        let mut model_lanes = Vec::new();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
+            evidence: "ripr excerpt".to_owned(),
+        }];
+        let mut summary_only_findings = Vec::new();
+
+        run_refuter_pass(
+            RefuterRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                provider_preflights: &[],
+                shared_context: "shared context",
+                args: &args,
+                model_calls_used: 3,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        )?;
+
+        assert!(inline_comments.is_empty());
+        assert_eq!(summary_only_findings.len(), 1);
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .contains("refuter unavailable")
+        );
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .contains("model call budget exhausted before refuter pass")
+        );
+        assert_eq!(model_lanes.len(), 1);
+        assert_eq!(model_lanes[0].lane, "refuter");
+        assert_eq!(model_lanes[0].status, "skipped");
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
+        assert_eq!(
+            missing_or_failed_model_evidence[0].reason,
+            "model call budget exhausted before refuter pass"
+        );
+        Ok(())
     }
 
     #[test]
