@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use wait_timeout::ChildExt;
@@ -648,6 +649,21 @@ struct ModelCandidateFinding {
     evidence: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct RefuterOutput {
+    #[serde(default)]
+    decisions: Vec<RefuterDecision>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RefuterDecision {
+    path: String,
+    line: u32,
+    disposition: String,
+    confidence: Option<String>,
+    reason: String,
+}
+
 #[derive(Serialize)]
 struct Event<'a, T> {
     ts: DateTime<Utc>,
@@ -691,6 +707,15 @@ struct ModelRunContext<'a> {
     shared_context: &'a str,
     args: &'a RunArgs,
     line_map: &'a BTreeSet<(String, u32)>,
+}
+
+struct RefuterRunContext<'a> {
+    root: &'a Path,
+    review_dir: &'a Path,
+    provider_preflights: &'a [ProviderPreflightReceipt],
+    shared_context: &'a str,
+    args: &'a RunArgs,
+    model_calls_used: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -748,8 +773,8 @@ impl ProviderSpec {
     }
 }
 
-struct ModelCallOutcome {
-    output: LaneModelOutput,
+struct ModelCallOutcome<T> {
+    output: T,
     duration_ms: u128,
     http_status: Option<u16>,
     response_shape: String,
@@ -2053,7 +2078,7 @@ fn write_review_artifacts(
             &provider_preflights,
             &mut missing_or_failed_model_evidence,
         );
-        run_available_model_lanes(
+        let model_calls_used = run_available_model_lanes(
             ModelRunContext {
                 root,
                 review_dir: &review_dir,
@@ -2068,9 +2093,22 @@ fn write_review_artifacts(
             &mut inline_comments,
             &mut summary_only_findings,
         )?;
+        dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+        run_refuter_pass(
+            RefuterRunContext {
+                root,
+                review_dir: &review_dir,
+                provider_preflights: &provider_preflights,
+                shared_context: &shared_context,
+                args,
+                model_calls_used,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        )?;
     }
-
-    dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
 
     let body = render_review_body(
         &shared_context_id,
@@ -2891,7 +2929,7 @@ fn run_available_model_lanes(
     missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
     inline_comments: &mut Vec<ReviewInlineComment>,
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
-) -> Result<()> {
+) -> Result<usize> {
     let model_dir = context.review_dir.join("model");
     fs::create_dir_all(&model_dir)?;
     let mut calls = 0usize;
@@ -2976,7 +3014,206 @@ fn run_available_model_lanes(
                 "model call budget or inline comment cap reached before lane execution".to_owned();
         }
     }
+    Ok(calls)
+}
+
+fn run_refuter_pass(
+    context: RefuterRunContext<'_>,
+    model_lanes: &mut Vec<ModelLaneReceipt>,
+    missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+) -> Result<()> {
+    let spec = direct_minimax_spec(context.args);
+    let mut receipt = ModelLaneReceipt {
+        lane: "refuter".to_owned(),
+        provider: spec.provider.key().to_owned(),
+        model: spec.model.clone(),
+        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        status: "planned".to_owned(),
+        reason: "planned M3 refuter pass for validated inline candidates".to_owned(),
+        duration_ms: None,
+        http_status: None,
+        response_shape: None,
+        fallback_from: None,
+    };
+
+    if inline_comments.is_empty() {
+        receipt.status = "skipped".to_owned();
+        receipt.reason = "no inline candidates passed guardrails before refuter".to_owned();
+        model_lanes.push(receipt);
+        return Ok(());
+    }
+    if context.model_calls_used >= context.args.max_model_calls {
+        receipt.status = "skipped".to_owned();
+        receipt.reason = "model call budget exhausted before refuter pass".to_owned();
+        model_lanes.push(receipt);
+        return Ok(());
+    }
+    if !provider_preflight_ok(&spec, context.provider_preflights) {
+        receipt.status = "preflight_failed".to_owned();
+        receipt.reason = provider_preflight_reason(&spec, context.provider_preflights)
+            .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        model_lanes.push(receipt);
+        return Ok(());
+    }
+    let env_name = model_api_key_env(spec.provider);
+    if std::env::var_os(env_name).is_none() {
+        receipt.status = "missing_key".to_owned();
+        receipt.reason = format!("{env_name} not provided; refuter output unavailable");
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        model_lanes.push(receipt);
+        return Ok(());
+    }
+
+    let refuter_dir = context.review_dir.join("model").join("refuter");
+    fs::create_dir_all(&refuter_dir)?;
+    receipt.status = "running".to_owned();
+    match call_model_refuter(
+        context.root,
+        &refuter_dir,
+        &spec,
+        context.shared_context,
+        inline_comments,
+        context.args,
+    ) {
+        Ok(outcome) => {
+            receipt.status = "ok".to_owned();
+            receipt.reason = "completed".to_owned();
+            receipt.duration_ms = Some(outcome.duration_ms);
+            receipt.http_status = outcome.http_status;
+            receipt.response_shape = Some(outcome.response_shape);
+            apply_refuter_output(outcome.output, inline_comments, summary_only_findings);
+        }
+        Err(err) => {
+            receipt.status = classify_model_error(&err);
+            receipt.reason = format!("{err:#}");
+            receipt.http_status = http_status_from_error(&err);
+            missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        }
+    }
+    model_lanes.push(receipt);
     Ok(())
+}
+
+fn call_model_refuter(
+    root: &Path,
+    lane_dir: &Path,
+    spec: &ProviderSpec,
+    shared_context: &str,
+    inline_comments: &[ReviewInlineComment],
+    args: &RunArgs,
+) -> Result<ModelCallOutcome<RefuterOutput>> {
+    let prompt = render_refuter_prompt(shared_context, inline_comments)?;
+    call_model_prompt_typed(root, lane_dir, spec, &prompt, args)
+}
+
+fn render_refuter_prompt(
+    shared_context: &str,
+    inline_comments: &[ReviewInlineComment],
+) -> Result<String> {
+    let candidates = serde_json::to_string_pretty(inline_comments)?;
+    Ok(format!(
+        r#"You are the final refuter for a Bun UB PR review.
+
+Use only the shared context and candidate inline comments below.
+Do not browse. Do not infer safety from missing evidence.
+Return strict JSON only:
+{{
+  "decisions": [
+    {{
+      "path": "repo-relative/path.rs",
+      "line": 123,
+      "disposition": "inline|summary|drop",
+      "confidence": "high|medium-high|medium|low",
+      "reason": "why this candidate should remain inline, move to summary, or be dropped"
+    }}
+  ]
+}}
+
+Rules:
+- `inline` only when the candidate is grounded, actionable, and not contradicted.
+- `summary` for plausible but uncertain, broad, off-proof, or needs-human-verification concerns.
+- `drop` only for high-confidence false positives or duplicates.
+- If uncertain, use `summary`.
+- Do not approve the PR and do not output LGTM language.
+
+Candidate inline comments:
+{candidates}
+
+Shared context:
+{shared_context}"#
+    ))
+}
+
+fn apply_refuter_output(
+    output: RefuterOutput,
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+) {
+    let mut decisions = BTreeMap::new();
+    for decision in output.decisions {
+        decisions.insert(
+            (normalize_repo_path(&decision.path), decision.line),
+            decision,
+        );
+    }
+
+    let mut kept = Vec::new();
+    for comment in std::mem::take(inline_comments) {
+        let key = (comment.path.clone(), comment.line);
+        let Some(decision) = decisions.remove(&key) else {
+            summary_only_findings.push(summary_from_refuted_inline(
+                comment,
+                "refuter returned no decision for this candidate; kept as summary-only",
+            ));
+            continue;
+        };
+        let confidence = decision
+            .confidence
+            .as_deref()
+            .unwrap_or("medium")
+            .trim()
+            .to_ascii_lowercase();
+        let confident = matches!(confidence.as_str(), "high" | "medium-high");
+        let disposition = decision.disposition.trim().to_ascii_lowercase();
+        match disposition.as_str() {
+            "inline" if confident => kept.push(comment),
+            "drop" if confident => {}
+            "summary" | "summary-only" => {
+                summary_only_findings.push(summary_from_refuted_inline(comment, &decision.reason));
+            }
+            "drop" | "inline" => {
+                let reason = format!(
+                    "refuter returned `{}` with `{}` confidence; kept as summary-only: {}",
+                    disposition, confidence, decision.reason
+                );
+                summary_only_findings.push(summary_from_refuted_inline(comment, &reason));
+            }
+            _ => {
+                let reason = format!(
+                    "refuter returned unknown disposition `{}`; kept as summary-only: {}",
+                    decision.disposition, decision.reason
+                );
+                summary_only_findings.push(summary_from_refuted_inline(comment, &reason));
+            }
+        }
+    }
+    inline_comments.extend(kept);
+}
+
+fn summary_from_refuted_inline(comment: ReviewInlineComment, reason: &str) -> SummaryOnlyFinding {
+    SummaryOnlyFinding {
+        lane: comment.lane,
+        severity: comment.severity,
+        confidence: comment.confidence,
+        reason: format!(
+            "refuter demoted inline candidate at {}:{}: {}",
+            comment.path, comment.line, reason
+        ),
+        evidence: comment.evidence,
+    }
 }
 
 fn selected_provider_spec(
@@ -3033,7 +3270,7 @@ fn call_model_lane(
     spec: &ProviderSpec,
     shared_context: &str,
     args: &RunArgs,
-) -> Result<ModelCallOutcome> {
+) -> Result<ModelCallOutcome<LaneModelOutput>> {
     let prompt = render_lane_model_prompt(lane, spec, shared_context);
     call_model_prompt(root, lane_dir, spec, &prompt, args)
 }
@@ -3044,7 +3281,20 @@ fn call_model_prompt(
     spec: &ProviderSpec,
     prompt: &str,
     args: &RunArgs,
-) -> Result<ModelCallOutcome> {
+) -> Result<ModelCallOutcome<LaneModelOutput>> {
+    call_model_prompt_typed(root, lane_dir, spec, prompt, args)
+}
+
+fn call_model_prompt_typed<T>(
+    root: &Path,
+    lane_dir: &Path,
+    spec: &ProviderSpec,
+    prompt: &str,
+    args: &RunArgs,
+) -> Result<ModelCallOutcome<T>>
+where
+    T: DeserializeOwned,
+{
     let env_name = model_api_key_env(spec.provider);
     let token = std::env::var(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
@@ -3054,7 +3304,7 @@ fn call_model_prompt(
     let stderr_path = lane_dir.join("stderr.txt");
     fs::write(&request_path, serde_json::to_vec_pretty(&payload)?)?;
     let started = Instant::now();
-    let output = run_curl_json_post(
+    let process_output = run_curl_json_post(
         root,
         &url,
         &token,
@@ -3064,31 +3314,31 @@ fn call_model_prompt(
     )
     .with_context(|| "run model curl")?;
     let duration_ms = started.elapsed().as_millis();
-    fs::write(&response_path, &output.stdout)?;
-    fs::write(&stderr_path, &output.stderr)?;
-    if !output.status.success() {
-        let response_text = String::from_utf8_lossy(&output.stdout);
+    fs::write(&response_path, &process_output.stdout)?;
+    fs::write(&stderr_path, &process_output.stderr)?;
+    if !process_output.status.success() {
+        let response_text = String::from_utf8_lossy(&process_output.stdout);
         bail!(
             "model curl exited {:?} with http status {:?}: stderr: {}; stdout: {}",
-            output.status.code(),
-            output.http_status,
-            String::from_utf8_lossy(&output.stderr),
+            process_output.status.code(),
+            process_output.http_status,
+            String::from_utf8_lossy(&process_output.stderr),
             response_text
         );
     }
-    let response: serde_json::Value = serde_json::from_slice(&output.stdout)
+    let response: serde_json::Value = serde_json::from_slice(&process_output.stdout)
         .with_context(|| format!("parse {}", response_path.display()))?;
     let response_shape = model_response_shape(&response).to_owned();
     let content = extract_model_content(&response)
         .ok_or_else(|| anyhow::anyhow!("model response did not contain assistant content"))?;
     let content_path = lane_dir.join("content.json");
     fs::write(&content_path, content.as_bytes())?;
-    let lane_output = serde_json::from_str(content)
+    let parsed_output = serde_json::from_str(content)
         .with_context(|| format!("parse {}", content_path.display()))?;
     Ok(ModelCallOutcome {
-        output: lane_output,
+        output: parsed_output,
         duration_ms,
-        http_status: output.http_status,
+        http_status: process_output.http_status,
         response_shape,
     })
 }
@@ -4475,13 +4725,14 @@ mod tests {
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
         LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode, ModelProvider,
         ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostingMode,
-        ProviderKindArg, ReviewArgs, ReviewInlineComment, RunArgs, RunMode, SensorPlan,
-        SensorStatusWrite, SummaryOnlyFinding, ToolClass, cap_review_body, classify_diff,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        http_status_from_error, model_assignments, model_request_payload, model_response_shape,
-        opencode_canary_spec, render_ledger_context, render_review_body, render_summary,
-        right_side_diff_lines, run_command_to_files, run_sensor, split_curl_http_status,
-        validate_github_review_payload, validate_inline_candidate, write_sensor_status,
+        ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs, ReviewInlineComment, RunArgs,
+        RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
+        apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
+        default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
+        model_assignments, model_request_payload, model_response_shape, opencode_canary_spec,
+        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
+        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
+        validate_inline_candidate, write_sensor_status,
     };
 
     #[test]
@@ -4742,6 +4993,86 @@ index 1111111..2222222 100644
                 .reason
                 .contains("duplicate inline candidate merged into src/lib.rs:2")
         );
+    }
+
+    #[test]
+    fn refuter_demotes_uncertain_or_unmatched_inline_candidates() {
+        let mut inline_comments = vec![
+            ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
+                evidence: "ripr excerpt".to_owned(),
+            },
+            ReviewInlineComment {
+                lane: "source-route".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 4,
+                side: "RIGHT".to_owned(),
+                body: "[source-route] A sibling path may share the helper.".to_owned(),
+                evidence: "route map".to_owned(),
+            },
+        ];
+        let mut summary_only_findings = Vec::new();
+        let output = RefuterOutput {
+            decisions: vec![RefuterDecision {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                disposition: "summary".to_owned(),
+                confidence: Some("high".to_owned()),
+                reason: "plausible but not line-local enough".to_owned(),
+            }],
+        };
+
+        apply_refuter_output(output, &mut inline_comments, &mut summary_only_findings);
+
+        assert!(inline_comments.is_empty());
+        assert_eq!(summary_only_findings.len(), 2);
+        assert!(summary_only_findings.iter().any(|finding| {
+            finding
+                .reason
+                .contains("plausible but not line-local enough")
+        }));
+        assert!(
+            summary_only_findings
+                .iter()
+                .any(|finding| finding.reason.contains("returned no decision"))
+        );
+    }
+
+    #[test]
+    fn refuter_drops_high_confidence_false_positive() {
+        let mut inline_comments = vec![ReviewInlineComment {
+            lane: "ub-active-view".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[ub-active-view] The view length can diverge from backing storage.".to_owned(),
+            evidence: "candidate evidence".to_owned(),
+        }];
+        let mut summary_only_findings = Vec::new();
+        let output = RefuterOutput {
+            decisions: vec![RefuterDecision {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                disposition: "drop".to_owned(),
+                confidence: Some("high".to_owned()),
+                reason: "contradicted by the diff context".to_owned(),
+            }],
+        };
+
+        apply_refuter_output(output, &mut inline_comments, &mut summary_only_findings);
+
+        assert!(inline_comments.is_empty());
+        assert!(summary_only_findings.is_empty());
     }
 
     #[test]
