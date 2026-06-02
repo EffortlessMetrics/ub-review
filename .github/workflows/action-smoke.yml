@@ -10,6 +10,30 @@ on:
         required: false
         default: false
         type: boolean
+      model_smoke_lane_width:
+        description: Bun lane width for manual MiniMax model smoke.
+        required: false
+        default: '10'
+        type: choice
+        options:
+          - '6'
+          - '10'
+          - '20'
+      model_smoke_max_model_calls:
+        description: Maximum model calls for manual MiniMax model smoke.
+        required: false
+        default: '14'
+        type: string
+      model_smoke_model_concurrency:
+        description: Model concurrency for manual MiniMax model smoke.
+        required: false
+        default: '8'
+        type: string
+      model_smoke_expected_ok_lanes:
+        description: Minimum successful review lanes expected in the smoke artifact.
+        required: false
+        default: '10'
+        type: string
 
 permissions:
   contents: read
@@ -86,13 +110,16 @@ jobs:
           provider-policy: minimax-only
           minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
           minimax-provider-kind: openai
-          max-model-calls: '1'
-          model-concurrency: '1'
+          lane-width: ${{ inputs.model_smoke_lane_width || '6' }}
+          max-model-calls: ${{ inputs.model_smoke_max_model_calls || '1' }}
+          model-concurrency: ${{ inputs.model_smoke_model_concurrency || '1' }}
           max-inline-comments: '2'
           fail-on-post-error: 'false'
 
       - name: Verify MiniMax smoke artifacts
-        run: python scripts/verify-model-smoke-artifacts.py target/ub-review-model-smoke
+        run: python scripts/verify-model-smoke-artifacts.py target/ub-review-model-smoke "${EXPECTED_OK_LANES}"
+        env:
+          EXPECTED_OK_LANES: ${{ inputs.model_smoke_expected_ok_lanes || '1' }}
 
       - uses: actions/upload-artifact@v7
         if: always()

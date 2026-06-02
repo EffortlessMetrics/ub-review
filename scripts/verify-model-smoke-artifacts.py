@@ -54,11 +54,20 @@ def require_single_ok_preflight(preflights) -> dict:
     return receipt
 
 
-def require_single_ok_lane(lanes) -> dict:
-    ok_lanes = [lane for lane in lanes if lane.get("status") == "ok"]
-    if len(ok_lanes) != 1:
-        fail(f"expected exactly one ok model lane, got {len(ok_lanes)}")
-    lane = ok_lanes[0]
+def require_ok_lanes(lanes, min_ok_lanes: int) -> list[dict]:
+    ok_lanes = [
+        lane
+        for lane in lanes
+        if lane.get("status") == "ok" and lane.get("lane") != "refuter"
+    ]
+    if len(ok_lanes) < min_ok_lanes:
+        fail(f"expected at least {min_ok_lanes} ok model lane(s), got {len(ok_lanes)}")
+    for lane in ok_lanes:
+        require_ok_lane_receipt(lane)
+    return ok_lanes
+
+
+def require_ok_lane_receipt(lane: dict) -> None:
     expected = {
         "provider": "minimax",
         "model": "MiniMax-M3",
@@ -73,15 +82,13 @@ def require_single_ok_lane(lanes) -> dict:
         fail("ok model lane duration_ms must be positive")
     if lane.get("fallback_from") is not None:
         fail("ok model lane unexpectedly used fallback_from")
-    return lane
 
 
-def require_metrics(metrics) -> None:
+def require_metrics(metrics, min_ok_lanes: int) -> None:
     models = metrics.get("models", {})
     expected = {
         "provider_preflights": 1,
         "provider_preflight_calls_attempted": 1,
-        "model_lane_calls_attempted": 1,
         "model_fallbacks_used": 0,
     }
     for key, value in expected.items():
@@ -89,8 +96,16 @@ def require_metrics(metrics) -> None:
             fail(f"metrics.models.{key} expected {value!r}, got {models.get(key)!r}")
     if models.get("provider_preflight_status_counts", {}).get("ok") != 1:
         fail("metrics did not record exactly one ok provider preflight")
-    if models.get("model_lane_status_counts", {}).get("ok") != 1:
-        fail("metrics did not record exactly one ok model lane")
+    if models.get("model_lane_calls_attempted", 0) < min_ok_lanes:
+        fail(
+            "metrics did not record enough model lane calls: "
+            f"expected at least {min_ok_lanes}, got {models.get('model_lane_calls_attempted')!r}"
+        )
+    if models.get("model_lane_status_counts", {}).get("ok", 0) < min_ok_lanes:
+        fail(
+            "metrics did not record enough ok model lanes: "
+            f"expected at least {min_ok_lanes}, got {models.get('model_lane_status_counts', {}).get('ok')!r}"
+        )
 
 
 def sanitize_artifact_name(value: str) -> str:
@@ -216,8 +231,21 @@ def assert_no_auth_header_leak(root: pathlib.Path) -> None:
                 fail(f"auth header marker `{needle}` found in {path}")
 
 
+def expected_min_ok_lanes(argv: list[str]) -> int:
+    if len(argv) <= 2:
+        return 1
+    try:
+        value = int(argv[2])
+    except ValueError:
+        fail(f"expected ok lane count must be an integer, got {argv[2]!r}")
+    if value <= 0:
+        fail(f"expected ok lane count must be positive, got {value}")
+    return value
+
+
 def main(argv: list[str]) -> int:
     root = pathlib.Path(argv[1] if len(argv) > 1 else "target/ub-review-model-smoke")
+    min_ok_lanes = expected_min_ok_lanes(argv)
     if not root.is_dir():
         fail(f"artifact root is not a directory: {root}")
 
@@ -226,10 +254,11 @@ def main(argv: list[str]) -> int:
     metrics = load_json(root / "review/metrics.json")
 
     preflight = require_single_ok_preflight(preflights)
-    ok_lane = require_single_ok_lane(review.get("model_lanes", []))
-    require_metrics(metrics)
+    ok_lanes = require_ok_lanes(review.get("model_lanes", []), min_ok_lanes)
+    require_metrics(metrics, min_ok_lanes)
     require_preflight_artifacts(root, preflight)
-    require_ok_lane_artifacts(root, ok_lane)
+    for lane in ok_lanes:
+        require_ok_lane_artifacts(root, lane)
 
     post_result = root / "review/post-result.json"
     post_error = root / "review/post-error.json"
@@ -242,7 +271,7 @@ def main(argv: list[str]) -> int:
         "MiniMax smoke verified: "
         f"preflights={metrics['models']['provider_preflight_calls_attempted']} "
         f"lane_calls={metrics['models']['model_lane_calls_attempted']} "
-        f"ok_lane={ok_lane['lane']}"
+        f"ok_lanes={','.join(lane['lane'] for lane in ok_lanes)}"
     )
     return 0
 

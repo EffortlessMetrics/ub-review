@@ -43,7 +43,12 @@ The repo-local `Action Smoke` workflow always runs the token-free local action
 smoke. To verify live MiniMax provider behavior in `EffortlessMetrics/ub-review`
 without labeling a PR, run the workflow manually on a trusted ref with
 `run_model_smoke: true`.
-That job uses the repository secret `MINIMAX_API_KEY`, caps the run to one
-model call, verifies the MiniMax preflight and at least one lane returned HTTP
-200, uploads `target/ub-review-model-smoke`, and keeps posting errors tolerated
-so artifacts remain available for inspection.
+That job uses the repository secret `MINIMAX_API_KEY`, defaults manual dispatch
+to the standard 10-lane MiniMax pass, verifies the MiniMax preflight and expected
+successful lane count, uploads `target/ub-review-model-smoke`, and keeps posting
+errors tolerated so artifacts remain available for inspection.
+
+Adding the `ub-review-model-smoke` label to a PR still runs a cheap one-lane
+provider smoke by default. Manual dispatch exposes `model_smoke_lane_width`,
+`model_smoke_max_model_calls`, `model_smoke_model_concurrency`, and
+`model_smoke_expected_ok_lanes` when a wider or deeper live check is needed.
