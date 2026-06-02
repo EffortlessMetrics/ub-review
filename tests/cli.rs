@@ -373,6 +373,104 @@ fn active_len_tracks_view_after_resize() {
 }
 
 #[test]
+fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "bun-rab-mini"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn active_len(len: usize) -> usize {
+    len
+}
+"#,
+    )?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn active_len(len: usize) -> usize {
+    let ptr = &len as *const usize;
+    unsafe { *ptr }
+}
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "touch rust behavior"])?;
+
+    let ledger = temp.path().join("bun-ub-ledger.md");
+    write_file(
+        &ledger,
+        "RAB resize follow-up: verify post-capture mutation before upstream. This tail should be truncated away.",
+    )?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--ledger-path",
+            path_str(&ledger)?,
+            "--ledger-max-bytes",
+            "64",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+
+    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+    assert!(shared_context.contains("## UB Ledger Context"));
+    assert!(shared_context.contains("RAB resize follow-up"));
+    assert!(shared_context.contains("[truncated]"));
+    assert!(!shared_context.contains("tail should be truncated away"));
+    assert!(!shared_context.contains("- No UB ledger configured"));
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    assert_eq!(review["ledger_path"], path_str(&ledger)?);
+    assert_eq!(review["ledger_max_bytes"], 64);
+    assert!(
+        review["shared_context_id"]
+            .as_str()
+            .is_some_and(|value| value.len() == 64)
+    );
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_hits_fake_minimax_provider_and_writes_artifacts() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
