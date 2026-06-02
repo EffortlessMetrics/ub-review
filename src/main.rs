@@ -3818,7 +3818,7 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
                     {"role": "system", "content": "Return strict JSON only. Do not include markdown fences or prose outside JSON."},
                     {"role": "user", "content": prompt}
                 ],
-                "max_completion_tokens": 2048,
+                "max_completion_tokens": 4096,
                 "reasoning_split": true,
                 "temperature": 0.1,
                 "stream": false
@@ -5381,7 +5381,7 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert_eq!(payload["max_completion_tokens"], 2048);
+        assert_eq!(payload["max_completion_tokens"], 4096);
         assert_eq!(payload["reasoning_split"], true);
         assert!(
             payload["messages"][0]["content"]
