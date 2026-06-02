@@ -4753,6 +4753,23 @@ fn render_evidence_sections(text: &mut String, out: &Path, plan: &Plan) {
                 "{} {}; reason: {}.",
                 sensor.id, receipt.status, receipt.reason
             )),
+            "skipped" if is_sensor_evidence_issue(sensor, &receipt.status, &receipt.reason) => {
+                missing.push(format!(
+                    "{} skipped; {} unavailable; reason: {}.",
+                    sensor.id,
+                    evidence_label(&sensor.id),
+                    receipt.reason
+                ));
+            }
+            status if is_sensor_evidence_issue(sensor, status, &receipt.reason) => {
+                missing.push(format!(
+                    "{} {}; {} unavailable; reason: {}.",
+                    sensor.id,
+                    status,
+                    evidence_label(&sensor.id),
+                    receipt.reason
+                ))
+            }
             _ => {}
         }
     }
@@ -5479,6 +5496,48 @@ mod tests {
             "- unsafe-review not installed; unsafe/native reviewability packet unavailable."
         ));
         assert!(!summary.contains("No ripr findings"));
+        Ok(())
+    }
+
+    #[test]
+    fn running_summary_reports_planned_skipped_sensor_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let planned_dry_run = sensor_plan("tokmd", "tokmd", true);
+        let trigger_skipped = sensor_plan("ripr", "ripr", false);
+        write_sensor_status(
+            &out,
+            &planned_dry_run,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["tokmd".to_owned()],
+                duration_ms: 0,
+                reason: "dry-run; sensor not executed",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        write_sensor_status(
+            &out,
+            &trigger_skipped,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["ripr".to_owned()],
+                duration_ms: 0,
+                reason: "trigger did not match this diff",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![planned_dry_run, trigger_skipped]);
+
+        let summary = render_summary(&out, &plan, &test_diff())?;
+        let missing = summary_section(&summary, "## Missing evidence", "## Lane packets")
+            .ok_or_else(|| anyhow::anyhow!("missing evidence section not found"))?;
+
+        assert!(missing.contains("tokmd skipped; deterministic repository/diff packet unavailable; reason: dry-run; sensor not executed."));
+        assert!(!missing.contains("ripr"));
+        assert!(!missing.contains("No planned sensor evidence is currently missing."));
         Ok(())
     }
 
@@ -6266,6 +6325,13 @@ UB_REVIEW_HTTP_STATUS:429
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,
             review_body_max_bytes: 60_000,
         }
+    }
+
+    fn summary_section<'a>(text: &'a str, heading: &str, next_heading: &str) -> Option<&'a str> {
+        let start = text.find(heading)? + heading.len();
+        let rest = &text[start..];
+        let end = rest.find(next_heading)?;
+        Some(&rest[..end])
     }
 
     fn sleeper_argv() -> Vec<String> {
