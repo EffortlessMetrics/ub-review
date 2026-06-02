@@ -44,5 +44,6 @@ smoke. To verify live MiniMax provider behavior in `EffortlessMetrics/ub-review`
 without labeling a PR, run the workflow manually on a trusted ref with
 `run_model_smoke: true`.
 That job uses the repository secret `MINIMAX_API_KEY`, caps the run to one
-model call, uploads `target/ub-review-model-smoke`, and keeps posting errors
-tolerated so artifacts remain available for inspection.
+model call, verifies the MiniMax preflight and at least one lane returned HTTP
+200, uploads `target/ub-review-model-smoke`, and keeps posting errors tolerated
+so artifacts remain available for inspection.
