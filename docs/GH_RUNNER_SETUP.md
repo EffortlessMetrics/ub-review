@@ -36,3 +36,13 @@ The consuming workflow is responsible for:
 Until release binaries are published, the action bootstraps from source on the
 runner. Cache Cargo registry/git and `CARGO_TARGET_DIR` in consuming workflows if
 runtime matters.
+
+## Self-smoke model verification
+
+The repo-local `Action Smoke` workflow always runs the token-free local action
+smoke. To verify live MiniMax provider behavior in `EffortlessMetrics/ub-review`
+without labeling a PR, run the workflow manually on a trusted ref with
+`run_model_smoke: true`.
+That job uses the repository secret `MINIMAX_API_KEY`, caps the run to one
+model call, uploads `target/ub-review-model-smoke`, and keeps posting errors
+tolerated so artifacts remain available for inspection.
