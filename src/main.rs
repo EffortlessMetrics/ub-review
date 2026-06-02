@@ -544,6 +544,7 @@ struct ReviewArtifacts {
     ledger_max_bytes: usize,
     provider_preflights: Vec<ProviderPreflightReceipt>,
     model_lanes: Vec<ModelLaneReceipt>,
+    missing_or_failed_sensor_evidence: Vec<SensorEvidenceIssue>,
     missing_or_failed_model_evidence: Vec<ModelEvidenceIssue>,
     inline_comments: Vec<ReviewInlineComment>,
     summary_only_findings: Vec<SummaryOnlyFinding>,
@@ -582,6 +583,13 @@ struct ModelEvidenceIssue {
     provider: String,
     model: String,
     endpoint_kind: String,
+    status: String,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SensorEvidenceIssue {
+    sensor: String,
     status: String,
     reason: String,
 }
@@ -2064,6 +2072,7 @@ fn write_review_artifacts(
     let assignments = model_assignments(plan, args);
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
+    let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
     let mut missing_or_failed_model_evidence = model_lanes
         .iter()
         .filter(|receipt| is_model_evidence_issue(&receipt.status))
@@ -2115,6 +2124,7 @@ fn write_review_artifacts(
         plan,
         diff,
         &model_lanes,
+        &missing_or_failed_sensor_evidence,
         &missing_or_failed_model_evidence,
         &inline_comments,
         &summary_only_findings,
@@ -2149,6 +2159,7 @@ fn write_review_artifacts(
         ledger_max_bytes: args.ledger_max_bytes,
         provider_preflights,
         model_lanes,
+        missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence,
         inline_comments,
         summary_only_findings,
@@ -2827,6 +2838,38 @@ fn is_model_evidence_issue(status: &str) -> bool {
             | "bad_envelope"
             | "preflight_failed"
     )
+}
+
+fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidenceIssue> {
+    plan.sensors
+        .iter()
+        .filter_map(|sensor| {
+            let status_path = out
+                .join("sensors")
+                .join(&sensor.id)
+                .join("ub-review-sensor-status.json");
+            let receipt = read_sensor_receipt(&status_path);
+            let status = receipt
+                .as_ref()
+                .map(|receipt| receipt.status.clone())
+                .unwrap_or_else(|| "receipt-absent".to_owned());
+            if !is_sensor_evidence_issue(&status) {
+                return None;
+            }
+            let reason = receipt
+                .map(|receipt| receipt.reason)
+                .unwrap_or_else(|| sensor.reason.clone());
+            Some(SensorEvidenceIssue {
+                sensor: sensor.id.clone(),
+                status,
+                reason,
+            })
+        })
+        .collect()
+}
+
+fn is_sensor_evidence_issue(status: &str) -> bool {
+    !matches!(status, "ok")
 }
 
 fn model_issue_from_receipt(receipt: &ModelLaneReceipt) -> ModelEvidenceIssue {
@@ -3580,6 +3623,7 @@ fn render_review_body(
     plan: &Plan,
     diff: &DiffContext,
     model_lanes: &[ModelLaneReceipt],
+    missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
@@ -3596,21 +3640,102 @@ fn render_review_body(
         diff.changed_files.len()
     ));
     text.push_str(&format!("- Inline comments: `{}`\n", inline_comments.len()));
-    text.push_str("\n## Model lanes\n\n");
-    for lane in model_lanes {
-        text.push_str(&format!(
-            "- Lane: `{}`\n  Provider: `{}`\n  Model: `{}`\n  Status: `{}` - {}\n",
-            lane.lane,
-            lane.provider,
-            lane.model,
-            lane.status,
-            escape_md(&lane.reason)
-        ));
+    text.push_str("\n## Decision\n\n");
+    text.push_str(&format!(
+        "- {}\n",
+        review_decision(
+            missing_or_failed_sensor_evidence,
+            missing_or_failed_model_evidence,
+            inline_comments,
+            summary_only_findings
+        )
+    ));
+
+    if !has_actionable_review_finding(inline_comments, summary_only_findings) {
+        text.push_str("\n## No blocking finding after checking\n\n");
+        text.push_str("- Shared diff packet, changed-file list, diff flags, sensor receipts, model lane receipts, and Bun lane packet prompts.\n");
+        text.push_str(
+            "- Inline-comment guardrails found no validated candidate comments to post.\n",
+        );
     }
-    text.push_str("\n## Missing or failed model evidence\n\n");
-    if missing_or_failed_model_evidence.is_empty() {
+
+    text.push_str("\n## Confirmed findings\n\n");
+    if inline_comments.is_empty() {
+        text.push_str("- None validated for inline posting.\n");
+    } else {
+        for comment in inline_comments {
+            text.push_str(&format!(
+                "- `[{}]` `{}` `{}` at `{}`:{}: {} Evidence: {}\n",
+                comment.lane,
+                comment.severity,
+                comment.confidence,
+                comment.path,
+                comment.line,
+                escape_md(&comment.body),
+                escape_md(&comment.evidence)
+            ));
+        }
+    }
+
+    text.push_str("\n## Summary-only findings\n\n");
+    if summary_only_findings.is_empty() {
+        text.push_str("- None.\n");
+    } else {
+        for finding in summary_only_findings {
+            text.push_str(&format!(
+                "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
+                finding.lane,
+                finding.severity,
+                finding.confidence,
+                escape_md(&finding.reason),
+                escape_md(&finding.evidence)
+            ));
+        }
+    }
+
+    text.push_str("\n## Failed objections\n\n");
+    if has_actionable_review_finding(inline_comments, summary_only_findings) {
+        text.push_str("- Refuter and diff-line guardrails kept uncertain, duplicate, low-confidence, and off-diff objections out of inline comments.\n");
+    } else {
+        text.push_str("- Strongest failed objection: a model or sensor may have found a real issue, but no blocker/high/medium candidate survived the bounded lane run, diff-line validation, and refuter path.\n");
+    }
+    text.push_str("- Missing evidence is not a failed objection; it is listed separately below.\n");
+
+    text.push_str("\n## Residual risk\n\n");
+    text.push_str("- A human should inspect unsafe/native seams, test-oracle strength, and any unavailable sensor/model evidence before relying on this review.\n");
+
+    text.push_str("\n## Parked follow-ups\n\n");
+    let parked = summary_only_findings
+        .iter()
+        .filter(|finding| is_parked_follow_up(finding))
+        .collect::<Vec<_>>();
+    if parked.is_empty() {
+        text.push_str(
+            "- No parked follow-up was promoted from ledger or lane evidence in this run.\n",
+        );
+    } else {
+        for finding in parked {
+            text.push_str(&format!(
+                "- `[{}]` {} Evidence: {}\n",
+                finding.lane,
+                escape_md(&finding.reason),
+                escape_md(&finding.evidence)
+            ));
+        }
+    }
+
+    text.push_str("\n## Missing or failed evidence\n\n");
+    if missing_or_failed_sensor_evidence.is_empty() && missing_or_failed_model_evidence.is_empty() {
         text.push_str("- None recorded.\n");
     } else {
+        for issue in missing_or_failed_sensor_evidence {
+            text.push_str(&format!(
+                "- Sensor `{}`: `{}` - {}\n",
+                issue.sensor,
+                issue.status,
+                escape_md(&issue.reason)
+            ));
+        }
         for issue in missing_or_failed_model_evidence {
             text.push_str(&format!(
                 "- Lane `{}` via `{}` model `{}` endpoint `{}`: `{}` - {}\n",
@@ -3624,50 +3749,56 @@ fn render_review_body(
         }
     }
 
-    if summary_only_findings.is_empty() && inline_comments.is_empty() {
-        text.push_str("\n## No blocking finding after checking\n\n");
-        text.push_str("- Shared diff packet, changed-file list, diff flags, sensor receipts, and Bun lane packet prompts.\n");
-        text.push_str(
-            "- Inline-comment guardrails found no validated candidate comments to post.\n",
-        );
-        text.push_str("\n## Best failed objection\n\n");
-        text.push_str("- Missing or failed sensor/model evidence can hide a real issue; this packet does not treat absence as proof of safety.\n");
-        text.push_str("\n## Residual risk\n\n");
-        text.push_str("- A human should inspect unsafe/native seams and test-oracle strength directly when model or sensor lanes are unavailable.\n");
-    } else {
-        text.push_str("\n## Summary-only findings\n\n");
-        for finding in summary_only_findings {
-            text.push_str(&format!(
-                "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
-                finding.lane,
-                finding.severity,
-                finding.confidence,
-                escape_md(&finding.reason),
-                escape_md(&finding.evidence)
-            ));
-        }
-        if summary_only_findings.is_empty() {
-            text.push_str("- None.\n");
-        }
-        text.push_str("\n## Inline comments\n\n");
-        if inline_comments.is_empty() {
-            text.push_str("- No inline comments passed the diff-line guardrails.\n");
-        } else {
-            for comment in inline_comments {
-                text.push_str(&format!(
-                    "- `{}`:{} `{}` `{}` {}\n",
-                    comment.path,
-                    comment.line,
-                    comment.severity,
-                    comment.confidence,
-                    escape_md(&comment.evidence)
-                ));
-            }
-        }
-        text.push_str("\n## Residual risk\n\n");
-        text.push_str("- Reviewers should verify summary-only findings and any unavailable sensor/model evidence before relying on this review.\n");
+    text.push_str("\n## Model lanes\n\n");
+    for lane in model_lanes {
+        text.push_str(&format!(
+            "- Lane: `{}`\n  Provider: `{}`\n  Model: `{}`\n  Status: `{}` - {}\n",
+            lane.lane,
+            lane.provider,
+            lane.model,
+            lane.status,
+            escape_md(&lane.reason)
+        ));
     }
     cap_review_body(text, review_body_max_bytes)
+}
+
+fn review_decision(
+    missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
+    missing_or_failed_model_evidence: &[ModelEvidenceIssue],
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+) -> &'static str {
+    if has_actionable_review_finding(inline_comments, summary_only_findings) {
+        "Needs reviewer attention before upstream: grounded findings or summary-only concerns remain."
+    } else if !missing_or_failed_sensor_evidence.is_empty()
+        || !missing_or_failed_model_evidence.is_empty()
+    {
+        "No blocking finding after bounded review; evidence is incomplete."
+    } else {
+        "No blocking finding after bounded review; residual risk remains for human review."
+    }
+}
+
+fn has_actionable_review_finding(
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+) -> bool {
+    inline_comments
+        .iter()
+        .any(|comment| matches!(comment.severity.as_str(), "blocker" | "high" | "medium"))
+        || summary_only_findings
+            .iter()
+            .any(|finding| matches!(finding.severity.as_str(), "blocker" | "high" | "medium"))
+}
+
+fn is_parked_follow_up(finding: &SummaryOnlyFinding) -> bool {
+    let reason = finding.reason.to_ascii_lowercase();
+    let evidence = finding.evidence.to_ascii_lowercase();
+    reason.contains("parked")
+        || reason.contains("follow-up")
+        || evidence.contains("parked")
+        || evidence.contains("follow-up")
 }
 
 fn cap_review_body(mut text: String, max_bytes: usize) -> String {
@@ -4796,13 +4927,13 @@ mod tests {
         LaneModelOutput, LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode,
         ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan,
         PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs,
-        ReviewInlineComment, RunArgs, RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        ToolClass, apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
-        default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
-        model_api_url, model_assignments, model_auth_header, model_json_payload,
-        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
-        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
-        run_sensor, split_curl_http_status, validate_github_review_payload,
+        ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
+        SummaryOnlyFinding, ToolClass, apply_refuter_output, cap_review_body, classify_diff,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        http_status_from_error, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_request_payload, model_response_shape, opencode_canary_spec,
+        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
+        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_inline_candidate, write_sensor_status,
     };
 
@@ -5150,7 +5281,7 @@ index 1111111..2222222 100644
     fn github_review_payload_requires_comment_event_and_right_side() -> Result<()> {
         let ok = GitHubReview {
             event: "COMMENT".to_owned(),
-            body: "## No blocking finding after checking\n\n- packet\n\n## Best failed objection\n\n- missing evidence\n\n## Residual risk\n\n- human review".to_owned(),
+            body: "## Decision\n\n- No blocking finding after bounded review; evidence is incomplete.\n\n## No blocking finding after checking\n\n- packet\n\n## Failed objections\n\n- missing evidence is listed separately\n\n## Residual risk\n\n- human review".to_owned(),
             comments: vec![GitHubReviewComment {
                 path: "src/lib.rs".to_owned(),
                 line: 2,
@@ -5442,6 +5573,11 @@ UB_REVIEW_HTTP_STATUS:429
             &test_plan(Vec::new()),
             &test_diff(),
             &[],
+            &[SensorEvidenceIssue {
+                sensor: "ripr".to_owned(),
+                status: "missing".to_owned(),
+                reason: "command not found".to_owned(),
+            }],
             &[ModelEvidenceIssue {
                 lane: "ub-memory-lifetime".to_owned(),
                 provider: "minimax".to_owned(),
@@ -5455,10 +5591,45 @@ UB_REVIEW_HTTP_STATUS:429
             60_000,
         );
 
-        assert!(body.contains("## Missing or failed model evidence"));
+        assert!(body.contains("## Decision"));
+        assert!(body.contains("evidence is incomplete"));
+        assert!(body.contains("## Confirmed findings"));
+        assert!(body.contains("## Summary-only findings"));
+        assert!(body.contains("## Failed objections"));
+        assert!(body.contains("## Residual risk"));
+        assert!(body.contains("## Parked follow-ups"));
+        assert!(body.contains("## Missing or failed evidence"));
+        assert!(body.contains("Sensor `ripr`: `missing` - command not found"));
         assert!(body.contains("rate_limited"));
         assert!(body.contains("## No blocking finding after checking"));
-        assert!(!body.contains("## Summary-only findings"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn review_body_routes_parked_followups_to_campaign_section() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "source-route".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "PBKDF2 sibling path is parked as follow-up, not current PR scope."
+                    .to_owned(),
+                evidence: "UB ledger excerpt".to_owned(),
+            }],
+            60_000,
+        );
+
+        assert!(body.contains("## Parked follow-ups"));
+        assert!(body.contains("PBKDF2 sibling path is parked as follow-up"));
+        assert!(body.contains("## Summary-only findings"));
+        assert!(!has_standalone_approval_line(&body));
     }
 
     #[test]

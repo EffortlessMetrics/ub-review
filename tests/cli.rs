@@ -132,10 +132,32 @@ fn active_len_tracks_view_after_resize() {
     let github_review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/github-review.json"))?)?;
     assert_eq!(github_review["event"], "COMMENT");
-    assert!(github_review["body"].as_str().is_some_and(|body| {
-        body.contains("## No blocking finding after checking")
-            || body.contains("## Summary-only findings")
-    }));
+    let github_review_body = github_review["body"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("github review body missing"))?;
+    let required_headings = [
+        "## Decision",
+        "## Confirmed findings",
+        "## Summary-only findings",
+        "## Failed objections",
+        "## Residual risk",
+        "## Parked follow-ups",
+        "## Missing or failed evidence",
+    ];
+    let mut previous_heading_index = 0;
+    for heading in required_headings {
+        assert!(github_review_body.contains(heading), "missing {heading}");
+        let heading_index = github_review_body
+            .find(heading)
+            .ok_or_else(|| anyhow::anyhow!("heading disappeared after contains check"))?;
+        assert!(
+            heading_index >= previous_heading_index,
+            "{heading} rendered out of order"
+        );
+        previous_heading_index = heading_index;
+    }
+    assert!(!github_review_body.contains("## Missing or failed model evidence"));
+    assert!(!has_standalone_approval_line(github_review_body));
     assert_eq!(
         github_review["comments"]
             .as_array()
@@ -143,6 +165,13 @@ fn active_len_tracks_view_after_resize() {
             .unwrap_or_default(),
         0
     );
+    if let Some(comments) = github_review["comments"].as_array() {
+        for comment in comments {
+            if let Some(body) = comment["body"].as_str() {
+                assert!(!has_standalone_approval_line(body));
+            }
+        }
+    }
     let review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
     assert_eq!(review["mode"], "review-direct");
@@ -151,6 +180,11 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
     assert_eq!(review["max_model_calls"], 14);
+    assert!(
+        review["missing_or_failed_sensor_evidence"]
+            .as_array()
+            .is_some_and(|issues| !issues.is_empty())
+    );
     assert!(
         review["missing_or_failed_model_evidence"]
             .as_array()
@@ -162,7 +196,8 @@ fn active_len_tracks_view_after_resize() {
             })
     );
     let review_body = fs::read_to_string(out.join("review/review.md"))?;
-    assert!(review_body.contains("## Missing or failed model evidence"));
+    assert!(review_body.contains("## Missing or failed evidence"));
+    assert!(!has_standalone_approval_line(&review_body));
 
     run(
         temp.path(),
