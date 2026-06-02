@@ -2137,7 +2137,7 @@ fn write_review_artifacts(
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
     let mut missing_or_failed_model_evidence = model_lanes
         .iter()
-        .filter(|receipt| is_model_evidence_issue(&receipt.status))
+        .filter(|receipt| is_model_receipt_evidence_issue(receipt))
         .map(model_issue_from_receipt)
         .collect::<Vec<_>>();
     let mut summary_only_findings = Vec::new();
@@ -3020,6 +3020,20 @@ fn is_model_evidence_issue(status: &str) -> bool {
     )
 }
 
+fn is_model_receipt_evidence_issue(receipt: &ModelLaneReceipt) -> bool {
+    is_model_evidence_issue(&receipt.status) || is_model_skipped_evidence_issue(receipt)
+}
+
+fn is_model_skipped_evidence_issue(receipt: &ModelLaneReceipt) -> bool {
+    receipt.status == "skipped"
+        && matches!(
+            receipt.reason.as_str(),
+            "model-mode off"
+                | "model call budget or inline comment cap reached before lane execution"
+                | "model call budget exhausted before refuter pass"
+        )
+}
+
 fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidenceIssue> {
     plan.sensors
         .iter()
@@ -3254,6 +3268,9 @@ fn run_available_model_lanes(
             receipt.status = "skipped".to_owned();
             receipt.reason =
                 "model call budget or inline comment cap reached before lane execution".to_owned();
+            if is_model_receipt_evidence_issue(receipt) {
+                missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+            }
         }
     }
     Ok(calls)
@@ -3339,6 +3356,9 @@ fn run_refuter_pass(
     if context.model_calls_used >= context.args.max_model_calls {
         receipt.status = "skipped".to_owned();
         receipt.reason = "model call budget exhausted before refuter pass".to_owned();
+        if is_model_receipt_evidence_issue(&receipt) {
+            missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        }
         model_lanes.push(receipt);
         return Ok(());
     }
@@ -5281,11 +5301,12 @@ mod tests {
         ReviewInlineComment, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, ToolClass, apply_refuter_output, cap_review_body, classify_diff,
         dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        http_status_from_error, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_request_payload, model_response_shape, opencode_canary_spec,
-        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
-        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, validate_run_args, write_sensor_status,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_request_payload, model_response_shape,
+        opencode_canary_spec, render_ledger_context, render_review_body, render_summary,
+        right_side_diff_lines, run_command_to_files, run_sensor, split_curl_http_status,
+        validate_github_review_payload, validate_inline_candidate, validate_run_args,
+        write_sensor_status,
     };
 
     #[test]
@@ -5779,6 +5800,31 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn skipped_model_lanes_are_missing_evidence_when_review_work_was_suppressed() {
+        let mut model_mode_off = model_lane_receipt("ub-memory-lifetime", "skipped");
+        model_mode_off.reason = "model-mode off".to_owned();
+        assert!(is_model_receipt_evidence_issue(&model_mode_off));
+
+        let mut budget_skipped = model_lane_receipt("tests-oracle", "skipped");
+        budget_skipped.reason =
+            "model call budget or inline comment cap reached before lane execution".to_owned();
+        assert!(is_model_receipt_evidence_issue(&budget_skipped));
+
+        let mut refuter_budget = model_lane_receipt("refuter", "skipped");
+        refuter_budget.reason = "model call budget exhausted before refuter pass".to_owned();
+        assert!(is_model_receipt_evidence_issue(&refuter_budget));
+
+        let mut no_inline_refuter = model_lane_receipt("refuter", "skipped");
+        no_inline_refuter.reason =
+            "no inline candidates passed guardrails before refuter".to_owned();
+        assert!(!is_model_receipt_evidence_issue(&no_inline_refuter));
+
+        let mut unknown_skip = model_lane_receipt("opposition", "skipped");
+        unknown_skip.reason = "optional lane had no work".to_owned();
+        assert!(!is_model_receipt_evidence_issue(&unknown_skip));
+    }
+
+    #[test]
     fn model_content_extracts_openai_and_anthropic_envelopes() -> Result<()> {
         let openai: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/openai-chat-completion.json"
@@ -6057,6 +6103,21 @@ UB_REVIEW_HTTP_STATUS:429
             class: ToolClass::Static,
             weight: 1,
             requires_lease: false,
+        }
+    }
+
+    fn model_lane_receipt(lane: &str, status: &str) -> super::ModelLaneReceipt {
+        super::ModelLaneReceipt {
+            lane: lane.to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "openai-chat".to_owned(),
+            status: status.to_owned(),
+            reason: "test reason".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
         }
     }
 
