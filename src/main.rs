@@ -2362,9 +2362,15 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&review.provider_preflights)?,
     )?;
     fs::write(review_dir.join("review.md"), body)?;
+    write_github_review_payload(&review_dir, &github_review)?;
+    Ok(())
+}
+
+fn write_github_review_payload(review_dir: &Path, github_review: &GitHubReview) -> Result<()> {
+    validate_github_review_payload(github_review)?;
     fs::write(
         review_dir.join("github-review.json"),
-        serde_json::to_vec_pretty(&github_review)?,
+        serde_json::to_vec_pretty(github_review)?,
     )?;
     Ok(())
 }
@@ -5595,7 +5601,7 @@ mod tests {
         render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
         run_refuter_pass, run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        write_sensor_status,
+        write_github_review_payload, write_sensor_status,
     };
 
     #[test]
@@ -6285,6 +6291,19 @@ index 1111111..2222222 100644
         };
         validate_github_review_payload(&ok)?;
 
+        let temp = tempfile::tempdir()?;
+        write_github_review_payload(temp.path(), &ok)?;
+        assert!(temp.path().join("github-review.json").exists());
+
+        let bad_event = GitHubReview {
+            event: "APPROVE".to_owned(),
+            ..ok.clone()
+        };
+        assert!(validate_github_review_payload(&bad_event).is_err());
+        let bad_event_out = tempfile::tempdir()?;
+        assert!(write_github_review_payload(bad_event_out.path(), &bad_event).is_err());
+        assert!(!bad_event_out.path().join("github-review.json").exists());
+
         let bad_side = GitHubReview {
             comments: vec![GitHubReviewComment {
                 side: "LEFT".to_owned(),
@@ -6293,6 +6312,9 @@ index 1111111..2222222 100644
             ..ok.clone()
         };
         assert!(validate_github_review_payload(&bad_side).is_err());
+        let bad_out = tempfile::tempdir()?;
+        assert!(write_github_review_payload(bad_out.path(), &bad_side).is_err());
+        assert!(!bad_out.path().join("github-review.json").exists());
 
         let parent_path = GitHubReview {
             comments: vec![GitHubReviewComment {
