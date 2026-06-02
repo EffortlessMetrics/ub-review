@@ -47,6 +47,14 @@ Use `@main` until a draft Bun UB PR proves:
 - sensor receipts exist under `target/ub-review/sensors/*/ub-review-sensor-status.json`;
 - missing sensors or model lanes are explicit missing evidence, not clean results.
 
+After downloading the artifact, run the packet verifier:
+
+```bash
+python scripts/verify-bun-review-artifacts.py target/ub-review \
+  --min-ok-model-lanes 10 \
+  --require-no-model-evidence-failures
+```
+
 After that run posts a useful review and uploads a complete packet, tag `v0` in
 this repository and switch the Bun workflow to:
 

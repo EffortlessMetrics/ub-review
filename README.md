@@ -124,6 +124,18 @@ Use `EffortlessMetrics/ub-review@main` for the first Bun fork verification.
 After that run posts a useful review and uploads a complete packet, tag `v0`
 and switch the Bun workflow to `EffortlessMetrics/ub-review@v0`.
 
+After downloading the first Bun artifact, verify the packet contract before
+tagging:
+
+```bash
+python scripts/verify-bun-review-artifacts.py target/ub-review \
+  --min-ok-model-lanes 10 \
+  --require-no-model-evidence-failures
+```
+
+This check verifies the required packet tree, lane packets, review payload,
+post receipt, model receipts, no-LGTM invariant, and basic secret hygiene.
+
 ## What it writes
 
 ```text
