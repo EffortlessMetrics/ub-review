@@ -2070,6 +2070,8 @@ fn write_review_artifacts(
         )?;
     }
 
+    dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+
     let body = render_review_body(
         &shared_context_id,
         plan,
@@ -3182,6 +3184,87 @@ fn apply_model_output(
             Err(finding) => summary_only_findings.push(finding),
         }
     }
+}
+
+fn dedupe_inline_comments(
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+) {
+    let mut deduped = BTreeMap::new();
+    for comment in std::mem::take(inline_comments) {
+        let key = (comment.path.clone(), comment.line);
+        if let Some(existing) = deduped.get_mut(&key) {
+            let dropped = if inline_comment_rank(&comment) > inline_comment_rank(existing) {
+                std::mem::replace(existing, comment)
+            } else {
+                comment
+            };
+            merge_duplicate_inline_evidence(existing, &dropped);
+            summary_only_findings.push(SummaryOnlyFinding {
+                lane: dropped.lane,
+                severity: dropped.severity,
+                confidence: dropped.confidence,
+                reason: format!(
+                    "duplicate inline candidate merged into {}:{}",
+                    dropped.path, dropped.line
+                ),
+                evidence: dropped.evidence,
+            });
+        } else {
+            deduped.insert(key, comment);
+        }
+    }
+    inline_comments.extend(deduped.into_values());
+}
+
+fn inline_comment_rank(comment: &ReviewInlineComment) -> (u8, u8) {
+    (
+        severity_rank(&comment.severity),
+        confidence_rank(&comment.confidence),
+    )
+}
+
+fn severity_rank(value: &str) -> u8 {
+    match value {
+        "blocker" => 4,
+        "high" => 3,
+        "medium" => 2,
+        "low" => 1,
+        _ => 0,
+    }
+}
+
+fn confidence_rank(value: &str) -> u8 {
+    match value {
+        "high" => 3,
+        "medium-high" => 2,
+        "medium" => 1,
+        "low" => 0,
+        _ => 0,
+    }
+}
+
+fn merge_duplicate_inline_evidence(kept: &mut ReviewInlineComment, dropped: &ReviewInlineComment) {
+    if dropped.evidence.is_empty() || kept.evidence.contains(&dropped.evidence) {
+        return;
+    }
+    let merged = format!(
+        "{} Additional duplicate evidence from lane `{}`: {}",
+        kept.evidence, dropped.lane, dropped.evidence
+    );
+    kept.evidence = truncate_chars(&merged, 2_000);
+}
+
+fn truncate_chars(value: &str, max_chars: usize) -> String {
+    if value.chars().count() <= max_chars {
+        return value.to_owned();
+    }
+    if max_chars <= 3 {
+        return value.chars().take(max_chars).collect();
+    }
+    let mut truncated = value.chars().take(max_chars - 3).collect::<String>();
+    truncated.push_str("...");
+    truncated
 }
 
 fn validate_inline_candidate(
@@ -4394,11 +4477,11 @@ mod tests {
         ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostingMode,
         ProviderKindArg, ReviewArgs, ReviewInlineComment, RunArgs, RunMode, SensorPlan,
         SensorStatusWrite, SummaryOnlyFinding, ToolClass, cap_review_body, classify_diff,
-        default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
-        model_assignments, model_request_payload, model_response_shape, opencode_canary_spec,
-        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
-        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
-        validate_inline_candidate, write_sensor_status,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        http_status_from_error, model_assignments, model_request_payload, model_response_shape,
+        opencode_canary_spec, render_ledger_context, render_review_body, render_summary,
+        right_side_diff_lines, run_command_to_files, run_sensor, split_curl_http_status,
+        validate_github_review_payload, validate_inline_candidate, write_sensor_status,
     };
 
     #[test]
@@ -4615,6 +4698,50 @@ index 1111111..2222222 100644
         );
         assert!(rejected.is_err());
         Ok(())
+    }
+
+    #[test]
+    fn inline_dedupe_keeps_strongest_same_location_candidate() {
+        let mut inline_comments = vec![
+            ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[tests-oracle] This test reaches the helper but not the boundary."
+                    .to_owned(),
+                evidence: "ripr excerpt".to_owned(),
+            },
+            ReviewInlineComment {
+                lane: "ub-active-view".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[ub-active-view] The view length can diverge from backing storage."
+                    .to_owned(),
+                evidence: "unsafe-review card".to_owned(),
+            },
+        ];
+        let mut summary_only_findings = Vec::new();
+
+        dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+
+        assert_eq!(inline_comments.len(), 1);
+        assert_eq!(inline_comments[0].lane, "ub-active-view");
+        assert_eq!(inline_comments[0].severity, "high");
+        assert!(inline_comments[0].evidence.contains("unsafe-review card"));
+        assert!(inline_comments[0].evidence.contains("ripr excerpt"));
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(summary_only_findings[0].lane, "tests-oracle");
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .contains("duplicate inline candidate merged into src/lib.rs:2")
+        );
     }
 
     #[test]
