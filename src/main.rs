@@ -5538,7 +5538,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use anyhow::Result;
+    use anyhow::{Context as _, Result};
 
     use super::{
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
@@ -6354,12 +6354,17 @@ index 1111111..2222222 100644
         let opencode: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/opencode-go-m3-messages.json"
         ))?;
+        let opencode_openai: serde_json::Value = serde_json::from_str(include_str!(
+            "../fixtures/providers/opencode-go-openai-chat-completion.json"
+        ))?;
         let minimax_thinking: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/minimax-m3-thinking-then-text.json"
         ))?;
         let malformed: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/malformed-no-content.json"
         ))?;
+        let non_json: serde_json::Value =
+            serde_json::from_str(include_str!("../fixtures/providers/non-json-content.json"))?;
 
         assert_eq!(model_response_shape(&openai), "openai");
         assert_eq!(
@@ -6378,6 +6383,13 @@ index 1111111..2222222 100644
                 "{\"summary\":\"opencode go m3 ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
             )
         );
+        assert_eq!(model_response_shape(&opencode_openai), "openai");
+        assert_eq!(
+            extract_model_content(&opencode_openai),
+            Some(
+                "{\"summary\":\"opencode go openai ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+            )
+        );
         assert_eq!(model_response_shape(&minimax_thinking), "anthropic");
         assert_eq!(
             extract_model_content(&minimax_thinking),
@@ -6387,6 +6399,19 @@ index 1111111..2222222 100644
         );
         assert_eq!(model_response_shape(&malformed), "unknown");
         assert!(extract_model_content(&malformed).is_none());
+        assert_eq!(model_response_shape(&non_json), "openai");
+        let content = extract_model_content(&non_json)
+            .ok_or_else(|| anyhow::anyhow!("non-json content fixture missing assistant content"))?;
+        let result = serde_json::from_str::<LaneModelOutput>(&model_json_payload(content))
+            .map(|_| ())
+            .map_err(anyhow::Error::from)
+            .context("parse model output fixture");
+        let Err(err) = result else {
+            return Err(anyhow::anyhow!(
+                "non-json provider content passed strict lane JSON parsing"
+            ));
+        };
+        assert_eq!(super::classify_model_error(&err), "invalid_json");
         Ok(())
     }
 
