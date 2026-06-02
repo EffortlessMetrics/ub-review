@@ -1,26 +1,28 @@
-# Repository bootstrap
+# Repository bootstrap and first live use
 
-Target repository:
+The initial repository scaffold has landed in:
 
 ```text
 https://github.com/EffortlessMetrics/ub-review
 ```
 
-The public GitHub page currently shows this repository as empty. This scaffold is intended to become its first commit.
+Current development should happen through small PRs against `main`. Do not treat
+`origin/main` as an empty bootstrap target.
 
-## Bootstrap commands
+## Local verification
+
+Before opening a PR, run:
 
 ```bash
-git clone git@github.com:EffortlessMetrics/ub-review.git
-cd ub-review
-cp -R /path/to/ub-review-repo-ready/. .
 cargo generate-lockfile
-git add .
-git commit -m "initial ub-review action scaffold"
-git push origin main
+cargo fmt --all --check
+cargo check --workspace --all-targets --locked
+cargo test --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo doc --workspace --no-deps --locked
 ```
 
-## After bootstrap
+## First Bun fork verification
 
 In the Bun fork, add:
 
@@ -29,11 +31,25 @@ In the Bun fork, add:
 ```
 
 using `examples/bun/.github/workflows/ub-review-packet.yml` from this repository.
-
-The Bun fork should call:
+The first run should call:
 
 ```yaml
 uses: EffortlessMetrics/ub-review@main
 ```
 
-Pin to a tag or SHA after the first green run.
+Use `@main` until a draft Bun UB PR proves:
+
+- one grouped Pull Request Review is posted or a `post-error.json` receipt explains why not;
+- `target/ub-review/running-summary.md` exists;
+- `target/ub-review/review/review.md` exists;
+- `target/ub-review/review/github-review.json` exists;
+- `target/ub-review/input/diff.patch` exists;
+- sensor receipts exist under `target/ub-review/sensors/*/ub-review-sensor-status.json`;
+- missing sensors or model lanes are explicit missing evidence, not clean results.
+
+After that run posts a useful review and uploads a complete packet, tag `v0` in
+this repository and switch the Bun workflow to:
+
+```yaml
+uses: EffortlessMetrics/ub-review@v0
+```

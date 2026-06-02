@@ -16,9 +16,11 @@ The Bun fork should consume this repository as a GitHub Action:
 Use `@main` until the first Bun fork verification succeeds. After tagging `v0`,
 pin the Bun workflow to `EffortlessMetrics/ub-review@v0`.
 
-The action is no-token and read-only by default. It writes a packet under
-`target/ub-review`, appends `running-summary.md` to the job summary, and lets the
-calling workflow upload the artifact.
+The action builds the packet without sensor secrets. In `posting: review` mode,
+the Bun workflow gives it the scoped `github.token` so it can submit one grouped
+Pull Request Review. MiniMax M3 lanes use `secrets.MINIMAX`; GLM is skipped for
+v0. The calling workflow still owns uploading `target/ub-review` as the durable
+artifact.
 
 ## Copy-ready workflow
 
@@ -48,13 +50,24 @@ target/ub-review/
   input/
   sensors/
   lanes/
+  review/
+    shared_context.md
+    review.json
+    review.md
+    github-review.json
+    post-result.json
+    post-error.json
   events.ndjson
   running-summary.md
 ```
 
-Start with `running-summary.md`, then inspect the lane packets under `lanes/`.
+Start with `running-summary.md`, then inspect `review/review.md`, the lane
+packets under `lanes/`, and `review/post-result.json` or
+`review/post-error.json` for the grouped review posting trail.
 
 ## CI budget rule
 
-The GitHub runner should prepare evidence once. It should not host long-running
-LLM orchestration. LLMs and reviewers consume the packet after CI uploads it.
+The GitHub runner should prepare evidence once and avoid duplicated local
+discovery. Bounded direct MiniMax/OpenCode Go calls may fan out over the shared
+packet, but the action should not shell out to Codex, OpenCode, Droid, or other
+agent harnesses as the hot-path orchestrator.
