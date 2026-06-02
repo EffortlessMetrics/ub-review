@@ -95,6 +95,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/merged_observations.json",
         "review/dropped_observations.json",
         "review/proof_requests.json",
+        "review/proof_request_groups.json",
         "review/proof_plan.md",
         "proof_requests.ndjson",
     ]:
@@ -265,6 +266,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
 def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict]) -> None:
     for request in proof_requests:
         require_proof_request_schema(request)
+    require_proof_request_groups(root, proof_requests)
     ndjson_path = root / "proof_requests.ndjson"
     text = read_text(ndjson_path)
     lines = [line for line in text.splitlines() if line.strip()]
@@ -284,6 +286,58 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
         fail("review/proof_plan.md does not mark proof requests as passive")
     if not proof_requests and "No proof requests were emitted" not in proof_plan:
         fail("review/proof_plan.md missing empty proof request note")
+
+
+def require_proof_request_groups(root: pathlib.Path, proof_requests: list[dict]) -> None:
+    groups = load_json(root / "review/proof_request_groups.json")
+    if not isinstance(groups, list):
+        fail("review/proof_request_groups.json is not an array")
+    expected = expected_proof_request_groups(proof_requests)
+    if groups != expected:
+        fail("review/proof_request_groups.json does not match raw proof request grouping")
+    for group in groups:
+        require_proof_request_group_schema(group)
+
+
+def expected_proof_request_groups(proof_requests: list[dict]) -> list[dict]:
+    groups: dict[tuple[str, str, int], dict] = {}
+    for request in proof_requests:
+        command = request["command"]
+        cost = request["cost"]
+        timeout_sec = request["timeout_sec"]
+        key = (command, cost, timeout_sec)
+        group = groups.get(key)
+        if group is None:
+            digest = hashlib.sha256(f"{command}\n{cost}\n{timeout_sec}".encode()).hexdigest()
+            group = {
+                "schema": "ub-review.proof_request_group.v1",
+                "id": f"proof-group-{digest[:12]}",
+                "command": command,
+                "cost": cost,
+                "timeout_sec": timeout_sec,
+                "required": False,
+                "status": "invalid",
+                "requested_by": [],
+                "request_ids": [],
+                "reasons": [],
+                "duplicate_count": 0,
+            }
+            groups[key] = group
+        group["required"] = bool(group["required"] or request["required"])
+        if request["status"] == "requested":
+            group["status"] = "requested"
+        append_unique(group["requested_by"], request["lane"])
+        for lane in request["requested_by"]:
+            append_unique(group["requested_by"], lane)
+        append_unique(group["request_ids"], request["id"])
+        append_unique(group["reasons"], request["reason"])
+        group["duplicate_count"] += 1
+    return [groups[key] for key in sorted(groups)]
+
+
+def append_unique(values: list[str], value: str) -> None:
+    if value not in values:
+        values.append(value)
 
 
 def require_observation_files(root: pathlib.Path, observations: list[dict]) -> None:
@@ -640,6 +694,30 @@ def require_proof_request_schema(request: dict) -> None:
         fail(f"proof request required is not boolean: {request!r}")
     if request["status"] not in {"requested", "invalid"}:
         fail(f"proof request has unsupported status: {request!r}")
+
+
+def require_proof_request_group_schema(group: dict) -> None:
+    if group.get("schema") != "ub-review.proof_request_group.v1":
+        fail(f"proof request group has wrong schema: {group!r}")
+    for field in ["id", "command", "cost", "status"]:
+        if not isinstance(group.get(field), str) or not group[field]:
+            fail(f"proof request group missing string field {field}: {group!r}")
+    timeout = group.get("timeout_sec")
+    if not isinstance(timeout, int) or timeout <= 0 or timeout > 900:
+        fail(f"proof request group timeout_sec is invalid: {group!r}")
+    if not isinstance(group.get("required"), bool):
+        fail(f"proof request group required is not boolean: {group!r}")
+    if group["status"] not in {"requested", "invalid"}:
+        fail(f"proof request group has unsupported status: {group!r}")
+    duplicate_count = group.get("duplicate_count")
+    if not isinstance(duplicate_count, int) or duplicate_count <= 0:
+        fail(f"proof request group duplicate_count is invalid: {group!r}")
+    for field in ["requested_by", "request_ids", "reasons"]:
+        values = group.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item for item in values
+        ):
+            fail(f"proof request group {field} is not a non-empty string array: {group!r}")
 
 
 def sanitize_artifact_name(value: str) -> str:
