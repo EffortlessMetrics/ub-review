@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::process::{Command as ProcessCommand, ExitStatus, Stdio};
+use std::process::{Child, Command as ProcessCommand, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -769,6 +769,13 @@ struct HttpPostOutput {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
     http_status: Option<u16>,
+}
+
+#[derive(Debug)]
+struct FileCommandOutput {
+    status: ExitStatus,
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
 }
 
 struct SensorStatusWrite<'a> {
@@ -4682,7 +4689,13 @@ fn run_curl_json_post(
     headers: &[&str],
     timeout_sec: u64,
 ) -> Result<HttpPostOutput> {
-    let mut child = ProcessCommand::new("curl")
+    let (stdout_path, stderr_path) = curl_temp_output_paths(request_path);
+    let stdout =
+        File::create(&stdout_path).with_context(|| format!("create {}", stdout_path.display()))?;
+    let stderr =
+        File::create(&stderr_path).with_context(|| format!("create {}", stderr_path.display()))?;
+    let mut command = ProcessCommand::new("curl");
+    command
         .arg("-sS")
         .arg("--fail-with-body")
         .arg("--max-time")
@@ -4698,22 +4711,35 @@ fn run_curl_json_post(
         .arg(url)
         .current_dir(root)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .with_context(|| "spawn curl")?;
-    {
-        let stdin = child
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr));
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(err) => {
+            remove_output_files(&stdout_path, &stderr_path);
+            return Err(err).with_context(|| "spawn curl");
+        }
+    };
+    let write_config_result = (|| -> Result<()> {
+        let mut stdin = child
             .stdin
-            .as_mut()
+            .take()
             .ok_or_else(|| anyhow::anyhow!("curl stdin unavailable"))?;
         use std::io::Write as _;
         for header in headers {
             writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
         }
         writeln!(stdin, "header = \"{}\"", curl_config_quote(auth_header))?;
+        Ok(())
+    })();
+    if let Err(err) = write_config_result {
+        let _ = child.kill();
+        let _ = child.wait();
+        remove_output_files(&stdout_path, &stderr_path);
+        return Err(err);
     }
-    let output = child.wait_with_output().with_context(|| "wait for curl")?;
+    let output = wait_for_child_output_files(child, &stdout_path, &stderr_path, timeout_sec)
+        .with_context(|| "wait for curl")?;
     let (stdout, http_status) = split_curl_http_status(output.stdout);
     Ok(HttpPostOutput {
         status: output.status,
@@ -4721,6 +4747,58 @@ fn run_curl_json_post(
         stderr: output.stderr,
         http_status,
     })
+}
+
+fn curl_temp_output_paths(request_path: &Path) -> (PathBuf, PathBuf) {
+    let dir = request_path.parent().unwrap_or_else(|| Path::new("."));
+    let file_name = request_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("request.json");
+    (
+        dir.join(format!("{file_name}.curl.stdout.tmp")),
+        dir.join(format!("{file_name}.curl.stderr.tmp")),
+    )
+}
+
+fn wait_for_child_output_files(
+    mut child: Child,
+    stdout_path: &Path,
+    stderr_path: &Path,
+    timeout_sec: u64,
+) -> Result<FileCommandOutput> {
+    let status = match child.wait_timeout(Duration::from_secs(timeout_sec))? {
+        Some(status) => status,
+        None => {
+            let _ = child.kill();
+            let _ = child.wait();
+            let stdout = read_and_remove_output_file(stdout_path)?;
+            let stderr = read_and_remove_output_file(stderr_path)?;
+            bail!(
+                "process timed out after {timeout_sec}s: stderr: {}; stdout: {}",
+                String::from_utf8_lossy(&stderr),
+                String::from_utf8_lossy(&stdout)
+            );
+        }
+    };
+    let stdout = read_and_remove_output_file(stdout_path)?;
+    let stderr = read_and_remove_output_file(stderr_path)?;
+    Ok(FileCommandOutput {
+        status,
+        stdout,
+        stderr,
+    })
+}
+
+fn read_and_remove_output_file(path: &Path) -> Result<Vec<u8>> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    let _ = fs::remove_file(path);
+    Ok(bytes)
+}
+
+fn remove_output_files(stdout_path: &Path, stderr_path: &Path) {
+    let _ = fs::remove_file(stdout_path);
+    let _ = fs::remove_file(stderr_path);
 }
 
 fn curl_config_quote(value: &str) -> String {
@@ -5588,6 +5666,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::fs;
     use std::path::Path;
+    use std::process::{Command as ProcessCommand, Stdio};
 
     use anyhow::{Context as _, Result};
 
@@ -5606,7 +5685,7 @@ mod tests {
         render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
         run_refuter_pass, run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        write_github_review_payload, write_sensor_status,
+        wait_for_child_output_files, write_github_review_payload, write_sensor_status,
     };
 
     #[test]
@@ -6618,6 +6697,38 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert_eq!(body, br#"{"error":"rate"}"#);
         assert_eq!(status, Some(429));
+    }
+
+    #[test]
+    fn child_output_file_wait_reports_timeout_and_cleans_temp_files() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let stdout_path = temp.path().join("stdout.txt");
+        let stderr_path = temp.path().join("stderr.txt");
+        let stdout =
+            fs::File::create(&stdout_path).with_context(|| "create sleeper stdout file")?;
+        let stderr =
+            fs::File::create(&stderr_path).with_context(|| "create sleeper stderr file")?;
+        let argv = sleeper_argv();
+        let Some((program, args)) = argv.split_first() else {
+            return Err(anyhow::anyhow!("empty sleeper argv"));
+        };
+        let child = ProcessCommand::new(program)
+            .args(args)
+            .current_dir(temp.path())
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::from(stderr))
+            .spawn()
+            .with_context(|| "spawn sleeper")?;
+
+        let err = match wait_for_child_output_files(child, &stdout_path, &stderr_path, 1) {
+            Ok(_) => return Err(anyhow::anyhow!("sleeper completed before timeout")),
+            Err(err) => err,
+        };
+
+        assert!(err.to_string().contains("timed out after 1s"));
+        assert!(!stdout_path.exists());
+        assert!(!stderr_path.exists());
+        Ok(())
     }
 
     #[test]
