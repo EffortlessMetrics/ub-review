@@ -2,6 +2,7 @@ name: Action Smoke
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
   workflow_dispatch:
 
 permissions:
@@ -36,4 +37,40 @@ jobs:
         with:
           name: ub-review-smoke
           path: target/ub-review-smoke
+          retention-days: 7
+
+  model-smoke:
+    name: MiniMax model smoke
+    if: github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ub-review-model-smoke')
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: ./
+        with:
+          preset: bun-ub
+          profile: gh-runner
+          install-tools: 'false'
+          base: HEAD~1
+          head: HEAD
+          out: target/ub-review-model-smoke
+          posting: review
+          github-token: ${{ github.token }}
+          model-mode: auto
+          provider-policy: minimax-only
+          minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
+          minimax-provider-kind: openai
+          max-model-calls: '1'
+          model-concurrency: '1'
+          max-inline-comments: '2'
+          fail-on-post-error: 'false'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ub-review-model-smoke
+          path: target/ub-review-model-smoke
           retention-days: 7

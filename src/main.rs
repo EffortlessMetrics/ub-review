@@ -282,7 +282,7 @@ struct RunArgs {
     #[arg(
         long,
         value_enum,
-        default_value = "anthropic",
+        default_value = "openai",
         env = "UB_REVIEW_MINIMAX_PROVIDER_KIND"
     )]
     minimax_provider_kind: ProviderKindArg,
@@ -3298,6 +3298,7 @@ where
     let env_name = model_api_key_env(spec.provider);
     let token = std::env::var(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
+    let auth_header = model_auth_header(spec, &token);
     let payload = model_request_payload(spec, prompt);
     let request_path = lane_dir.join("request.json");
     let response_path = lane_dir.join("response.json");
@@ -3307,7 +3308,7 @@ where
     let process_output = run_curl_json_post(
         root,
         &url,
-        &token,
+        &auth_header,
         &request_path,
         &["Accept: application/json", "Content-Type: application/json"],
         args.model_timeout_sec,
@@ -3333,8 +3334,16 @@ where
         .ok_or_else(|| anyhow::anyhow!("model response did not contain assistant content"))?;
     let content_path = lane_dir.join("content.json");
     fs::write(&content_path, content.as_bytes())?;
-    let parsed_output = serde_json::from_str(content)
-        .with_context(|| format!("parse {}", content_path.display()))?;
+    let json_payload = model_json_payload(content);
+    let parse_path = if json_payload == content {
+        content_path
+    } else {
+        let normalized_path = lane_dir.join("content-normalized.json");
+        fs::write(&normalized_path, json_payload.as_bytes())?;
+        normalized_path
+    };
+    let parsed_output = serde_json::from_str(&json_payload)
+        .with_context(|| format!("parse {}", parse_path.display()))?;
     Ok(ModelCallOutcome {
         output: parsed_output,
         duration_ms,
@@ -3352,29 +3361,31 @@ Endpoint kind: {endpoint_kind}
 Role: {role}
 Focus: {focus}
 
-Use the shared context below. Return strict JSON:
+Use the shared context below. Return only one strict JSON object:
 {{
-  "summary": "short lane summary",
+  "summary": "short lane summary, 300 chars max",
   "inline_comments": [
     {{
       "severity": "blocker|high|medium",
       "confidence": "high|medium-high",
       "path": "repo-relative/path.rs",
       "line": 123,
-      "body": "[{lane}] concise actionable finding with evidence or disproof condition",
-      "evidence": "artifact, diff, or invariant"
+      "body": "[{lane}] concise actionable finding, 400 chars max",
+      "evidence": "artifact, diff, or invariant, 240 chars max"
     }}
   ],
   "summary_only_findings": [
     {{
       "severity": "blocker|high|medium|low",
       "confidence": "high|medium-high|medium",
-      "reason": "why this should stay in the summary",
-      "evidence": "artifact, diff, or invariant"
+      "reason": "summary-only issue, 400 chars max",
+      "evidence": "artifact, diff, or invariant, 240 chars max"
     }}
   ]
 }}
 
+Hard caps: at most 2 inline_comments and at most 1 summary_only_findings item.
+If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
 Only propose inline comments for valid RIGHT-side changed or context lines in the PR diff.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
 
@@ -3745,10 +3756,21 @@ fn model_api_key_env(provider: ModelProvider) -> &'static str {
 
 fn model_api_url(spec: &ProviderSpec) -> String {
     match spec.provider {
-        ModelProvider::MiniMaxDirect => env_or_default(
-            "UB_REVIEW_MINIMAX_API_URL",
-            "https://api.minimax.io/anthropic",
-        ),
+        ModelProvider::MiniMaxDirect => {
+            if let Ok(value) = std::env::var("UB_REVIEW_MINIMAX_API_URL")
+                && !value.trim().is_empty()
+            {
+                return value;
+            }
+            match spec.endpoint_kind {
+                ProviderEndpointKind::AnthropicMessages => {
+                    "https://api.minimax.io/anthropic/v1/messages".to_owned()
+                }
+                ProviderEndpointKind::OpenAiChat => {
+                    "https://api.minimax.io/v1/chat/completions".to_owned()
+                }
+            }
+        }
         ModelProvider::OpenCodeGo => {
             if let Ok(value) = std::env::var("UB_REVIEW_OPENCODE_API_URL")
                 && !value.trim().is_empty()
@@ -3767,23 +3789,44 @@ fn model_api_url(spec: &ProviderSpec) -> String {
     }
 }
 
-fn env_or_default(name: &str, default: &str) -> String {
-    std::env::var(name)
-        .ok()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| default.to_owned())
+fn model_auth_header(spec: &ProviderSpec, token: &str) -> String {
+    match spec.provider {
+        ModelProvider::MiniMaxDirect
+            if spec.endpoint_kind == ProviderEndpointKind::AnthropicMessages =>
+        {
+            format!("X-Api-Key: {token}")
+        }
+        ModelProvider::MiniMaxDirect => format!("Authorization: Bearer {token}"),
+        ModelProvider::OpenCodeGo => format!("Authorization: Bearer {token}"),
+    }
 }
 
 fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value {
     match spec.endpoint_kind {
         ProviderEndpointKind::AnthropicMessages => serde_json::json!({
             "model": spec.model,
-            "max_tokens": 4096,
+            "max_tokens": model_max_tokens(spec),
+            "system": "Return one compact JSON object in the final text block. Do not include markdown fences or prose outside JSON.",
+            "thinking": {"type": "adaptive"},
             "temperature": 0.1,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
         }),
+        ProviderEndpointKind::OpenAiChat if spec.provider == ModelProvider::MiniMaxDirect => {
+            serde_json::json!({
+                "model": spec.model,
+                "messages": [
+                    {"role": "system", "content": "Return strict JSON only. Do not include markdown fences or prose outside JSON."},
+                    {"role": "user", "content": prompt}
+                ],
+                "max_completion_tokens": 4096,
+                "reasoning_split": true,
+                "response_format": {"type": "json_object"},
+                "temperature": 0.1,
+                "stream": false
+            })
+        }
         ProviderEndpointKind::OpenAiChat => serde_json::json!({
             "model": spec.model,
             "messages": [
@@ -3796,30 +3839,61 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
     }
 }
 
+fn model_max_tokens(spec: &ProviderSpec) -> u32 {
+    match spec.endpoint_kind {
+        ProviderEndpointKind::AnthropicMessages => 4096,
+        ProviderEndpointKind::OpenAiChat => 4096,
+    }
+}
+
 fn extract_model_content(response: &serde_json::Value) -> Option<&str> {
     response
         .pointer("/choices/0/message/content")
         .and_then(serde_json::Value::as_str)
-        .or_else(|| {
-            response
-                .pointer("/content/0/text")
-                .and_then(serde_json::Value::as_str)
-        })
+        .or_else(|| anthropic_content_text(response))
         .or_else(|| response.get("text").and_then(serde_json::Value::as_str))
         .or_else(|| response.get("reply").and_then(serde_json::Value::as_str))
         .or_else(|| response.get("content").and_then(serde_json::Value::as_str))
 }
 
+fn anthropic_content_text(response: &serde_json::Value) -> Option<&str> {
+    response
+        .get("content")?
+        .as_array()?
+        .iter()
+        .find_map(|item| item.get("text").and_then(serde_json::Value::as_str))
+}
+
 fn model_response_shape(response: &serde_json::Value) -> &'static str {
     if response.pointer("/choices/0/message/content").is_some() {
         "openai"
-    } else if response.pointer("/content/0/text").is_some() {
+    } else if anthropic_content_text(response).is_some() {
         "anthropic"
     } else if response.get("reply").is_some() || response.get("content").is_some() {
         "provider-flat"
     } else {
         "unknown"
     }
+}
+
+fn model_json_payload(content: &str) -> String {
+    let trimmed = content.trim();
+    strip_markdown_json_fence(trimmed)
+        .map(str::trim)
+        .unwrap_or(content)
+        .to_owned()
+}
+
+fn strip_markdown_json_fence(trimmed: &str) -> Option<&str> {
+    let body = trimmed.strip_prefix("```")?;
+    let newline = body.find('\n')?;
+    let (info, rest_with_newline) = body.split_at(newline);
+    let info = info.trim();
+    if !info.is_empty() && !info.eq_ignore_ascii_case("json") {
+        return None;
+    }
+    let rest = rest_with_newline.strip_prefix('\n')?.trim_end();
+    rest.strip_suffix("```")
 }
 
 fn classify_model_error(err: &anyhow::Error) -> String {
@@ -3845,7 +3919,7 @@ fn classify_model_error(err: &anyhow::Error) -> String {
 fn run_curl_json_post(
     root: &Path,
     url: &str,
-    token: &str,
+    auth_header: &str,
     request_path: &Path,
     headers: &[&str],
     timeout_sec: u64,
@@ -3879,11 +3953,7 @@ fn run_curl_json_post(
         for header in headers {
             writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
         }
-        writeln!(
-            stdin,
-            "header = \"Authorization: Bearer {}\"",
-            curl_config_quote(token)
-        )?;
+        writeln!(stdin, "header = \"{}\"", curl_config_quote(auth_header))?;
     }
     let output = child.wait_with_output().with_context(|| "wait for curl")?;
     let (stdout, http_status) = split_curl_http_status(output.stdout);
@@ -3960,7 +4030,7 @@ fn post_github_review(args: &PostArgs) -> Result<serde_json::Value> {
     let output = run_curl_json_post(
         Path::new("."),
         &url,
-        token,
+        &format!("Authorization: Bearer {token}"),
         &post_payload,
         &[
             "Accept: application/vnd.github+json",
@@ -4723,15 +4793,16 @@ mod tests {
 
     use super::{
         BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
-        LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode, ModelProvider,
-        ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan, PostingMode,
-        ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs, ReviewInlineComment, RunArgs,
-        RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
+        LaneModelOutput, LanePlan, ModelCandidateComment, ModelEvidenceIssue, ModelMode,
+        ModelProvider, ModelProviderPolicy, NO_LGTM_POSTURE, OpenCodeEndpointKindArg, Plan,
+        PostingMode, ProviderKindArg, RefuterDecision, RefuterOutput, ReviewArgs,
+        ReviewInlineComment, RunArgs, RunMode, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
+        ToolClass, apply_refuter_output, cap_review_body, classify_diff, dedupe_inline_comments,
         default_lanes, direct_minimax_spec, extract_model_content, http_status_from_error,
-        model_assignments, model_request_payload, model_response_shape, opencode_canary_spec,
-        render_ledger_context, render_review_body, render_summary, right_side_diff_lines,
-        run_command_to_files, run_sensor, split_curl_http_status, validate_github_review_payload,
+        model_api_url, model_assignments, model_auth_header, model_json_payload,
+        model_request_payload, model_response_shape, opencode_canary_spec, render_ledger_context,
+        render_review_body, render_summary, right_side_diff_lines, run_command_to_files,
+        run_sensor, split_curl_http_status, validate_github_review_payload,
         validate_inline_candidate, write_sensor_status,
     };
 
@@ -5132,6 +5203,37 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn direct_minimax_openai_uses_chat_endpoint_and_bearer_header() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+
+        assert_eq!(
+            model_api_url(&spec),
+            "https://api.minimax.io/v1/chat/completions"
+        );
+        assert_eq!(
+            model_auth_header(&spec, "test-token"),
+            "Authorization: Bearer test-token"
+        );
+    }
+
+    #[test]
+    fn direct_minimax_anthropic_uses_messages_endpoint_and_api_key_header() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
+        let spec = direct_minimax_spec(&args);
+
+        assert_eq!(
+            model_api_url(&spec),
+            "https://api.minimax.io/anthropic/v1/messages"
+        );
+        assert_eq!(
+            model_auth_header(&spec, "test-token"),
+            "X-Api-Key: test-token"
+        );
+    }
+
+    #[test]
     fn provider_policy_opencode_canary_routes_only_opposition() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::OpencodeGoCanary;
@@ -5190,6 +5292,9 @@ index 1111111..2222222 100644
         let opencode: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/opencode-go-m3-messages.json"
         ))?;
+        let minimax_thinking: serde_json::Value = serde_json::from_str(include_str!(
+            "../fixtures/providers/minimax-m3-thinking-then-text.json"
+        ))?;
         let malformed: serde_json::Value = serde_json::from_str(include_str!(
             "../fixtures/providers/malformed-no-content.json"
         ))?;
@@ -5211,8 +5316,37 @@ index 1111111..2222222 100644
                 "{\"summary\":\"opencode go m3 ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
             )
         );
+        assert_eq!(model_response_shape(&minimax_thinking), "anthropic");
+        assert_eq!(
+            extract_model_content(&minimax_thinking),
+            Some(
+                "{\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}"
+            )
+        );
         assert_eq!(model_response_shape(&malformed), "unknown");
         assert!(extract_model_content(&malformed).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn model_json_payload_accepts_markdown_json_fence() -> Result<()> {
+        let fenced = r#"```json
+{
+  "summary": "fenced ok",
+  "inline_comments": [],
+  "summary_only_findings": []
+}
+```"#;
+
+        let parsed: LaneModelOutput = serde_json::from_str(&model_json_payload(fenced))?;
+
+        assert_eq!(parsed.summary.as_deref(), Some("fenced ok"));
+        assert!(parsed.inline_comments.is_empty());
+        assert!(parsed.summary_only_findings.is_empty());
+        assert!(
+            serde_json::from_str::<LaneModelOutput>(&model_json_payload("Here is the JSON:\n{}"))
+                .is_err()
+        );
         Ok(())
     }
 
@@ -5244,13 +5378,40 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn minimax_anthropic_payload_uses_anthropic_shape() {
+    fn minimax_openai_payload_uses_chat_shape() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let spec = direct_minimax_spec(&args);
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "MiniMax-M3");
-        assert!(payload["max_tokens"].is_number());
+        assert_eq!(payload["max_completion_tokens"], 4096);
+        assert_eq!(payload["reasoning_split"], true);
+        assert_eq!(payload["response_format"]["type"], "json_object");
+        assert!(
+            payload["messages"][0]["content"]
+                .as_str()
+                .is_some_and(|system| system.contains("strict JSON"))
+        );
+        assert!(payload["messages"][1]["content"].as_str().is_some());
+        assert_eq!(payload["stream"], false);
+        assert!(payload.get("max_tokens").is_none());
+    }
+
+    #[test]
+    fn minimax_anthropic_payload_uses_messages_shape() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
+        let spec = direct_minimax_spec(&args);
+        let payload = model_request_payload(&spec, "packet");
+
+        assert_eq!(payload["model"], "MiniMax-M3");
+        assert_eq!(payload["max_tokens"], 4096);
+        assert_eq!(payload["thinking"]["type"], "adaptive");
+        assert!(
+            payload["system"]
+                .as_str()
+                .is_some_and(|system| system.contains("final text block"))
+        );
         assert!(payload["messages"].is_array());
         assert!(payload["messages"][0]["content"].as_str().is_some());
         assert!(payload.get("stream").is_none());
@@ -5263,7 +5424,13 @@ UB_REVIEW_HTTP_STATUS:429
         let payload = model_request_payload(&spec, "packet");
 
         assert_eq!(payload["model"], "minimax-m3");
-        assert!(payload["max_tokens"].is_number());
+        assert_eq!(payload["max_tokens"], 4096);
+        assert_eq!(payload["thinking"]["type"], "adaptive");
+        assert!(
+            payload["system"]
+                .as_str()
+                .is_some_and(|system| system.contains("final text block"))
+        );
         assert!(payload["messages"][0]["content"].as_str().is_some());
         assert!(payload.get("stream").is_none());
     }
@@ -5378,7 +5545,7 @@ UB_REVIEW_HTTP_STATUS:429
             model_timeout_sec: 180,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
-            minimax_provider_kind: ProviderKindArg::Anthropic,
+            minimax_provider_kind: ProviderKindArg::Openai,
             minimax_model: "MiniMax-M3".to_owned(),
             opencode_model: "minimax-m3".to_owned(),
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,

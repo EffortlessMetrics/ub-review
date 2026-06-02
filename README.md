@@ -252,7 +252,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `github-token` | empty | Scoped token for `posting=review`. |
 | `minimax-api-key` | empty | MiniMax M3 lane key. |
 | `minimax-api-url` | empty | Optional MiniMax API URL override. |
-| `minimax-provider-kind` | `anthropic` | MiniMax envelope, `anthropic` or `openai`. |
+| `minimax-provider-kind` | `openai` | MiniMax envelope, `openai` or `anthropic`. |
 | `minimax-model` | `MiniMax-M3` | MiniMax model name. |
 | `opencode-api-key` | empty | OpenCode Go key for optional direct provider lanes. |
 | `opencode-api-url` | empty | Optional OpenCode Go API URL override. |
