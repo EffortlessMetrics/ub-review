@@ -4481,7 +4481,7 @@ fn strip_markdown_json_fence(trimmed: &str) -> Option<&str> {
 }
 
 fn classify_model_error(err: &anyhow::Error) -> String {
-    let text = err.to_string().to_ascii_lowercase();
+    let text = model_error_chain_text(err).to_ascii_lowercase();
     if text.contains("401") || text.contains("403") || text.contains("auth") {
         "auth_failed".to_owned()
     } else if text.contains("429") || text.contains("rate") {
@@ -4498,6 +4498,10 @@ fn classify_model_error(err: &anyhow::Error) -> String {
     } else {
         "failed".to_owned()
     }
+}
+
+fn model_error_chain_text(err: &anyhow::Error) -> String {
+    format!("{err:#}")
 }
 
 fn run_curl_json_post(
@@ -4574,7 +4578,7 @@ fn split_curl_http_status(stdout: Vec<u8>) -> (Vec<u8>, Option<u16>) {
 }
 
 fn http_status_from_error(err: &anyhow::Error) -> Option<u16> {
-    let text = format!("{err:#}");
+    let text = model_error_chain_text(err);
     let needle = "http status Some(";
     let start = text.find(needle)? + needle.len();
     let end = text[start..].find(')')? + start;
@@ -6313,6 +6317,26 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert_eq!(http_status_from_error(&err), Some(401));
         assert_eq!(super::classify_model_error(&err), "auth_failed");
+
+        let wrapped_rate_limit = anyhow::anyhow!(
+            "model curl exited Some(22) with http status Some(429): stderr: too many requests"
+        )
+        .context("run model curl");
+        assert_eq!(http_status_from_error(&wrapped_rate_limit), Some(429));
+        assert_eq!(
+            super::classify_model_error(&wrapped_rate_limit),
+            "rate_limited"
+        );
+
+        let wrapped_timeout = anyhow::anyhow!("operation timed out").context("run model curl");
+        assert_eq!(super::classify_model_error(&wrapped_timeout), "timed_out");
+
+        let wrapped_parse_error =
+            anyhow::anyhow!("parse lane model JSON response").context("decode model output");
+        assert_eq!(
+            super::classify_model_error(&wrapped_parse_error),
+            "invalid_json"
+        );
     }
 
     #[test]
