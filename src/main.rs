@@ -3882,13 +3882,7 @@ fn apply_model_output(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
 ) {
     if let Some(summary) = output.summary {
-        summary_only_findings.push(SummaryOnlyFinding {
-            lane: lane.id.clone(),
-            severity: "low".to_owned(),
-            confidence: "medium".to_owned(),
-            reason: summary,
-            evidence: "lane model summary".to_owned(),
-        });
+        summary_only_findings.push(validate_lane_model_summary(lane, &summary));
     }
     for candidate in output.summary_only_findings {
         summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
@@ -3929,6 +3923,34 @@ fn apply_model_output(
 
 fn is_candidate_only_lane(lane_id: &str) -> bool {
     is_opencode_fast_lane(lane_id)
+}
+
+fn validate_lane_model_summary(lane: &LanePlan, summary: &str) -> SummaryOnlyFinding {
+    let reason = summary.trim().to_owned();
+    let reason_present = !reason.is_empty();
+    let concise = reason.chars().count() <= 1_200;
+    let no_standalone_approval = !has_standalone_approval_line(&reason);
+
+    if reason_present && concise && no_standalone_approval {
+        SummaryOnlyFinding {
+            lane: lane.id.clone(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason,
+            evidence: "lane model summary".to_owned(),
+        }
+    } else {
+        SummaryOnlyFinding {
+            lane: lane.id.clone(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: format!(
+                "lane model summary guard rejected summary; reason_present={} concise={} no_standalone_approval={}",
+                reason_present, concise, no_standalone_approval
+            ),
+            evidence: "lane model summary guardrail".to_owned(),
+        }
+    }
 }
 
 fn validate_summary_only_candidate(
@@ -5552,6 +5574,7 @@ A zero-finding review is not approval. It must report:
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
     use std::fs;
     use std::path::Path;
 
@@ -6023,6 +6046,48 @@ index 1111111..2222222 100644
                 .contains("candidate-only lane emitted inline candidate")
         );
         assert_eq!(summary_only_findings[0].evidence, "diff hunk");
+    }
+
+    #[test]
+    fn lane_model_summary_rejects_standalone_approval_language() -> Result<()> {
+        let lane = default_lanes()
+            .into_iter()
+            .find(|lane| lane.id == "tests")
+            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
+        for summary in ["LGTM", "no actionable findings", "no actionable"] {
+            let output = LaneModelOutput {
+                summary: Some(summary.to_owned()),
+                inline_comments: Vec::new(),
+                summary_only_findings: Vec::new(),
+            };
+            let mut inline_comments = Vec::new();
+            let mut summary_only_findings = Vec::new();
+
+            apply_model_output(
+                &lane,
+                output,
+                &BTreeSet::new(),
+                8,
+                &mut inline_comments,
+                &mut summary_only_findings,
+            );
+
+            assert!(inline_comments.is_empty());
+            assert_eq!(summary_only_findings.len(), 1);
+            assert_eq!(
+                summary_only_findings[0].evidence,
+                "lane model summary guardrail"
+            );
+            assert!(
+                summary_only_findings[0]
+                    .reason
+                    .contains("no_standalone_approval=false")
+            );
+            assert!(!has_standalone_approval_line(
+                &summary_only_findings[0].reason
+            ));
+        }
+        Ok(())
     }
 
     #[test]
