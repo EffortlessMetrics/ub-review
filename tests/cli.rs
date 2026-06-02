@@ -756,6 +756,7 @@ fn spawn_fake_openai_provider(
 }
 
 fn handle_fake_openai_request(mut stream: TcpStream) -> Result<String> {
+    stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
     let mut reader = BufReader::new(stream.try_clone()?);
