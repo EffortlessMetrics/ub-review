@@ -3857,13 +3857,24 @@ fn validate_inline_candidate(
     let allowed_severity = matches!(candidate.severity.as_str(), "blocker" | "high" | "medium");
     let allowed_confidence = matches!(candidate.confidence.as_str(), "high" | "medium-high");
     let line_valid = line_map.contains(&(path.clone(), candidate.line));
-    let body = ensure_lane_prefix(&lane.id, candidate.body.trim());
+    let body_text = candidate.body.trim();
+    let evidence = candidate.evidence.trim().to_owned();
+    let body = ensure_lane_prefix(&lane.id, body_text);
     let concise = body.chars().count() <= 1_200;
+    let body_present = !body_text.is_empty();
+    let evidence_present = !evidence.is_empty();
     let repo_relative = !path.is_empty()
         && !Path::new(&path).is_absolute()
         && !path.split('/').any(|part| part == "..");
 
-    if allowed_severity && allowed_confidence && line_valid && concise && repo_relative {
+    if allowed_severity
+        && allowed_confidence
+        && line_valid
+        && concise
+        && body_present
+        && evidence_present
+        && repo_relative
+    {
         Ok(ReviewInlineComment {
             lane: lane.id.clone(),
             severity: candidate.severity,
@@ -3872,7 +3883,7 @@ fn validate_inline_candidate(
             line: candidate.line,
             side: "RIGHT".to_owned(),
             body,
-            evidence: candidate.evidence,
+            evidence,
         })
     } else {
         Err(SummaryOnlyFinding {
@@ -3880,16 +3891,18 @@ fn validate_inline_candidate(
             severity: candidate.severity,
             confidence: candidate.confidence,
             reason: format!(
-                "inline guard rejected {}:{}; severity_allowed={} confidence_allowed={} line_valid={} concise={} repo_relative={}",
+                "inline guard rejected {}:{}; severity_allowed={} confidence_allowed={} line_valid={} concise={} body_present={} evidence_present={} repo_relative={}",
                 path,
                 candidate.line,
                 allowed_severity,
                 allowed_confidence,
                 line_valid,
                 concise,
+                body_present,
+                evidence_present,
                 repo_relative
             ),
-            evidence: candidate.evidence,
+            evidence,
         })
     }
 }
@@ -5657,6 +5670,36 @@ index 1111111..2222222 100644
             &line_map,
         );
         assert!(rejected.is_err());
+        let missing_evidence = validate_inline_candidate(
+            &lane,
+            ModelCandidateComment {
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                body: "[tests] line-valid but unsupported claim".to_owned(),
+                evidence: "".to_owned(),
+            },
+            &line_map,
+        );
+        assert!(
+            missing_evidence
+                .is_err_and(|finding| { finding.reason.contains("evidence_present=false") })
+        );
+
+        let empty_body = validate_inline_candidate(
+            &lane,
+            ModelCandidateComment {
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                body: "   ".to_owned(),
+                evidence: "diff hunk".to_owned(),
+            },
+            &line_map,
+        );
+        assert!(empty_body.is_err_and(|finding| { finding.reason.contains("body_present=false") }));
         Ok(())
     }
 
