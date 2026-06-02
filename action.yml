@@ -243,7 +243,19 @@ runs:
         cargo build --manifest-path "$workdir/Cargo.toml" --locked --release
         echo "::endgroup::"
 
-        bin="$workdir/target/release/ub-review"
+        if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+          case "$CARGO_TARGET_DIR" in
+            /*)
+              cargo_target_dir="$CARGO_TARGET_DIR"
+              ;;
+            *)
+              cargo_target_dir="$PWD/$CARGO_TARGET_DIR"
+              ;;
+          esac
+        else
+          cargo_target_dir="$workdir/target"
+        fi
+        bin="$cargo_target_dir/release/ub-review"
         if [[ ! -x "$bin" ]]; then
           echo "::error::ub-review binary was not produced at $bin"
           exit 1
