@@ -139,8 +139,8 @@ def assert_no_auth_header_leak(root: pathlib.Path) -> None:
     ]
     paths = []
     for pattern in [
-        "review/model/**/request.json",
-        "review/provider-preflight/**/request.json",
+        "review/model/**/stderr.txt",
+        "review/provider-preflight/**/stderr.txt",
         "review/post-error.json",
         "review/post-result.json",
         "review/post-stdout.json",
