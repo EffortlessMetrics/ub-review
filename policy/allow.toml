@@ -1,0 +1,94 @@
+schema_version = 1
+tool = "cargo-allow"
+
+# Default source-tree exception ledger. Keep this consolidated until real
+# exception volume proves that narrower ledgers improve reviewability.
+
+[[exception]]
+id = "clippy-too-many-arguments-artifact-writers"
+kind = "clippy-suppression"
+path = "src/main.rs"
+lint = "clippy::too_many_arguments"
+owner = "ub-review/core"
+reason = "Artifact writer functions currently pass explicit packet context while the receipt model settles; refactor after the packet contract is stable."
+created = "2026-06-03"
+review_after = "2026-07-03"
+expires = "2026-12-03"
+
+[[exception]]
+id = "non-rust-github-actions"
+kind = "non-rust-file"
+glob = ".github/workflows/*.yml"
+category = "platform-required-workflow"
+language = "yaml"
+owner = "release/ci"
+reason = "GitHub Actions requires workflow YAML; workflow privileges and lane behavior are governed by workflow and CI policy."
+created = "2026-06-03"
+review_after = "2026-07-03"
+
+[[exception]]
+id = "non-rust-docs-and-templates"
+kind = "non-rust-file"
+glob = "{README.md,docs/**/*.md,templates/**/*.md,REPO_READY.md,RELEASE_NOTES*.md,AGENTS.md,.github/pull_request_template.md}"
+category = "documentation"
+language = "markdown"
+owner = "ub-review/docs"
+reason = "Human and agent operating documentation is intentionally Markdown so GitHub renders it and reviewers can audit it directly."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[exception]]
+id = "non-rust-config-toml"
+kind = "non-rust-file"
+glob = "{configs,profiles,runtime,policy}/**/*.toml"
+category = "configuration-and-policy"
+language = "toml"
+owner = "ub-review/core"
+reason = "Runtime profiles, examples, and policy ledgers are data surfaces that must be easy for humans and agents to diff, validate, and repair."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[exception]]
+id = "non-rust-release-scripts"
+kind = "non-rust-file"
+glob = "scripts/*"
+category = "release-tooling"
+language = "python/bash"
+owner = "release/ci"
+reason = "Existing release and smoke wrappers remain for workflow compatibility; durable automation should move toward Rust or xtask-style checks after parity is proven."
+created = "2026-06-03"
+review_after = "2026-07-03"
+expires = "2026-12-03"
+
+[[exception]]
+id = "non-rust-fixtures"
+kind = "non-rust-file"
+glob = "fixtures/**/*"
+category = "fixtures"
+language = "mixed"
+owner = "ub-review/tests"
+reason = "Fixture projects and provider payloads are consumed by integration tests and packet-contract checks."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[exception]]
+id = "non-rust-action-metadata"
+kind = "non-rust-file"
+glob = "action.yml"
+category = "platform-required-action-metadata"
+language = "yaml"
+owner = "release/ci"
+reason = "GitHub composite/action metadata must be YAML for consumers of this action."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[exception]]
+id = "non-rust-ast-grep-rules"
+kind = "non-rust-file"
+glob = "tools/ub-rules/**/*.yml"
+category = "external-tool-rules"
+language = "yaml"
+owner = "ub-review/sensors"
+reason = "ast-grep rule packs are YAML because the external tool consumes YAML rule definitions."
+created = "2026-06-03"
+review_after = "2026-09-03"
