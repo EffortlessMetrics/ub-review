@@ -32,3 +32,10 @@ Each issue should include a minimal repro, command run, expected behavior,
 actual behavior, artifact excerpt, Bun UB impact, and proposed acceptance
 criteria. Work around locally only when needed to keep `ub-review` usable, and
 link the workaround to the upstream issue.
+
+## unsafe-review lane semantics
+
+`unsafe-review` cards are routed to lanes that need unsafe-contract evidence:
+UB, tests, architecture, opposition, and security. A card means the unsafe seam
+needs review evidence; it is not a proof that UB exists. An absent or failed
+unsafe-review run is missing evidence, not a clean bill of health.

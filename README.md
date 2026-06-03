@@ -262,7 +262,7 @@ Default core sensors are best-effort:
 
 - `tokmd` for deterministic repository/diff packets and LLM-ready context;
 - `ripr` for Rust changed-behavior test-oracle weakness;
-- `unsafe-review` for Rust unsafe/native-boundary reviewability;
+- `unsafe-review` for Rust unsafe-contract reviewability;
 - `ast-grep` for cheap structural route scans.
 
 Missing sensors are recorded as missing evidence. Missing evidence is never
@@ -270,6 +270,28 @@ reported as clean evidence.
 
 Heavy witnesses such as builds, tests, Miri, ASAN, and mutation testing are off
 by default. Enable them only behind explicit workflow policy.
+
+### Rust unsafe evidence stack
+
+For Rust repositories with an unsafe surface, `unsafe-review` is the third
+static evidence pillar beside `cargo-allow` and `ripr`:
+
+| Tool | Review question |
+|---|---|
+| `cargo-allow` | Is this exception owned, scoped, evidenced, and not silently broadened? |
+| `ripr` | Does changed behavior appear exposed to a meaningful oracle? |
+| `unsafe-review` | Does changed unsafe code have reviewable safety evidence? |
+| `cargo-mutants` | Do tests fail against concrete mutants? |
+| Miri | Does this concrete execution hit UB? |
+| Codecov | Did this code execute? |
+
+`unsafe-review` asks whether an unsafe change has the safety contract,
+precondition guard, layout/alignment witness, aliasing/lifetime evidence, local
+test reach, and witness route needed for credible review. It is advisory by
+default and does not claim to prove soundness, UB-free status, or Miri
+cleanliness. See [docs/UNSAFE_REVIEW_POLICY.md](docs/UNSAFE_REVIEW_POLICY.md)
+and [docs/ci/unsafe-review.md](docs/ci/unsafe-review.md) for reusable repo
+guidance.
 
 ## Review posting
 
