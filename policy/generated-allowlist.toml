@@ -1,0 +1,5 @@
+schema_version = 1
+
+# Add structured receipts here before accepting durable exceptions. Receipts
+# should include id, path/glob or surface, owner, reason, created, review_after,
+# and expires when the exception is temporary.

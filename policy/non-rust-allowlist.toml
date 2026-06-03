@@ -1,0 +1,78 @@
+schema_version = 1
+
+[[allow]]
+id = "non-rust-github-actions"
+glob = ".github/workflows/*.yml"
+category = "platform_required_workflow"
+language = "yaml"
+owner = "release/ci"
+reason = "GitHub Actions requires workflow YAML; workflow privileges and lane behavior are governed by workflow and CI policy ledgers."
+broad_glob_reason = "Workflows are reviewed as CI surfaces in companion policy ledgers."
+created = "2026-06-03"
+review_after = "2026-07-03"
+
+[[allow]]
+id = "non-rust-docs-and-templates"
+glob = "{README.md,docs/**/*.md,templates/**/*.md,REPO_READY.md,RELEASE_NOTES*.md}"
+category = "documentation"
+language = "markdown"
+owner = "ub-review/docs"
+reason = "Human and agent operating documentation is intentionally Markdown so GitHub renders it and PR reviewers can audit it directly."
+broad_glob_reason = "Documentation files are non-executable and reviewed as source documentation."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[allow]]
+id = "non-rust-config-toml"
+glob = "{configs,profiles,runtime,policy}/**/*.toml"
+category = "configuration_and_policy"
+language = "toml"
+owner = "ub-review/core"
+reason = "Runtime profiles, examples, and policy ledgers are data surfaces that must be easy for humans and agents to diff, validate, and repair."
+broad_glob_reason = "TOML is the canonical policy data format for receipt-backed exceptions."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[allow]]
+id = "non-rust-release-scripts"
+glob = "scripts/*"
+category = "release_tooling"
+language = "python/bash"
+owner = "release/ci"
+reason = "Existing release and smoke wrappers remain for workflow compatibility; durable automation should move toward Rust or xtask-style checks after parity is proven."
+broad_glob_reason = "Executable and process details live in companion ledgers."
+created = "2026-06-03"
+review_after = "2026-07-03"
+expires = "2026-12-03"
+
+[[allow]]
+id = "non-rust-fixtures"
+glob = "fixtures/**/*"
+category = "fixtures"
+language = "mixed"
+owner = "ub-review/tests"
+reason = "Fixture projects and provider payloads are consumed by integration tests and packet-contract checks."
+broad_glob_reason = "Fixtures intentionally mirror external ecosystem surfaces."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[allow]]
+id = "non-rust-action-metadata"
+glob = "action.yml"
+category = "platform_required_action_metadata"
+language = "yaml"
+owner = "release/ci"
+reason = "GitHub composite/action metadata must be YAML for consumers of this action."
+created = "2026-06-03"
+review_after = "2026-09-03"
+
+[[allow]]
+id = "non-rust-ast-grep-rules"
+glob = "tools/ub-rules/**/*.yml"
+category = "external_tool_rules"
+language = "yaml"
+owner = "ub-review/sensors"
+reason = "ast-grep rule packs are YAML because the external tool consumes YAML rule definitions."
+broad_glob_reason = "Rule execution is governed by sensor and process policy."
+created = "2026-06-03"
+review_after = "2026-09-03"

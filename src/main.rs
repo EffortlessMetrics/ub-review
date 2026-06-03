@@ -4220,7 +4220,10 @@ fn render_claim_prompt(diff: &DiffContext) -> String {
     text
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn write_review_artifacts(
     root: &Path,
     out: &Path,
@@ -6421,7 +6424,10 @@ fn run_proof_broker_v0(
     )
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     root: &Path,
     out: &Path,
@@ -7429,7 +7435,10 @@ fn github_review_skip_path(review_json: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("github-review-skip.json"))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn render_shared_context(
     root: &Path,
     out: &Path,
@@ -10310,7 +10319,10 @@ fn validate_inline_candidate(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn render_review_body(
     shared_context_id: &str,
     plan: &Plan,
@@ -10482,7 +10494,10 @@ fn render_review_body(
     cap_review_body(text, review_body_max_bytes)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn render_pull_request_review_body(
     _shared_context_id: &str,
     _plan: &Plan,
@@ -12780,7 +12795,10 @@ fn builtin_tools() -> Vec<ToolPolicy> {
     ]
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn tool(
     id: &str,
     command: &str,

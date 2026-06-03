@@ -1,0 +1,4 @@
+schema_version = "0.3"
+
+# Panic-family exceptions are semantic receipts, not line-number waivers. Add
+# entries as path + family + selector, with last_seen only as advisory metadata.
