@@ -4055,6 +4055,9 @@ fn write_review_artifacts(
     let proof_result = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
+    let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
+    write_candidate_artifacts(out, &candidates)?;
+    let (inline_comments, summary_only_findings) = read_candidate_review_surfaces(out)?;
 
     let artifact_body = render_review_body(
         &shared_context_id,
@@ -4153,15 +4156,12 @@ fn write_review_artifacts(
         body: artifact_body.clone(),
     };
     let observations = combined_observations(&review);
-    let candidates =
-        build_candidate_records(&review.inline_comments, &review.summary_only_findings);
     let witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
         &observations,
         &review.proof_receipts,
     );
-    write_candidate_artifacts(out, &candidates)?;
     write_observation_artifacts(out, &observations)?;
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
@@ -4912,6 +4912,77 @@ fn write_candidate_artifacts(out: &Path, candidates: &[CandidateRecord]) -> Resu
     }
     fs::write(out.join("candidates.ndjson"), ndjson)?;
     Ok(())
+}
+
+fn read_candidate_review_surfaces(
+    out: &Path,
+) -> Result<(Vec<ReviewInlineComment>, Vec<SummaryOnlyFinding>)> {
+    let path = out.join("review/candidates.json");
+    let candidates: Vec<CandidateRecord> = serde_json::from_slice(
+        &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+    )
+    .with_context(|| format!("parse {}", path.display()))?;
+    candidate_review_surfaces(&candidates)
+}
+
+fn candidate_review_surfaces(
+    candidates: &[CandidateRecord],
+) -> Result<(Vec<ReviewInlineComment>, Vec<SummaryOnlyFinding>)> {
+    let mut inline_comments = Vec::new();
+    let mut summary_only_findings = Vec::new();
+    for candidate in candidates {
+        if candidate.schema != "ub-review.candidate.v1" {
+            bail!("candidate {} has unsupported schema", candidate.id);
+        }
+        match (candidate.source.as_str(), candidate.status.as_str()) {
+            ("inline-comment", "accepted-inline") => {
+                let path = candidate
+                    .path
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("candidate {} missing path", candidate.id))?;
+                let line = candidate
+                    .line
+                    .ok_or_else(|| anyhow::anyhow!("candidate {} missing line", candidate.id))?;
+                let side = candidate
+                    .side
+                    .clone()
+                    .ok_or_else(|| anyhow::anyhow!("candidate {} missing side", candidate.id))?;
+                if side != "RIGHT" {
+                    bail!("candidate {} side must be RIGHT", candidate.id);
+                }
+                inline_comments.push(ReviewInlineComment {
+                    lane: candidate.lane.clone(),
+                    severity: candidate.severity.clone(),
+                    confidence: candidate.confidence.clone(),
+                    path,
+                    line,
+                    side,
+                    body: candidate.claim.clone(),
+                    evidence: candidate.evidence.clone(),
+                });
+            }
+            ("summary-only-finding", "summary-only") => {
+                if candidate.path.is_some() || candidate.line.is_some() || candidate.side.is_some()
+                {
+                    bail!("summary-only candidate {} has inline fields", candidate.id);
+                }
+                summary_only_findings.push(SummaryOnlyFinding {
+                    lane: candidate.lane.clone(),
+                    severity: candidate.severity.clone(),
+                    confidence: candidate.confidence.clone(),
+                    reason: candidate.claim.clone(),
+                    evidence: candidate.evidence.clone(),
+                });
+            }
+            _ => bail!(
+                "candidate {} has unsupported source/status {}/{}",
+                candidate.id,
+                candidate.source,
+                candidate.status
+            ),
+        }
+    }
+    Ok((inline_comments, summary_only_findings))
 }
 
 struct WitnessRecordInput<'a> {
@@ -11663,10 +11734,10 @@ mod tests {
         model_auth_header, model_json_payload, model_lane, model_request_payload,
         model_response_shape, normalize_run_args, opencode_canary_spec, pr_decision_sentence,
         proof_budget, proof_lease_budget, provider_spec_for_lane_with_key_state,
-        read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
-        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
+        read_candidate_review_surfaces, read_github_event_pr_context, render_ledger_context,
+        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
         validate_github_review_payload, validate_github_review_payload_for_post,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
         wait_for_child_output_files, write_candidate_artifacts, write_github_review_payload,
@@ -15697,6 +15768,7 @@ UB_REVIEW_HTTP_STATUS:429
                 .join(format!("{}.json", aggregate[0].id)),
         )?)?;
         let ndjson = fs::read_to_string(temp.path().join("candidates.ndjson"))?;
+        let (hydrated_inline, hydrated_summary) = read_candidate_review_surfaces(temp.path())?;
 
         assert_eq!(aggregate.len(), 2);
         assert_eq!(aggregate[0].schema, "ub-review.candidate.v1");
@@ -15714,6 +15786,47 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(first_file, serde_json::to_value(&aggregate[0])?);
         assert_eq!(ndjson.lines().count(), 2);
         assert!(ndjson.contains("\"schema\":\"ub-review.candidate.v1\""));
+        assert_eq!(hydrated_inline.len(), 1);
+        assert_eq!(hydrated_inline[0].body, inline_comments[0].body);
+        assert_eq!(hydrated_inline[0].side, "RIGHT");
+        assert_eq!(hydrated_summary.len(), 1);
+        assert_eq!(hydrated_summary[0].reason, summary_only_findings[0].reason);
+        Ok(())
+    }
+
+    #[test]
+    fn candidate_artifact_readback_rejects_malformed_records() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("review"))?;
+        fs::write(
+            temp.path().join("review/candidates.json"),
+            serde_json::to_vec_pretty(&serde_json::json!([
+                {
+                    "schema": "ub-review.candidate.v1",
+                    "id": "candidate-bad",
+                    "lane": "tests-oracle",
+                    "source": "inline-comment",
+                    "status": "accepted-inline",
+                    "severity": "medium",
+                    "confidence": "high",
+                    "claim": "[tests-oracle] Missing path should fail readback.",
+                    "evidence": "candidate artifact fixture",
+                    "line": 42,
+                    "side": "RIGHT"
+                }
+            ]))?,
+        )?;
+
+        let error = match read_candidate_review_surfaces(temp.path()) {
+            Ok(_) => return Err(anyhow::anyhow!("malformed candidate was accepted")),
+            Err(error) => error,
+        };
+
+        assert!(
+            error
+                .to_string()
+                .contains("candidate candidate-bad missing path")
+        );
         Ok(())
     }
 
