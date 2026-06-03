@@ -507,6 +507,8 @@ def expected_proof_request_groups(proof_requests: list[dict]) -> list[dict]:
         group["required"] = bool(group["required"] or request["required"])
         if request["status"] == "requested":
             group["status"] = "requested"
+        elif request["status"] == "unsupported" and group["status"] != "requested":
+            group["status"] = "unsupported"
         append_unique(group["requested_by"], request["lane"])
         for lane in request["requested_by"]:
             append_unique(group["requested_by"], lane)
@@ -875,7 +877,7 @@ def require_proof_request_schema(request: dict) -> None:
         fail(f"proof request timeout_sec is invalid: {request!r}")
     if not isinstance(request.get("required"), bool):
         fail(f"proof request required is not boolean: {request!r}")
-    if request["status"] not in {"requested", "invalid"}:
+    if request["status"] not in {"requested", "unsupported", "invalid"}:
         fail(f"proof request has unsupported status: {request!r}")
 
 
@@ -967,7 +969,7 @@ def require_proof_request_group_schema(group: dict) -> None:
         fail(f"proof request group timeout_sec is invalid: {group!r}")
     if not isinstance(group.get("required"), bool):
         fail(f"proof request group required is not boolean: {group!r}")
-    if group["status"] not in {"requested", "invalid"}:
+    if group["status"] not in {"requested", "unsupported", "invalid"}:
         fail(f"proof request group has unsupported status: {group!r}")
     if group["cost"] not in {"focused-test", "focused-build", "manual"}:
         fail(f"proof request group has unsupported cost: {group!r}")
