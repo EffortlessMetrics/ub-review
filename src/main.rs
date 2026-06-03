@@ -3789,13 +3789,14 @@ fn focused_proof_plans_from_diff(
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
-            let command = command_display(&proof_task_argv(&task));
+            let head_command = proof_task_plan_command(&task, "head");
+            let base_plus_tests_command = proof_task_plan_command(&task, "base-plus-tests");
             FocusedProofPlan {
                 id: task.id,
                 test_file: task.file,
                 test_name: task.test_name,
-                head_command: command.clone(),
-                base_plus_tests_command: command,
+                head_command,
+                base_plus_tests_command,
                 requested_by: task.requested_by,
                 request_ids: task.request_ids,
                 status: "planned".to_owned(),
@@ -3818,6 +3819,7 @@ fn focused_test_tasks_from_diff(
 ) -> Vec<FocusedTestTask> {
     let request_groups = proof_request_groups(proof_requests);
     let mut tasks = Vec::new();
+    let mut estimated_seconds = 0_u64;
     for file in diff
         .changed_files
         .iter()
@@ -3826,20 +3828,33 @@ fn focused_test_tasks_from_diff(
     {
         let names = focused_test_names_for_file(&diff.patch, file);
         if names.is_empty() {
+            if !focused_proof_budget_allows_next(tasks.len(), estimated_seconds, budget) {
+                return tasks;
+            }
             tasks.push(focused_test_task(file, None, &request_groups));
+            estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
         } else {
             for name in names {
-                tasks.push(focused_test_task(file, Some(name), &request_groups));
-                if tasks.len() >= budget.max_focused_tests {
+                if !focused_proof_budget_allows_next(tasks.len(), estimated_seconds, budget) {
                     return tasks;
                 }
+                tasks.push(focused_test_task(file, Some(name), &request_groups));
+                estimated_seconds =
+                    estimated_seconds.saturating_add(budget.per_command_timeout_sec);
             }
-        }
-        if tasks.len() >= budget.max_focused_tests {
-            break;
         }
     }
     tasks
+}
+
+fn focused_proof_budget_allows_next(
+    current_tasks: usize,
+    estimated_seconds: u64,
+    budget: ProofBudget,
+) -> bool {
+    current_tasks < budget.max_focused_tests
+        && estimated_seconds.saturating_add(budget.per_command_timeout_sec)
+            <= budget.max_total_seconds
 }
 
 fn focused_test_task(
@@ -3956,6 +3971,13 @@ fn proof_task_argv(task: &FocusedTestTask) -> Vec<String> {
         argv.push(name.clone());
     }
     argv
+}
+
+fn proof_task_plan_command(task: &FocusedTestTask, worktree: &str) -> String {
+    format!(
+        "cwd=target/ub-review/proof-worktrees/{worktree} {}",
+        command_display(&proof_task_argv(task))
+    )
 }
 
 fn command_display(argv: &[String]) -> String {
@@ -8227,7 +8249,7 @@ fn builtin_profiles() -> Vec<Profile> {
             3,
             2,
             2,
-            0,
+            2,
             0,
             1_500,
             4_000,
@@ -8623,20 +8645,20 @@ mod tests {
         RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
         ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan,
         SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_review_metrics, build_tokmd_sensor_commands, cap_review_body, classify_diff,
-        classify_proof_cost, cmd_post, collect_sensor_evidence_issues, combined_observations,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_lane, model_request_payload, model_response_shape,
-        opencode_canary_spec, proof_budget, provider_spec_for_lane_with_key_state,
-        render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
-        write_observation_artifacts, write_proof_request_artifacts, write_review_artifacts,
-        write_sensor_status,
+        build_review_metrics, build_tokmd_sensor_commands, builtin_profiles, cap_review_body,
+        classify_diff, classify_proof_cost, cmd_post, collect_sensor_evidence_issues,
+        combined_observations, dedupe_inline_comments, default_lanes, direct_minimax_spec,
+        extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, opencode_canary_spec, proof_budget,
+        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
+        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, sha256_hex, split_curl_http_status,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
+        write_proof_request_artifacts, write_review_artifacts, write_sensor_status,
     };
 
     #[test]
@@ -8675,6 +8697,18 @@ mod tests {
             github_actions: true,
         };
         assert_eq!(box_state.suggested_profile(), "gh-runner");
+    }
+
+    #[test]
+    fn builtin_gh_runner_profile_matches_default_test_lease() {
+        let builtin = builtin_profiles()
+            .into_iter()
+            .find(|profile| profile.name == "gh-runner");
+        assert!(builtin.is_some());
+        if let Some(builtin) = builtin {
+            assert_eq!(builtin.limits.tests, Profile::default().limits.tests);
+            assert_eq!(builtin.limits.tests, 2);
+        }
     }
 
     #[test]
@@ -9496,6 +9530,17 @@ index 1111111..2222222 100644
             tasks[1].test_name.as_deref(),
             Some("keeps stable bytes after getter reentry")
         );
+        let time_capped_tasks = focused_test_tasks_from_diff(
+            &diff,
+            &proof_requests,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 6,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 300,
+            },
+        );
+        assert_eq!(time_capped_tasks.len(), 1);
         assert_eq!(proof_budget(&Profile::default()).max_focused_tests, 1);
     }
 
@@ -9560,9 +9605,13 @@ index 1111111..2222222 100644
 
         assert!(proof_plan.contains("## Focused red/green proof plan"));
         assert!(proof_plan.contains("No proof broker commands were executed"));
-        assert!(proof_plan.contains("head=`bun test test/js/bun/md/md-edge-cases.test.ts -t"));
+        assert!(proof_plan.contains(
+            "head=`cwd=target/ub-review/proof-worktrees/head bun test test/js/bun/md/md-edge-cases.test.ts -t"
+        ));
         assert!(
-            proof_plan.contains("base+tests=`bun test test/js/bun/md/md-edge-cases.test.ts -t")
+            proof_plan.contains(
+                "base+tests=`cwd=target/ub-review/proof-worktrees/base-plus-tests bun test test/js/bun/md/md-edge-cases.test.ts -t"
+            )
         );
         assert!(!temp.path().join("review/proof_receipts.json").exists());
         assert!(!temp.path().join("proof_receipts.ndjson").exists());
