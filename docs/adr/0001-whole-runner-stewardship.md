@@ -8,7 +8,7 @@ Accepted
 
 ub-review is an evidence-first CI review gate. It uses the whole runner to turn a PR into proof-backed review feedback.
 
-CI review has a short-lived but powerful execution environment: CPU, disk, memory, I/O, model budget, and wall-clock time are all available only while the runner is live. Model calls are remote network I/O and run concurrently with local proof work; they do not lock the device or consume the local CPU budget while waiting on providers. Spending runner resources on repeated checkout, duplicated repo navigation, disconnected model work, or verbose posting reduces the evidence available to the human reviewer.
+CI review has a short-lived but powerful execution environment: CPU, disk, memory, I/O, model budget, and wall-clock time are all available only while the runner is live. Model calls are remote network I/O and run concurrently with local proof work; provider wait does not lock the device or consume the local CPU budget. Spending runner resources on repeated checkout, duplicated repo navigation, disconnected model work, or verbose posting reduces the evidence available to the human reviewer.
 
 The review gate therefore needs a clear resource rule and plain implementation
 names. Runtime profile names are technical: `gh-runner-standard`,
@@ -72,7 +72,7 @@ Trusted-repository defaults are two passes per PR:
 
 There is no default `synchronize` trigger. A new commit should not automatically spend another full runner unless the repo explicitly opts into that cost.
 
-Each pass targets 30 minutes of local proof work and has a hard timeout of 60 minutes. Remote model wall time runs alongside that lease; it is not subtracted from the local proof budget. The standard pass emphasizes focused tests, base+tests red/green, actionlint, scoped source-route checks, and other lightweight proof. Targeted mutation and sanitizer witnesses run only when a runtime profile leases them.
+Each pass targets 30 minutes of local proof work and has a hard timeout of 60 minutes. Remote model provider wait runs alongside that lease but the pass still obeys the runtime timeout. The standard pass emphasizes focused tests, base+tests red/green, actionlint, scoped source-route checks, and other lightweight proof. Targeted mutation and sanitizer witnesses run only when a runtime profile leases them.
 
 ## Consequences
 

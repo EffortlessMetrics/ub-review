@@ -84,11 +84,12 @@ read files while a model call is running, so the runner owns observation reads
 and writes. The runner injects relevant existing observations into prompts and
 collects new observations from model output.
 
-Standard mode should optimize for review quality under the full local runner
-lease, not minimum wall time. A 30-minute runner lease means 30 minutes remain
-available for local proof even while model lanes spend wall time waiting on
-providers. Model calls are concurrent network I/O; they do not reserve the
-device. That time should buy coordination and confirmation:
+Standard mode should optimize for review quality under the local proof lease,
+not minimum wall time. A 30-minute local proof lease should be spent on commands
+likely to change the review decision while model lanes wait on providers.
+Model calls are concurrent network I/O; they do not reserve the device, and the
+end-to-end pass still obeys the configured runtime timeout. That time should buy
+coordination and confirmation:
 
 ```text
 model lanes: 10

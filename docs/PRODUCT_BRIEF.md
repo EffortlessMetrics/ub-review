@@ -10,7 +10,7 @@ The goal is not the fastest possible review. The goal is the best useful review 
 
 Whole-runner stewardship: while the runner is live, every useful resource serves the review.
 
-CPU runs focused tests. Disk holds proof worktrees. Memory holds evidence packets. Model budget goes to reasoning over prepared evidence. Remote model wall time runs concurrently with local proof; it does not reduce the runner's local compute lease. Time is spent producing receipts.
+CPU runs focused tests. Disk holds proof worktrees. Memory holds evidence packets. Model budget goes to reasoning over prepared evidence. Remote model calls run concurrently with local proof; provider wait does not occupy the runner's local compute lease. Time is spent producing receipts.
 
 ## Product sentence
 

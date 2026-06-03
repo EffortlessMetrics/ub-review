@@ -23,7 +23,7 @@ Trusted repositories use two passes per PR by default:
 
 There is no default `synchronize` trigger.
 
-Each pass targets 30 minutes of local proof work and has a hard timeout of 60 minutes. Model calls are network I/O scheduled concurrently with local commands; their wall time does not reserve the CPU, disk, or local proof budget. All runtime profiles keep the PR body pure signal and place command logs, lane outputs, model status, resource leases, metrics, raw observations, and proof stdout/stderr in artifacts.
+Each pass targets 30 minutes of local proof work and has a hard timeout of 60 minutes. Model calls are network I/O scheduled concurrently with local commands; provider wait does not reserve the CPU, disk, or local proof budget, and the pass still obeys the runtime timeout. All runtime profiles keep the PR body pure signal and place command logs, lane outputs, model status, resource leases, metrics, raw observations, and proof stdout/stderr in artifacts.
 
 ## Profile intent
 
