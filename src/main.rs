@@ -6872,9 +6872,9 @@ fn render_review_body(
 
 #[allow(clippy::too_many_arguments)]
 fn render_pull_request_review_body(
-    shared_context_id: &str,
+    _shared_context_id: &str,
     plan: &Plan,
-    diff: &DiffContext,
+    _diff: &DiffContext,
     missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
@@ -6917,14 +6917,16 @@ fn render_pull_request_review_body(
     let parked = summary_only_findings
         .iter()
         .filter(|finding| {
-            is_parked_follow_up(finding)
+            !is_pr_body_artifact_only_finding(finding)
+                && is_parked_follow_up(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
         })
         .collect::<Vec<_>>();
     let verification_questions = summary_only_findings
         .iter()
         .filter(|finding| {
-            !is_parked_follow_up(finding)
+            !is_pr_body_artifact_only_finding(finding)
+                && !is_parked_follow_up(finding)
                 && is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
         })
@@ -6932,143 +6934,84 @@ fn render_pull_request_review_body(
     let summary_concerns = summary_only_findings
         .iter()
         .filter(|finding| {
-            !is_parked_follow_up(finding)
+            !is_pr_body_artifact_only_finding(finding)
+                && !is_parked_follow_up(finding)
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
         })
         .collect::<Vec<_>>();
-    let has_review_value = has_actionable_review_finding(inline_comments, summary_only_findings)
+    let has_review_value = has_actionable_inline_comment(inline_comments)
+        || has_actionable_pr_body_summary_finding(summary_only_findings)
         || has_actionable_observation(&observation_items);
 
-    text.push_str(&format!(
-        "# {}\n\n",
-        pr_review_heading_for_diff_class(plan.diff_class)
-    ));
-    text.push_str(&format!("- Shared context: `{shared_context_id}`\n"));
-    text.push_str(&format!("- Profile: `{}`\n", plan.profile_name));
-    text.push_str(&format!(
-        "- Changed files: `{}`\n",
-        diff.changed_files.len()
-    ));
-    text.push_str(&format!("- Inline comments: `{}`\n", inline_comments.len()));
-
-    text.push_str("\n## Decision\n\n");
+    text.push_str("## Decision\n\n");
     text.push_str("- ");
     if has_review_value {
         text.push_str(
-            "Needs reviewer attention before upstream: grounded findings or verification concerns remain.\n",
+            "Needs reviewer attention before upstream: findings or verification questions remain.\n",
         );
     } else if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
+        || !missing_observations.is_empty()
     {
         text.push_str(
-            "No review findings were produced in this degraded pass; unavailable evidence is listed below.\n",
+            "No blocking finding from this pass; missing evidence below limits confidence.\n",
         );
     } else {
-        text.push_str(
-            "No blocking finding from this review pass; residual risk remains for human review.\n",
-        );
+        text.push_str(no_blocking_decision_for_diff_class(plan.diff_class));
+        text.push('\n');
     }
 
-    if inline_comments.is_empty()
-        && verification_questions.is_empty()
-        && verification_observations.is_empty()
-        && summary_concerns.is_empty()
-        && concern_observations.is_empty()
-        && parked.is_empty()
-        && parked_observations.is_empty()
-        && refuted_observations.is_empty()
+    if !inline_comments.is_empty()
+        || !summary_concerns.is_empty()
+        || !concern_observations.is_empty()
     {
-        text.push_str("\n## Review result\n\n");
-        text.push_str(
-            "- No validated code findings or verification questions survived this run.\n",
-        );
-    }
-
-    if !inline_comments.is_empty() {
-        text.push_str("\n## Findings\n\n");
+        text.push_str("\n## Confirmed findings\n\n");
         for comment in inline_comments {
-            text.push_str(&format!(
-                "- `[{}]` `{}` `{}` at `{}`:{}: {} Evidence: {}\n",
-                comment.lane,
-                comment.severity,
-                comment.confidence,
-                comment.path,
-                comment.line,
-                escape_md(&comment.body),
-                escape_md(&comment.evidence)
-            ));
+            render_pr_signal(&mut text, &comment.body);
+        }
+        for observation in &concern_observations {
+            render_review_observation(&mut text, observation, PrObservationTone::Signal);
+        }
+        for finding in summary_concerns {
+            render_pr_signal(&mut text, &finding.reason);
         }
     }
 
     if !verification_questions.is_empty() {
         text.push_str("\n## Verification questions\n\n");
         for observation in &verification_observations {
-            render_review_observation(&mut text, observation);
+            render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
         for finding in verification_questions {
-            text.push_str(&format!(
-                "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
-                finding.lane,
-                finding.severity,
-                finding.confidence,
-                escape_md(&finding.reason),
-                escape_md(&finding.evidence)
-            ));
+            render_pr_verification(&mut text, &finding.reason);
         }
     } else if !verification_observations.is_empty() {
         text.push_str("\n## Verification questions\n\n");
         for observation in &verification_observations {
-            render_review_observation(&mut text, observation);
-        }
-    }
-
-    if !summary_concerns.is_empty() {
-        text.push_str("\n## Summary-only concerns\n\n");
-        for observation in &concern_observations {
-            render_review_observation(&mut text, observation);
-        }
-        for finding in summary_concerns {
-            text.push_str(&format!(
-                "- `[{}]` `{}` `{}`: {} Evidence: {}\n",
-                finding.lane,
-                finding.severity,
-                finding.confidence,
-                escape_md(&finding.reason),
-                escape_md(&finding.evidence)
-            ));
-        }
-    } else if !concern_observations.is_empty() {
-        text.push_str("\n## Summary-only concerns\n\n");
-        for observation in &concern_observations {
-            render_review_observation(&mut text, observation);
+            render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
     }
 
     if !refuted_observations.is_empty() {
-        text.push_str("\n## Refuted / dropped\n\n");
+        text.push_str("\n## Refuted\n\n");
         for observation in &refuted_observations {
-            render_review_observation(&mut text, observation);
+            render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
     }
 
     if !parked.is_empty() {
         text.push_str("\n## Parked follow-ups\n\n");
         for observation in &parked_observations {
-            render_review_observation(&mut text, observation);
+            render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
         for finding in parked {
-            text.push_str(&format!(
-                "- `[{}]` {} Evidence: {}\n",
-                finding.lane,
-                escape_md(&finding.reason),
-                escape_md(&finding.evidence)
-            ));
+            render_pr_signal(&mut text, &finding.reason);
         }
     } else if !parked_observations.is_empty() {
         text.push_str("\n## Parked follow-ups\n\n");
         for observation in &parked_observations {
-            render_review_observation(&mut text, observation);
+            render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
     }
 
@@ -7084,7 +7027,7 @@ fn render_pull_request_review_body(
     {
         text.push_str("\n## Missing evidence\n\n");
         for observation in &missing_observations {
-            render_review_observation(&mut text, observation);
+            render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
         render_compact_missing_evidence(
             &mut text,
@@ -7094,6 +7037,53 @@ fn render_pull_request_review_body(
     }
 
     cap_review_body(text, review_body_max_bytes)
+}
+
+fn no_blocking_decision_for_diff_class(diff_class: DiffClass) -> &'static str {
+    match diff_class {
+        DiffClass::SourceUb => {
+            "No blocking UB finding from this pass; residual risk remains for human review."
+        }
+        DiffClass::SourceGeneral => {
+            "No blocking source finding from this pass; residual risk remains for human review."
+        }
+        DiffClass::TestsOnly => {
+            "No blocking test finding from this pass; residual risk remains for human review."
+        }
+        DiffClass::WorkflowTooling => {
+            "No blocking workflow finding from this pass; residual risk remains for human review."
+        }
+        DiffClass::DocsOnly => {
+            "No blocking docs finding from this pass; residual risk remains for human review."
+        }
+        DiffClass::ArtifactOnlySmoke => {
+            "No blocking review-packet finding from this pass; residual risk remains for human review."
+        }
+    }
+}
+
+fn has_actionable_inline_comment(inline_comments: &[ReviewInlineComment]) -> bool {
+    inline_comments
+        .iter()
+        .any(|comment| matches!(comment.severity.as_str(), "blocker" | "high" | "medium"))
+}
+
+fn has_actionable_pr_body_summary_finding(summary_only_findings: &[SummaryOnlyFinding]) -> bool {
+    summary_only_findings.iter().any(|finding| {
+        !is_pr_body_artifact_only_finding(finding)
+            && matches!(finding.severity.as_str(), "blocker" | "high" | "medium")
+    })
+}
+
+fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
+    let reason = finding.reason.to_ascii_lowercase();
+    reason.starts_with("inline guard rejected ")
+        || reason.contains("severity_allowed=")
+        || reason.contains("confidence_allowed=")
+        || reason.contains("line_valid=")
+        || reason.contains("body_present=")
+        || reason.contains("evidence_present=")
+        || reason.contains("repo_relative=")
 }
 
 fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
@@ -7210,32 +7200,84 @@ fn normalized_review_text(value: &str) -> String {
         .join(" ")
 }
 
-fn render_review_observation(text: &mut String, observation: &ObservationGroup) {
-    let lanes = observation.lanes.join(", ");
-    let location = match (&observation.path, observation.line) {
-        (Some(path), Some(line)) => format!(" at `{path}`:{line}"),
-        (Some(path), None) => format!(" at `{path}`"),
-        _ => String::new(),
-    };
-    let evidence = if observation.evidence.is_empty() {
-        "model observation".to_owned()
+#[derive(Clone, Copy)]
+enum PrObservationTone {
+    Signal,
+    Verification,
+}
+
+fn render_review_observation(
+    text: &mut String,
+    observation: &ObservationGroup,
+    tone: PrObservationTone,
+) {
+    match tone {
+        PrObservationTone::Signal => render_pr_signal(text, &observation.claim),
+        PrObservationTone::Verification => render_pr_verification(text, &observation.claim),
+    }
+}
+
+fn render_pr_signal(text: &mut String, value: &str) {
+    let sentence = pr_sentence(value);
+    text.push_str(&format!("- {}\n", escape_md(&sentence)));
+}
+
+fn render_pr_verification(text: &mut String, value: &str) {
+    let sentence = verification_sentence(value);
+    text.push_str(&format!("- {}\n", escape_md(&sentence)));
+}
+
+fn verification_sentence(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return "Confirm the unresolved review question.".to_owned();
+    }
+    let without_trailing = trimmed.trim_end_matches(&['.', '!', '?'][..]).trim();
+    if without_trailing.is_empty() {
+        return "Confirm the unresolved review question.".to_owned();
+    }
+    if is_actionable_verification_sentence(trimmed) {
+        return pr_sentence(trimmed);
+    }
+    format!("Confirm {}.", lower_first_ascii(without_trailing))
+}
+
+fn is_actionable_verification_sentence(value: &str) -> bool {
+    let normalized = value.trim_start().to_ascii_lowercase();
+    value.trim_end().ends_with('?')
+        || [
+            "confirm ", "verify ", "check ", "ensure ", "run ", "add ", "can ", "does ", "do ",
+            "is ", "are ", "will ", "should ", "could ", "did ",
+        ]
+        .iter()
+        .any(|prefix| normalized.starts_with(prefix))
+}
+
+fn pr_sentence(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return "See review artifacts for the recorded evidence.".to_owned();
+    }
+    if trimmed
+        .chars()
+        .next_back()
+        .is_some_and(|ch| matches!(ch, '.' | '!' | '?'))
+    {
+        trimmed.to_owned()
     } else {
-        observation
-            .evidence
-            .iter()
-            .map(|value| escape_md(value))
-            .collect::<Vec<_>>()
-            .join("; ")
-    };
-    text.push_str(&format!(
-        "- `[{}]` `{}` `{}`{}: {} Evidence: {}\n",
-        escape_md(&lanes),
-        observation.severity,
-        observation.confidence,
-        location,
-        escape_md(&observation.claim),
-        evidence
-    ));
+        format!("{trimmed}.")
+    }
+}
+
+fn lower_first_ascii(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_uppercase() => {
+            format!("{}{}", first.to_ascii_lowercase(), chars.as_str())
+        }
+        Some(_) => value.to_owned(),
+        None => String::new(),
+    }
 }
 
 fn render_compact_missing_evidence(
@@ -7243,38 +7285,21 @@ fn render_compact_missing_evidence(
     sensor_issues: &[SensorEvidenceIssue],
     model_issues: &[ModelEvidenceIssue],
 ) {
-    text.push_str(&format!(
-        "- Review confidence is reduced: `{}` sensor evidence item(s) and `{}` model evidence item(s) were unavailable. Full setup diagnostics are in the review artifacts.\n",
-        sensor_issues.len(),
-        model_issues.len()
-    ));
-    for issue in sensor_issues.iter().take(4) {
-        text.push_str(&format!(
-            "- Sensor `{}` unavailable: `{}` - {}\n",
-            issue.sensor,
-            issue.status,
-            escape_md(&issue.reason)
-        ));
-    }
-    if sensor_issues.len() > 4 {
-        text.push_str(&format!(
-            "- `{}` additional sensor evidence item(s) omitted from the PR body.\n",
-            sensor_issues.len() - 4
-        ));
-    }
-    for issue in model_issues.iter().take(4) {
-        text.push_str(&format!(
-            "- Model lane `{}` unavailable: `{}` - {}\n",
-            issue.lane,
-            issue.status,
-            escape_md(&issue.reason)
-        ));
-    }
-    if model_issues.len() > 4 {
-        text.push_str(&format!(
-            "- `{}` additional model evidence item(s) omitted from the PR body.\n",
-            model_issues.len() - 4
-        ));
+    match (sensor_issues.is_empty(), model_issues.is_empty()) {
+        (true, true) => {}
+        (false, false) => {
+            text.push_str("- Some sensor and model evidence was unavailable; setup and lane diagnostics are in the review artifacts.\n");
+        }
+        (false, true) => {
+            text.push_str(
+                "- Some sensor evidence was unavailable; tool diagnostics are in the review artifacts.\n",
+            );
+        }
+        (true, false) => {
+            text.push_str(
+                "- Some model evidence was unavailable; lane diagnostics are in the review artifacts.\n",
+            );
+        }
     }
 }
 
@@ -11322,12 +11347,16 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Decision"));
-        assert!(body.contains("degraded pass"));
-        assert!(body.contains("## Review result"));
+        assert!(body.contains("missing evidence below limits confidence"));
+        assert!(!body.contains("## Review result"));
         assert!(body.contains("## Residual risk"));
         assert!(body.contains("## Missing evidence"));
-        assert!(body.contains("Sensor `ripr` unavailable: `missing` - command not found"));
-        assert!(body.contains("rate_limited"));
+        assert!(body.contains("Some sensor and model evidence was unavailable"));
+        assert!(body.contains("review artifacts"));
+        assert!(!body.contains("Sensor `ripr` unavailable"));
+        assert!(!body.contains("command not found"));
+        assert!(!body.contains("rate_limited"));
+        assert!(!body.contains("ub-memory-lifetime"));
         assert!(!body.contains("## Model lanes"));
         assert!(!body.contains("## Confirmed findings"));
         assert!(!body.contains("## Summary-only findings"));
@@ -11353,6 +11382,10 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Decision"));
+        assert!(!body.contains("Shared context"));
+        assert!(!body.contains("Profile:"));
+        assert!(!body.contains("Changed files:"));
+        assert!(!body.contains("Inline comments:"));
         assert!(!body.contains("## Model lanes"));
         assert!(!body.contains("Lane: `ub-memory-lifetime`"));
         assert!(!body.contains("Provider: `minimax`"));
@@ -11414,13 +11447,83 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.starts_with("# Workflow Review"));
+        assert!(body.starts_with("## Decision"));
         assert!(body.contains("workflow permissions"));
         assert!(body.contains("actionlint/zizmor"));
         assert!(!body.contains("ArrayBuffer"));
         assert!(!body.contains("worker handoff"));
         assert!(!body.contains("unsafe/native seams"));
         assert!(!body.contains("test-oracle strength"));
+    }
+
+    #[test]
+    fn pr_review_body_hides_machine_metadata_for_findings() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[ReviewInlineComment {
+                lane: "opposition".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/postgres.rs".to_owned(),
+                line: 196,
+                side: "RIGHT".to_owned(),
+                body: "Confirm the C++ copy cannot race detach or resize between the Rust guard and native read.".to_owned(),
+                evidence: "line 196 calls Bun__createArrayBufferForCopy".to_owned(),
+            }],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Confirmed findings"));
+        assert!(body.contains("Confirm the C++ copy cannot race detach or resize"));
+        assert!(!body.contains("Shared context"));
+        assert!(!body.contains("Profile:"));
+        assert!(!body.contains("Changed files:"));
+        assert!(!body.contains("Inline comments:"));
+        assert!(!body.contains("`[opposition]`"));
+        assert!(!body.contains("medium-high"));
+        assert!(!body.contains("src/postgres.rs"));
+        assert!(!body.contains("Evidence:"));
+        assert!(!body.contains("line 196 calls"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_compiler_residue_artifact_only() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "source-route".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "inline guard rejected src/lib.rs:12; severity_allowed=true confidence_allowed=true line_valid=false concise=true body_present=true evidence_present=true repo_relative=true".to_owned(),
+                evidence: "compiler guard metadata".to_owned(),
+            }],
+            &[] as &[Observation],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Decision"));
+        assert!(!body.contains("inline guard rejected"));
+        assert!(!body.contains("severity_allowed"));
+        assert!(!body.contains("compiler guard metadata"));
+        assert!(!body.contains("## Confirmed findings"));
+        assert!(!body.contains("## Verification questions"));
+        assert!(!has_standalone_approval_line(&body));
     }
 
     #[test]
@@ -11745,7 +11848,7 @@ UB_REVIEW_HTTP_STATUS:429
             ),
             test_observation(
                 "source-route",
-                "Confirm a typed-array view over a resizable ArrayBuffer carries the resizable flag through PinnedView.",
+                "A typed-array view over a resizable ArrayBuffer carries the resizable flag through PinnedView.",
                 "verification-question",
                 "open",
                 "medium",
@@ -11778,13 +11881,15 @@ UB_REVIEW_HTTP_STATUS:429
                 .count(),
             1
         );
-        assert!(body.contains("`[tests-oracle, opposition]`"));
+        assert!(!body.contains("`[tests-oracle, opposition]`"));
         assert!(body.contains("## Verification questions"));
-        assert!(body.contains("typed-array view over a resizable ArrayBuffer"));
-        assert!(body.contains("## Refuted / dropped"));
+        assert!(body.contains("Confirm a typed-array view over a resizable ArrayBuffer"));
+        assert!(body.contains("## Refuted"));
         assert!(body.contains("Box::from(slice) can return None"));
         assert!(body.contains("## Missing evidence"));
         assert!(!body.contains("duplicate lane summary"));
+        assert!(!body.contains("Evidence:"));
+        assert!(!body.contains("medium-high"));
         assert!(!body.contains("## Model lanes"));
         assert!(!has_standalone_approval_line(&body));
     }
