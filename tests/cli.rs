@@ -121,6 +121,8 @@ fn active_len_tracks_view_after_resize() {
         "events.ndjson",
         "resolved-profile.json",
         "resolved-plan.json",
+        "resolved-tools.json",
+        "tool-status.json",
         "running-summary.md",
         "sensors/tokmd/ub-review-sensor-status.json",
         "sensors/ripr/ub-review-sensor-status.json",
@@ -129,6 +131,8 @@ fn active_len_tracks_view_after_resize() {
         "review/shared_context.md",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
+        "review/resolved-tools.json",
+        "review/tool-status.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/review.json",
@@ -297,6 +301,37 @@ fn active_len_tracks_view_after_resize() {
             .map(std::vec::Vec::len),
         Some(10)
     );
+    let resolved_tools: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/resolved-tools.json"))?)?;
+    assert_eq!(resolved_tools["schema"], "ub-review.resolved_tools.v1");
+    assert_eq!(resolved_tools["runtime_profile"], "gh-runner");
+    assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
+        tools.iter().any(|tool| {
+            tool["id"] == "tokmd"
+                && tool["required_if"] == "always"
+                && tool["planned_run"] == true
+                && tool["artifact_paths"].as_array().is_some_and(|paths| {
+                    paths.iter().any(|path| path == "sensors/tokmd/analyze.md")
+                })
+        })
+    }));
+    let tool_status: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/tool-status.json"))?)?;
+    assert_eq!(tool_status["schema"], "ub-review.tool_status.v1");
+    assert!(tool_status["tools"].as_array().is_some_and(|tools| {
+        tools.iter().any(|tool| {
+            tool["id"] == "ripr"
+                && tool["planned_run"] == true
+                && tool["status"] == "skipped"
+                && tool["reason"] == "dry-run; sensor not executed"
+        })
+    }));
+    let root_resolved_tools: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-tools.json"))?)?;
+    assert_eq!(root_resolved_tools, resolved_tools);
+    let root_tool_status: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("tool-status.json"))?)?;
+    assert_eq!(root_tool_status, tool_status);
     let capped_out = temp.path().join("packet-capped");
     run(
         temp.path(),
