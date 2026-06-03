@@ -191,6 +191,22 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["selectors"]["lane_width"], 10);
     assert_eq!(resolved_plan["selectors"]["model_concurrency"], 8);
     assert_eq!(resolved_plan["selectors"]["max_model_calls"], 14);
+    assert_eq!(resolved_plan["selectors"]["lanes"], serde_json::json!([]));
+    assert_eq!(
+        resolved_plan["selectors"]["except_lanes"],
+        serde_json::json!([])
+    );
+    assert_eq!(resolved_plan["selectors"]["tools"], serde_json::json!([]));
+    assert_eq!(
+        resolved_plan["selectors"]["except_tools"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        resolved_plan["selectors"]["effective_model_lanes"]
+            .as_array()
+            .map(std::vec::Vec::len),
+        Some(10)
+    );
     assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
         sensors
             .iter()
