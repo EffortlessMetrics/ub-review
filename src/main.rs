@@ -1218,6 +1218,39 @@ struct CandidateRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+struct OrchestratorPlanArtifact {
+    schema: String,
+    candidates: usize,
+    evidence_groups: Vec<OrchestratorEvidenceGroup>,
+    follow_up_tasks: Vec<FollowUpQuestionTask>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OrchestratorEvidenceGroup {
+    schema: String,
+    id: String,
+    evidence_need: String,
+    disposition: String,
+    candidate_ids: Vec<String>,
+    lanes: Vec<String>,
+    duplicate_count: usize,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct FollowUpQuestionTask {
+    schema: String,
+    id: String,
+    group_id: String,
+    evidence_need: String,
+    disposition: String,
+    candidate_ids: Vec<String>,
+    question: String,
+    status: String,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct GitHubReview {
     event: String,
     body: String,
@@ -4058,6 +4091,9 @@ fn write_review_artifacts(
     let resource_leases = proof_result.resource_leases;
     let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
     write_candidate_artifacts(out, &candidates)?;
+    let candidates = read_candidate_records(out)?;
+    let orchestrator_plan = build_orchestrator_plan(&candidates);
+    write_orchestrator_artifacts(out, &orchestrator_plan)?;
     let (inline_comments, summary_only_findings) = read_candidate_review_surfaces(out)?;
 
     let artifact_body = render_review_body(
@@ -4940,12 +4976,14 @@ fn write_candidate_artifacts(out: &Path, candidates: &[CandidateRecord]) -> Resu
 fn read_candidate_review_surfaces(
     out: &Path,
 ) -> Result<(Vec<ReviewInlineComment>, Vec<SummaryOnlyFinding>)> {
-    let path = out.join("review/candidates.json");
-    let candidates: Vec<CandidateRecord> = serde_json::from_slice(
-        &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
-    )
-    .with_context(|| format!("parse {}", path.display()))?;
+    let candidates = read_candidate_records(out)?;
     candidate_review_surfaces(&candidates)
+}
+
+fn read_candidate_records(out: &Path) -> Result<Vec<CandidateRecord>> {
+    let path = out.join("review/candidates.json");
+    serde_json::from_slice(&fs::read(&path).with_context(|| format!("read {}", path.display()))?)
+        .with_context(|| format!("parse {}", path.display()))
 }
 
 fn candidate_review_surfaces(
@@ -5028,6 +5066,152 @@ fn candidate_review_surfaces(
         }
     }
     Ok((inline_comments, summary_only_findings))
+}
+
+fn build_orchestrator_plan(candidates: &[CandidateRecord]) -> OrchestratorPlanArtifact {
+    let mut grouped: BTreeMap<(String, String), Vec<&CandidateRecord>> = BTreeMap::new();
+    for candidate in candidates {
+        let evidence_need = candidate_evidence_need(candidate);
+        grouped
+            .entry((candidate.disposition.clone(), evidence_need))
+            .or_default()
+            .push(candidate);
+    }
+
+    let mut evidence_groups = Vec::new();
+    let mut follow_up_tasks = Vec::new();
+    for ((disposition, evidence_need), group_candidates) in grouped {
+        let candidate_ids = group_candidates
+            .iter()
+            .map(|candidate| candidate.id.clone())
+            .collect::<Vec<_>>();
+        let lanes = unique_sorted(
+            group_candidates
+                .iter()
+                .map(|candidate| candidate.lane.clone())
+                .collect(),
+        );
+        let fingerprint = sha256_hex(format!("{disposition}\n{evidence_need}").as_bytes());
+        let group_id = format!("evidence-group-{}", &fingerprint[..12]);
+        let group = OrchestratorEvidenceGroup {
+            schema: "ub-review.orchestrator_evidence_group.v1".to_owned(),
+            id: group_id.clone(),
+            evidence_need: evidence_need.clone(),
+            disposition: disposition.clone(),
+            candidate_ids: candidate_ids.clone(),
+            lanes,
+            duplicate_count: candidate_ids.len().saturating_sub(1),
+            reason: orchestrator_group_reason(&disposition, &evidence_need),
+        };
+        if let Some(task) =
+            follow_up_task_for_group(&group_id, &disposition, &evidence_need, &candidate_ids)
+        {
+            follow_up_tasks.push(task);
+        }
+        evidence_groups.push(group);
+    }
+
+    OrchestratorPlanArtifact {
+        schema: "ub-review.orchestrator_plan.v1".to_owned(),
+        candidates: candidates.len(),
+        evidence_groups,
+        follow_up_tasks,
+    }
+}
+
+fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("orchestrator_plan.json"),
+        serde_json::to_vec_pretty(plan)?,
+    )?;
+
+    let mut ndjson = String::new();
+    for task in &plan.follow_up_tasks {
+        ndjson.push_str(&serde_json::to_string(task)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("follow_up_questions.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn candidate_evidence_need(candidate: &CandidateRecord) -> String {
+    match candidate.disposition.as_str() {
+        "inline" => "accepted-inline-review".to_owned(),
+        "parked-follow-up" => "parked-follow-up-confirmation".to_owned(),
+        "refuted" => "refutation-confirmation".to_owned(),
+        "dropped" => "dropped-candidate-audit".to_owned(),
+        _ => {
+            let text = format!("{}\n{}", candidate.claim, candidate.evidence).to_ascii_lowercase();
+            if text.contains("proof") || text.contains("red") || text.contains("green") {
+                "proof-confirmation".to_owned()
+            } else if text.contains("route") || text.contains("sibling") {
+                "source-route-confirmation".to_owned()
+            } else if text.contains("test") || text.contains("oracle") {
+                "test-oracle-confirmation".to_owned()
+            } else {
+                "summary-confirmation".to_owned()
+            }
+        }
+    }
+}
+
+fn follow_up_task_for_group(
+    group_id: &str,
+    disposition: &str,
+    evidence_need: &str,
+    candidate_ids: &[String],
+) -> Option<FollowUpQuestionTask> {
+    if matches!(disposition, "inline" | "dropped") {
+        return None;
+    }
+    let fingerprint = sha256_hex(format!("{group_id}\n{evidence_need}").as_bytes());
+    Some(FollowUpQuestionTask {
+        schema: "ub-review.follow_up_question.v1".to_owned(),
+        id: format!("follow-up-{}", &fingerprint[..12]),
+        group_id: group_id.to_owned(),
+        evidence_need: evidence_need.to_owned(),
+        disposition: disposition.to_owned(),
+        candidate_ids: candidate_ids.to_vec(),
+        question: follow_up_question_text(disposition, evidence_need),
+        status: "planned".to_owned(),
+        reason: "deterministic orchestrator skeleton; no shell commands or posting side effects"
+            .to_owned(),
+    })
+}
+
+fn follow_up_question_text(disposition: &str, evidence_need: &str) -> String {
+    match (disposition, evidence_need) {
+        ("refuted", _) => "Confirm the refutation still matches the current PR evidence.".to_owned(),
+        ("parked-follow-up", _) => {
+            "Confirm whether this parked follow-up should remain outside current PR scope.".to_owned()
+        }
+        (_, "proof-confirmation") => {
+            "Confirm whether focused proof can resolve this summary-only candidate.".to_owned()
+        }
+        (_, "source-route-confirmation") => {
+            "Confirm the changed source route or sibling path before promoting this candidate."
+                .to_owned()
+        }
+        (_, "test-oracle-confirmation") => {
+            "Confirm the test oracle strength before promoting this candidate.".to_owned()
+        }
+        _ => "Confirm whether additional evidence should promote or keep this candidate summary-only."
+            .to_owned(),
+    }
+}
+
+fn orchestrator_group_reason(disposition: &str, evidence_need: &str) -> String {
+    format!("grouped candidate disposition `{disposition}` under evidence need `{evidence_need}`")
+}
+
+fn unique_sorted(values: Vec<String>) -> Vec<String> {
+    values
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }
 
 struct WitnessRecordInput<'a> {
@@ -11769,26 +11953,27 @@ mod tests {
         STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
         SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
         apply_model_output, apply_plan_selectors, apply_refuter_output,
-        apply_runtime_profile_limits, build_candidate_records, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, opencode_canary_spec, pr_decision_sentence,
-        proof_budget, proof_lease_budget, provider_spec_for_lane_with_key_state,
-        read_candidate_review_surfaces, read_github_event_pr_context, render_ledger_context,
-        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
+        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        normalize_run_args, opencode_canary_spec, pr_decision_sentence, proof_budget,
+        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
+        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
+        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
         validate_github_review_payload, validate_github_review_payload_for_post,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
         wait_for_child_output_files, write_candidate_artifacts, write_github_review_payload,
-        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
-        write_witness_artifacts,
+        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
+        write_proof_request_artifacts, write_resource_lease_artifacts, write_review_artifacts,
+        write_sensor_status, write_witness_artifacts,
     };
 
     #[test]
@@ -15935,6 +16120,169 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(error.to_string().contains(
             "summary-only candidate candidate-bad-disposition disposition cannot be inline"
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn orchestrator_plan_groups_evidence_needs_and_tasks() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let candidates = vec![
+            super::CandidateRecord {
+                schema: "ub-review.candidate.v1".to_owned(),
+                id: "candidate-proof-a".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                source: "summary-only-finding".to_owned(),
+                status: "summary-only".to_owned(),
+                disposition: "summary-only".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                claim: "Needs red/green proof before upstream.".to_owned(),
+                evidence: "proof request from tests lane".to_owned(),
+                path: None,
+                line: None,
+                side: None,
+            },
+            super::CandidateRecord {
+                schema: "ub-review.candidate.v1".to_owned(),
+                id: "candidate-proof-b".to_owned(),
+                lane: "opposition".to_owned(),
+                source: "summary-only-finding".to_owned(),
+                status: "summary-only".to_owned(),
+                disposition: "summary-only".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium".to_owned(),
+                claim: "Red witness is still missing.".to_owned(),
+                evidence: "proof concern from opposition".to_owned(),
+                path: None,
+                line: None,
+                side: None,
+            },
+            super::CandidateRecord {
+                schema: "ub-review.candidate.v1".to_owned(),
+                id: "candidate-inline".to_owned(),
+                lane: "ub-memory-lifetime".to_owned(),
+                source: "inline-comment".to_owned(),
+                status: "accepted-inline".to_owned(),
+                disposition: "inline".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                claim: "Inline comment survives line validation.".to_owned(),
+                evidence: "RIGHT-side line map".to_owned(),
+                path: Some("src/lib.rs".to_owned()),
+                line: Some(42),
+                side: Some("RIGHT".to_owned()),
+            },
+            super::CandidateRecord {
+                schema: "ub-review.candidate.v1".to_owned(),
+                id: "candidate-dropped".to_owned(),
+                lane: "architecture".to_owned(),
+                source: "summary-only-finding".to_owned(),
+                status: "summary-only".to_owned(),
+                disposition: "dropped".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                claim: "Duplicate inline candidate merged into src/lib.rs:42.".to_owned(),
+                evidence: "duplicate evidence".to_owned(),
+                path: None,
+                line: None,
+                side: None,
+            },
+            super::CandidateRecord {
+                schema: "ub-review.candidate.v1".to_owned(),
+                id: "candidate-parked".to_owned(),
+                lane: "sibling-paths".to_owned(),
+                source: "summary-only-finding".to_owned(),
+                status: "summary-only".to_owned(),
+                disposition: "parked-follow-up".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                claim: "Sibling helper needs a later route check.".to_owned(),
+                evidence: "parked follow-up evidence".to_owned(),
+                path: None,
+                line: None,
+                side: None,
+            },
+            super::CandidateRecord {
+                schema: "ub-review.candidate.v1".to_owned(),
+                id: "candidate-refuted".to_owned(),
+                lane: "opposition".to_owned(),
+                source: "summary-only-finding".to_owned(),
+                status: "summary-only".to_owned(),
+                disposition: "refuted".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                claim: "False premise was refuted before posting.".to_owned(),
+                evidence: "refuted by deterministic calibration".to_owned(),
+                path: None,
+                line: None,
+                side: None,
+            },
+        ];
+
+        let plan = build_orchestrator_plan(&candidates);
+        write_orchestrator_artifacts(temp.path(), &plan)?;
+
+        let aggregate: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/orchestrator_plan.json"),
+        )?)?;
+        let ndjson = fs::read_to_string(temp.path().join("follow_up_questions.ndjson"))?;
+        let proof_group = plan
+            .evidence_groups
+            .iter()
+            .find(|group| group.evidence_need == "proof-confirmation")
+            .ok_or_else(|| anyhow::anyhow!("proof group should be present"))?;
+        let inline_group = plan
+            .evidence_groups
+            .iter()
+            .find(|group| group.disposition == "inline")
+            .ok_or_else(|| anyhow::anyhow!("inline group should be present"))?;
+        let dropped_group = plan
+            .evidence_groups
+            .iter()
+            .find(|group| group.disposition == "dropped")
+            .ok_or_else(|| anyhow::anyhow!("dropped group should be present"))?;
+
+        assert_eq!(aggregate, serde_json::to_value(&plan)?);
+        assert_eq!(plan.schema, "ub-review.orchestrator_plan.v1");
+        assert_eq!(plan.candidates, 6);
+        assert_eq!(
+            proof_group.candidate_ids,
+            vec!["candidate-proof-a", "candidate-proof-b"]
+        );
+        assert_eq!(proof_group.lanes, vec!["opposition", "tests-oracle"]);
+        assert_eq!(proof_group.duplicate_count, 1);
+        assert_eq!(inline_group.duplicate_count, 0);
+        assert_eq!(dropped_group.duplicate_count, 0);
+        assert!(
+            !plan
+                .follow_up_tasks
+                .iter()
+                .any(|task| task.group_id == inline_group.id || task.group_id == dropped_group.id)
+        );
+
+        let task_group_ids = plan
+            .follow_up_tasks
+            .iter()
+            .map(|task| task.group_id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(plan.follow_up_tasks.len(), 3);
+        assert!(task_group_ids.contains(&proof_group.id.as_str()));
+        assert!(
+            plan.follow_up_tasks
+                .iter()
+                .all(|task| task.status == "planned")
+        );
+
+        let ndjson_tasks = ndjson
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        let expected_tasks = plan
+            .follow_up_tasks
+            .iter()
+            .map(serde_json::to_value)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        assert_eq!(ndjson_tasks, expected_tasks);
         Ok(())
     }
 

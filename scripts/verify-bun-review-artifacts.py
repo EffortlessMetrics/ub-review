@@ -115,12 +115,14 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/unique_observations.json",
         "review/merged_observations.json",
         "review/dropped_observations.json",
+        "review/orchestrator_plan.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
         "review/resource_leases.json",
         "review/resource_plan.md",
+        "follow_up_questions.ndjson",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
         "resource_leases.ndjson",
@@ -308,6 +310,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
     require_candidate_artifacts(root, review)
+    require_orchestrator_plan(root)
     if metrics.get("terminal_state") != review.get("terminal_state", {}).get("status"):
         fail("metrics terminal_state does not match review.json terminal_state")
     if not isinstance(metrics.get("observations"), int):
@@ -403,6 +406,120 @@ def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
             fail(f"candidates.ndjson line {index + 1} does not match JSON artifact")
     for candidate in candidates:
         require_candidate_schema(candidate)
+
+
+def require_orchestrator_plan(root: pathlib.Path) -> None:
+    candidates = load_json(root / "review/candidates.json")
+    plan = load_json(root / "review/orchestrator_plan.json")
+    expected = expected_orchestrator_plan(candidates)
+    if plan != expected:
+        fail("review/orchestrator_plan.json does not match candidate evidence grouping")
+
+    lines = [line for line in read_text(root / "follow_up_questions.ndjson").splitlines() if line.strip()]
+    tasks = plan["follow_up_tasks"]
+    if len(lines) != len(tasks):
+        fail("follow_up_questions.ndjson line count does not match orchestrator plan")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid follow_up_questions.ndjson line {index + 1}: {error}")
+        if parsed != tasks[index]:
+            fail(f"follow_up_questions.ndjson line {index + 1} does not match orchestrator plan")
+    require_orchestrator_plan_schema(plan)
+
+
+def expected_orchestrator_plan(candidates: list[dict]) -> dict:
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for candidate in candidates:
+        key = (candidate["disposition"], candidate_evidence_need(candidate))
+        grouped.setdefault(key, []).append(candidate)
+
+    evidence_groups = []
+    follow_up_tasks = []
+    for disposition, evidence_need in sorted(grouped):
+        group_candidates = grouped[(disposition, evidence_need)]
+        candidate_ids = [candidate["id"] for candidate in group_candidates]
+        lanes = sorted({candidate["lane"] for candidate in group_candidates})
+        group_id = "evidence-group-" + hashlib.sha256(
+            f"{disposition}\n{evidence_need}".encode("utf-8")
+        ).hexdigest()[:12]
+        group = {
+            "schema": "ub-review.orchestrator_evidence_group.v1",
+            "id": group_id,
+            "evidence_need": evidence_need,
+            "disposition": disposition,
+            "candidate_ids": candidate_ids,
+            "lanes": lanes,
+            "duplicate_count": max(0, len(candidate_ids) - 1),
+            "reason": f"grouped candidate disposition `{disposition}` under evidence need `{evidence_need}`",
+        }
+        task = follow_up_task_for_group(group_id, disposition, evidence_need, candidate_ids)
+        if task is not None:
+            follow_up_tasks.append(task)
+        evidence_groups.append(group)
+
+    return {
+        "schema": "ub-review.orchestrator_plan.v1",
+        "candidates": len(candidates),
+        "evidence_groups": evidence_groups,
+        "follow_up_tasks": follow_up_tasks,
+    }
+
+
+def candidate_evidence_need(candidate: dict) -> str:
+    disposition = candidate["disposition"]
+    if disposition == "inline":
+        return "accepted-inline-review"
+    if disposition == "parked-follow-up":
+        return "parked-follow-up-confirmation"
+    if disposition == "refuted":
+        return "refutation-confirmation"
+    if disposition == "dropped":
+        return "dropped-candidate-audit"
+    text = f"{candidate['claim']}\n{candidate['evidence']}".lower()
+    if "proof" in text or "red" in text or "green" in text:
+        return "proof-confirmation"
+    if "route" in text or "sibling" in text:
+        return "source-route-confirmation"
+    if "test" in text or "oracle" in text:
+        return "test-oracle-confirmation"
+    return "summary-confirmation"
+
+
+def follow_up_task_for_group(
+    group_id: str, disposition: str, evidence_need: str, candidate_ids: list[str]
+) -> dict | None:
+    if disposition in {"inline", "dropped"}:
+        return None
+    task_id = "follow-up-" + hashlib.sha256(
+        f"{group_id}\n{evidence_need}".encode("utf-8")
+    ).hexdigest()[:12]
+    return {
+        "schema": "ub-review.follow_up_question.v1",
+        "id": task_id,
+        "group_id": group_id,
+        "evidence_need": evidence_need,
+        "disposition": disposition,
+        "candidate_ids": candidate_ids,
+        "question": follow_up_question_text(disposition, evidence_need),
+        "status": "planned",
+        "reason": "deterministic orchestrator skeleton; no shell commands or posting side effects",
+    }
+
+
+def follow_up_question_text(disposition: str, evidence_need: str) -> str:
+    if disposition == "refuted":
+        return "Confirm the refutation still matches the current PR evidence."
+    if disposition == "parked-follow-up":
+        return "Confirm whether this parked follow-up should remain outside current PR scope."
+    if evidence_need == "proof-confirmation":
+        return "Confirm whether focused proof can resolve this summary-only candidate."
+    if evidence_need == "source-route-confirmation":
+        return "Confirm the changed source route or sibling path before promoting this candidate."
+    if evidence_need == "test-oracle-confirmation":
+        return "Confirm the test oracle strength before promoting this candidate."
+    return "Confirm whether additional evidence should promote or keep this candidate summary-only."
 
 
 def expected_candidate_records(review: dict) -> list[dict]:
@@ -1110,6 +1227,66 @@ def require_candidate_schema(candidate: dict) -> None:
             fail(f"summary-only candidate disposition is inline: {candidate!r}")
         if path is not None or line is not None or side is not None:
             fail(f"summary-only candidate should not have inline fields: {candidate!r}")
+
+
+def require_orchestrator_plan_schema(plan: dict) -> None:
+    if plan.get("schema") != "ub-review.orchestrator_plan.v1":
+        fail(f"orchestrator plan has wrong schema: {plan!r}")
+    if not isinstance(plan.get("candidates"), int) or plan["candidates"] < 0:
+        fail(f"orchestrator plan candidates is invalid: {plan!r}")
+    groups = plan.get("evidence_groups")
+    tasks = plan.get("follow_up_tasks")
+    if not isinstance(groups, list):
+        fail("orchestrator plan evidence_groups is not an array")
+    if not isinstance(tasks, list):
+        fail("orchestrator plan follow_up_tasks is not an array")
+    group_ids = set()
+    for group in groups:
+        require_orchestrator_group_schema(group)
+        if group["id"] in group_ids:
+            fail(f"orchestrator group id is duplicated: {group!r}")
+        group_ids.add(group["id"])
+    for task in tasks:
+        require_follow_up_task_schema(task, group_ids)
+
+
+def require_orchestrator_group_schema(group: dict) -> None:
+    if group.get("schema") != "ub-review.orchestrator_evidence_group.v1":
+        fail(f"orchestrator group has wrong schema: {group!r}")
+    for field in ["id", "evidence_need", "disposition", "reason"]:
+        if not isinstance(group.get(field), str) or not group[field]:
+            fail(f"orchestrator group missing string field {field}: {group!r}")
+    for field in ["candidate_ids", "lanes"]:
+        values = group.get(field)
+        if not isinstance(values, list) or not all(isinstance(item, str) and item for item in values):
+            fail(f"orchestrator group {field} is not a string array: {group!r}")
+    if not isinstance(group.get("duplicate_count"), int) or group["duplicate_count"] < 0:
+        fail(f"orchestrator group duplicate_count is invalid: {group!r}")
+
+
+def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
+    if task.get("schema") != "ub-review.follow_up_question.v1":
+        fail(f"follow-up task has wrong schema: {task!r}")
+    for field in [
+        "id",
+        "group_id",
+        "evidence_need",
+        "disposition",
+        "question",
+        "status",
+        "reason",
+    ]:
+        if not isinstance(task.get(field), str) or not task[field]:
+            fail(f"follow-up task missing string field {field}: {task!r}")
+    if task["group_id"] not in group_ids:
+        fail(f"follow-up task references unknown group: {task!r}")
+    if task["status"] != "planned":
+        fail(f"follow-up task has unsupported status: {task!r}")
+    candidate_ids = task.get("candidate_ids")
+    if not isinstance(candidate_ids, list) or not all(
+        isinstance(item, str) and item for item in candidate_ids
+    ):
+        fail(f"follow-up task candidate_ids is not a string array: {task!r}")
 
 
 def require_proof_request_schema(request: dict) -> None:
