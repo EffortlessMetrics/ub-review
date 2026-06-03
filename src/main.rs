@@ -1076,6 +1076,19 @@ struct WitnessRecord {
     proof_receipt_id: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct WitnessRegistryArtifact {
+    schema: String,
+    total: usize,
+    status_counts: BTreeMap<String, usize>,
+    kind_counts: BTreeMap<String, usize>,
+    source_counts: BTreeMap<String, usize>,
+    follow_up_total: usize,
+    follow_up_status_counts: BTreeMap<String, usize>,
+    witness_ids_by_status: BTreeMap<String, Vec<String>>,
+    follow_up_witness_ids_by_status: BTreeMap<String, Vec<String>>,
+}
+
 #[derive(Clone, Debug)]
 struct FocusedTestTask {
     id: String,
@@ -5935,12 +5948,60 @@ fn proof_receipt_witness_evidence(receipt: &ProofReceipt) -> Vec<String> {
     evidence
 }
 
+fn witness_registry_artifact(witnesses: &[WitnessRecord]) -> WitnessRegistryArtifact {
+    let mut status_counts = BTreeMap::new();
+    let mut kind_counts = BTreeMap::new();
+    let mut source_counts = BTreeMap::new();
+    let mut follow_up_status_counts = BTreeMap::new();
+    let mut witness_ids_by_status: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut follow_up_witness_ids_by_status: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut follow_up_total = 0;
+
+    for witness in witnesses {
+        *status_counts.entry(witness.status.clone()).or_insert(0) += 1;
+        *kind_counts.entry(witness.kind.clone()).or_insert(0) += 1;
+        *source_counts.entry(witness.source.clone()).or_insert(0) += 1;
+        witness_ids_by_status
+            .entry(witness.status.clone())
+            .or_default()
+            .push(witness.id.clone());
+
+        if witness.source.starts_with("follow-up-") {
+            follow_up_total += 1;
+            *follow_up_status_counts
+                .entry(witness.status.clone())
+                .or_insert(0) += 1;
+            follow_up_witness_ids_by_status
+                .entry(witness.status.clone())
+                .or_default()
+                .push(witness.id.clone());
+        }
+    }
+
+    WitnessRegistryArtifact {
+        schema: "ub-review.witness_registry.v1".to_owned(),
+        total: witnesses.len(),
+        status_counts,
+        kind_counts,
+        source_counts,
+        follow_up_total,
+        follow_up_status_counts,
+        witness_ids_by_status,
+        follow_up_witness_ids_by_status,
+    }
+}
+
 fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let registry = witness_registry_artifact(witnesses);
     fs::write(
         review_dir.join("witnesses.json"),
         serde_json::to_vec_pretty(witnesses)?,
+    )?;
+    fs::write(
+        review_dir.join("witness_registry.json"),
+        serde_json::to_vec_pretty(&registry)?,
     )?;
     let mut ndjson = String::new();
     for witness in witnesses {
@@ -17909,6 +17970,18 @@ index 1111111..2222222 100644
         let witness_json: Vec<super::WitnessRecord> =
             serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
         assert_eq!(witness_json.len(), 5);
+        let registry: super::WitnessRegistryArtifact =
+            serde_json::from_slice(&fs::read(temp.path().join("review/witness_registry.json"))?)?;
+        assert_eq!(registry.schema, "ub-review.witness_registry.v1");
+        assert_eq!(registry.total, 5);
+        assert_eq!(registry.follow_up_total, 5);
+        assert_eq!(registry.follow_up_status_counts["needs-witness"], 3);
+        assert_eq!(registry.follow_up_status_counts["tool-confirmed"], 1);
+        assert_eq!(registry.follow_up_status_counts["refuted"], 1);
+        assert_eq!(
+            registry.follow_up_witness_ids_by_status["needs-witness"].len(),
+            3
+        );
         Ok(())
     }
 
@@ -18183,9 +18256,20 @@ index 1111111..2222222 100644
 
         let witness_json: Vec<super::WitnessRecord> =
             serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
+        let registry: super::WitnessRegistryArtifact =
+            serde_json::from_slice(&fs::read(temp.path().join("review/witness_registry.json"))?)?;
         let ndjson = fs::read_to_string(temp.path().join("witnesses.ndjson"))?;
         assert_eq!(witness_json.len(), witnesses.len());
         assert_eq!(ndjson.lines().count(), witness_json.len());
+        assert_eq!(registry.schema, "ub-review.witness_registry.v1");
+        assert_eq!(registry.total, witness_json.len());
+        assert_eq!(registry.status_counts["needs-witness"], 3);
+        assert_eq!(registry.status_counts["tool-confirmed"], 2);
+        assert_eq!(registry.status_counts["refuted"], 1);
+        assert_eq!(registry.status_counts["parked"], 1);
+        assert_eq!(registry.source_counts["proof-receipt"], 2);
+        assert_eq!(registry.follow_up_total, 0);
+        assert!(registry.follow_up_status_counts.is_empty());
         assert!(
             witness_json.iter().all(|witness| {
                 witness.schema == "ub-review.witness.v1" && !witness.id.is_empty()

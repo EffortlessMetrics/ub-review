@@ -196,9 +196,13 @@ target/ub-review/
     follow_up_outputs.json
     follow_up_evidence.json
     witnesses.json
+    witness_registry.json
     proof_requests.json
     proof_request_groups.json
+    proof_receipts.json
     proof_plan.md
+    resource_leases.json
+    resource_plan.md
     github-review.json
     github-review-skip.json
     post-result.json
@@ -214,6 +218,8 @@ target/ub-review/
   follow_up_outputs.ndjson
   witnesses.ndjson
   proof_requests.ndjson
+  proof_receipts.ndjson
+  resource_leases.ndjson
   running-summary.md
 ```
 
