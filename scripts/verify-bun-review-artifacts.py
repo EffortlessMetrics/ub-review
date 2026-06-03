@@ -34,27 +34,6 @@ SECRET_MARKERS = [
     "UB_REVIEW_MINIMAX_API_KEY",
     "UB_REVIEW_OPENCODE_API_KEY",
 ]
-FOLLOW_UP_RESULT_STATUSES = {
-    "ok",
-    "degraded",
-    "skipped",
-    "skipped_budget",
-    "missing_key",
-    "preflight_failed",
-    "failed",
-    "timed_out",
-    "rate_limited",
-    "auth_failed",
-    "invalid_json",
-    "bad_envelope",
-}
-FOLLOW_UP_OUTPUT_COUNT_FIELDS = [
-    "observations",
-    "candidate_findings",
-    "summary_only_findings",
-    "failed_objections",
-    "proof_requests",
-]
 
 
 def fail(message: str) -> None:
@@ -116,6 +95,29 @@ def has_reviewer_value_heading(body: str) -> bool:
             "## Missing evidence",
         ]
     )
+
+
+FOLLOW_UP_RESULT_STATUSES = {
+    "ok",
+    "degraded",
+    "skipped",
+    "skipped_budget",
+    "missing_key",
+    "preflight_failed",
+    "failed",
+    "timed_out",
+    "rate_limited",
+    "auth_failed",
+    "invalid_json",
+    "bad_envelope",
+}
+FOLLOW_UP_OUTPUT_COUNT_FIELDS = [
+    "observations",
+    "candidate_findings",
+    "summary_only_findings",
+    "failed_objections",
+    "proof_requests",
+]
 
 
 def require_common_tree(root: pathlib.Path) -> None:
