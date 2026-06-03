@@ -654,6 +654,154 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn run_executes_focused_proof_and_writes_receipts() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    write_file(&repo.join("README.md"), "# focused proof fixture\n")?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("test/js/bun/ffi/ffi.test.js"),
+        r#"import { expect, test } from "bun:test";
+
+test("no-finalizer toBuffer keeps caller memory alive", () => {
+  expect(true).toBe(true);
+});
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(
+        &repo,
+        "git",
+        &["commit", "-m", "add focused ffi regression"],
+    )?;
+
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_bun(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+        &[("PATH", path.as_str())],
+    )?;
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert_eq!(receipts.len(), 1);
+    let receipt = &receipts[0];
+    assert_eq!(receipt["schema"], "ub-review.proof_receipt.v1");
+    assert_eq!(receipt["kind"], "focused-red-green");
+    assert_eq!(receipt["test_patch_mode"], "base-plus-tests");
+    assert_eq!(receipt["result"], "discriminating");
+    assert_eq!(receipt["requested_by"], serde_json::json!(["proof-broker"]));
+    assert_eq!(receipt["request_ids"], serde_json::json!([]));
+    assert!(
+        receipt["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("HEAD passed; base+tests failed"))
+    );
+    let commands = json_array_field(receipt, "commands")?;
+    assert_eq!(commands.len(), 2);
+    assert_eq!(commands[0]["side"], "head");
+    assert_eq!(commands[0]["status"], "passed");
+    assert_eq!(commands[1]["side"], "base-plus-tests");
+    assert_eq!(commands[1]["status"], "failed");
+    assert!(
+        commands[0]["command"]
+            .as_str()
+            .is_some_and(|command| command.contains("test/js/bun/ffi/ffi.test.js"))
+    );
+    assert!(commands[0]["command"].as_str().is_some_and(|command| {
+        command.contains("no-finalizer toBuffer keeps caller memory alive")
+    }));
+    assert!(
+        commands[0]["command"]
+            .as_str()
+            .is_some_and(|command| command.contains(" -t "))
+    );
+    for command in commands {
+        assert!(out.join(json_str_field(command, "stdout")?).exists());
+        assert!(out.join(json_str_field(command, "stderr")?).exists());
+    }
+
+    let leases: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+    assert_eq!(leases.len(), 1);
+    assert_eq!(leases[0]["schema"], "ub-review.resource_lease.v1");
+    assert_eq!(leases[0]["kind"], "focused-test");
+    assert_eq!(leases[0]["status"], "granted");
+    assert_eq!(leases[0]["consumer"], receipt["id"]);
+    assert_eq!(leases[0]["network"], false);
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    assert_eq!(review["proof_receipts"], serde_json::json!(receipts));
+    assert_eq!(review["resource_leases"], serde_json::json!(leases));
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["proof_receipts"], 1);
+    assert_eq!(metrics["resource_leases"], 1);
+
+    let proof_plan = fs::read_to_string(out.join("review/proof_plan.md"))?;
+    assert!(proof_plan.contains("Proof broker v0 executed focused proof under the runtime budget"));
+    assert!(proof_plan.contains("result=`discriminating`"));
+    let resource_plan = fs::read_to_string(out.join("review/resource_plan.md"))?;
+    assert!(resource_plan.contains("status=`granted`"));
+
+    let receipt_ndjson = fs::read_to_string(out.join("proof_receipts.ndjson"))?;
+    assert_eq!(
+        receipt_ndjson
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+        1
+    );
+    let lease_ndjson = fs::read_to_string(out.join("resource_leases.ndjson"))?;
+    assert_eq!(
+        lease_ndjson
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+        1
+    );
+    let head_stdout = fs::read_to_string(out.join(json_str_field(&commands[0], "stdout")?))?;
+    assert!(head_stdout.contains("fake bun"));
+    let base_stderr = fs::read_to_string(out.join(json_str_field(&commands[1], "stderr")?))?;
+    assert!(base_stderr.contains("base failure"));
+    assert!(!out.join("proof-worktrees/base-plus-tests").exists());
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_hits_fake_minimax_provider_and_writes_artifacts() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
@@ -1095,6 +1243,75 @@ fn write_file(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
+fn write_fake_bun(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    #[cfg(windows)]
+    {
+        let source = dir.join("fake_bun.rs");
+        write_file(
+            &source,
+            r#"use std::{env, fs, process};
+
+fn main() {
+    let cwd = env::current_dir().expect("current dir");
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    println!("fake bun {}", args.join(" "));
+    let mut base_plus_tests = cwd.to_string_lossy().contains("base-plus-tests");
+    let git_file = cwd.join(".git");
+    if git_file.is_file() {
+        let text = fs::read_to_string(git_file).unwrap_or_default();
+        base_plus_tests |= text.contains("base-plus-tests");
+    }
+    if base_plus_tests {
+        eprintln!("base failure");
+        process::exit(1);
+    }
+}
+"#,
+        )?;
+        let exe = dir.join("bun.exe");
+        run(dir, "rustc", &[path_str(&source)?, "-o", path_str(&exe)?])?;
+    }
+    #[cfg(not(windows))]
+    {
+        let script = dir.join("bun");
+        write_file(
+            &script,
+            r#"#!/bin/sh
+echo "fake bun $*"
+if [ -f .git ] && grep -q base-plus-tests .git; then
+  echo "base failure" >&2
+  exit 1
+fi
+case "$PWD" in
+  *base-plus-tests*)
+    echo "base failure" >&2
+    exit 1
+    ;;
+esac
+exit 0
+"#,
+        )?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = fs::metadata(&script)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&script, permissions)?;
+        }
+    }
+    Ok(())
+}
+
+fn prepend_to_path(dir: &Path) -> Result<String> {
+    let mut paths = vec![dir.to_path_buf()];
+    if let Some(existing) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&existing));
+    }
+    Ok(std::env::join_paths(paths)?.to_string_lossy().into_owned())
+}
+
 fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
@@ -1296,6 +1513,24 @@ fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String
 fn path_str(path: &Path) -> Result<&str> {
     path.to_str()
         .ok_or_else(|| anyhow::anyhow!("path is not valid UTF-8: {}", path.display()))
+}
+
+fn json_array_field<'a>(
+    value: &'a serde_json::Value,
+    field: &str,
+) -> Result<&'a [serde_json::Value]> {
+    value
+        .get(field)
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .ok_or_else(|| anyhow::anyhow!("JSON field `{field}` is not an array"))
+}
+
+fn json_str_field<'a>(value: &'a serde_json::Value, field: &str) -> Result<&'a str> {
+    value
+        .get(field)
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| anyhow::anyhow!("JSON field `{field}` is not a string"))
 }
 
 fn sum_json_object_values(value: &serde_json::Value) -> u64 {
