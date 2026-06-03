@@ -1,0 +1,41 @@
+schema_version = "1.0"
+
+[lane.format]
+description = "Rust formatting determinism."
+intent = "code-shape consistency"
+runner = "ubuntu_24_04"
+base_lem = 1
+default_pr = true
+blocking = true
+paths = ["**/*.rs", "Cargo.toml", "rustfmt.toml"]
+outputs = []
+
+[lane.rust_check]
+description = "Type and feature-shape verification."
+intent = "compile correctness"
+runner = "ubuntu_24_04"
+base_lem = 4
+default_pr = true
+blocking = true
+paths = ["src/**", "tests/**", "Cargo.toml", "Cargo.lock"]
+outputs = ["target/ci/ci-actuals-rust_check.json"]
+
+[lane.clippy]
+description = "Strict Clippy and panic-family lint baseline."
+intent = "lint and panic-policy enforcement"
+runner = "ubuntu_24_04"
+base_lem = 5
+default_pr = true
+blocking = true
+paths = ["src/**", "tests/**", "policy/clippy-*.toml", "clippy.toml"]
+outputs = ["target/ci/ci-actuals-clippy.json"]
+
+[lane.ripr_advisory]
+description = "Static mutation-exposure analysis for production Rust diffs."
+intent = "oracle-gap detection"
+runner = "ubuntu_24_04"
+base_lem = 4
+default_pr = true
+blocking = false
+paths = ["src/**", "tests/**"]
+outputs = ["target/ripr/pr/summary.md", "target/ripr/pr/repo-exposure.json"]

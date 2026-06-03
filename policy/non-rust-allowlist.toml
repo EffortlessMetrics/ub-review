@@ -1,0 +1,28 @@
+schema_version = "1.0"
+
+[[allow]]
+glob = ".github/**/*.yml"
+kind = "ci_declarative"
+owner = "release/ci"
+surface = "ci"
+classification = "config"
+reason = "GitHub Actions workflow definitions are platform-required YAML."
+covered_by = ["cargo xtask check-file-policy"]
+
+[[allow]]
+glob = "docs/**/*.md"
+kind = "documentation"
+owner = "maintainers"
+surface = "docs"
+classification = "documentation"
+reason = "Repository policy, architecture, and usage documentation."
+covered_by = ["cargo xtask check-file-policy"]
+
+[[allow]]
+glob = "scripts/*"
+kind = "legacy_tooling"
+owner = "maintainers"
+surface = "tooling"
+classification = "automation"
+reason = "Existing helper scripts are retained until equivalent Rust/xtask checks are available."
+covered_by = ["cargo xtask check-file-policy"]

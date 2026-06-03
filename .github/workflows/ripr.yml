@@ -1,0 +1,38 @@
+name: ripr
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "ripr.toml"
+      - "policy/ripr-suppressions.toml"
+  workflow_dispatch:
+
+jobs:
+  ripr-advisory:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare ripr artifact directory
+        run: mkdir -p target/ripr/pr
+      - name: Run ripr when available
+        run: |
+          if command -v ripr >/dev/null 2>&1; then
+            ripr --config ripr.toml
+          else
+            cat > target/ripr/pr/summary.md <<'SUMMARY'
+            # ripr advisory
+
+            `ripr` is not installed on this runner. This lane records the expected artifact shape until the runner image provides the tool.
+            SUMMARY
+            cat > target/ripr/pr/repo-exposure.json <<'JSON'
+            {"schema_version":1,"status":"tool_unavailable","blocking":false}
+            JSON
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ripr-advisory
+          path: target/ripr/pr

@@ -1,0 +1,5 @@
+[profile.default]
+failure-output = "immediate-final"
+success-output = "never"
+status-level = "pass"
+retries = 0

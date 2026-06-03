@@ -1,0 +1,8 @@
+schema_version = "1.0"
+
+[policy]
+owner_required = true
+reason_required = true
+surface_required = true
+
+# Network surfaces must be receipt-backed before enforcement is enabled.

@@ -1,0 +1,6 @@
+# Keep tests on the same panic-free road surface as production code.
+allow-unwrap-in-tests = false
+allow-expect-in-tests = false
+allow-panic-in-tests = false
+allow-dbg-in-tests = false
+avoid-breaking-exported-api = false

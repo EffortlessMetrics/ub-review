@@ -1,0 +1,9 @@
+schema_version = "1.0"
+
+[policy]
+owner_required = true
+reason_required = true
+classification_required = true
+entries_must_expire = true
+
+# No active ripr suppressions.

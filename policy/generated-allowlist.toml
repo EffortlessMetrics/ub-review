@@ -1,0 +1,8 @@
+schema_version = "1.0"
+
+[policy]
+owner_required = true
+reason_required = true
+coverage_required = true
+
+# No generated-file exceptions are currently registered.

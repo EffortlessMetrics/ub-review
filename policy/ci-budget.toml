@@ -1,0 +1,15 @@
+schema_version = "1.0"
+
+[budget.default]
+default_limit_lem = 35
+hard_limit_lem = 125
+requires_override_label = "ci-budget-override"
+
+[budget.tiny]
+default_limit_lem = 8
+hard_limit_lem = 35
+
+[budget.expanded]
+default_limit_lem = 75
+hard_limit_lem = 125
+requires_ack_label = "ci-budget-ack"

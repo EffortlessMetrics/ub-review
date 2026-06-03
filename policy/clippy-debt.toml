@@ -1,0 +1,13 @@
+schema_version = "1.0"
+
+[policy]
+entries_must_expire = true
+planned_flips_require_owner = true
+
+[[debt]]
+id = "clippy-debt-0001"
+lint = "pedantic"
+owner = "maintainers"
+classification = "planned_ratcheting"
+reason = "Track future readability/taste lint hardening without enabling blanket category failures in the initial policy baseline."
+expires = "2026-12-31"

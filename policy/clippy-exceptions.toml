@@ -1,0 +1,8 @@
+schema_version = "1.0"
+
+[policy]
+required_style = "expect-with-reason"
+reason_prefix = "policy:"
+allow_bare_allow = false
+
+# No active exceptions. Add entries only with owner, lint, path, classification, reason, and expiry.

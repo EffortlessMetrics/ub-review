@@ -1,0 +1,9 @@
+schema_version = "0.3"
+
+[policy]
+panic_free_tests = true
+entries_must_expire = true
+selector_required = true
+last_seen_is_advisory = true
+
+# No active panic-family exceptions.

@@ -1,0 +1,10 @@
+schema_version = "1.0"
+
+[analysis]
+mode = "pr-advisory"
+report_dir = "target/ripr/pr"
+suppressions = "policy/ripr-suppressions.toml"
+
+[policy]
+description = "Static mutation-exposure analysis; mutation-testing-lite signal at static-analysis prices."
+blocking = false

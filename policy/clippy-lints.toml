@@ -1,0 +1,11 @@
+schema_version = "1.0"
+
+[policy]
+panic_free_tests = true
+allow_test_carveouts = false
+suppression_style = "expect-with-reason"
+blanket_categories = false
+
+[deny]
+panic_family = ["unwrap_used", "expect_used", "panic", "todo", "unimplemented", "dbg_macro"]
+silent_failure = ["let_underscore_must_use", "let_underscore_future"]

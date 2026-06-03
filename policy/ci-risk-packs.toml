@@ -1,0 +1,21 @@
+schema_version = "1.0"
+
+[risk_pack.default_rust]
+description = "Normal Rust implementation changes."
+labels = []
+lanes = ["format", "rust_check", "clippy", "ripr_advisory"]
+estimated_lem = 12
+
+[risk_pack.full_ci]
+description = "Broad validation requested by reviewer or release policy."
+labels = ["full-ci"]
+lanes = ["format", "rust_check", "clippy", "ripr_advisory"]
+estimated_lem = 35
+requires_ack_label = "ci-budget-ack"
+
+[risk_pack.runtime_mutation]
+description = "Runtime mutation testing for oracle adequacy confirmation."
+labels = ["mutation"]
+lanes = ["format", "rust_check", "clippy", "ripr_advisory"]
+estimated_lem = 75
+requires_ack_label = "ci-budget-ack"
