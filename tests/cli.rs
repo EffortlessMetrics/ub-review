@@ -181,6 +181,10 @@ fn active_len_tracks_view_after_resize() {
         resolved_profile["profile"]["limits"]["tests"],
         serde_json::json!(2)
     );
+    assert_eq!(
+        resolved_profile["profile"]["limits"]["sensor_jobs"],
+        serde_json::json!(4)
+    );
     assert_eq!(resolved_profile["review"]["posting_engine"], "artifact");
     assert!(resolved_profile["tools"]["tokmd"]["enabled"].as_bool() == Some(true));
     let resolved_plan: serde_json::Value =
@@ -190,6 +194,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["runtime_profile"], "gh-runner");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
     assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 900);
+    assert_eq!(resolved_plan["limits"]["sensor_jobs"], 4);
     assert_eq!(resolved_plan["selectors"]["depth"], "standard");
     assert_eq!(resolved_plan["selectors"]["lane_width"], 10);
     assert_eq!(resolved_plan["selectors"]["model_concurrency"], 8);
@@ -244,6 +249,7 @@ fn active_len_tracks_view_after_resize() {
         serde_json::from_slice(&fs::read(capped_out.join("resolved-plan.json"))?)?;
     assert_eq!(capped_resolved_plan["runtime_profile"], "cx23");
     assert_eq!(capped_resolved_plan["limits"]["llm_in_flight"], 12);
+    assert_eq!(capped_resolved_plan["limits"]["sensor_jobs"], 2);
     assert_eq!(capped_resolved_plan["selectors"]["model_concurrency"], 12);
     assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
         sensors
