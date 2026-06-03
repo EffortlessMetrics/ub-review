@@ -1,0 +1,15 @@
+[budget]
+preferred_default_lem = 25
+default_limit_lem = 35
+elevated_limit_lem = 75
+hard_limit_lem = 125
+
+[runner_multipliers]
+ubuntu_latest = 1.0
+windows_latest = 2.0
+macos_latest = 10.0
+docker_build = 6.0
+gpu_docker = 6.0
+nix_build = 4.0
+wasm = 2.0
+python_wheel = 2.0

@@ -15026,10 +15026,10 @@ index 3333333..4444444 100644
             },
             tasks,
             |_root, _argv, _timeout, _stdout, _stderr| {
-                unreachable!("proof command should not run without a lease")
+                anyhow::bail!("proof command should not run without a lease")
             },
             |_root, _out, _diff| {
-                unreachable!("base+tests worktree should not be prepared without a lease")
+                anyhow::bail!("base+tests worktree should not be prepared without a lease")
             },
         )?;
 
@@ -15070,10 +15070,12 @@ index 3333333..4444444 100644
             },
             tasks,
             |_root, _argv, _timeout, _stdout, _stderr| {
-                unreachable!("proof command should not run when proof budget is zero")
+                anyhow::bail!("proof command should not run when proof budget is zero")
             },
             |_root, _out, _diff| {
-                unreachable!("base+tests worktree should not be prepared when proof budget is zero")
+                anyhow::bail!(
+                    "base+tests worktree should not be prepared when proof budget is zero"
+                )
             },
         )?;
 

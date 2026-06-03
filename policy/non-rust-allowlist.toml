@@ -1,0 +1,41 @@
+# Non-Rust surfaces are allowed when they are explicit, owned, and reviewed.
+
+[[allow]]
+id = "file-0001"
+patterns = ["docs/**", "README.md", "RELEASE_NOTES*.md", "REPO_READY.md", "LICENSE-*", "templates/**/*.md"]
+kind = "documentation"
+owner = "maintainers"
+reason = "Repository documentation, templates, and licenses are first-class policy and contributor surfaces."
+review_after = "2026-12-31"
+
+[[allow]]
+id = "file-0002"
+patterns = ["policy/**/*.toml", "configs/**/*.toml", "profiles/**/*.toml", "runtime/**/*.toml", "rustfmt.toml", "rust-toolchain.toml", "Cargo.toml", "Cargo.lock", "fixtures/**/Cargo.toml", "fixtures/**/Cargo.lock"]
+kind = "configuration"
+owner = "maintainers"
+reason = "TOML manifests and policy/configuration files are part of the Rust-first control plane."
+review_after = "2026-12-31"
+
+[[allow]]
+id = "file-0003"
+patterns = [".github/**/*.yml", ".github/**/*.yaml", "action.yml", "examples/**/.github/**/*.yml"]
+kind = "github-actions"
+owner = "maintainers"
+reason = "GitHub Actions workflows and action metadata are required for this CI/action repository."
+review_after = "2026-12-31"
+
+[[allow]]
+id = "file-0004"
+patterns = ["scripts/*.py", "scripts/*.sh", "examples/**/*.sh"]
+kind = "bounded-tooling"
+owner = "maintainers"
+reason = "Small helper scripts currently verify artifacts or demonstrate action setup; future automation should prefer Rust/xtask when practical."
+review_after = "2026-09-01"
+
+[[allow]]
+id = "file-0005"
+patterns = ["fixtures/providers/*.json", "tools/ub-rules/**/*.yml"]
+kind = "fixtures-and-analysis-rules"
+owner = "maintainers"
+reason = "Provider fixtures and ast-grep rules are required test/analyzer inputs."
+review_after = "2026-12-31"

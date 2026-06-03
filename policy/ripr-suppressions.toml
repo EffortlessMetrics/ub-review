@@ -1,0 +1,5 @@
+# ripr starts advisory. Suppressions should describe static oracle-gap findings,
+# not runtime mutation-testing terminology.
+
+[suppressions]
+entries = []

@@ -1,0 +1,94 @@
+[[lanes]]
+id = "rust-fast"
+workflow = ".github/workflows/ci.yml"
+job = "rust"
+kind = "rust"
+tier = "default-pr"
+default_pr = true
+blocking = true
+runner = "ubuntu-latest"
+base_lem = 20
+owner = "maintainers"
+intent = "Fast deterministic Rust gate."
+failure_mode = "Formatting, compile, test, docs, or Clippy regressions."
+proof_obligation = "Repository builds and tests on the pinned Rust toolchain with warnings denied."
+allowed_triggers = ["pull_request", "push:main"]
+duplicate_of = ""
+review_after = "2026-07-01"
+expires = "2026-12-31"
+
+[[lanes]]
+id = "action-smoke"
+workflow = ".github/workflows/action-smoke.yml"
+job = "smoke"
+kind = "action-smoke"
+tier = "default-pr"
+default_pr = true
+blocking = true
+runner = "ubuntu-latest"
+base_lem = 20
+owner = "maintainers"
+intent = "Verify the local GitHub Action produces and validates ub-review smoke artifacts without model calls."
+failure_mode = "Action contract, output path, artifact, or posting-receipt regressions."
+proof_obligation = "The action can run locally in CI and produce the documented artifact contract."
+allowed_triggers = ["pull_request", "workflow_dispatch"]
+duplicate_of = ""
+review_after = "2026-07-01"
+expires = "2026-12-31"
+
+[[lanes]]
+id = "model-smoke"
+workflow = ".github/workflows/action-smoke.yml"
+job = "model-smoke"
+kind = "model-smoke"
+tier = "label-or-manual"
+default_pr = false
+blocking = false
+runner = "ubuntu-latest"
+base_lem = 25
+owner = "maintainers"
+intent = "Exercise bounded MiniMax model evidence only when requested."
+failure_mode = "Provider integration or model artifact contract regressions."
+proof_obligation = "BYOK model lane can complete and produce compliant evidence receipts."
+allowed_triggers = ["label:ub-review-model-smoke", "workflow_dispatch"]
+duplicate_of = ""
+review_after = "2026-07-01"
+expires = "2026-12-31"
+
+[[lanes]]
+id = "release-binary-pr"
+workflow = ".github/workflows/release-binary.yml"
+job = "build-linux-x64"
+kind = "release-surface"
+tier = "risk-routed"
+default_pr = false
+blocking = true
+runner = "ubuntu-latest"
+base_lem = 20
+owner = "maintainers"
+intent = "Verify releasable Linux binary packaging when release surfaces change."
+failure_mode = "Release build, executable, package, checksum, or artifact regressions."
+proof_obligation = "The release binary can be built and packaged from the PR state."
+allowed_triggers = ["pull_request:release-surface"]
+duplicate_of = ""
+review_after = "2026-07-01"
+expires = "2026-12-31"
+
+[[lanes]]
+id = "release-publish"
+workflow = ".github/workflows/release-binary.yml"
+job = "publish"
+kind = "release"
+tier = "tag-only"
+default_pr = false
+blocking = true
+runner = "ubuntu-latest"
+base_lem = 20
+owner = "maintainers"
+intent = "Publish a release asset only for version tags."
+failure_mode = "Release tag validation, packaging, or GitHub release upload regressions."
+proof_obligation = "A tag build produces and uploads the release asset."
+allowed_triggers = ["push:tag:v*"]
+duplicate_of = "release-binary-pr"
+review_after = "2026-07-01"
+expires = "2026-12-31"

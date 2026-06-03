@@ -1,0 +1,5 @@
+# Exceptions for CI jobs that cannot yet be represented in the lane whitelist.
+# Keep empty when every workflow job has a lane receipt.
+
+[exceptions]
+entries = []

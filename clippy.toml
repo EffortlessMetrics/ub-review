@@ -1,0 +1,5 @@
+# Keep Clippy behavior uniform across production code and tests.
+allow-unwrap-in-tests = false
+allow-expect-in-tests = false
+allow-panic-in-tests = false
+allow-dbg-in-tests = false

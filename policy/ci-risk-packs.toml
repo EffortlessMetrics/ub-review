@@ -1,0 +1,24 @@
+[[risk_packs]]
+id = "docs_only"
+paths = ["docs/**", "*.md"]
+lanes = ["rust-fast"]
+reason = "Docs should keep the fast gate available without expanding optional lanes."
+
+[[risk_packs]]
+id = "rust_source"
+paths = ["src/**", "tests/**", "fixtures/**/*.rs", "Cargo.toml", "Cargo.lock"]
+lanes = ["rust-fast", "action-smoke"]
+reason = "Rust behavior changes need the default Rust and action smoke gates."
+
+[[risk_packs]]
+id = "release_surface"
+paths = [".github/workflows/release-binary.yml", "Cargo.toml", "Cargo.lock", "src/**"]
+lanes = ["rust-fast", "release-binary-pr"]
+reason = "Release-surface changes need binary packaging proof."
+
+[[risk_packs]]
+id = "model_provider"
+paths = ["fixtures/providers/**", "templates/bun/**", "profiles/**", "runtime/**"]
+labels = ["ub-review-model-smoke"]
+lanes = ["model-smoke"]
+reason = "Provider and lane prompt changes may need model smoke proof when explicitly labeled."

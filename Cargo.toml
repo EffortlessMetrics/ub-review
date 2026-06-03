@@ -25,6 +25,8 @@ tempfile = "3.12"
 
 [lints.rust]
 unsafe_code = "forbid"
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
 
 [lints.clippy]
 unwrap_used = "deny"
@@ -32,6 +34,7 @@ expect_used = "deny"
 panic = "deny"
 todo = "deny"
 unimplemented = "deny"
+unreachable = "deny"
 dbg_macro = "deny"
 
 [[bin]]

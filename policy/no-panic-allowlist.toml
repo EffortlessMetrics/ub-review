@@ -1,0 +1,26 @@
+# Panic-family exception ledger. Keep entries semantic rather than line-number
+# based whenever possible.
+
+[policy]
+applies_to = ["src", "tests", "examples", "benches", "fixtures", "xtask"]
+covered = [
+  "unwrap",
+  "expect",
+  "panic_macro",
+  "todo_macro",
+  "unimplemented_macro",
+  "unreachable_macro",
+  "indexing_slicing",
+  "string_slice",
+]
+
+[[allow]]
+id = "panic-0001"
+path = "tests/cli.rs"
+family = "assertion"
+owner = "maintainers"
+classification = "test-oracle"
+reason = "Assertions are allowed as test oracles; fallible setup should still use Result."
+selector = "assert_eq/assert_ne/assert macros in tests"
+review_after = "2026-07-01"
+expires = "2026-12-31"

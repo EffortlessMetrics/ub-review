@@ -1,0 +1,20 @@
+# Repository lint posture. This file documents the intended policy alongside
+# Cargo.toml so future checkers can compare declared policy with effective lints.
+
+[rust]
+unsafe_code = "forbid"
+unsafe_op_in_unsafe_fn = "deny"
+unused_must_use = "deny"
+
+[clippy]
+dbg_macro = "deny"
+todo = "deny"
+unimplemented = "deny"
+panic = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "target-deny-after-inventory"
+string_slice = "target-deny-after-inventory"
+allow_attributes = "target-deny-after-migration"
+allow_attributes_without_reason = "target-deny-after-migration"

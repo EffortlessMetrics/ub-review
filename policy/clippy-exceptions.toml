@@ -1,0 +1,13 @@
+# Temporary Clippy exception ledger. Inline suppressions should reference these
+# IDs once migrated to reason-bearing #[expect(...)] attributes.
+
+[[exceptions]]
+id = "clippy-0001"
+path = "src/main.rs"
+lint = "clippy::too_many_arguments"
+owner = "maintainers"
+classification = "constructor-aggregation-debt"
+reason = "Several artifact and receipt constructors currently pass structured state explicitly; migrate to parameter structs before denying this lint."
+selector = "current too_many_arguments suppressions in src/main.rs"
+review_after = "2026-07-01"
+expires = "2026-09-01"
