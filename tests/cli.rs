@@ -462,6 +462,8 @@ fn active_len_tracks_view_after_resize() {
     assert!(summary.contains("## Provider preflights"));
     assert!(summary.contains("## Model lane status"));
     assert!(summary.contains("## Missing or failed model evidence"));
+    assert!(summary.contains("## Review efficiency"));
+    assert!(summary.contains("Follow-up results:"));
     assert!(summary.contains("`ub-memory-lifetime`"));
     assert!(summary.contains("MiniMax-M3"));
     assert!(summary.contains("## Lane packets"));
