@@ -2207,6 +2207,12 @@ def require_proof_command_receipt_schema(command: dict) -> None:
     for field in ["side", "command", "status", "stdout", "stderr", "reason"]:
         if not isinstance(command.get(field), str) or not command[field]:
             fail(f"proof command receipt missing string field {field}: {command!r}")
+    env = command.get("env")
+    if not isinstance(env, dict) or not all(
+        isinstance(key, str) and key and isinstance(value, str)
+        for key, value in env.items()
+    ):
+        fail(f"proof command receipt env is not a string map: {command!r}")
     if command["side"] not in {"head", "base-plus-tests"}:
         fail(f"proof command receipt has unsupported side: {command!r}")
     if command["status"] not in {"passed", "failed", "timed_out", "skipped"}:

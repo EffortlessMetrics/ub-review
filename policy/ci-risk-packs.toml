@@ -1,0 +1,13 @@
+schema_version = 1
+
+[[risk_pack]]
+id = "native-boundary"
+labels = ["risk/native-boundary", "ci/elevated"]
+lanes = ["rust-fast-gate", "policy-gate", "ripr-advisory"]
+reason = "Native and UB-adjacent changes need targeted static and test-oracle evidence at PR time."
+
+[[risk_pack]]
+id = "release"
+labels = ["risk/release", "ci/high"]
+lanes = ["rust-fast-gate", "policy-gate", "release-dry-run"]
+reason = "Release claims and packaging changes need explicit higher-cost proof."

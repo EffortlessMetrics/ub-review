@@ -1,0 +1,15 @@
+schema_version = 1
+
+[budget]
+preferred_default_lem = 25
+default_limit_lem = 35
+elevated_limit_lem = 75
+hard_limit_lem = 125
+linux_minute_rate_usd = 0.008
+
+[bands]
+pennies = "0-12 LEM: docs, metadata, and very light checks"
+default = "13-35 LEM: ordinary Rust PR"
+elevated = "36-75 LEM: scoped high-risk PR with explicit reason or label"
+high = "76-125 LEM: explicitly expensive PR"
+over_ceiling = ">125 LEM: override required"
