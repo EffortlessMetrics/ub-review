@@ -194,6 +194,7 @@ target/ub-review/
     orchestrator_plan.json
     follow_up_results.json
     follow_up_outputs.json
+    follow_up_evidence.json
     proof_requests.json
     proof_request_groups.json
     proof_plan.md

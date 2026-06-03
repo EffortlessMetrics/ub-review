@@ -152,6 +152,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/orchestrator_plan.json",
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
+        "review/follow_up_evidence.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
@@ -394,7 +395,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
-    require_follow_up_outputs(root, follow_up_results)
+    follow_up_outputs = require_follow_up_outputs(root, follow_up_results)
+    require_follow_up_evidence(root, follow_up_outputs)
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
@@ -1217,6 +1219,31 @@ def require_follow_up_outputs(root: pathlib.Path, results: list[dict]) -> list[d
             fail(f"follow_up_outputs.ndjson line {index + 1} does not match JSON artifact")
         require_follow_up_output_schema(output, result)
     return outputs
+
+
+def require_follow_up_evidence(root: pathlib.Path, outputs: list[dict]) -> dict:
+    evidence = load_json(root / "review/follow_up_evidence.json")
+    if not isinstance(evidence, dict):
+        fail("review/follow_up_evidence.json is not an object")
+    if evidence.get("schema") != "ub-review.follow_up_evidence.v1":
+        fail(f"follow-up evidence has wrong schema: {evidence!r}")
+    if evidence.get("follow_up_outputs") != len(outputs):
+        fail("follow-up evidence output count does not match follow_up_outputs")
+    for field in [
+        "inline_comments",
+        "summary_only_findings",
+        "observations",
+        "proof_requests",
+    ]:
+        values = evidence.get(field)
+        if not isinstance(values, list):
+            fail(f"follow-up evidence {field} is not an array: {evidence!r}")
+        expected = []
+        for output in outputs:
+            expected.extend(output[field])
+        if values != expected:
+            fail(f"follow-up evidence {field} does not match flattened outputs")
+    return evidence
 
 
 def require_follow_up_result_metrics(metrics: dict, results: list[dict]) -> None:

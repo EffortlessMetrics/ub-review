@@ -1369,6 +1369,16 @@ struct FollowUpOutputRecord {
     proof_requests: Vec<ProofRequest>,
 }
 
+#[derive(Debug, Serialize)]
+struct FollowUpEvidenceArtifact {
+    schema: String,
+    follow_up_outputs: usize,
+    inline_comments: Vec<ReviewInlineComment>,
+    summary_only_findings: Vec<SummaryOnlyFinding>,
+    observations: Vec<Observation>,
+    proof_requests: Vec<ProofRequest>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct GitHubReview {
     event: String,
@@ -4355,6 +4365,8 @@ fn write_review_artifacts(
     )?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
+    let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
+    write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -5387,6 +5399,40 @@ fn write_follow_up_output_artifacts(out: &Path, outputs: &[FollowUpOutputRecord]
         ndjson.push('\n');
     }
     fs::write(out.join("follow_up_outputs.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn follow_up_evidence_from_outputs(outputs: &[FollowUpOutputRecord]) -> FollowUpEvidenceArtifact {
+    let mut inline_comments = Vec::new();
+    let mut summary_only_findings = Vec::new();
+    let mut observations = Vec::new();
+    let mut proof_requests = Vec::new();
+    for output in outputs {
+        inline_comments.extend(output.inline_comments.iter().cloned());
+        summary_only_findings.extend(output.summary_only_findings.iter().cloned());
+        observations.extend(output.observations.iter().cloned());
+        proof_requests.extend(output.proof_requests.iter().cloned());
+    }
+    FollowUpEvidenceArtifact {
+        schema: "ub-review.follow_up_evidence.v1".to_owned(),
+        follow_up_outputs: outputs.len(),
+        inline_comments,
+        summary_only_findings,
+        observations,
+        proof_requests,
+    }
+}
+
+fn write_follow_up_evidence_artifact(
+    out: &Path,
+    evidence: &FollowUpEvidenceArtifact,
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("follow_up_evidence.json"),
+        serde_json::to_vec_pretty(evidence)?,
+    )?;
     Ok(())
 }
 
@@ -12829,12 +12875,12 @@ mod tests {
         classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
         collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, follow_up_model_lane_id,
-        follow_up_output_record, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_lane, model_request_payload, model_response_shape,
-        normalize_run_args, observation_summary_artifacts, opencode_canary_spec,
-        pr_decision_sentence, proof_budget, proof_lease_budget,
+        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
+        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, normalize_run_args, observation_summary_artifacts,
+        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
         provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
         render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
@@ -12842,9 +12888,9 @@ mod tests {
         runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
         validate_github_review_payload, validate_github_review_payload_for_post,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_candidate_artifacts, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -17718,9 +17764,22 @@ index 1111111..2222222 100644
         );
 
         let temp = tempfile::tempdir()?;
-        write_follow_up_output_artifacts(temp.path(), &[record])?;
+        let outputs = vec![record];
+        let evidence = follow_up_evidence_from_outputs(&outputs);
+        assert_eq!(evidence.schema, "ub-review.follow_up_evidence.v1");
+        assert_eq!(evidence.follow_up_outputs, 1);
+        assert_eq!(evidence.inline_comments.len(), 1);
+        assert_eq!(evidence.summary_only_findings.len(), 1);
+        assert_eq!(evidence.observations.len(), 2);
+        assert_eq!(evidence.proof_requests.len(), 1);
+
+        write_follow_up_output_artifacts(temp.path(), &outputs)?;
+        write_follow_up_evidence_artifact(temp.path(), &evidence)?;
         let written: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path().join("review/follow_up_outputs.json"),
+        )?)?;
+        let written_evidence: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/follow_up_evidence.json"),
         )?)?;
         let lines = fs::read_to_string(temp.path().join("follow_up_outputs.ndjson"))?;
         let ndjson = lines
@@ -17729,6 +17788,15 @@ index 1111111..2222222 100644
             .collect::<std::result::Result<Vec<_>, _>>()?;
         assert_eq!(written.as_array().map(Vec::len), Some(1));
         assert_eq!(ndjson, written.as_array().cloned().unwrap_or_default());
+        assert_eq!(written_evidence["follow_up_outputs"], 1);
+        assert_eq!(
+            written_evidence["observations"].as_array().map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(
+            written_evidence["proof_requests"].as_array().map(Vec::len),
+            Some(1)
+        );
         Ok(())
     }
 
