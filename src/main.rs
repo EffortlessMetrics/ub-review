@@ -3543,41 +3543,12 @@ fn classify_diff(files: &[String], patch: &str) -> DiffFlags {
         flags.dependency_changed |= is_dependency_path(&lower);
         flags.shell_changed |= lower.ends_with(".sh") || lower.starts_with("scripts/");
         flags.cpp_changed |= is_cpp_path(&lower);
-        flags.unsafe_or_native_risk |= lower.contains("ffi")
-            || lower.contains("jsc")
-            || lower.contains("arraybuffer")
-            || lower.contains("typedarray")
-            || lower.contains("worker")
-            || lower.contains("crypto")
-            || lower.contains("zstd")
-            || lower.contains("src/runtime/")
-            || lower.contains("src/bun.js/bindings/");
+        flags.unsafe_or_native_risk |= is_native_risk_path(&lower);
     }
-    let lower_patch = patch.to_ascii_lowercase();
-    for token in [
-        "unsafe",
-        "extern",
-        "from_raw_parts",
-        "as_ptr",
-        "as_mut_ptr",
-        "maybeuninit",
-        "nonnull",
-        "arraybuffer",
-        "typedarray",
-        "detach",
-        "resize",
-        "transfer",
-        "protect",
-        "unprotect",
-        "worker",
-        "ffi",
-        "jsc",
-        "stringorbuffer",
-        "sharedarraybuffer",
-    ] {
-        if lower_patch.contains(token) {
-            flags.unsafe_or_native_risk = true;
-        }
+    if patch_tokens_can_promote_native_risk(files, &flags)
+        && patch_contains_native_risk_token(patch)
+    {
+        flags.unsafe_or_native_risk = true;
     }
     flags
 }
@@ -3613,6 +3584,58 @@ fn is_cpp_path(path: &str) -> bool {
     [".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"]
         .iter()
         .any(|suffix| path.ends_with(suffix))
+}
+
+fn is_zig_path(path: &str) -> bool {
+    path.ends_with(".zig")
+}
+
+fn is_native_risk_path(path: &str) -> bool {
+    path.contains("ffi")
+        || path.contains("jsc")
+        || path.contains("arraybuffer")
+        || path.contains("typedarray")
+        || path.contains("worker")
+        || path.contains("crypto")
+        || path.contains("zstd")
+        || path.contains("src/runtime/")
+        || path.contains("src/bun.js/bindings/")
+}
+
+fn patch_tokens_can_promote_native_risk(files: &[String], flags: &DiffFlags) -> bool {
+    flags.rust_changed
+        || flags.cpp_changed
+        || files.iter().any(|path| {
+            let lower = path.to_ascii_lowercase();
+            is_zig_path(&lower) || is_native_risk_path(&lower)
+        })
+}
+
+fn patch_contains_native_risk_token(patch: &str) -> bool {
+    let lower_patch = patch.to_ascii_lowercase();
+    [
+        "unsafe",
+        "extern",
+        "from_raw_parts",
+        "as_ptr",
+        "as_mut_ptr",
+        "maybeuninit",
+        "nonnull",
+        "arraybuffer",
+        "typedarray",
+        "detach",
+        "resize",
+        "transfer",
+        "protect",
+        "unprotect",
+        "worker",
+        "ffi",
+        "jsc",
+        "stringorbuffer",
+        "sharedarraybuffer",
+    ]
+    .iter()
+    .any(|token| lower_patch.contains(token))
 }
 
 fn is_dependency_path(path: &str) -> bool {
@@ -14569,6 +14592,40 @@ mod tests {
             classify_diff_class(&["src/lib.rs".to_owned()], &flags),
             DiffClass::SourceUb
         );
+    }
+
+    #[test]
+    fn generic_typescript_diff_stays_source_general_despite_native_words() {
+        let files = vec!["packages/bun-plugin/src/options.ts".to_owned()];
+        let flags = classify_diff(
+            &files,
+            "+ const message = 'unsafe fallback should not route to UB lanes';",
+        );
+
+        assert!(flags.source_changed);
+        assert!(!flags.rust_changed);
+        assert!(!flags.cpp_changed);
+        assert!(!flags.unsafe_or_native_risk);
+        assert_eq!(
+            classify_diff_class(&files, &flags),
+            DiffClass::SourceGeneral
+        );
+
+        let mut plan = test_plan(Vec::new());
+        plan.diff_class = DiffClass::SourceGeneral;
+        let lanes = review_lanes_for_args(&plan, &test_run_args(PathBuf::from("out")));
+        assert!(lanes.iter().all(|lane| !lane.id.starts_with("ub-")));
+        assert!(!lanes.iter().any(|lane| lane.id == "ub"));
+    }
+
+    #[test]
+    fn native_surface_typescript_path_can_still_route_source_ub() {
+        let files = vec!["src/bun.js/bindings/arraybuffer.ts".to_owned()];
+        let flags = classify_diff(&files, "+ const length = view.byteLength;");
+
+        assert!(flags.source_changed);
+        assert!(flags.unsafe_or_native_risk);
+        assert_eq!(classify_diff_class(&files, &flags), DiffClass::SourceUb);
     }
 
     #[test]
