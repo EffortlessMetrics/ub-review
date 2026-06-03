@@ -7,6 +7,12 @@ lint:
 test:
     cargo test --workspace --all-features --locked
 
+policy:
+    cargo xtask policy-check
+
+policy-inventory:
+    cargo xtask policy-inventory
+
 coverage:
     cargo llvm-cov --workspace --all-features --locked --lcov --output-path lcov.info
 

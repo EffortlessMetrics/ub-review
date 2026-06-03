@@ -52,7 +52,8 @@ Serious repo:
 
 High-volume repo:
 
-- `xtask` parse/check commands for policy files;
+- `cargo xtask policy-check` for parse-only policy receipt validation;
+- `cargo xtask policy-inventory` for receipt and CI policy counts;
 - inventory/propose commands for exceptions;
 - risk packs that select deeper proof;
 - CI summary output that distinguishes pass, fail, advisory, and skipped by

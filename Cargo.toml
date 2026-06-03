@@ -10,6 +10,10 @@ readme = "README.md"
 keywords = ["review", "rust", "pr", "ub", "ci"]
 categories = ["command-line-utilities", "development-tools"]
 
+[workspace]
+members = [".", "xtask"]
+resolver = "3"
+
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive", "env"] }
