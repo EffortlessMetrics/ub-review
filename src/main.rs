@@ -5068,8 +5068,12 @@ fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGrou
             duplicate_count: 0,
         });
         group.required |= request.required;
-        if request.status == "requested" {
-            group.status = "requested".to_owned();
+        match request.status.as_str() {
+            "requested" => group.status = "requested".to_owned(),
+            "unsupported" if group.status != "requested" => {
+                group.status = "unsupported".to_owned();
+            }
+            _ => {}
         }
         push_unique(&mut group.requested_by, &request.lane);
         for lane in &request.requested_by {
@@ -8369,13 +8373,9 @@ fn validate_proof_request(
 ) -> ProofRequest {
     let command = request.command.trim().replace(['\r', '\n'], " ");
     let reason = non_empty_or(request.reason.trim(), "model proof request missing reason");
-    let status = if command.is_empty() {
-        "invalid"
-    } else {
-        "requested"
-    };
     let command = non_empty_or(&command, "<missing command>");
     let cost = classify_proof_cost(request.cost.as_deref(), &command);
+    let status = proof_request_status(&command, &cost);
     let timeout_sec = request.timeout_sec.unwrap_or(300).clamp(1, 900);
     let fingerprint = sha256_hex(
         format!(
@@ -8397,6 +8397,34 @@ fn validate_proof_request(
         required: request.required.unwrap_or(false),
         status: status.to_owned(),
     }
+}
+
+fn proof_request_status(command: &str, cost: &str) -> &'static str {
+    if command == "<missing command>" {
+        return "invalid";
+    }
+    if proof_request_allowed_v0(command, cost) {
+        "requested"
+    } else {
+        "unsupported"
+    }
+}
+
+fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
+    if cost != "focused-test" || has_shell_control_token(command) {
+        return false;
+    }
+    let parts = command.split_whitespace().collect::<Vec<_>>();
+    if parts.len() < 3 || parts[0] != "bun" || parts[1] != "test" {
+        return false;
+    }
+    is_bun_focused_test_file(parts[2])
+}
+
+fn has_shell_control_token(command: &str) -> bool {
+    command
+        .chars()
+        .any(|ch| matches!(ch, '&' | '|' | ';' | '`' | '>' | '<' | '$'))
 }
 
 fn classify_proof_cost(cost: Option<&str>, command: &str) -> String {
@@ -12699,6 +12727,78 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn proof_request_status_enforces_v0_bun_test_allowlist() {
+        let lane = model_lane(
+            "tests-oracle",
+            "Tests oracle",
+            &["tokmd"],
+            "Check focused proof requests.",
+        );
+        let requests = vec![
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                        .to_owned(),
+                    reason: "Run the focused Bun test.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(true),
+                },
+                0,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "cargo build --workspace".to_owned(),
+                    reason: "Compile the workspace.".to_owned(),
+                    cost: Some("focused-build".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                1,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "bun test test/js/bun/md/md-edge-cases.test.ts && rm -rf target"
+                        .to_owned(),
+                    reason: "Shell-shaped command should not be brokered.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                2,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: String::new(),
+                    reason: "Missing command.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                3,
+            ),
+        ];
+
+        assert_eq!(requests[0].status, "requested");
+        assert_eq!(requests[0].cost, "focused-test");
+        assert_eq!(requests[1].status, "unsupported");
+        assert_eq!(requests[1].cost, "focused-build");
+        assert_eq!(requests[2].status, "unsupported");
+        assert_eq!(requests[3].status, "invalid");
+        assert_eq!(requests[3].command, "<missing command>");
+
+        let groups = super::proof_request_groups(&requests);
+        assert_eq!(groups.len(), 4);
+        assert!(groups.iter().any(|group| group.status == "requested"));
+        assert!(groups.iter().any(|group| group.status == "unsupported"));
+        assert!(groups.iter().any(|group| group.status == "invalid"));
+    }
+
+    #[test]
     fn proof_request_artifacts_write_focused_planner_without_execution() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let patch = "\
@@ -12718,18 +12818,32 @@ index 1111111..2222222 100644
             flags: DiffFlags::default(),
             diff_class: DiffClass::TestsOnly,
         };
-        let proof_requests = vec![ProofRequest {
-            schema: "ub-review.proof_request.v1".to_owned(),
-            id: "proof-tests-001".to_owned(),
-            lane: "tests-oracle".to_owned(),
-            requested_by: vec!["tests-oracle".to_owned()],
-            command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
-            reason: "Need focused red/green witness.".to_owned(),
-            cost: "focused-test".to_owned(),
-            timeout_sec: 300,
-            required: false,
-            status: "requested".to_owned(),
-        }];
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-tests-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+                reason: "Need focused red/green witness.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-build-001".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo build --workspace".to_owned(),
+                reason: "Compile proof is outside proof broker v0.".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "unsupported".to_owned(),
+            },
+        ];
 
         write_proof_request_artifacts(
             temp.path(),
@@ -12740,9 +12854,18 @@ index 1111111..2222222 100644
         )?;
 
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
+        let proof_groups: Vec<ProofRequestGroup> = serde_json::from_slice(&fs::read(
+            temp.path().join("review/proof_request_groups.json"),
+        )?)?;
 
         assert!(proof_plan.contains("## Focused red/green proof plan"));
+        assert!(proof_plan.contains("status=unsupported"));
         assert!(proof_plan.contains("No proof broker commands were executed"));
+        assert!(
+            proof_groups
+                .iter()
+                .any(|group| group.status == "unsupported")
+        );
         assert!(proof_plan.contains(
             "head=`cwd=target/ub-review/proof-worktrees/head bun test test/js/bun/md/md-edge-cases.test.ts -t"
         ));
