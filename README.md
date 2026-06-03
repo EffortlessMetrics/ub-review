@@ -160,6 +160,10 @@ target/ub-review/
     opposition.md
     security.md
 
+  candidates/
+    candidate-0000-abc123def456.json
+    ...
+
   observations/
     tests-oracle.ndjson
     source-route.ndjson
@@ -179,6 +183,7 @@ target/ub-review/
     metrics.json
     review.json
     review.md
+    candidates.json
     observations.json
     unique_observations.json
     merged_observations.json
@@ -195,6 +200,7 @@ target/ub-review/
     post-stderr.txt
 
   events.ndjson
+  candidates.ndjson
   proof_requests.ndjson
   running-summary.md
 ```

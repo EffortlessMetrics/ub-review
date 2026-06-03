@@ -307,6 +307,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("metrics inline_comments does not match review.json")
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
+    require_candidate_artifacts(root, review)
     if metrics.get("terminal_state") != review.get("terminal_state", {}).get("status"):
         fail("metrics terminal_state does not match review.json terminal_state")
     if not isinstance(metrics.get("observations"), int):
@@ -359,6 +360,103 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if not isinstance(models, dict):
         fail("metrics.models is missing")
     return metrics
+
+
+def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
+    candidates = load_json(root / "review/candidates.json")
+    if not isinstance(candidates, list):
+        fail("review/candidates.json is not an array")
+    expected = expected_candidate_records(review)
+    if candidates != expected:
+        fail("review/candidates.json does not match review candidate surfaces")
+
+    candidate_dir = root / "candidates"
+    if not candidate_dir.is_dir():
+        fail("missing candidates directory")
+    expected_files = {
+        f"{sanitize_artifact_name(candidate['id'])}.json": candidate
+        for candidate in candidates
+    }
+    actual_files = []
+    for path in candidate_dir.iterdir():
+        if not path.is_file():
+            fail(f"unexpected candidates entry: {path.name}")
+        actual_files.append(path.name)
+    actual_files.sort()
+    if actual_files != sorted(expected_files):
+        fail("candidates directory entries do not match review/candidates.json")
+    for name, expected_candidate in expected_files.items():
+        parsed = load_json(candidate_dir / name)
+        if parsed != expected_candidate:
+            fail(f"candidates/{name} does not match review/candidates.json")
+
+    ndjson_path = root / "candidates.ndjson"
+    lines = [line for line in read_text(ndjson_path).splitlines() if line.strip()]
+    if len(lines) != len(candidates):
+        fail("candidates.ndjson line count does not match review/candidates.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid candidates.ndjson line {index + 1}: {error}")
+        if parsed != candidates[index]:
+            fail(f"candidates.ndjson line {index + 1} does not match JSON artifact")
+    for candidate in candidates:
+        require_candidate_schema(candidate)
+
+
+def expected_candidate_records(review: dict) -> list[dict]:
+    candidates: list[dict] = []
+    for comment in review.get("inline_comments", []):
+        fingerprint = hashlib.sha256(
+            (
+                "inline-comment\n"
+                f"{comment.get('lane')}\n"
+                f"{comment.get('path')}\n"
+                f"{comment.get('line')}\n"
+                f"{comment.get('body')}\n"
+                f"{comment.get('evidence')}"
+            ).encode("utf-8")
+        ).hexdigest()
+        candidates.append(
+            {
+                "schema": "ub-review.candidate.v1",
+                "id": f"candidate-{len(candidates):04}-{fingerprint[:12]}",
+                "lane": comment.get("lane"),
+                "source": "inline-comment",
+                "status": "accepted-inline",
+                "severity": comment.get("severity"),
+                "confidence": comment.get("confidence"),
+                "claim": comment.get("body"),
+                "evidence": comment.get("evidence"),
+                "path": comment.get("path"),
+                "line": comment.get("line"),
+                "side": comment.get("side"),
+            }
+        )
+    for finding in review.get("summary_only_findings", []):
+        fingerprint = hashlib.sha256(
+            (
+                "summary-only-finding\n"
+                f"{finding.get('lane')}\n"
+                f"{finding.get('reason')}\n"
+                f"{finding.get('evidence')}"
+            ).encode("utf-8")
+        ).hexdigest()
+        candidates.append(
+            {
+                "schema": "ub-review.candidate.v1",
+                "id": f"candidate-{len(candidates):04}-{fingerprint[:12]}",
+                "lane": finding.get("lane"),
+                "source": "summary-only-finding",
+                "status": "summary-only",
+                "severity": finding.get("severity"),
+                "confidence": finding.get("confidence"),
+                "claim": finding.get("reason"),
+                "evidence": finding.get("evidence"),
+            }
+        )
+    return candidates
 
 
 def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict]) -> None:
@@ -929,6 +1027,49 @@ def require_observation_schema(observation: dict) -> None:
     line = observation.get("line")
     if line is not None and (not isinstance(line, int) or line <= 0):
         fail(f"observation line is invalid: {observation!r}")
+
+
+def require_candidate_schema(candidate: dict) -> None:
+    if candidate.get("schema") != "ub-review.candidate.v1":
+        fail(f"candidate has wrong schema: {candidate!r}")
+    for field in [
+        "id",
+        "lane",
+        "source",
+        "status",
+        "severity",
+        "confidence",
+        "claim",
+        "evidence",
+    ]:
+        if not isinstance(candidate.get(field), str) or not candidate[field]:
+            fail(f"candidate missing string field {field}: {candidate!r}")
+    if candidate["source"] not in {"inline-comment", "summary-only-finding"}:
+        fail(f"candidate has unsupported source: {candidate!r}")
+    if candidate["status"] not in {"accepted-inline", "summary-only"}:
+        fail(f"candidate has unsupported status: {candidate!r}")
+    if candidate["severity"] not in {"blocker", "high", "medium", "low"}:
+        fail(f"candidate has unsupported severity: {candidate!r}")
+    if candidate["confidence"] not in {"high", "medium-high", "medium", "low"}:
+        fail(f"candidate has unsupported confidence: {candidate!r}")
+    path = candidate.get("path")
+    line = candidate.get("line")
+    side = candidate.get("side")
+    if candidate["status"] == "accepted-inline":
+        if (
+            not isinstance(path, str)
+            or not path
+            or path.startswith(("/", "\\"))
+            or ".." in pathlib.PurePosixPath(path).parts
+        ):
+            fail(f"inline candidate path is not repo-relative: {candidate!r}")
+        if not isinstance(line, int) or line <= 0:
+            fail(f"inline candidate line is invalid: {candidate!r}")
+        if side != "RIGHT":
+            fail(f"inline candidate side is not RIGHT: {candidate!r}")
+    else:
+        if path is not None or line is not None or side is not None:
+            fail(f"summary-only candidate should not have inline fields: {candidate!r}")
 
 
 def require_proof_request_schema(request: dict) -> None:

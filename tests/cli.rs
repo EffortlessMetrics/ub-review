@@ -133,6 +133,7 @@ fn active_len_tracks_view_after_resize() {
         "review/metrics.json",
         "review/review.json",
         "review/review.md",
+        "review/candidates.json",
         "review/observations.json",
         "review/unique_observations.json",
         "review/merged_observations.json",
@@ -143,6 +144,7 @@ fn active_len_tracks_view_after_resize() {
         "review/proof_plan.md",
         "review/resource_leases.json",
         "review/resource_plan.md",
+        "candidates.ndjson",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
         "witnesses.ndjson",
@@ -151,6 +153,7 @@ fn active_len_tracks_view_after_resize() {
     ] {
         assert!(out.join(path).exists(), "missing {}", path);
     }
+    assert!(out.join("candidates").is_dir());
     assert!(out.join("proof_requests").is_dir());
     assert!(out.join("questions").is_dir());
 
@@ -1091,6 +1094,33 @@ path = "src/lib.rs"
                 finding["lane"].as_str() == Some("ub")
                     && finding["evidence"].as_str() == Some("lane model summary")
             }))
+    );
+    let candidates: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/candidates.json"))?)?;
+    let candidates = candidates
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("candidates missing"))?;
+    let candidate = candidates
+        .iter()
+        .find(|candidate| candidate["lane"].as_str() == Some("ub"))
+        .ok_or_else(|| anyhow::anyhow!("ub candidate missing"))?;
+    assert_eq!(candidate["schema"], "ub-review.candidate.v1");
+    assert_eq!(candidate["source"], "summary-only-finding");
+    assert_eq!(candidate["status"], "summary-only");
+    assert_eq!(candidate["claim"], "fake provider ok");
+    assert_eq!(candidate["evidence"], "lane model summary");
+    let candidate_file: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("candidates")
+            .join(format!("{}.json", json_str_field(candidate, "id")?)),
+    )?)?;
+    assert_eq!(candidate_file, *candidate);
+    let candidates_ndjson = fs::read_to_string(out.join("candidates.ndjson"))?;
+    assert_eq!(
+        candidates_ndjson
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+        candidates.len()
     );
 
     let metrics: serde_json::Value =

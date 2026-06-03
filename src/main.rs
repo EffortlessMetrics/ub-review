@@ -1198,6 +1198,25 @@ struct SummaryOnlyFinding {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+struct CandidateRecord {
+    schema: String,
+    id: String,
+    lane: String,
+    source: String,
+    status: String,
+    severity: String,
+    confidence: String,
+    claim: String,
+    evidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    side: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct GitHubReview {
     event: String,
     body: String,
@@ -4134,12 +4153,15 @@ fn write_review_artifacts(
         body: artifact_body.clone(),
     };
     let observations = combined_observations(&review);
+    let candidates =
+        build_candidate_records(&review.inline_comments, &review.summary_only_findings);
     let witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
         &observations,
         &review.proof_receipts,
     );
+    write_candidate_artifacts(out, &candidates)?;
     write_observation_artifacts(out, &observations)?;
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
@@ -4799,6 +4821,97 @@ fn build_witness_records(
         }));
     }
     witnesses
+}
+
+fn build_candidate_records(
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+) -> Vec<CandidateRecord> {
+    let mut candidates = Vec::new();
+    for comment in inline_comments {
+        let fingerprint = sha256_hex(
+            format!(
+                "inline-comment\n{}\n{}\n{}\n{}\n{}",
+                comment.lane, comment.path, comment.line, comment.body, comment.evidence
+            )
+            .as_bytes(),
+        );
+        candidates.push(CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: format!(
+                "candidate-{index:04}-{short}",
+                index = candidates.len(),
+                short = &fingerprint[..12]
+            ),
+            lane: comment.lane.clone(),
+            source: "inline-comment".to_owned(),
+            status: "accepted-inline".to_owned(),
+            severity: comment.severity.clone(),
+            confidence: comment.confidence.clone(),
+            claim: comment.body.clone(),
+            evidence: comment.evidence.clone(),
+            path: Some(comment.path.clone()),
+            line: Some(comment.line),
+            side: Some(comment.side.clone()),
+        });
+    }
+    for finding in summary_only_findings {
+        let fingerprint = sha256_hex(
+            format!(
+                "summary-only-finding\n{}\n{}\n{}",
+                finding.lane, finding.reason, finding.evidence
+            )
+            .as_bytes(),
+        );
+        candidates.push(CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: format!(
+                "candidate-{index:04}-{short}",
+                index = candidates.len(),
+                short = &fingerprint[..12]
+            ),
+            lane: finding.lane.clone(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            severity: finding.severity.clone(),
+            confidence: finding.confidence.clone(),
+            claim: finding.reason.clone(),
+            evidence: finding.evidence.clone(),
+            path: None,
+            line: None,
+            side: None,
+        });
+    }
+    candidates
+}
+
+fn write_candidate_artifacts(out: &Path, candidates: &[CandidateRecord]) -> Result<()> {
+    let candidates_dir = out.join("candidates");
+    if candidates_dir.exists() {
+        fs::remove_dir_all(&candidates_dir)
+            .with_context(|| format!("remove {}", candidates_dir.display()))?;
+    }
+    fs::create_dir_all(&candidates_dir)
+        .with_context(|| format!("create {}", candidates_dir.display()))?;
+
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("candidates.json"),
+        serde_json::to_vec_pretty(candidates)?,
+    )?;
+
+    let mut ndjson = String::new();
+    for candidate in candidates {
+        ndjson.push_str(&serde_json::to_string(candidate)?);
+        ndjson.push('\n');
+        fs::write(
+            candidates_dir.join(format!("{}.json", sanitize_artifact_name(&candidate.id))),
+            serde_json::to_vec_pretty(candidate)?,
+        )?;
+    }
+    fs::write(out.join("candidates.ndjson"), ndjson)?;
+    Ok(())
 }
 
 struct WitnessRecordInput<'a> {
@@ -11540,10 +11653,10 @@ mod tests {
         STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
         SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
         apply_model_output, apply_plan_selectors, apply_refuter_output,
-        apply_runtime_profile_limits, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        apply_runtime_profile_limits, build_candidate_records, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
@@ -11556,8 +11669,8 @@ mod tests {
         runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
         validate_github_review_payload, validate_github_review_payload_for_post,
         validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        wait_for_child_output_files, write_candidate_artifacts, write_github_review_payload,
+        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -15550,6 +15663,58 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.resource_leases, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
+    }
+
+    #[test]
+    fn candidate_artifacts_track_inline_and_summary_surfaces() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            path: "test/js/bun/md/md-edge-cases.test.ts".to_owned(),
+            line: 1145,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] Added regression needs a red witness.".to_owned(),
+            evidence: "RIGHT-side line map and test proof request".to_owned(),
+        }];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "source-route".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "inline guard rejected src/lib.rs:99; line_valid=false".to_owned(),
+            evidence: "line map receipt".to_owned(),
+        }];
+        let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
+
+        write_candidate_artifacts(temp.path(), &candidates)?;
+
+        let aggregate: Vec<super::CandidateRecord> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/candidates.json"))?)?;
+        let first_file: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path()
+                .join("candidates")
+                .join(format!("{}.json", aggregate[0].id)),
+        )?)?;
+        let ndjson = fs::read_to_string(temp.path().join("candidates.ndjson"))?;
+
+        assert_eq!(aggregate.len(), 2);
+        assert_eq!(aggregate[0].schema, "ub-review.candidate.v1");
+        assert_eq!(aggregate[0].source, "inline-comment");
+        assert_eq!(aggregate[0].status, "accepted-inline");
+        assert_eq!(
+            aggregate[0].path.as_deref(),
+            Some(inline_comments[0].path.as_str())
+        );
+        assert_eq!(aggregate[0].line, Some(inline_comments[0].line));
+        assert_eq!(aggregate[0].side.as_deref(), Some("RIGHT"));
+        assert_eq!(aggregate[1].source, "summary-only-finding");
+        assert_eq!(aggregate[1].status, "summary-only");
+        assert!(aggregate[1].path.is_none());
+        assert_eq!(first_file, serde_json::to_value(&aggregate[0])?);
+        assert_eq!(ndjson.lines().count(), 2);
+        assert!(ndjson.contains("\"schema\":\"ub-review.candidate.v1\""));
+        Ok(())
     }
 
     #[test]
