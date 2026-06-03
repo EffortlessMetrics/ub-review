@@ -97,6 +97,49 @@ def has_reviewer_value_heading(body: str) -> bool:
     )
 
 
+def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
+    lowered = body.lower()
+    for phrase in [
+        "no blocking finding after",
+        "no blocking ub finding",
+        "no actionable findings",
+        "a human should still inspect",
+        "lane transcript",
+        "raw observations",
+    ]:
+        if phrase in lowered:
+            fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
+    for heading in [
+        "## Model lanes",
+        "## Model lane status",
+        "## Lane status",
+        "## Lane roster",
+        "## Provider preflights",
+        "## Provider status",
+        "## Model provider status",
+        "## Sensors",
+        "## Sensor status",
+        "## Sensor receipts",
+    ]:
+        if heading in body:
+            fail(f"{path} contains artifact-only status section: {heading!r}")
+    for label in [
+        "- Shared context:",
+        "- Profile:",
+        "- Base:",
+        "- Head:",
+        "- Changed files:",
+        "- Inline comments:",
+        "## Review efficiency",
+        "Runtime:",
+        "Terminal state:",
+        "Review payload:",
+        "Follow-up results:",
+    ]:
+        if label in body:
+            fail(f"{path} contains execution summary boilerplate: {label!r}")
+
+
 FOLLOW_UP_RESULT_STATUSES = {
     "ok",
     "degraded",
@@ -334,6 +377,7 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         if not isinstance(body, str) or not has_reviewer_value_heading(body):
             fail("github-review.json body is missing reviewer-value content")
         no_standalone_approval_line(body, github_review_path)
+        require_pr_review_body_policy(body, github_review_path)
         comments = github_review.get("comments")
         if not isinstance(comments, list):
             fail("github-review.json comments is not an array")

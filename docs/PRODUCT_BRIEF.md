@@ -38,6 +38,16 @@ Everything else goes to artifacts:
 - metrics
 - raw observations
 
+The default `[review_body]` policy enforces that split:
+
+```toml
+[review_body]
+include_successful_lane_table = false
+include_provider_table = "on_failure"
+include_sensor_table = "on_failure"
+include_execution_summary = "none"
+```
+
 ## Execution contract
 
 Models investigate. Tools produce receipts. The compiler decides what earns the

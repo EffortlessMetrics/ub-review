@@ -619,6 +619,7 @@ struct Config {
     profile: String,
     repo: RepoConfig,
     review: ReviewConfig,
+    review_body: ReviewBodyPolicy,
     profiles: BTreeMap<String, Profile>,
     tools: BTreeMap<String, ToolPolicy>,
     lanes: Vec<LanePlan>,
@@ -642,6 +643,33 @@ struct ReviewConfig {
     require_zero_finding_audit: bool,
     enable_default_lanes: bool,
     github_summary: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+struct ReviewBodyPolicy {
+    include_successful_lane_table: bool,
+    include_provider_table: ReviewBodyTablePolicy,
+    include_sensor_table: ReviewBodyTablePolicy,
+    include_execution_summary: ReviewBodyExecutionSummaryPolicy,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ReviewBodyTablePolicy {
+    Never,
+    #[default]
+    OnFailure,
+    Always,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ReviewBodyExecutionSummaryPolicy {
+    #[default]
+    None,
+    OnFailure,
+    Always,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1984,6 +2012,7 @@ impl Default for Config {
             profile: "gh-runner".to_owned(),
             repo: RepoConfig::default(),
             review: ReviewConfig::default(),
+            review_body: ReviewBodyPolicy::default(),
             profiles,
             tools,
             lanes: Vec::new(),
@@ -2011,6 +2040,17 @@ impl Default for ReviewConfig {
             require_zero_finding_audit: true,
             enable_default_lanes: true,
             github_summary: true,
+        }
+    }
+}
+
+impl Default for ReviewBodyPolicy {
+    fn default() -> Self {
+        Self {
+            include_successful_lane_table: false,
+            include_provider_table: ReviewBodyTablePolicy::OnFailure,
+            include_sensor_table: ReviewBodyTablePolicy::OnFailure,
+            include_execution_summary: ReviewBodyExecutionSummaryPolicy::None,
         }
     }
 }
@@ -2891,6 +2931,7 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
         "selected_runtime_profile": &profile.name,
         "repo": &config.repo,
         "review": &config.review,
+        "review_body": &config.review_body,
         "review_profile": {
             "name": &config.review_profile,
             "repo_kind": &config.repo.kind,
@@ -2924,6 +2965,7 @@ fn resolved_plan_artifact(
         "guards": &profile.guards,
         "limits": &profile.limits,
         "posting": &config.review,
+        "review_body": &config.review_body,
         "selectors": resolved_selector_artifact(run_args, selectors, effective_model_lanes),
         "sensors": &plan.sensors,
         "lanes": &plan.lanes,
@@ -4452,6 +4494,8 @@ fn write_review_artifacts(
         args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
+    validate_pr_review_body_policy(&pr_body, &config.review_body)
+        .with_context(|| "validate pull request review body policy")?;
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -4602,7 +4646,7 @@ fn write_review_artifacts(
     )?;
     fs::write(review_dir.join("review.md"), artifact_body)?;
     if should_prepare_github_review {
-        write_github_review_payload(&review_dir, &github_review, &line_map)?;
+        write_github_review_payload(&review_dir, &github_review, &line_map, &config.review_body)?;
     } else {
         write_github_review_skip_receipt(
             &review_dir,
@@ -4649,6 +4693,123 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
     ]
     .iter()
     .any(|heading| body.contains(heading))
+}
+
+fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if has_forbidden_pr_review_boilerplate(trimmed) {
+        bail!("github review body contains artifact-only boilerplate");
+    }
+    if !policy.include_successful_lane_table && contains_successful_lane_table(trimmed) {
+        bail!("github review body contains successful lane table");
+    }
+    match policy.include_provider_table {
+        ReviewBodyTablePolicy::Always => {}
+        ReviewBodyTablePolicy::Never | ReviewBodyTablePolicy::OnFailure => {
+            if contains_provider_status_table(trimmed) {
+                bail!("github review body contains provider status table");
+            }
+        }
+    }
+    match policy.include_sensor_table {
+        ReviewBodyTablePolicy::Always => {}
+        ReviewBodyTablePolicy::Never | ReviewBodyTablePolicy::OnFailure => {
+            if contains_sensor_status_table(trimmed) {
+                bail!("github review body contains sensor status table");
+            }
+        }
+    }
+    match policy.include_execution_summary {
+        ReviewBodyExecutionSummaryPolicy::Always => {}
+        ReviewBodyExecutionSummaryPolicy::None => {
+            if contains_execution_summary(trimmed) {
+                bail!("github review body contains execution summary");
+            }
+        }
+        ReviewBodyExecutionSummaryPolicy::OnFailure => {
+            if contains_execution_summary(trimmed) && !pr_body_has_failure_context(trimmed) {
+                bail!("github review body contains success execution summary");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    [
+        "no blocking finding after",
+        "no blocking ub finding",
+        "no actionable findings",
+        "a human should still inspect",
+        "lane transcript",
+        "raw observations",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+fn contains_successful_lane_table(body: &str) -> bool {
+    [
+        "## Model lanes",
+        "## Model lane status",
+        "## Lane status",
+        "## Lane roster",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn contains_provider_status_table(body: &str) -> bool {
+    [
+        "## Provider preflights",
+        "## Provider status",
+        "## Model provider status",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn contains_sensor_status_table(body: &str) -> bool {
+    ["## Sensors", "## Sensor status", "## Sensor receipts"]
+        .iter()
+        .any(|needle| body.contains(needle))
+}
+
+fn contains_execution_summary(body: &str) -> bool {
+    [
+        "- Shared context:",
+        "- Profile:",
+        "- Base:",
+        "- Head:",
+        "- Changed files:",
+        "- Inline comments:",
+        "## Review efficiency",
+        "Runtime:",
+        "Terminal state:",
+        "Review payload:",
+        "Follow-up results:",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn pr_body_has_failure_context(body: &str) -> bool {
+    [
+        "## Decision",
+        "## Evidence gaps",
+        "## Missing evidence",
+        "## Missing or failed evidence",
+        "Needs ",
+        "failed",
+        "timed out",
+        "unavailable",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
 }
 
 struct TerminalStateInput<'a> {
@@ -4737,11 +4898,13 @@ fn write_github_review_payload(
     review_dir: &Path,
     github_review: &GitHubReview,
     right_lines: &BTreeSet<(String, u32)>,
+    review_body_policy: &ReviewBodyPolicy,
 ) -> Result<()> {
     validate_github_review_payload_for_right_lines(
         github_review,
         right_lines,
         "generated diff context",
+        review_body_policy,
     )?;
     fs::write(
         review_dir.join("github-review.json"),
@@ -12602,8 +12765,19 @@ fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
 }
 
 fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
+    validate_github_review_payload_with_policy(review, &ReviewBodyPolicy::default())
+}
+
+fn validate_github_review_payload_with_policy(
+    review: &GitHubReview,
+    policy: &ReviewBodyPolicy,
+) -> Result<()> {
     if review.event != "COMMENT" {
         bail!("github review event must be COMMENT");
+    }
+    validate_pr_review_body_policy(&review.body, policy)?;
+    if review.comments.is_empty() && !pr_body_has_reviewer_value(&review.body) {
+        bail!("github review body is missing reviewer-value content");
     }
     if has_standalone_approval_line(&review.body) {
         bail!("github review body contains standalone approval language");
@@ -12635,7 +12809,8 @@ fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
 }
 
 fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubReview) -> Result<()> {
-    validate_github_review_payload(review)?;
+    let review_body_policy = ReviewBodyPolicy::default();
+    validate_github_review_payload_with_policy(review, &review_body_policy)?;
     let diff_patch = post_diff_patch_path(args);
     if review.comments.is_empty() {
         return Ok(());
@@ -12647,6 +12822,7 @@ fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubRevie
         review,
         &right_lines,
         &diff_patch.display().to_string(),
+        &review_body_policy,
     )
 }
 
@@ -12654,8 +12830,9 @@ fn validate_github_review_payload_for_right_lines(
     review: &GitHubReview,
     right_lines: &BTreeSet<(String, u32)>,
     source: &str,
+    review_body_policy: &ReviewBodyPolicy,
 ) -> Result<()> {
-    validate_github_review_payload(review)?;
+    validate_github_review_payload_with_policy(review, review_body_policy)?;
     for comment in &review.comments {
         let path = normalize_repo_path(&comment.path);
         if !right_lines.contains(&(path.clone(), comment.line)) {
@@ -13800,15 +13977,16 @@ mod tests {
         PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
         ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
         RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewDepth, ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewDepth, ReviewInlineComment,
+        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
+        append_follow_up_evidence_witnesses, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
         follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
@@ -13822,11 +14000,11 @@ mod tests {
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
         runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
         split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_pr_review_body_policy, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -16737,7 +16915,7 @@ index 1111111..2222222 100644
         validate_github_review_payload(&ok)?;
 
         let temp = tempfile::tempdir()?;
-        write_github_review_payload(temp.path(), &ok, &line_map)?;
+        write_github_review_payload(temp.path(), &ok, &line_map, &ReviewBodyPolicy::default())?;
         assert!(temp.path().join("github-review.json").exists());
 
         let stale_line = GitHubReview {
@@ -16748,9 +16926,14 @@ index 1111111..2222222 100644
             ..ok.clone()
         };
         let stale_line_out = tempfile::tempdir()?;
-        let err = write_github_review_payload(stale_line_out.path(), &stale_line, &line_map)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly wrote github-review.json"))?;
+        let err = write_github_review_payload(
+            stale_line_out.path(),
+            &stale_line,
+            &line_map,
+            &ReviewBodyPolicy::default(),
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly wrote github-review.json"))?;
         assert!(err.to_string().contains("not a valid RIGHT-side diff line"));
         assert!(!stale_line_out.path().join("github-review.json").exists());
 
@@ -16760,7 +16943,15 @@ index 1111111..2222222 100644
         };
         assert!(validate_github_review_payload(&bad_event).is_err());
         let bad_event_out = tempfile::tempdir()?;
-        assert!(write_github_review_payload(bad_event_out.path(), &bad_event, &line_map).is_err());
+        assert!(
+            write_github_review_payload(
+                bad_event_out.path(),
+                &bad_event,
+                &line_map,
+                &ReviewBodyPolicy::default()
+            )
+            .is_err()
+        );
         assert!(!bad_event_out.path().join("github-review.json").exists());
 
         let bad_side = GitHubReview {
@@ -16772,7 +16963,15 @@ index 1111111..2222222 100644
         };
         assert!(validate_github_review_payload(&bad_side).is_err());
         let bad_out = tempfile::tempdir()?;
-        assert!(write_github_review_payload(bad_out.path(), &bad_side, &line_map).is_err());
+        assert!(
+            write_github_review_payload(
+                bad_out.path(),
+                &bad_side,
+                &line_map,
+                &ReviewBodyPolicy::default()
+            )
+            .is_err()
+        );
         assert!(!bad_out.path().join("github-review.json").exists());
 
         let parent_path = GitHubReview {
@@ -16810,6 +17009,56 @@ index 1111111..2222222 100644
             ..ok
         };
         assert!(validate_github_review_payload(&overlong_body).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn github_review_payload_rejects_pr_body_boilerplate() -> Result<()> {
+        let mut review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Model lanes\n\n- Lane: `ub`\n  Provider: `minimax`\n  Model: `m3`\n  Status: `ok` - completed".to_owned(),
+            comments: Vec::new(),
+        };
+
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("model lane table unexpectedly passed"))?;
+        assert!(err.to_string().contains("successful lane table"), "{err:#}");
+
+        review.body = "## Decision\n\n- No blocking finding after bounded review; residual risk remains for human review.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("no-finding boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "- Profile: `gh-runner`\n- Base: `origin/main`\n- Head: `HEAD`".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("execution summary unexpectedly passed"))?;
+        assert!(err.to_string().contains("execution summary"), "{err:#}");
+        Ok(())
+    }
+
+    #[test]
+    fn review_body_policy_allows_configured_execution_summary_on_failure() -> Result<()> {
+        let policy = ReviewBodyPolicy {
+            include_execution_summary: ReviewBodyExecutionSummaryPolicy::OnFailure,
+            ..ReviewBodyPolicy::default()
+        };
+        validate_pr_review_body_policy(
+            "## Evidence gaps\n\n- Focused proof timed out.\n\nRuntime: `31s`",
+            &policy,
+        )?;
+        let err = validate_pr_review_body_policy("Runtime: `31s`", &policy)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("success execution summary unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("success execution summary"),
+            "{err:#}"
+        );
         Ok(())
     }
 
