@@ -20,6 +20,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
     minimax-api-key: ${{ secrets.MINIMAX }}
     minimax-provider-kind: anthropic
     model-mode: auto
+    depth: standard
     provider-policy: minimax-only
     lane-width: '10'
     model-timeout-sec: '300'
@@ -33,6 +34,8 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
 GLM is skipped for v0. The Bun v0 cutover workflow uses direct MiniMax M3 for
 all model lanes. OpenCode Go remains optional for later direct provider
 canary/deep modes; `ub-review` does not invoke the OpenCode agent harness.
+Use `depth: quick`, `standard`, or `deep` for preset lane/model-call pressure;
+keep raw lane/model budget overrides on `standard`.
 
 ## Permissions
 

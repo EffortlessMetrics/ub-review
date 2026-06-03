@@ -113,6 +113,10 @@ inputs:
     description: 'Model mode: auto or off.'
     default: auto
     required: false
+  depth:
+    description: 'Review depth selector: quick, standard, or deep.'
+    default: standard
+    required: false
   provider-policy:
     description: 'Provider policy: minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
     default: minimax-primary
@@ -450,6 +454,7 @@ runs:
           --posting "${{ inputs.posting }}" \
           --mode "${{ inputs.mode }}" \
           --model-mode "${{ inputs['model-mode'] }}" \
+          --depth "${{ inputs.depth }}" \
           --provider-policy "${{ inputs['provider-policy'] }}" \
           --lane-width "${{ inputs['lane-width'] }}" \
           --model-timeout-sec "${{ inputs['model-timeout-sec'] }}" \

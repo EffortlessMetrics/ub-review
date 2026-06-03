@@ -73,6 +73,7 @@ jobs:
           minimax-api-key: ${{ secrets.MINIMAX }}
           minimax-provider-kind: anthropic
           model-mode: auto
+          depth: standard
           provider-policy: minimax-only
           lane-width: '10'
           model-timeout-sec: '300'
