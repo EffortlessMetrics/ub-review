@@ -457,6 +457,7 @@ struct GitHubReviewSkipReceipt {
     status: String,
     reason: String,
     review_payload_status: String,
+    terminal_state: String,
     github_review_json: String,
     model_mode: String,
     inline_comments: usize,
@@ -725,6 +726,23 @@ struct PrThreadContext {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct ReviewTerminalState {
+    schema: String,
+    status: String,
+    reason: String,
+    review_payload_status: String,
+    reviewer_value_present: bool,
+    diff_class: String,
+    model_mode: String,
+    usable_model_lanes: usize,
+    model_lanes: usize,
+    evidence_gaps: usize,
+    proof_receipts: usize,
+    inline_comments: usize,
+    summary_only_findings: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct ReviewArtifacts {
     shared_context_id: String,
     mode: String,
@@ -740,6 +758,7 @@ struct ReviewArtifacts {
     ledger_path: String,
     ledger_max_bytes: usize,
     pr_thread_context: PrThreadContext,
+    terminal_state: ReviewTerminalState,
     provider_preflights: Vec<ProviderPreflightReceipt>,
     model_lanes: Vec<ModelLaneReceipt>,
     missing_or_failed_sensor_evidence: Vec<SensorEvidenceIssue>,
@@ -800,6 +819,7 @@ struct ReviewMetrics {
     missing_or_failed_sensor_evidence: usize,
     missing_or_failed_model_evidence: usize,
     provider_evidence_failures: usize,
+    terminal_state: String,
     review_payload_status: String,
     post_status: String,
     review_body_bytes: usize,
@@ -3539,6 +3559,19 @@ fn write_review_artifacts(
     } else {
         "skipped_empty_smoke"
     };
+    let terminal_state = build_review_terminal_state(TerminalStateInput {
+        args,
+        plan,
+        review_payload_status,
+        should_prepare_github_review,
+        pr_body: &pr_body,
+        inline_comments: &inline_comments,
+        summary_only_findings: &summary_only_findings,
+        model_lanes: &model_lanes,
+        missing_or_failed_sensor_evidence: &missing_or_failed_sensor_evidence,
+        missing_or_failed_model_evidence: &missing_or_failed_model_evidence,
+        proof_receipts: &proof_receipts,
+    });
     let review = ReviewArtifacts {
         shared_context_id,
         mode: args.mode.key().to_owned(),
@@ -3554,6 +3587,7 @@ fn write_review_artifacts(
         ledger_path: effective_ledger_path(config, args),
         ledger_max_bytes: args.ledger_max_bytes,
         pr_thread_context,
+        terminal_state,
         provider_preflights,
         model_lanes,
         missing_or_failed_sensor_evidence,
@@ -3601,6 +3635,10 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&metrics)?,
     )?;
     fs::write(
+        review_dir.join("terminal_state.json"),
+        serde_json::to_vec_pretty(&review.terminal_state)?,
+    )?;
+    fs::write(
         review_dir.join("provider-preflight-status.json"),
         serde_json::to_vec_pretty(&review.provider_preflights)?,
     )?;
@@ -3610,11 +3648,7 @@ fn write_review_artifacts(
     } else {
         write_github_review_skip_receipt(
             &review_dir,
-            build_github_review_skip_receipt(
-                args,
-                &review,
-                "No reviewer-facing findings, verification questions, residual risk, or model review ran; diagnostics remain in artifacts.",
-            ),
+            build_github_review_skip_receipt(args, &review),
         )?;
     }
     Ok(())
@@ -3657,6 +3691,88 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
     ]
     .iter()
     .any(|heading| body.contains(heading))
+}
+
+struct TerminalStateInput<'a> {
+    args: &'a RunArgs,
+    plan: &'a Plan,
+    review_payload_status: &'a str,
+    should_prepare_github_review: bool,
+    pr_body: &'a str,
+    inline_comments: &'a [ReviewInlineComment],
+    summary_only_findings: &'a [SummaryOnlyFinding],
+    model_lanes: &'a [ModelLaneReceipt],
+    missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
+    missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
+    proof_receipts: &'a [ProofReceipt],
+}
+
+fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalState {
+    let usable_model_lanes = input
+        .model_lanes
+        .iter()
+        .filter(|receipt| model_lane_is_usable_for_terminal_state(receipt))
+        .count();
+    let evidence_gaps = input.missing_or_failed_sensor_evidence.len()
+        + input.missing_or_failed_model_evidence.len();
+    let reviewer_value_present = input.should_prepare_github_review
+        || has_reviewer_value(input.inline_comments, input.pr_body)
+        || input
+            .proof_receipts
+            .iter()
+            .any(proof_receipt_changes_review_value);
+
+    let (status, reason) = if reviewer_value_present {
+        (
+            "needs-reviewer-attention",
+            "Reviewer-value content survived compilation; a grouped PR review was prepared.",
+        )
+    } else if input.args.dry_run {
+        (
+            "artifact-only",
+            "Dry run requested; this run produced artifacts but no reviewer-facing review.",
+        )
+    } else if matches!(input.args.model_mode, ModelMode::Off) {
+        (
+            "artifact-only",
+            "Model mode was off; this run produced artifacts but no reviewer-facing review.",
+        )
+    } else if input.plan.diff_class == DiffClass::ArtifactOnlySmoke {
+        (
+            "artifact-only",
+            "Artifact-only smoke diff; diagnostics remain in artifacts and no PR review was prepared.",
+        )
+    } else if usable_model_lanes == 0 && input.proof_receipts.is_empty() {
+        (
+            "failed-to-review",
+            "No usable model lane or proof receipt was available, so the run did not reach a sufficient review state.",
+        )
+    } else {
+        (
+            "sufficient",
+            "No reviewer-value content survived compilation; the run reached a sufficient terminal state and stayed artifact-only.",
+        )
+    };
+
+    ReviewTerminalState {
+        schema: "ub-review.terminal_state.v1".to_owned(),
+        status: status.to_owned(),
+        reason: reason.to_owned(),
+        review_payload_status: input.review_payload_status.to_owned(),
+        reviewer_value_present,
+        diff_class: input.plan.diff_class.key().to_owned(),
+        model_mode: input.args.model_mode.key().to_owned(),
+        usable_model_lanes,
+        model_lanes: input.model_lanes.len(),
+        evidence_gaps,
+        proof_receipts: input.proof_receipts.len(),
+        inline_comments: input.inline_comments.len(),
+        summary_only_findings: input.summary_only_findings.len(),
+    }
+}
+
+fn model_lane_is_usable_for_terminal_state(receipt: &ModelLaneReceipt) -> bool {
+    matches!(receipt.status.as_str(), "ok" | "degraded")
 }
 
 fn write_github_review_payload(
@@ -3779,6 +3895,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
             .iter()
             .filter(|receipt| is_model_evidence_issue(&receipt.status))
             .count(),
+        terminal_state: review.terminal_state.status.clone(),
         review_payload_status: review_payload_status.to_owned(),
         post_status: "not_attempted_by_run".to_owned(),
         review_body_bytes: review.body.len(),
@@ -5291,13 +5408,13 @@ fn write_github_review_skip_receipt(
 fn build_github_review_skip_receipt(
     args: &RunArgs,
     review: &ReviewArtifacts,
-    reason: &str,
 ) -> GitHubReviewSkipReceipt {
     GitHubReviewSkipReceipt {
         schema_version: 1,
         status: "skipped".to_owned(),
-        reason: reason.to_owned(),
-        review_payload_status: "skipped_empty_smoke".to_owned(),
+        reason: review.terminal_state.reason.clone(),
+        review_payload_status: review.terminal_state.review_payload_status.clone(),
+        terminal_state: review.terminal_state.status.clone(),
         github_review_json: "review/github-review.json".to_owned(),
         model_mode: args.model_mode.key().to_owned(),
         inline_comments: review.inline_comments.len(),
@@ -9555,9 +9672,14 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .get("post_status")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("unknown");
+    let terminal_state = metrics
+        .get("terminal_state")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
 
     text.push_str("\n## Review efficiency\n\n");
     text.push_str(&format!("- Runtime: `{runtime}`\n"));
+    text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
     ));
@@ -10453,9 +10575,10 @@ mod tests {
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
         Profile, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
         ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_model_output, apply_refuter_output, build_review_metrics,
+        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
+        SummaryOnlyFinding, TerminalStateInput, ToolClass, apply_model_output,
+        apply_refuter_output, build_review_metrics, build_review_terminal_state,
         build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
         classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
         collect_sensor_evidence_issues, combined_observations, command_display,
@@ -13384,6 +13507,105 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn terminal_state_marks_clean_usable_review_sufficient() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(state.status, "sufficient");
+        assert_eq!(state.usable_model_lanes, 1);
+        assert!(!state.reviewer_value_present);
+    }
+
+    #[test]
+    fn terminal_state_keeps_model_off_runs_artifact_only() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.model_mode = ModelMode::Off;
+        let plan = test_plan(Vec::new());
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(state.status, "artifact-only");
+        assert!(state.reason.contains("Model mode was off"));
+    }
+
+    #[test]
+    fn terminal_state_marks_unusable_auto_run_failed_to_review() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let missing_model = vec![ModelEvidenceIssue {
+            lane: "tests-oracle".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "timed_out".to_owned(),
+            reason: "timed out".to_owned(),
+        }];
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &missing_model,
+            proof_receipts: &[],
+        });
+
+        assert_eq!(state.status, "failed-to-review");
+        assert_eq!(state.evidence_gaps, 1);
+    }
+
+    #[test]
+    fn terminal_state_marks_surviving_pr_body_as_reviewer_attention() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "prepared",
+            should_prepare_github_review: true,
+            pr_body: "## Verification questions\n\n- Confirm the focused proof.",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(state.status, "needs-reviewer-attention");
+        assert!(state.reviewer_value_present);
+    }
+
+    #[test]
     fn artifact_review_body_keeps_model_lane_roster() {
         let body = render_review_body(
             "abc123",
@@ -13710,8 +13932,10 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(artifact_body.contains("Lane: `ub-memory-lifetime`"));
         assert_eq!(skip["status"], "skipped");
         assert_eq!(skip["review_payload_status"], "skipped_empty_smoke");
+        assert_eq!(skip["terminal_state"], "artifact-only");
         assert_eq!(metrics["wall_clock_seconds"], 73);
         assert_eq!(metrics["wall_clock_ms"], 73_000);
+        assert_eq!(metrics["terminal_state"], "artifact-only");
         assert_eq!(metrics["review_payload_status"], "skipped_empty_smoke");
         assert_eq!(metrics["post_status"], "not_attempted_by_run");
         assert_eq!(metrics["github_review_body_bytes"], 0);
@@ -13719,6 +13943,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics["artifact_review_body_bytes"], artifact_body.len());
         assert!(summary.contains("## Review efficiency"));
         assert!(summary.contains("Runtime: `1m13s`"));
+        assert!(summary.contains("Terminal state: `artifact-only`"));
         assert!(
             summary.contains("Review payload: `skipped_empty_smoke`; post: `not_attempted_by_run`")
         );
@@ -13743,6 +13968,7 @@ UB_REVIEW_HTTP_STATUS:429
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
             pr_thread_context: test_pr_thread_context(),
+            terminal_state: test_terminal_state("needs-reviewer-attention"),
             provider_preflights: vec![
                 super::ProviderPreflightReceipt {
                     provider: "minimax".to_owned(),
@@ -13807,6 +14033,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.provider_evidence_failures, 1);
         assert_eq!(metrics.review_payload_status, "prepared");
         assert_eq!(metrics.post_status, "not_attempted_by_run");
+        assert_eq!(metrics.terminal_state, "needs-reviewer-attention");
         assert_eq!(metrics.observations, 0);
         assert_eq!(metrics.proof_requests, 0);
         assert_eq!(metrics.proof_receipts, 0);
@@ -13833,6 +14060,7 @@ UB_REVIEW_HTTP_STATUS:429
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
             pr_thread_context: test_pr_thread_context(),
+            terminal_state: test_terminal_state("needs-reviewer-attention"),
             provider_preflights: Vec::new(),
             model_lanes: vec![model_lane_receipt("tests-oracle", "ok")],
             missing_or_failed_sensor_evidence: vec![SensorEvidenceIssue {
@@ -14353,6 +14581,28 @@ UB_REVIEW_HTTP_STATUS:429
             thread_context_path: None,
             thread_context: None,
             thread_context_truncated: false,
+        }
+    }
+
+    fn test_terminal_state(status: &str) -> ReviewTerminalState {
+        ReviewTerminalState {
+            schema: "ub-review.terminal_state.v1".to_owned(),
+            status: status.to_owned(),
+            reason: "test terminal state".to_owned(),
+            review_payload_status: if status == "needs-reviewer-attention" {
+                "prepared".to_owned()
+            } else {
+                "skipped_empty_smoke".to_owned()
+            },
+            reviewer_value_present: status == "needs-reviewer-attention",
+            diff_class: "source-ub".to_owned(),
+            model_mode: "auto".to_owned(),
+            usable_model_lanes: 1,
+            model_lanes: 1,
+            evidence_gaps: 0,
+            proof_receipts: 0,
+            inline_comments: 0,
+            summary_only_findings: 0,
         }
     }
 
