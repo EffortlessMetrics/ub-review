@@ -4327,7 +4327,7 @@ fn write_review_artifacts(
         },
         &mut follow_up_results,
     )?;
-    write_follow_up_result_artifacts(&review_dir, &follow_up_results)?;
+    write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -5316,12 +5316,19 @@ fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> 
     Ok(())
 }
 
-fn write_follow_up_result_artifacts(review_dir: &Path, results: &[FollowUpResult]) -> Result<()> {
-    fs::create_dir_all(review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+fn write_follow_up_result_artifacts(out: &Path, results: &[FollowUpResult]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     fs::write(
         review_dir.join("follow_up_results.json"),
         serde_json::to_vec_pretty(results)?,
     )?;
+    let mut ndjson = String::new();
+    for result in results {
+        ndjson.push_str(&serde_json::to_string(result)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("follow_up_results.ndjson"), ndjson)?;
     Ok(())
 }
 
@@ -17333,12 +17340,22 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(proof_result.content_path.is_none());
         assert!(proof_result.stderr_path.is_none());
 
-        super::write_follow_up_result_artifacts(&review_dir, &follow_up_results)?;
+        super::write_follow_up_result_artifacts(temp.path(), &follow_up_results)?;
         let written_results: serde_json::Value =
             serde_json::from_slice(&fs::read(review_dir.join("follow_up_results.json"))?)?;
+        let written_result_lines =
+            fs::read_to_string(temp.path().join("follow_up_results.ndjson"))?;
+        let written_result_ndjson = written_result_lines
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         assert_eq!(
             written_results.as_array().map(Vec::len),
             Some(plan.follow_up_tasks.len())
+        );
+        assert_eq!(
+            written_result_ndjson,
+            written_results.as_array().cloned().unwrap_or_default()
         );
         assert!(
             written_results
