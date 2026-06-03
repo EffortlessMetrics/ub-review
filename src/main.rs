@@ -1284,6 +1284,23 @@ struct FollowUpQuestionTask {
     reason: String,
 }
 
+#[derive(Debug, Serialize)]
+struct FollowUpQuestionPacket<'a> {
+    schema: &'static str,
+    id: &'a str,
+    task_id: &'a str,
+    group_id: &'a str,
+    evidence_need: &'a str,
+    disposition: &'a str,
+    candidate_ids: &'a [String],
+    observation_group_ids: &'a [String],
+    routed_evidence: &'a [OrchestratorRoutedEvidence],
+    question: &'a str,
+    status: &'a str,
+    source_artifact: &'static str,
+    prompt: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct GitHubReview {
     event: String,
@@ -4232,7 +4249,6 @@ fn write_review_artifacts(
         &review.proof_receipts,
         &review.resource_leases,
     );
-    write_orchestrator_artifacts(out, &orchestrator_plan)?;
     let witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
@@ -4240,6 +4256,7 @@ fn write_review_artifacts(
         &review.proof_receipts,
     );
     write_observation_artifacts(out, &observations)?;
+    write_orchestrator_artifacts(out, &orchestrator_plan)?;
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -5224,7 +5241,90 @@ fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> 
         ndjson.push('\n');
     }
     fs::write(out.join("follow_up_questions.ndjson"), ndjson)?;
+    write_follow_up_question_packets(out, &plan.follow_up_tasks)?;
     Ok(())
+}
+
+fn write_follow_up_question_packets(out: &Path, tasks: &[FollowUpQuestionTask]) -> Result<()> {
+    let follow_up_dir = out.join("questions").join("orchestrator-follow-up");
+    if follow_up_dir.exists() {
+        fs::remove_dir_all(&follow_up_dir)
+            .with_context(|| format!("remove {}", follow_up_dir.display()))?;
+    }
+    if tasks.is_empty() {
+        return Ok(());
+    }
+    fs::create_dir_all(&follow_up_dir)
+        .with_context(|| format!("create {}", follow_up_dir.display()))?;
+    for task in tasks {
+        let packet = follow_up_question_packet(task);
+        fs::write(
+            follow_up_dir.join(format!("{}.json", sanitize_artifact_name(&task.id))),
+            serde_json::to_vec_pretty(&packet)?,
+        )?;
+    }
+    Ok(())
+}
+
+fn follow_up_question_packet(task: &FollowUpQuestionTask) -> FollowUpQuestionPacket<'_> {
+    FollowUpQuestionPacket {
+        schema: "ub-review.follow_up_question_packet.v1",
+        id: task.id.as_str(),
+        task_id: task.id.as_str(),
+        group_id: task.group_id.as_str(),
+        evidence_need: task.evidence_need.as_str(),
+        disposition: task.disposition.as_str(),
+        candidate_ids: &task.candidate_ids,
+        observation_group_ids: &task.observation_group_ids,
+        routed_evidence: &task.routed_evidence,
+        question: task.question.as_str(),
+        status: task.status.as_str(),
+        source_artifact: "review/orchestrator_plan.json",
+        prompt: render_follow_up_question_prompt(task),
+    }
+}
+
+fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
+    let mut prompt = String::new();
+    prompt.push_str("Follow-up question task\n\n");
+    prompt.push_str(&format!("- Task: `{}`\n", task.id));
+    prompt.push_str(&format!("- Group: `{}`\n", task.group_id));
+    prompt.push_str(&format!("- Evidence need: `{}`\n", task.evidence_need));
+    prompt.push_str(&format!("- Disposition: `{}`\n", task.disposition));
+    if !task.candidate_ids.is_empty() {
+        prompt.push_str(&format!(
+            "- Candidate ids: `{}`\n",
+            task.candidate_ids.join("`, `")
+        ));
+    }
+    if !task.observation_group_ids.is_empty() {
+        prompt.push_str(&format!(
+            "- Observation group ids: `{}`\n",
+            task.observation_group_ids.join("`, `")
+        ));
+    }
+    prompt.push_str(&format!("\nQuestion: {}\n\n", task.question));
+    if task.routed_evidence.is_empty() {
+        prompt.push_str("Routed evidence: none.\n\n");
+    } else {
+        prompt.push_str("Routed evidence:\n");
+        for evidence in &task.routed_evidence {
+            prompt.push_str(&format!(
+                "- `{}` kind=`{}` status=`{}` result=`{}` artifact=`{}` reason={}\n",
+                evidence.id,
+                evidence.kind,
+                evidence.status,
+                evidence.result,
+                evidence.artifact,
+                evidence.reason
+            ));
+        }
+        prompt.push('\n');
+    }
+    prompt.push_str(
+        "Return strict JSON with observations, candidate_findings, summary_only_findings, failed_objections, and proof_requests. Do not post, mutate, or run shell commands.\n",
+    );
+    prompt
 }
 
 fn candidate_evidence_need(candidate: &CandidateRecord) -> String {
@@ -16845,6 +16945,39 @@ UB_REVIEW_HTTP_STATUS:429
             .map(serde_json::to_value)
             .collect::<std::result::Result<Vec<_>, _>>()?;
         assert_eq!(ndjson_tasks, expected_tasks);
+        let follow_up_dir = temp.path().join("questions/orchestrator-follow-up");
+        assert!(follow_up_dir.is_dir());
+        let follow_up_files = fs::read_dir(&follow_up_dir)?
+            .filter_map(std::result::Result::ok)
+            .map(|entry| entry.path())
+            .collect::<Vec<_>>();
+        assert_eq!(follow_up_files.len(), plan.follow_up_tasks.len());
+        let proof_packet: serde_json::Value = serde_json::from_slice(&fs::read(
+            follow_up_dir.join(format!("{}.json", proof_task.id)),
+        )?)?;
+        assert_eq!(
+            proof_packet["schema"],
+            "ub-review.follow_up_question_packet.v1"
+        );
+        assert_eq!(proof_packet["task_id"], proof_task.id);
+        assert_eq!(proof_packet["group_id"], proof_task.group_id);
+        assert_eq!(
+            proof_packet["routed_evidence"],
+            serde_json::to_value(&proof_task.routed_evidence)?
+        );
+        assert!(proof_packet["prompt"].as_str().is_some_and(|prompt| {
+            prompt.contains("Routed evidence:")
+                && prompt.contains("proof-confirmed")
+                && prompt.contains("Do not post, mutate, or run shell commands")
+        }));
+        let observation_packet: serde_json::Value = serde_json::from_slice(&fs::read(
+            follow_up_dir.join(format!("{}.json", observation_task.id)),
+        )?)?;
+        assert_eq!(observation_packet["disposition"], "observation");
+        assert_eq!(
+            observation_packet["observation_group_ids"],
+            serde_json::json!([observation_group.observation_group_id])
+        );
         Ok(())
     }
 
