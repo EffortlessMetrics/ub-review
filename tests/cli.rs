@@ -126,6 +126,7 @@ fn active_len_tracks_view_after_resize() {
         "sensors/ast-grep/ub-review-sensor-status.json",
         "review/shared_context.md",
         "review/pr_thread_context.json",
+        "review/terminal_state.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/review.json",
@@ -152,6 +153,7 @@ fn active_len_tracks_view_after_resize() {
         serde_json::from_slice(&fs::read(out.join("review/github-review-skip.json"))?)?;
     assert_eq!(github_skip["status"], "skipped");
     assert_eq!(github_skip["review_payload_status"], "skipped_empty_smoke");
+    assert_eq!(github_skip["terminal_state"], "artifact-only");
     let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
     assert!(artifact_body.contains("## Confirmed findings"));
     assert!(artifact_body.contains("## Missing or failed evidence"));
@@ -176,6 +178,11 @@ fn active_len_tracks_view_after_resize() {
     let pr_thread_context: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
     assert_eq!(pr_thread_context, review["pr_thread_context"]);
+    let terminal_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/terminal_state.json"))?)?;
+    assert_eq!(terminal_state, review["terminal_state"]);
+    assert_eq!(terminal_state["schema"], "ub-review.terminal_state.v1");
+    assert_eq!(terminal_state["status"], "artifact-only");
     let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
     assert!(shared_context.contains("## PR Thread Context"));
     assert!(shared_context.contains("- Status: `"));
@@ -186,6 +193,7 @@ fn active_len_tracks_view_after_resize() {
     let plan_json: serde_json::Value = serde_json::from_slice(&fs::read(out.join("plan.json"))?)?;
     assert_eq!(metrics["schema_version"], 1);
     assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
+    assert_eq!(metrics["terminal_state"], terminal_state["status"]);
     assert_eq!(metrics["profile_name"], "gh-runner");
     assert_eq!(
         metrics["changed_files"],

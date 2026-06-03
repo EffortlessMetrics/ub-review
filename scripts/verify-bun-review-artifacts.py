@@ -77,6 +77,25 @@ def no_standalone_approval_line(text: str, path: pathlib.Path) -> None:
             fail(f"standalone approval line in {path}:{line_number}: {line!r}")
 
 
+def has_reviewer_value_heading(body: str) -> bool:
+    return any(
+        heading in body
+        for heading in [
+            "## Decision",
+            "## Findings",
+            "## Confirmed findings",
+            "## Verification questions",
+            "## Test proof",
+            "## Proof results",
+            "## Refuted",
+            "## Residual risk",
+            "## Parked follow-ups",
+            "## Evidence gaps",
+            "## Missing evidence",
+        ]
+    )
+
+
 def require_common_tree(root: pathlib.Path) -> None:
     for path in [
         "input/changed-files.txt",
@@ -87,6 +106,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "running-summary.md",
         "review/shared_context.md",
         "review/pr_thread_context.json",
+        "review/terminal_state.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/review.json",
@@ -186,6 +206,26 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         )
     if review.get("pr_thread_context") != pr_thread_context:
         fail("review.json pr_thread_context does not match pr_thread_context.json")
+    terminal_state = load_json(root / "review/terminal_state.json")
+    if not isinstance(terminal_state, dict):
+        fail("terminal_state.json is not an object")
+    if terminal_state.get("schema") != "ub-review.terminal_state.v1":
+        fail(
+            "terminal_state.json schema expected ub-review.terminal_state.v1, "
+            f"got {terminal_state.get('schema')!r}"
+        )
+    if terminal_state.get("status") not in {
+        "needs-reviewer-attention",
+        "sufficient",
+        "artifact-only",
+        "failed-to-review",
+    }:
+        fail(
+            "terminal_state.json status expected a known terminal state, "
+            f"got {terminal_state.get('status')!r}"
+        )
+    if review.get("terminal_state") != terminal_state:
+        fail("review.json terminal_state does not match terminal_state.json")
 
     for heading in [
         "## Decision",
@@ -207,8 +247,8 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         if github_review.get("event") != "COMMENT":
             fail(f"github-review.json event expected COMMENT, got {github_review.get('event')!r}")
         body = github_review.get("body")
-        if not isinstance(body, str) or "## Decision" not in body:
-            fail("github-review.json body is missing the review summary")
+        if not isinstance(body, str) or not has_reviewer_value_heading(body):
+            fail("github-review.json body is missing reviewer-value content")
         no_standalone_approval_line(body, github_review_path)
         comments = github_review.get("comments")
         if not isinstance(comments, list):
@@ -230,6 +270,8 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
             fail(
                 "github-review-skip.json review_payload_status expected skipped_empty_smoke"
             )
+        if skip.get("terminal_state") != review.get("terminal_state", {}).get("status"):
+            fail("github-review-skip.json terminal_state does not match review.json")
 
     return review
 
@@ -265,6 +307,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("metrics inline_comments does not match review.json")
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
+    if metrics.get("terminal_state") != review.get("terminal_state", {}).get("status"):
+        fail("metrics terminal_state does not match review.json terminal_state")
     if not isinstance(metrics.get("observations"), int):
         fail("metrics observations is not an integer")
     if not isinstance(metrics.get("proof_requests"), int):
@@ -1027,6 +1071,7 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "running-summary.md",
         root / "review/shared_context.md",
         root / "review/pr_thread_context.json",
+        root / "review/terminal_state.json",
         root / "review/review.json",
         root / "review/review.md",
         root / "review/github-review.json",
