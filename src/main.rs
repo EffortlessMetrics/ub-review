@@ -6930,14 +6930,29 @@ fn focused_test_names_for_file(patch: &str, file: &str) -> Vec<String> {
 
 fn extract_focused_test_name(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
-    for prefix in ["test(", "it(", "describe("] {
-        if let Some(rest) = trimmed.strip_prefix(prefix)
-            && let Some(name) = parse_js_string_literal(rest.trim_start())
-        {
+    for callee in ["test", "it", "describe"] {
+        if let Some(name) = extract_js_test_call_name(trimmed, callee) {
             return Some(name);
         }
     }
     None
+}
+
+fn extract_js_test_call_name(line: &str, callee: &str) -> Option<String> {
+    let mut rest = line.strip_prefix(callee)?;
+    if let Some(modified) = rest.strip_prefix('.') {
+        let modifier_len = modified
+            .chars()
+            .take_while(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+            .map(char::len_utf8)
+            .sum::<usize>();
+        if modifier_len == 0 {
+            return None;
+        }
+        rest = &modified[modifier_len..];
+    }
+    rest = rest.strip_prefix('(')?;
+    parse_js_string_literal(rest.trim_start())
 }
 
 fn parse_js_string_literal(text: &str) -> Option<String> {
@@ -14184,6 +14199,63 @@ index 1111111..2222222 100644
         assert_eq!(time_capped_tasks.len(), 1);
         assert_eq!(proof_budget(&Profile::default())?.max_focused_tests, 1);
         Ok(())
+    }
+
+    #[test]
+    fn focused_test_names_for_file_handles_modifiers_escapes_and_diff_scope() {
+        let patch = "\
+diff --git a/test/js/bun/ffi/ffi.test.js b/test/js/bun/ffi/ffi.test.js
+index 1111111..2222222 100644
+--- a/test/js/bun/ffi/ffi.test.js
++++ b/test/js/bun/ffi/ffi.test.js
+@@ -1,5 +1,8 @@
+ test(\"existing context is ignored\", () => {});
+-test(\"deleted test is ignored\", () => {});
++test.only(\"keeps \\\"quoted\\\" byte ranges\", () => {});
++it.skip('caller\\'s memory stays alive', () => {});
++describe.todo(\"RAB no-finalizer suite\", () => {});
++test.only(\"keeps \\\"quoted\\\" byte ranges\", () => {});
+diff --git a/test/js/bun/ffi/other.test.js b/test/js/bun/ffi/other.test.js
+index 3333333..4444444 100644
+--- a/test/js/bun/ffi/other.test.js
++++ b/test/js/bun/ffi/other.test.js
+@@ -1 +1,2 @@
++test(\"other file is ignored\", () => {});
+";
+
+        let names = super::focused_test_names_for_file(patch, "test/js/bun/ffi/ffi.test.js");
+
+        assert_eq!(
+            names,
+            vec![
+                "keeps \"quoted\" byte ranges".to_owned(),
+                "caller\'s memory stays alive".to_owned(),
+                "RAB no-finalizer suite".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn focused_test_name_parsing_rejects_non_calls_and_empty_names() {
+        assert_eq!(
+            super::extract_focused_test_name("testing(\"not a test\")"),
+            None
+        );
+        assert_eq!(
+            super::extract_focused_test_name("test .only(\"spaced\")"),
+            None
+        );
+        assert_eq!(
+            super::extract_focused_test_name("test.todo(\"todo is focused\")"),
+            Some("todo is focused".to_owned())
+        );
+        assert_eq!(
+            super::extract_focused_test_name("describe. (\"broken\")"),
+            None
+        );
+        assert_eq!(super::parse_js_string_literal("\"   \""), None);
+        assert_eq!(super::parse_js_string_literal("`template literal`"), None);
+        assert_eq!(super::parse_js_string_literal("'unterminated"), None);
     }
 
     #[test]
