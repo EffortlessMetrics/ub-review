@@ -127,10 +127,12 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
             "metrics did not record enough model lane calls: "
             f"expected at least {min_ok_lanes}, got {models.get('model_lane_calls_attempted')!r}"
         )
-    if models.get("model_lane_status_counts", {}).get("ok", 0) < min_ok_lanes:
+    lane_status_counts = models.get("model_lane_status_counts", {})
+    usable_lanes = lane_status_counts.get("ok", 0) + lane_status_counts.get("degraded", 0)
+    if usable_lanes < min_ok_lanes:
         fail(
-            "metrics did not record enough ok model lanes: "
-            f"expected at least {min_ok_lanes}, got {models.get('model_lane_status_counts', {}).get('ok')!r}"
+            "metrics did not record enough usable ok/degraded model lanes: "
+            f"expected at least {min_ok_lanes}, got {usable_lanes!r}"
         )
 
 

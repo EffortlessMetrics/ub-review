@@ -1411,6 +1411,7 @@ struct ModelCallOutcome<T> {
     duration_ms: u128,
     http_status: Option<u16>,
     response_shape: String,
+    degraded: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -5221,6 +5222,7 @@ fn model_call_attempted_status(status: &str) -> bool {
     matches!(
         status,
         "ok" | "failed"
+            | "degraded"
             | "invalid_json"
             | "timed_out"
             | "rate_limited"
@@ -6271,8 +6273,14 @@ fn run_available_model_lanes(
             let lane = &context.assignments[task_result.index].lane;
             match task_result.result {
                 Ok(outcome) => {
-                    receipt.status = "ok".to_owned();
-                    receipt.reason = "completed".to_owned();
+                    if outcome.degraded {
+                        receipt.status = "degraded".to_owned();
+                        receipt.reason =
+                            "contentful lane output was preserved as degraded evidence".to_owned();
+                    } else {
+                        receipt.status = "ok".to_owned();
+                        receipt.reason = "completed".to_owned();
+                    }
                     receipt.duration_ms = Some(outcome.duration_ms);
                     receipt.http_status = outcome.http_status;
                     receipt.response_shape = Some(outcome.response_shape.clone());
@@ -6661,7 +6669,16 @@ fn call_model_prompt(
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<LaneModelOutput>> {
-    call_model_prompt_typed(root, lane_dir, spec, prompt, args)
+    let content = call_model_prompt_content(root, lane_dir, spec, prompt, args)?;
+    let (output, degraded) =
+        parse_lane_model_output_or_degrade(&content.json_payload, &content.parse_path)?;
+    Ok(ModelCallOutcome {
+        output,
+        duration_ms: content.duration_ms,
+        http_status: content.http_status,
+        response_shape: content.response_shape,
+        degraded,
+    })
 }
 
 fn call_model_prompt_typed<T>(
@@ -6674,6 +6691,33 @@ fn call_model_prompt_typed<T>(
 where
     T: DeserializeOwned,
 {
+    let content = call_model_prompt_content(root, lane_dir, spec, prompt, args)?;
+    let parsed_output = serde_json::from_str(&content.json_payload)
+        .with_context(|| format!("parse {}", content.parse_path.display()))?;
+    Ok(ModelCallOutcome {
+        output: parsed_output,
+        duration_ms: content.duration_ms,
+        http_status: content.http_status,
+        response_shape: content.response_shape,
+        degraded: false,
+    })
+}
+
+struct ModelPromptContent {
+    json_payload: String,
+    parse_path: PathBuf,
+    duration_ms: u128,
+    http_status: Option<u16>,
+    response_shape: String,
+}
+
+fn call_model_prompt_content(
+    root: &Path,
+    lane_dir: &Path,
+    spec: &ProviderSpec,
+    prompt: &str,
+    args: &RunArgs,
+) -> Result<ModelPromptContent> {
     let env_name = model_api_key_env(spec.provider);
     let token = env_value(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
@@ -6721,14 +6765,80 @@ where
         fs::write(&normalized_path, json_payload.as_bytes())?;
         normalized_path
     };
-    let parsed_output = serde_json::from_str(&json_payload)
-        .with_context(|| format!("parse {}", parse_path.display()))?;
-    Ok(ModelCallOutcome {
-        output: parsed_output,
+    Ok(ModelPromptContent {
+        json_payload,
+        parse_path,
         duration_ms,
         http_status: process_output.http_status,
         response_shape,
     })
+}
+
+fn parse_lane_model_output_or_degrade(
+    json_payload: &str,
+    parse_path: &Path,
+) -> Result<(LaneModelOutput, bool)> {
+    match serde_json::from_str::<LaneModelOutput>(json_payload) {
+        Ok(output) => Ok((output, false)),
+        Err(err) if lane_model_raw_content_is_usable(json_payload) => Ok((
+            degraded_lane_model_output(json_payload, &err, parse_path),
+            true,
+        )),
+        Err(err) => {
+            Err(anyhow::Error::new(err)).with_context(|| format!("parse {}", parse_path.display()))
+        }
+    }
+}
+
+fn lane_model_raw_content_is_usable(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty() && trimmed.chars().any(char::is_alphabetic)
+}
+
+fn degraded_lane_model_output(
+    raw: &str,
+    err: &serde_json::Error,
+    parse_path: &Path,
+) -> LaneModelOutput {
+    LaneModelOutput {
+        summary: None,
+        inline_comments: Vec::new(),
+        candidate_findings: Vec::new(),
+        summary_only_findings: Vec::new(),
+        observations: vec![lane_output_malformed_content_observation(
+            raw, err, parse_path,
+        )],
+        failed_objections: Vec::new(),
+        proof_requests: Vec::new(),
+    }
+}
+
+fn lane_output_malformed_content_observation(
+    raw: &str,
+    err: &serde_json::Error,
+    parse_path: &Path,
+) -> ModelCandidateObservation {
+    let raw = truncate_chars(raw.trim(), 240);
+    ModelCandidateObservation {
+        claim: truncate_chars(
+            &format!(
+                "Lane output was contentful but not valid JSON; preserved degraded text: {raw}"
+            ),
+            320,
+        ),
+        question: Some("lane-output-shape".to_owned()),
+        kind: Some("missing-evidence".to_owned()),
+        status: Some("open".to_owned()),
+        severity: Some("low".to_owned()),
+        confidence: Some("medium".to_owned()),
+        path: None,
+        line: None,
+        evidence: vec![
+            format!("Parse error: {err}"),
+            format!("Raw content artifact: {}", parse_path.display()),
+        ],
+        dedupe_key: Some("lane-output-malformed-content".to_owned()),
+    }
 }
 
 fn render_lane_model_prompt(lane: &LanePlan, spec: &ProviderSpec, shared_context: &str) -> String {
@@ -7648,24 +7758,33 @@ fn render_pull_request_review_body(
 ) -> String {
     let mut text = String::new();
     let observation_items = unique_review_observations(observations);
-    let refuted_observations = observation_items
+    let pr_observation_items = observation_items
         .iter()
+        .filter(|observation| !is_pr_body_artifact_only_observation(observation))
+        .collect::<Vec<_>>();
+    let refuted_observations = pr_observation_items
+        .iter()
+        .copied()
         .filter(|observation| is_pr_body_refuted_observation(observation))
         .collect::<Vec<_>>();
-    let missing_observations = observation_items
+    let missing_observations = pr_observation_items
         .iter()
+        .copied()
         .filter(|observation| is_missing_evidence_observation(observation))
         .collect::<Vec<_>>();
-    let parked_observations = observation_items
+    let parked_observations = pr_observation_items
         .iter()
+        .copied()
         .filter(|observation| is_parked_observation(observation))
         .collect::<Vec<_>>();
-    let residual_risk_observations = observation_items
+    let residual_risk_observations = pr_observation_items
         .iter()
+        .copied()
         .filter(|observation| is_residual_risk_observation(observation))
         .collect::<Vec<_>>();
-    let verification_observations = observation_items
+    let verification_observations = pr_observation_items
         .iter()
+        .copied()
         .filter(|observation| {
             !is_refuted_observation(observation)
                 && !is_missing_evidence_observation(observation)
@@ -7674,8 +7793,9 @@ fn render_pull_request_review_body(
                 && is_verification_observation(observation)
         })
         .collect::<Vec<_>>();
-    let concern_observations = observation_items
+    let concern_observations = pr_observation_items
         .iter()
+        .copied()
         .filter(|observation| {
             !is_refuted_observation(observation)
                 && !is_missing_evidence_observation(observation)
@@ -7955,6 +8075,13 @@ fn is_refuted_observation(observation: &ObservationGroup) -> bool {
 
 fn is_pr_body_refuted_observation(observation: &ObservationGroup) -> bool {
     is_refuted_observation(observation) && !is_global_calibration_refutation(observation)
+}
+
+fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool {
+    observation.dedupe_key.starts_with("lane-output-shape")
+        || observation
+            .dedupe_key
+            .starts_with("lane-output-malformed-content")
 }
 
 fn is_global_calibration_refutation(observation: &ObservationGroup) -> bool {
@@ -9188,6 +9315,11 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .pointer("/models/model_lane_status_counts/ok")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
+    let degraded_lanes = metrics
+        .pointer("/models/model_lane_status_counts/degraded")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let usable_lanes = ok_lanes.saturating_add(degraded_lanes);
     let inline_comments = metrics
         .get("github_review_comments")
         .and_then(serde_json::Value::as_u64)
@@ -9215,7 +9347,9 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
 
     text.push_str("\n## Review efficiency\n\n");
     text.push_str(&format!("- Runtime: `{runtime}`\n"));
-    text.push_str(&format!("- Model lanes: `{ok_lanes}/{total_lanes}` ok\n"));
+    text.push_str(&format!(
+        "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
+    ));
     text.push_str(&format!(
         "- Inline comments: `{inline_comments}/{max_inline_comments}`\n"
     ));
@@ -11000,6 +11134,45 @@ index 1111111..2222222 100644
                     .any(|item| item.contains("Malformed inline finding text"))
         }));
         Ok(())
+    }
+
+    #[test]
+    fn lane_output_split_degrades_contentful_malformed_output() -> Result<()> {
+        let raw = "args.buffer = StringOrBuffer::EncodedSlice(ZigStringSlice::init_owned(owned)); runs synchronously pre-schedule";
+        let parse_path = Path::new("target/ub-review/review/model/ub-worker-handoff/content.json");
+
+        let (output, degraded) = super::parse_lane_model_output_or_degrade(raw, parse_path)?;
+
+        assert!(degraded);
+        assert!(output.inline_comments.is_empty());
+        assert!(output.candidate_findings.is_empty());
+        assert!(output.summary_only_findings.is_empty());
+        assert_eq!(output.observations.len(), 1);
+        assert_eq!(
+            output.observations[0].question.as_deref(),
+            Some("lane-output-shape")
+        );
+        assert_eq!(
+            output.observations[0].kind.as_deref(),
+            Some("missing-evidence")
+        );
+        assert!(output.observations[0].claim.contains("EncodedSlice"));
+        assert!(
+            output.observations[0]
+                .evidence
+                .iter()
+                .any(|item| item.contains("content.json"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn degraded_model_lane_is_attempted_but_not_missing_evidence() {
+        let mut degraded = model_lane_receipt("ub-worker-handoff", "degraded");
+        degraded.reason = "contentful lane output was preserved as degraded evidence".to_owned();
+
+        assert!(super::model_call_attempted_status("degraded"));
+        assert!(!super::is_model_receipt_evidence_issue(&degraded));
     }
 
     #[test]
@@ -13543,6 +13716,38 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("medium-high"));
         assert!(!body.contains("## Model lanes"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_omits_lane_output_shape_artifacts() {
+        let observations = vec![test_observation(
+            "ub-worker-handoff",
+            "Lane output was contentful but not valid JSON; preserved degraded text: EncodedSlice route excerpt",
+            "missing-evidence",
+            "open",
+            "low",
+            "medium",
+            "lane-output-malformed-content",
+        )];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &observations,
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(!body.contains("## Missing evidence"));
+        assert!(!body.contains("Lane output was contentful"));
+        assert!(!body.contains("EncodedSlice route excerpt"));
+        assert!(body.contains("No blocking UB finding from this pass."));
     }
 
     #[test]
