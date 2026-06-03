@@ -4176,6 +4176,8 @@ fn write_lane_packets(
         }
         text.push_str("\n## Review posture\n\n");
         text.push_str(review_posture_for_diff_class(diff.diff_class));
+        text.push_str("\n\n## Review-fast target\n\n");
+        text.push_str(REVIEW_FAST_TARGET);
         text.push_str("\n\n## Required output shape\n\n");
         text.push_str(&format!(
             "Start inline comments for this lane with `[{}]`. If no blocking finding exists, write an audit trail: what you checked, strongest failed objection, and residual risk. Do not infer safety from missing sensor receipts.\n",
@@ -7488,6 +7490,8 @@ fn render_shared_context(
         diff_class_posture_heading(diff.diff_class)
     ));
     text.push_str(review_posture_for_diff_class(diff.diff_class));
+    text.push_str("\n\n## Review-fast Target\n\n");
+    text.push_str(REVIEW_FAST_TARGET);
     text.push_str("\n\n## PR Thread Context\n\n");
     text.push_str(&render_pr_thread_context(pr_thread_context));
     text.push_str("\n\n## UB Ledger Context\n\n");
@@ -12906,6 +12910,18 @@ A zero-finding review is not approval. It must report:
 4. residual risk for a human to verify.
 "#;
 
+const REVIEW_FAST_TARGET: &str = r#"Optimize for review-fast output, not generic commentary. A review-fast finding has a coherent seam, a clear claim boundary, concrete evidence, and an efficient verification path.
+
+For each actionable issue, state:
+1. the narrow seam touched by the PR;
+2. the behavior, invariant, or product/policy claim at risk;
+3. the strongest evidence from the packet;
+4. the targeted proof that would confirm or refute it;
+5. what the available evidence does not establish.
+
+Prefer findings that help reviewers validate rather than investigate. Do not infer broad safety from narrow proof, missing receipts, snapshot churn, or a no-finding lane.
+"#;
+
 const WORKFLOW_TOOLING_POSTURE: &str = r#"Standalone approval language is banned.
 
 Return workflow/tooling reviewer value only: findings, verification questions, actionlint/zizmor proof results, refutations, residual workflow risk, parked follow-ups, and trust-affecting missing workflow evidence.
@@ -13007,8 +13023,8 @@ mod tests {
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_github_review_payload, write_lane_packets, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -13261,6 +13277,25 @@ mod tests {
         ] {
             assert!(!has_standalone_approval_line(text));
         }
+    }
+
+    #[test]
+    fn lane_packets_include_review_fast_claim_boundary_guidance() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let plan = test_plan(vec![sensor_plan("ripr", "ripr", true)]);
+
+        write_lane_packets(&out, &test_diff(), &plan, &event_log)?;
+
+        let lane_packet = fs::read_to_string(out.join("lanes/tests.md"))?;
+        assert!(lane_packet.contains("## Review-fast target"));
+        assert!(lane_packet.contains("coherent seam"));
+        assert!(lane_packet.contains("clear claim boundary"));
+        assert!(lane_packet.contains("targeted proof that would confirm or refute it"));
+        assert!(lane_packet.contains("what the available evidence does not establish"));
+        assert!(lane_packet.contains("`ripr`: `receipt-absent`"));
+        Ok(())
     }
 
     #[test]

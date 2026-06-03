@@ -3,6 +3,18 @@
 Use this packet as evidence, not as a verdict. Do not infer safety from missing
 sensor output. Missing evidence is a review question, not a clean result.
 
+Optimize for review-fast output, not generic commentary. A review-fast finding
+has a coherent seam, a clear claim boundary, concrete evidence, and an efficient
+verification path.
+
+For each actionable issue, state:
+
+1. the narrow seam touched by the PR;
+2. the behavior, invariant, or product/policy claim at risk;
+3. the strongest evidence from the packet;
+4. the targeted proof that would confirm or refute it;
+5. what the available evidence does not establish.
+
 Standalone approval language is banned. Do not use a one-word approval, a
 generic quality adjective, or a zero-actionable shorthand as the conclusion.
 
