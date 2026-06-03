@@ -149,6 +149,8 @@ fn active_len_tracks_view_after_resize() {
         "review/witnesses.json",
         "review/witness_registry.json",
         "review/proof_requests.json",
+        "review/proof_planner_input.json",
+        "review/proof_planner_output.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
         "review/resource_leases.json",
@@ -158,6 +160,7 @@ fn active_len_tracks_view_after_resize() {
         "follow_up_results.ndjson",
         "follow_up_outputs.ndjson",
         "proof_requests.ndjson",
+        "proof_tasks.ndjson",
         "proof_receipts.ndjson",
         "witnesses.ndjson",
         "resource_leases.ndjson",
@@ -989,6 +992,40 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         &[("PATH", path.as_str())],
     )?;
 
+    let planner_input: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_input.json"))?)?;
+    assert_eq!(planner_input["schema"], "ub-review.proof_planner_input.v1");
+    assert_eq!(planner_input["diff_class"], "tests-only");
+    assert_eq!(planner_input["runtime_budget"]["max_focused_tests"], 1);
+
+    let planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    assert_eq!(
+        planner_output["schema"],
+        "ub-review.proof_planner_output.v1"
+    );
+    assert_eq!(planner_output["lane"], "proof-planner");
+    let proof_tasks = json_array_field(&planner_output, "proof_tasks")?;
+    assert_eq!(proof_tasks.len(), 1);
+    assert_eq!(proof_tasks[0]["schema"], "ub-review.proof_task.v1");
+    assert_eq!(proof_tasks[0]["kind"], "focused-test");
+    assert_eq!(proof_tasks[0]["mode"], "red-green");
+    assert_eq!(proof_tasks[0]["lease"]["cpu"], 2);
+    assert_eq!(proof_tasks[0]["lease"]["network"], false);
+    assert!(
+        proof_tasks[0]["purpose"]
+            .as_str()
+            .is_some_and(|purpose| { purpose.contains("fails on base+tests and passes on HEAD") })
+    );
+    let proof_tasks_ndjson = fs::read_to_string(out.join("proof_tasks.ndjson"))?;
+    assert_eq!(
+        proof_tasks_ndjson
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+        1
+    );
+
     let receipts: Vec<serde_json::Value> =
         serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
     assert_eq!(receipts.len(), 1);
@@ -1146,6 +1183,7 @@ path = "src/lib.rs"
         bin,
         &[
             "run",
+            "--dry-run",
             "--config",
             path_str(&config)?,
             "--root",
@@ -1303,6 +1341,160 @@ path = "src/lib.rs"
     ));
     assert!(summary.contains("| `ub` | `minimax` | `MiniMax-M3` | `openai-chat` | `ok` |"));
     assert!(!summary.contains(dummy_key));
+    Ok(())
+}
+
+#[test]
+fn model_auto_run_preserves_contentful_non_json_lane_output_as_degraded() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "bun-rab-mini"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn active_len(len: usize) -> usize {
+    len
+}
+"#,
+    )?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn active_len(len: usize) -> usize {
+    let ptr = &len as *const usize;
+    unsafe { *ptr }
+}
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "touch rust behavior"])?;
+
+    let raw_lane_content = "EncodedSlice route excerpt survived as text";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+        fake_openai_lane_content(),
+        raw_lane_content.to_owned(),
+    ])?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let minimax_key_env = ["UB", "_REVIEW_MINIMAX_API_KEY"].concat();
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lane-width",
+            "6",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--max-inline-comments",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            (minimax_key_env.as_str(), "dummy-minimax-key"),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 2);
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    let model_lanes = review["model_lanes"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("model_lanes missing"))?;
+    let ub_lane = model_lanes
+        .iter()
+        .find(|lane| lane["lane"].as_str() == Some("ub"))
+        .ok_or_else(|| anyhow::anyhow!("ub model lane missing"))?;
+    assert_eq!(ub_lane["status"], "degraded");
+    assert_eq!(
+        ub_lane["reason"],
+        "contentful lane output was preserved as degraded evidence"
+    );
+    assert_eq!(ub_lane["http_status"], 200);
+    assert_eq!(ub_lane["response_shape"], "openai");
+    assert!(
+        review["missing_or_failed_model_evidence"]
+            .as_array()
+            .is_some_and(|issues| issues.is_empty())
+    );
+    assert!(
+        review["observations"]
+            .as_array()
+            .is_some_and(|observations| observations.iter().any(|observation| {
+                observation["lane"].as_str() == Some("ub")
+                    && observation["kind"].as_str() == Some("missing-evidence")
+                    && observation["dedupe_key"].as_str() == Some("lane-output-malformed-content")
+                    && observation["claim"]
+                        .as_str()
+                        .is_some_and(|claim| claim.contains(raw_lane_content))
+                    && observation["evidence"].as_array().is_some_and(|evidence| {
+                        evidence.iter().any(|item| {
+                            item.as_str().is_some_and(|text| {
+                                let normalized = text.replace('\\', "/");
+                                normalized.contains("Raw content artifact:")
+                                    && normalized.contains("review/model/ub/content.json")
+                            })
+                        })
+                    })
+            }))
+    );
+
+    let lane_content = fs::read_to_string(out.join("review/model/ub/content.json"))?;
+    assert_eq!(lane_content, raw_lane_content);
+
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["models"]["model_lane_status_counts"]["degraded"], 1);
+    assert_eq!(metrics["models"]["model_lane_calls_attempted"], 1);
+    assert_eq!(metrics["missing_or_failed_model_evidence"], 0);
+    assert!(!out.join("review/github-review.json").exists());
+    assert!(out.join("review/github-review-skip.json").exists());
+    let pr_body = fs::read_to_string(out.join("review/review.md"))?;
+    assert!(!pr_body.contains(raw_lane_content));
     Ok(())
 }
 
@@ -1749,15 +1941,31 @@ fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
 fn spawn_fake_openai_provider(
     expected_requests: usize,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_contents(
+        (0..expected_requests)
+            .map(|_| fake_openai_lane_content())
+            .collect(),
+    )
+}
+
+fn spawn_fake_openai_provider_with_contents(
+    contents: Vec<String>,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let expected_requests = contents.len();
         let deadline = Instant::now() + Duration::from_secs(120);
         let mut requests = Vec::new();
         while requests.len() < expected_requests {
             match listener.accept() {
-                Ok((stream, _addr)) => requests.push(handle_fake_openai_request(stream)?),
+                Ok((stream, _addr)) => {
+                    let content = contents
+                        .get(requests.len())
+                        .ok_or_else(|| anyhow::anyhow!("fake provider response missing"))?;
+                    requests.push(handle_fake_openai_request(stream, content)?);
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     if Instant::now() >= deadline {
                         bail!(
@@ -1776,7 +1984,16 @@ fn spawn_fake_openai_provider(
     Ok((url, handle))
 }
 
-fn handle_fake_openai_request(mut stream: TcpStream) -> Result<String> {
+fn fake_openai_lane_content() -> String {
+    serde_json::json!({
+        "summary": "fake provider ok",
+        "inline_comments": [],
+        "summary_only_findings": []
+    })
+    .to_string()
+}
+
+fn handle_fake_openai_request(mut stream: TcpStream, content: &str) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -1805,16 +2022,11 @@ fn handle_fake_openai_request(mut stream: TcpStream) -> Result<String> {
     let mut body = vec![0; content_length];
     reader.read_exact(&mut body)?;
     let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
-    let lane_output = serde_json::json!({
-        "summary": "fake provider ok",
-        "inline_comments": [],
-        "summary_only_findings": []
-    });
     let response_body = serde_json::to_vec(&serde_json::json!({
         "choices": [
             {
                 "message": {
-                    "content": lane_output.to_string()
+                    "content": content
                 }
             }
         ]

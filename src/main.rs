@@ -1300,6 +1300,69 @@ struct FocusedProofPlan {
     reason: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerInput<'a> {
+    schema: &'static str,
+    diff_class: &'static str,
+    changed_files: &'a [String],
+    pr_thread_context_status: &'a str,
+    proof_requests: &'a [ProofRequest],
+    runtime_budget: ProofPlannerRuntimeBudget,
+    box_shape: &'a BoxState,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerRuntimeBudget {
+    target_timeout_sec: u64,
+    hard_timeout_sec: u64,
+    max_focused_tests: usize,
+    per_command_timeout_sec: u64,
+    total_proof_timeout_sec: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerOutput {
+    schema: &'static str,
+    lane: &'static str,
+    proof_tasks: Vec<ProofTaskArtifact>,
+    skip: Vec<ProofPlannerSkip>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofTaskArtifact {
+    schema: &'static str,
+    id: String,
+    kind: String,
+    command: String,
+    head_command: String,
+    base_plus_tests_command: Option<String>,
+    purpose: String,
+    consumers: Vec<String>,
+    value: String,
+    cost: String,
+    timeout_sec: u64,
+    lease: ProofTaskLease,
+    test_file: String,
+    test_name: Option<String>,
+    mode: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofTaskLease {
+    cpu: u32,
+    memory_mb: u64,
+    disk_mb: u64,
+    network: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerSkip {
+    kind: String,
+    reason: String,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ProofBudget {
     max_focused_test_files: usize,
@@ -2597,6 +2660,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         &args.review.out,
         &config,
         &diff,
+        &box_state,
         &plan,
         &preliminary_summary,
         &args,
@@ -3479,41 +3543,12 @@ fn classify_diff(files: &[String], patch: &str) -> DiffFlags {
         flags.dependency_changed |= is_dependency_path(&lower);
         flags.shell_changed |= lower.ends_with(".sh") || lower.starts_with("scripts/");
         flags.cpp_changed |= is_cpp_path(&lower);
-        flags.unsafe_or_native_risk |= lower.contains("ffi")
-            || lower.contains("jsc")
-            || lower.contains("arraybuffer")
-            || lower.contains("typedarray")
-            || lower.contains("worker")
-            || lower.contains("crypto")
-            || lower.contains("zstd")
-            || lower.contains("src/runtime/")
-            || lower.contains("src/bun.js/bindings/");
+        flags.unsafe_or_native_risk |= is_native_risk_path(&lower);
     }
-    let lower_patch = patch.to_ascii_lowercase();
-    for token in [
-        "unsafe",
-        "extern",
-        "from_raw_parts",
-        "as_ptr",
-        "as_mut_ptr",
-        "maybeuninit",
-        "nonnull",
-        "arraybuffer",
-        "typedarray",
-        "detach",
-        "resize",
-        "transfer",
-        "protect",
-        "unprotect",
-        "worker",
-        "ffi",
-        "jsc",
-        "stringorbuffer",
-        "sharedarraybuffer",
-    ] {
-        if lower_patch.contains(token) {
-            flags.unsafe_or_native_risk = true;
-        }
+    if patch_tokens_can_promote_native_risk(files, &flags)
+        && patch_contains_native_risk_token(patch)
+    {
+        flags.unsafe_or_native_risk = true;
     }
     flags
 }
@@ -3549,6 +3584,58 @@ fn is_cpp_path(path: &str) -> bool {
     [".c", ".cc", ".cpp", ".cxx", ".h", ".hpp"]
         .iter()
         .any(|suffix| path.ends_with(suffix))
+}
+
+fn is_zig_path(path: &str) -> bool {
+    path.ends_with(".zig")
+}
+
+fn is_native_risk_path(path: &str) -> bool {
+    path.contains("ffi")
+        || path.contains("jsc")
+        || path.contains("arraybuffer")
+        || path.contains("typedarray")
+        || path.contains("worker")
+        || path.contains("crypto")
+        || path.contains("zstd")
+        || path.contains("src/runtime/")
+        || path.contains("src/bun.js/bindings/")
+}
+
+fn patch_tokens_can_promote_native_risk(files: &[String], flags: &DiffFlags) -> bool {
+    flags.rust_changed
+        || flags.cpp_changed
+        || files.iter().any(|path| {
+            let lower = path.to_ascii_lowercase();
+            is_zig_path(&lower) || is_native_risk_path(&lower)
+        })
+}
+
+fn patch_contains_native_risk_token(patch: &str) -> bool {
+    let lower_patch = patch.to_ascii_lowercase();
+    [
+        "unsafe",
+        "extern",
+        "from_raw_parts",
+        "as_ptr",
+        "as_mut_ptr",
+        "maybeuninit",
+        "nonnull",
+        "arraybuffer",
+        "typedarray",
+        "detach",
+        "resize",
+        "transfer",
+        "protect",
+        "unprotect",
+        "worker",
+        "ffi",
+        "jsc",
+        "stringorbuffer",
+        "sharedarraybuffer",
+    ]
+    .iter()
+    .any(|token| lower_patch.contains(token))
 }
 
 fn is_dependency_path(path: &str) -> bool {
@@ -4598,6 +4685,7 @@ fn write_review_artifacts(
     out: &Path,
     config: &Config,
     diff: &DiffContext,
+    box_state: &BoxState,
     plan: &Plan,
     running_summary: &str,
     args: &RunArgs,
@@ -4679,6 +4767,14 @@ fn write_review_artifacts(
     }
 
     let profile = config.selected_profile()?;
+    write_proof_planner_artifacts(
+        out,
+        diff,
+        profile,
+        box_state,
+        &pr_thread_context,
+        &proof_requests,
+    )?;
     let proof_result = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
@@ -6694,6 +6790,139 @@ fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -> Result<()
     }
     fs::write(out.join("witnesses.ndjson"), ndjson)?;
     Ok(())
+}
+
+fn write_proof_planner_artifacts(
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    box_state: &BoxState,
+    pr_thread_context: &PrThreadContext,
+    proof_requests: &[ProofRequest],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let budget = proof_budget(profile)?;
+    let lease_budget = proof_lease_budget(profile)?;
+    let input = ProofPlannerInput {
+        schema: "ub-review.proof_planner_input.v1",
+        diff_class: diff.diff_class.key(),
+        changed_files: &diff.changed_files,
+        pr_thread_context_status: &pr_thread_context.status,
+        proof_requests,
+        runtime_budget: ProofPlannerRuntimeBudget {
+            target_timeout_sec: profile.budgets.default_timeout_sec,
+            hard_timeout_sec: profile.budgets.hard_timeout_sec,
+            max_focused_tests: budget.max_focused_tests,
+            per_command_timeout_sec: budget.per_command_timeout_sec,
+            total_proof_timeout_sec: budget.max_total_seconds,
+        },
+        box_shape: box_state,
+    };
+    let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
+    let proof_tasks = plans
+        .into_iter()
+        .map(|plan| proof_task_artifact(plan, budget, lease_budget))
+        .collect::<Vec<_>>();
+    let skip = proof_planner_skips(diff);
+    let output = ProofPlannerOutput {
+        schema: "ub-review.proof_planner_output.v1",
+        lane: "proof-planner",
+        proof_tasks,
+        skip,
+    };
+    fs::write(
+        review_dir.join("proof_planner_input.json"),
+        serde_json::to_vec_pretty(&input)?,
+    )?;
+    fs::write(
+        review_dir.join("proof_planner_output.json"),
+        serde_json::to_vec_pretty(&output)?,
+    )?;
+    let mut ndjson = String::new();
+    for task in &output.proof_tasks {
+        ndjson.push_str(&serde_json::to_string(task)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("proof_tasks.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn proof_task_artifact(
+    plan: FocusedProofPlan,
+    budget: ProofBudget,
+    lease_budget: ProofLeaseBudget,
+) -> ProofTaskArtifact {
+    let base_plus_tests_command =
+        (plan.mode == FocusedProofMode::RedGreen).then(|| plan.base_plus_tests_command.clone());
+    let command = match &base_plus_tests_command {
+        Some(base_command) => format!("{} && {}", plan.head_command, base_command),
+        None => plan.head_command.clone(),
+    };
+    let purpose = focused_proof_task_purpose(&plan);
+    ProofTaskArtifact {
+        schema: "ub-review.proof_task.v1",
+        id: plan.id,
+        kind: "focused-test".to_owned(),
+        command,
+        head_command: plan.head_command,
+        base_plus_tests_command,
+        purpose,
+        consumers: vec![
+            "tests-oracle".to_owned(),
+            "opposition".to_owned(),
+            "compiler".to_owned(),
+        ],
+        value: "high".to_owned(),
+        cost: "low".to_owned(),
+        timeout_sec: budget
+            .per_command_timeout_sec
+            .saturating_mul(plan.mode.command_count())
+            .min(budget.max_total_seconds),
+        lease: ProofTaskLease {
+            cpu: lease_budget.cpu,
+            memory_mb: lease_budget.memory_mb,
+            disk_mb: lease_budget.disk_mb,
+            network: lease_budget.network,
+        },
+        test_file: plan.test_file,
+        test_name: plan.test_name,
+        mode: plan.mode.key().to_owned(),
+        requested_by: plan.requested_by,
+        request_ids: plan.request_ids,
+    }
+}
+
+fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
+    match plan.mode {
+        FocusedProofMode::HeadOnly => {
+            format!(
+                "Prove the focused test target `{}` passes on HEAD.",
+                plan.test_file
+            )
+        }
+        FocusedProofMode::RedGreen => format!(
+            "Prove the focused test target `{}` fails on base+tests and passes on HEAD.",
+            plan.test_file
+        ),
+    }
+}
+
+fn proof_planner_skips(diff: &DiffContext) -> Vec<ProofPlannerSkip> {
+    let mut skip = Vec::new();
+    if !diff.flags.unsafe_or_native_risk {
+        skip.push(ProofPlannerSkip {
+            kind: "miri".to_owned(),
+            reason: "No new unsafe/native aliasing surface was detected; cheaper focused proof is preferred when available.".to_owned(),
+        });
+    }
+    if !diff.flags.workflow_changed {
+        skip.push(ProofPlannerSkip {
+            kind: "actionlint".to_owned(),
+            reason: "No workflow files changed.".to_owned(),
+        });
+    }
+    skip
 }
 
 fn write_proof_request_artifacts(
@@ -8835,6 +9064,10 @@ fn render_pr_thread_context(context: &PrThreadContext) -> String {
     if let Some(title) = context.title.as_deref() {
         text.push_str(&format!("- Title: {}\n", escape_md(title)));
     }
+    if let Some(guidance) = pr_thread_reuse_guidance(context) {
+        text.push('\n');
+        text.push_str(guidance);
+    }
     if let Some(body) = context.body.as_deref() {
         text.push_str("\n### PR Body\n\n```text\n");
         text.push_str(body);
@@ -8855,6 +9088,18 @@ fn render_pr_thread_context(context: &PrThreadContext) -> String {
         text.push_str("- No PR thread context was provided for this run.\n");
     }
     text
+}
+
+fn pr_thread_reuse_guidance(context: &PrThreadContext) -> Option<&'static str> {
+    if context.status != "seeded" {
+        return None;
+    }
+    Some(
+        "### Seeded Thread Reuse Rules\n\n\
+- Treat PR body claims, author replies, prior ub-review comments, resolved/dismissed discussion notes, and proof receipts in this context as lane evidence.\n\
+- Before emitting a verification question or proof request, compare it with the seeded thread. If the same concern is already answered and the current diff does not reopen it, emit a `resolved-check` observation or `failed_objection` instead of a fresh candidate.\n\
+- If the current diff reopens an answered concern, cite the changed file/line or proof receipt that makes the prior answer stale.\n",
+    )
 }
 
 fn render_ledger_context(root: &Path, config: &Config, args: &RunArgs) -> Result<String> {
@@ -9497,28 +9742,30 @@ fn build_model_lane_receipts(
                 ModelMode::Off => ("skipped", "model-mode off".to_owned()),
                 ModelMode::Auto => {
                     let primary_env = model_api_key_env(spec.provider);
+                    let primary_label = model_api_key_label(spec.provider);
                     if env_value_present(primary_env) {
                         (
                             "planned",
                             format!(
-                                "{primary_env} present; lane eligible for {} call",
+                                "{primary_label} present; lane eligible for {} call",
                                 spec.provider.key()
                             ),
                         )
                     } else if let Some(fallback) = &assignment.fallback {
                         let fallback_env = model_api_key_env(fallback.provider);
+                        let fallback_label = model_api_key_label(fallback.provider);
                         if env_value_present(fallback_env) {
                             (
                                 "planned",
                                 format!(
-                                    "{primary_env} not provided; fallback {fallback_env} present"
+                                    "{primary_label} not provided; fallback {fallback_label} present"
                                 ),
                             )
                         } else {
                             (
                                 "missing_key",
                                 format!(
-                                    "{primary_env} and fallback {fallback_env} not provided; lane output unavailable"
+                                    "{primary_label} and fallback {fallback_label} not provided; lane output unavailable"
                                 ),
                             )
                         }
@@ -9526,7 +9773,7 @@ fn build_model_lane_receipts(
                         (
                             "missing_key",
                             format!(
-                                "{primary_env} not provided; {} lane output unavailable",
+                                "{primary_label} not provided; {} lane output unavailable",
                                 spec.provider.key()
                             ),
                         )
@@ -9567,12 +9814,13 @@ fn build_provider_preflight_receipts(
                 ModelMode::Off => ("skipped", "model-mode off".to_owned()),
                 ModelMode::Auto => {
                     let env_name = model_api_key_env(spec.provider);
+                    let key_label = model_api_key_label(spec.provider);
                     if env_value_present(env_name) {
-                        ("planned", format!("{env_name} present; preflight planned"))
+                        ("planned", format!("{key_label} present; preflight planned"))
                     } else {
                         (
                             "missing_key",
-                            format!("{env_name} not provided; provider unavailable"),
+                            format!("{key_label} not provided; provider unavailable"),
                         )
                     }
                 }
@@ -9804,9 +10052,10 @@ fn run_available_model_lanes(
             receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             let env_name = model_api_key_env(spec.provider);
             if !env_value_present(env_name) {
+                let key_label = model_api_key_label(spec.provider);
                 receipt.status = "missing_key".to_owned();
                 receipt.reason = format!(
-                    "{env_name} not provided; {} lane output unavailable",
+                    "{key_label} not provided; {} lane output unavailable",
                     spec.provider.key()
                 );
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
@@ -10307,8 +10556,9 @@ fn run_refuter_pass(
     }
     let env_name = model_api_key_env(spec.provider);
     if !env_value_present(env_name) {
+        let key_label = model_api_key_label(spec.provider);
         receipt.status = "missing_key".to_owned();
-        receipt.reason = format!("{env_name} not provided; refuter output unavailable");
+        receipt.reason = format!("{key_label} not provided; refuter output unavailable");
         missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
         demote_inline_candidates_for_refuter_unavailable(
             &receipt.reason,
@@ -12621,6 +12871,13 @@ fn model_api_key_env(provider: ModelProvider) -> &'static str {
     }
 }
 
+fn model_api_key_label(provider: ModelProvider) -> &'static str {
+    match provider {
+        ModelProvider::MiniMaxDirect => "minimax API key",
+        ModelProvider::OpenCodeGo => "opencode-go API key",
+    }
+}
+
 fn model_api_key_present(provider: ModelProvider) -> bool {
     env_value_present(model_api_key_env(provider))
 }
@@ -14338,6 +14595,40 @@ mod tests {
     }
 
     #[test]
+    fn generic_typescript_diff_stays_source_general_despite_native_words() {
+        let files = vec!["packages/bun-plugin/src/options.ts".to_owned()];
+        let flags = classify_diff(
+            &files,
+            "+ const message = 'unsafe fallback should not route to UB lanes';",
+        );
+
+        assert!(flags.source_changed);
+        assert!(!flags.rust_changed);
+        assert!(!flags.cpp_changed);
+        assert!(!flags.unsafe_or_native_risk);
+        assert_eq!(
+            classify_diff_class(&files, &flags),
+            DiffClass::SourceGeneral
+        );
+
+        let mut plan = test_plan(Vec::new());
+        plan.diff_class = DiffClass::SourceGeneral;
+        let lanes = review_lanes_for_args(&plan, &test_run_args(PathBuf::from("out")));
+        assert!(lanes.iter().all(|lane| !lane.id.starts_with("ub-")));
+        assert!(!lanes.iter().any(|lane| lane.id == "ub"));
+    }
+
+    #[test]
+    fn native_surface_typescript_path_can_still_route_source_ub() {
+        let files = vec!["src/bun.js/bindings/arraybuffer.ts".to_owned()];
+        let flags = classify_diff(&files, "+ const length = view.byteLength;");
+
+        assert!(flags.source_changed);
+        assert!(flags.unsafe_or_native_risk);
+        assert_eq!(classify_diff_class(&files, &flags), DiffClass::SourceUb);
+    }
+
+    #[test]
     fn workflow_only_diff_routes_to_workflow_lanes() {
         let files = vec![".github/workflows/review.yml".to_owned()];
         let flags = classify_diff(&files, "+permissions:\n+  contents: read\n");
@@ -14406,6 +14697,16 @@ mod tests {
             github_actions: true,
         };
         assert_eq!(box_state.suggested_profile(), "gh-runner");
+    }
+
+    fn test_box_state() -> BoxState {
+        BoxState {
+            cpus: 2,
+            free_mem_mb: Some(7_000),
+            free_disk_mb: Some(10_000),
+            load_1m: Some(0.5),
+            github_actions: false,
+        }
     }
 
     #[test]
@@ -15867,6 +16168,29 @@ index 1111111..2222222 100644
         assert_eq!(proof_lease_budget(cx43)?.cpu, 4);
         assert_eq!(proof_lease_budget(cx43)?.disk_mb, 2_048);
         Ok(())
+    }
+
+    #[test]
+    fn proof_planner_skips_actionlint_when_workflows_are_unchanged() {
+        let mut diff = test_diff();
+        diff.flags.workflow_changed = false;
+
+        let skips = super::proof_planner_skips(&diff);
+
+        assert!(skips.iter().any(|skip| {
+            skip.kind == "actionlint" && skip.reason == "No workflow files changed."
+        }));
+    }
+
+    #[test]
+    fn proof_planner_keeps_actionlint_relevant_for_workflow_changes() {
+        let mut diff = test_diff();
+        diff.flags.workflow_changed = true;
+        diff.changed_files = vec![".github/workflows/ci.yml".to_owned()];
+
+        let skips = super::proof_planner_skips(&diff);
+
+        assert!(!skips.iter().any(|skip| skip.kind == "actionlint"));
     }
 
     #[test]
@@ -17573,6 +17897,38 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn seeded_pr_thread_context_tells_lanes_not_to_reask_answered_questions() {
+        let mut context = test_pr_thread_context();
+        context.status = "seeded".to_owned();
+        context.title = Some("Harden bad-free proof".to_owned());
+        context.body = Some(
+            "PR body: base+tests receipt shows the new focused test fails on base and passes on HEAD."
+                .to_owned(),
+        );
+        context.thread_context = Some(
+            "Author reply: ASAN receipt attached; prior ub-review verification question is answered."
+                .to_owned(),
+        );
+
+        let rendered = render_pr_thread_context(&context);
+
+        assert!(rendered.contains("### Seeded Thread Reuse Rules"));
+        assert!(rendered.contains("Treat PR body claims, author replies"));
+        assert!(rendered.contains("proof receipts in this context as lane evidence"));
+        assert!(rendered.contains("already answered and the current diff does not reopen it"));
+        assert!(rendered.contains("`resolved-check` observation or `failed_objection`"));
+        assert!(rendered.contains("makes the prior answer stale"));
+    }
+
+    #[test]
+    fn absent_pr_thread_context_omits_reuse_rules() {
+        let rendered = render_pr_thread_context(&test_pr_thread_context());
+
+        assert!(!rendered.contains("### Seeded Thread Reuse Rules"));
+        assert!(rendered.contains("- No PR thread context was provided for this run."));
+    }
+
+    #[test]
     fn pr_thread_context_reads_github_event_pr_metadata() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let event_path = temp.path().join("event.json");
@@ -18957,6 +19313,7 @@ UB_REVIEW_HTTP_STATUS:429
             &out,
             &config,
             &diff,
+            &test_box_state(),
             &plan,
             "running summary",
             &args,
