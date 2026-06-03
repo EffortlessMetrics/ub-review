@@ -141,6 +141,14 @@ inputs:
     description: Maximum UB ledger context bytes.
     default: '65536'
     required: false
+  pr-thread-context:
+    description: Optional file containing bounded PR thread context, prior replies, or proof receipts to seed into shared context.
+    default: ''
+    required: false
+  pr-thread-context-max-bytes:
+    description: Maximum PR thread context bytes.
+    default: '65536'
+    required: false
   fail-on-post-error:
     description: Fail the action when posting the grouped PR review fails.
     default: 'false'
@@ -318,6 +326,8 @@ runs:
           --opencode-endpoint-kind "${{ inputs['opencode-endpoint-kind'] }}" \
           --ledger-path "${{ inputs['ledger-path'] }}" \
           --ledger-max-bytes "${{ inputs['ledger-max-bytes'] }}" \
+          --pr-thread-context "${{ inputs['pr-thread-context'] }}" \
+          --pr-thread-context-max-bytes "${{ inputs['pr-thread-context-max-bytes'] }}" \
           --review-body-max-bytes "${{ inputs['review-body-max-bytes'] }}" \
           --no-github-summary \
           "${extra[@]}"

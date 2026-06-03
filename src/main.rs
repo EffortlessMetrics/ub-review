@@ -315,6 +315,16 @@ struct RunArgs {
     /// Maximum bytes of UB ledger context.
     #[arg(long, default_value_t = 65_536, env = "UB_REVIEW_LEDGER_MAX_BYTES")]
     ledger_max_bytes: usize,
+    /// Optional PR thread context file with prior replies, receipts, or resolved comments.
+    #[arg(long, default_value = "", env = "UB_REVIEW_PR_THREAD_CONTEXT")]
+    pr_thread_context: String,
+    /// Maximum bytes of PR thread context to seed into shared_context.md.
+    #[arg(
+        long,
+        default_value_t = 65_536,
+        env = "UB_REVIEW_PR_THREAD_CONTEXT_MAX_BYTES"
+    )]
+    pr_thread_context_max_bytes: usize,
     /// MiniMax provider request/response family.
     #[arg(
         long,
@@ -699,6 +709,22 @@ struct LanePlan {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct PrThreadContext {
+    schema: String,
+    status: String,
+    max_bytes: usize,
+    sources: Vec<String>,
+    warnings: Vec<String>,
+    pull_number: Option<u64>,
+    title: Option<String>,
+    body: Option<String>,
+    body_truncated: bool,
+    thread_context_path: Option<String>,
+    thread_context: Option<String>,
+    thread_context_truncated: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct ReviewArtifacts {
     shared_context_id: String,
     mode: String,
@@ -713,6 +739,7 @@ struct ReviewArtifacts {
     model_timeout_sec: u64,
     ledger_path: String,
     ledger_max_bytes: usize,
+    pr_thread_context: PrThreadContext,
     provider_preflights: Vec<ProviderPreflightReceipt>,
     model_lanes: Vec<ModelLaneReceipt>,
     missing_or_failed_sensor_evidence: Vec<SensorEvidenceIssue>,
@@ -3382,9 +3409,22 @@ fn write_review_artifacts(
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
-    let shared_context =
-        render_shared_context(root, out, config, diff, plan, running_summary, args)?;
+    let pr_thread_context = collect_pr_thread_context(root, args)?;
+    let shared_context = render_shared_context(
+        root,
+        out,
+        config,
+        diff,
+        plan,
+        running_summary,
+        args,
+        &pr_thread_context,
+    )?;
     fs::write(review_dir.join("shared_context.md"), &shared_context)?;
+    fs::write(
+        review_dir.join("pr_thread_context.json"),
+        serde_json::to_vec_pretty(&pr_thread_context)?,
+    )?;
     let shared_context_id = sha256_hex(shared_context.as_bytes());
     let line_map = right_side_diff_lines(&diff.patch);
     let assignments = model_assignments(plan, args);
@@ -3513,6 +3553,7 @@ fn write_review_artifacts(
         model_timeout_sec: args.model_timeout_sec,
         ledger_path: effective_ledger_path(config, args),
         ledger_max_bytes: args.ledger_max_bytes,
+        pr_thread_context,
         provider_preflights,
         model_lanes,
         missing_or_failed_sensor_evidence,
@@ -5273,6 +5314,7 @@ fn github_review_skip_path(review_json: &Path) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("github-review-skip.json"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render_shared_context(
     root: &Path,
     out: &Path,
@@ -5281,6 +5323,7 @@ fn render_shared_context(
     plan: &Plan,
     running_summary: &str,
     args: &RunArgs,
+    pr_thread_context: &PrThreadContext,
 ) -> Result<String> {
     let mut text = String::new();
     text.push_str("# Shared UB Review Context\n\n");
@@ -5330,6 +5373,8 @@ fn render_shared_context(
         diff_class_posture_heading(diff.diff_class)
     ));
     text.push_str(review_posture_for_diff_class(diff.diff_class));
+    text.push_str("\n\n## PR Thread Context\n\n");
+    text.push_str(&render_pr_thread_context(pr_thread_context));
     text.push_str("\n\n## UB Ledger Context\n\n");
     text.push_str(&render_ledger_context(root, config, args)?);
     text.push_str("\n\n## Diff Patch\n\n```diff\n");
@@ -5339,6 +5384,156 @@ fn render_shared_context(
     }
     text.push_str("```\n");
     Ok(text)
+}
+
+fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadContext> {
+    let mut context = PrThreadContext {
+        schema: "ub-review.pr_thread_context.v1".to_owned(),
+        status: "absent".to_owned(),
+        max_bytes: args.pr_thread_context_max_bytes,
+        sources: Vec::new(),
+        warnings: Vec::new(),
+        pull_number: None,
+        title: None,
+        body: None,
+        body_truncated: false,
+        thread_context_path: None,
+        thread_context: None,
+        thread_context_truncated: false,
+    };
+
+    if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH") {
+        let event_path = PathBuf::from(event_path);
+        context
+            .sources
+            .push(format!("github-event:{}", event_path.display()));
+        match read_github_event_pr_context(&event_path, args.pr_thread_context_max_bytes) {
+            Ok(event_context) => {
+                context.pull_number = event_context.pull_number;
+                context.title = event_context.title;
+                context.body = event_context.body;
+                context.body_truncated = event_context.body_truncated;
+            }
+            Err(err) => context
+                .warnings
+                .push(format!("github-event unavailable: {err}")),
+        }
+    }
+
+    let configured_thread_path = args.pr_thread_context.trim();
+    if !configured_thread_path.is_empty() {
+        let configured_path = PathBuf::from(configured_thread_path);
+        let path = if configured_path.is_absolute() {
+            configured_path
+        } else {
+            root.join(configured_path)
+        };
+        context
+            .sources
+            .push(format!("thread-context-file:{}", path.display()));
+        context.thread_context_path = Some(path.display().to_string());
+        match read_bounded_text_with_status(&path, args.pr_thread_context_max_bytes) {
+            Ok(text) => {
+                context.thread_context = Some(text.text);
+                context.thread_context_truncated = text.truncated;
+            }
+            Err(err) => context
+                .warnings
+                .push(format!("thread-context-file unavailable: {err}")),
+        }
+    }
+
+    context.status =
+        if context.title.is_some() || context.body.is_some() || context.thread_context.is_some() {
+            "seeded".to_owned()
+        } else if context.warnings.is_empty() {
+            "absent".to_owned()
+        } else {
+            "unavailable".to_owned()
+        };
+
+    Ok(context)
+}
+
+struct GitHubEventPrContext {
+    pull_number: Option<u64>,
+    title: Option<String>,
+    body: Option<String>,
+    body_truncated: bool,
+}
+
+fn read_github_event_pr_context(path: &Path, max_bytes: usize) -> Result<GitHubEventPrContext> {
+    let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let value: serde_json::Value =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    let Some(pull_request) = value.get("pull_request") else {
+        return Ok(GitHubEventPrContext {
+            pull_number: None,
+            title: None,
+            body: None,
+            body_truncated: false,
+        });
+    };
+    let body = pull_request
+        .get("body")
+        .and_then(serde_json::Value::as_str)
+        .map(|body| bounded_string(body, max_bytes));
+    Ok(GitHubEventPrContext {
+        pull_number: pull_request
+            .get("number")
+            .and_then(serde_json::Value::as_u64),
+        title: pull_request
+            .get("title")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned),
+        body: body.as_ref().map(|body| body.text.clone()),
+        body_truncated: body.as_ref().is_some_and(|body| body.truncated),
+    })
+}
+
+fn render_pr_thread_context(context: &PrThreadContext) -> String {
+    let mut text = String::new();
+    text.push_str(&format!("- Status: `{}`\n", context.status));
+    if context.sources.is_empty() {
+        text.push_str("- Sources: none\n");
+    } else {
+        text.push_str("- Sources:\n");
+        for source in &context.sources {
+            text.push_str(&format!("  - `{}`\n", escape_md(source)));
+        }
+    }
+    if !context.warnings.is_empty() {
+        text.push_str("- Warnings:\n");
+        for warning in &context.warnings {
+            text.push_str(&format!("  - {}\n", escape_md(warning)));
+        }
+    }
+    if let Some(number) = context.pull_number {
+        text.push_str(&format!("- Pull request: `#{number}`\n"));
+    }
+    if let Some(title) = context.title.as_deref() {
+        text.push_str(&format!("- Title: {}\n", escape_md(title)));
+    }
+    if let Some(body) = context.body.as_deref() {
+        text.push_str("\n### PR Body\n\n```text\n");
+        text.push_str(body);
+        if !body.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("```\n");
+    }
+    if let Some(thread_context) = context.thread_context.as_deref() {
+        text.push_str("\n### Prior Review Thread\n\n```text\n");
+        text.push_str(thread_context);
+        if !thread_context.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("```\n");
+    }
+    if context.status == "absent" {
+        text.push_str("- No PR thread context was provided for this run.\n");
+    }
+    text
 }
 
 fn render_ledger_context(root: &Path, config: &Config, args: &RunArgs) -> Result<String> {
@@ -5415,7 +5610,16 @@ fn effective_ledger_path(config: &Config, args: &RunArgs) -> String {
     }
 }
 
+struct BoundedText {
+    text: String,
+    truncated: bool,
+}
+
 fn read_bounded_text(path: &Path, max_bytes: usize) -> Result<String> {
+    read_bounded_text_with_status(path, max_bytes).map(|bounded| bounded.text)
+}
+
+fn read_bounded_text_with_status(path: &Path, max_bytes: usize) -> Result<BoundedText> {
     let mut file = File::open(path).with_context(|| format!("open {}", path.display()))?;
     let mut buffer = vec![0; max_bytes.saturating_add(1)];
     use std::io::Read as _;
@@ -5427,7 +5631,33 @@ fn read_bounded_text(path: &Path, max_bytes: usize) -> Result<String> {
     if count > max_bytes {
         text.push_str("\n[truncated]\n");
     }
-    Ok(text)
+    Ok(BoundedText {
+        text,
+        truncated: count > max_bytes,
+    })
+}
+
+fn bounded_string(value: &str, max_bytes: usize) -> BoundedText {
+    if value.len() <= max_bytes {
+        return BoundedText {
+            text: value.to_owned(),
+            truncated: false,
+        };
+    }
+    let mut end = 0;
+    for (index, ch) in value.char_indices() {
+        let next = index + ch.len_utf8();
+        if next > max_bytes {
+            break;
+        }
+        end = next;
+    }
+    let mut text = value[..end].to_owned();
+    text.push_str("\n[truncated]\n");
+    BoundedText {
+        text,
+        truncated: true,
+    }
 }
 
 fn is_ledger_excerpt_candidate(path: &Path) -> bool {
@@ -10220,23 +10450,24 @@ mod tests {
         LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider,
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, Profile,
-        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
+        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
+        Profile, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
         ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
         ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
         SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
         apply_model_output, apply_refuter_output, build_review_metrics,
         build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_sensor_evidence_issues,
-        combined_observations, command_display, dedupe_inline_comments, default_lanes,
-        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, opencode_canary_spec, pr_decision_sentence,
-        proof_budget, provider_spec_for_lane_with_key_state, render_ledger_context,
-        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor, sha256_hex,
-        split_curl_http_status, validate_github_review_payload,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        opencode_canary_spec, pr_decision_sentence, proof_budget,
+        provider_spec_for_lane_with_key_state, read_github_event_pr_context, render_ledger_context,
+        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
         write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
@@ -12508,6 +12739,114 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn pr_thread_context_reads_configured_file_bounded() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::write(
+            temp.path().join("thread.md"),
+            "Author reply: ASAN bad-free receipt attached.\nThis tail should be truncated.",
+        )?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.pr_thread_context = "thread.md".to_owned();
+        args.pr_thread_context_max_bytes = 40;
+
+        let context = collect_pr_thread_context(temp.path(), &args)?;
+        let rendered = render_pr_thread_context(&context);
+
+        assert_eq!(context.status, "seeded");
+        assert!(
+            context
+                .thread_context_path
+                .as_deref()
+                .is_some_and(|path| path.ends_with("thread.md"))
+        );
+        assert!(
+            context
+                .thread_context
+                .as_deref()
+                .is_some_and(|text| text.contains("ASAN bad-free"))
+        );
+        assert!(context.thread_context_truncated);
+        assert!(rendered.contains("### Prior Review Thread"));
+        assert!(rendered.contains("[truncated]"));
+        assert!(!rendered.contains("tail should be truncated"));
+        Ok(())
+    }
+
+    #[test]
+    fn pr_thread_context_reads_github_event_pr_metadata() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let event_path = temp.path().join("event.json");
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "pull_request": {
+                    "number": 37,
+                    "title": "Harden FFI bad-free tests",
+                    "body": "The ASAN receipt proves the old no-finalizer path fails on base+tests and passes on HEAD."
+                }
+            }))?,
+        )?;
+
+        let context = read_github_event_pr_context(&event_path, 48)?;
+
+        assert_eq!(context.pull_number, Some(37));
+        assert_eq!(context.title.as_deref(), Some("Harden FFI bad-free tests"));
+        assert!(
+            context
+                .body
+                .as_deref()
+                .is_some_and(|body| body.contains("ASAN receipt"))
+        );
+        assert!(context.body_truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn pr_thread_context_treats_non_pr_event_as_absent() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let event_path = temp.path().join("event.json");
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "repository": {
+                    "full_name": "EffortlessMetrics/ub-review"
+                }
+            }))?,
+        )?;
+
+        let context = read_github_event_pr_context(&event_path, 65_536)?;
+
+        assert_eq!(context.pull_number, None);
+        assert_eq!(context.title, None);
+        assert_eq!(context.body, None);
+        assert!(!context.body_truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn pr_thread_context_truncates_github_event_body_on_utf8_boundary() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let event_path = temp.path().join("event.json");
+        fs::write(
+            &event_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "pull_request": {
+                    "number": 38,
+                    "title": "Non-ASCII PR body",
+                    "body": "🔥 receipt attached"
+                }
+            }))?,
+        )?;
+
+        let context = read_github_event_pr_context(&event_path, 1)?;
+
+        assert_eq!(context.pull_number, Some(38));
+        assert_eq!(context.body.as_deref(), Some("\n[truncated]\n"));
+        assert!(context.body_truncated);
+        Ok(())
+    }
+
+    #[test]
     fn provider_policy_minimax_only_uses_direct_m3() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::MinimaxOnly;
@@ -13403,6 +13742,7 @@ UB_REVIEW_HTTP_STATUS:429
             model_timeout_sec: 300,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
+            pr_thread_context: test_pr_thread_context(),
             provider_preflights: vec![
                 super::ProviderPreflightReceipt {
                     provider: "minimax".to_owned(),
@@ -13492,6 +13832,7 @@ UB_REVIEW_HTTP_STATUS:429
             model_timeout_sec: 300,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
+            pr_thread_context: test_pr_thread_context(),
             provider_preflights: Vec::new(),
             model_lanes: vec![model_lane_receipt("tests-oracle", "ok")],
             missing_or_failed_sensor_evidence: vec![SensorEvidenceIssue {
@@ -13998,6 +14339,23 @@ UB_REVIEW_HTTP_STATUS:429
         }
     }
 
+    fn test_pr_thread_context() -> PrThreadContext {
+        PrThreadContext {
+            schema: "ub-review.pr_thread_context.v1".to_owned(),
+            status: "absent".to_owned(),
+            max_bytes: 65_536,
+            sources: Vec::new(),
+            warnings: Vec::new(),
+            pull_number: None,
+            title: None,
+            body: None,
+            body_truncated: false,
+            thread_context_path: None,
+            thread_context: None,
+            thread_context_truncated: false,
+        }
+    }
+
     fn test_run_args(out: std::path::PathBuf) -> RunArgs {
         RunArgs {
             review: ReviewArgs {
@@ -14022,6 +14380,8 @@ UB_REVIEW_HTTP_STATUS:429
             model_timeout_sec: 300,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
+            pr_thread_context: String::new(),
+            pr_thread_context_max_bytes: 65_536,
             minimax_provider_kind: ProviderKindArg::Anthropic,
             minimax_model: "MiniMax-M3".to_owned(),
             opencode_model: "minimax-m3".to_owned(),

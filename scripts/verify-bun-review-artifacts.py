@@ -86,6 +86,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "plan.json",
         "running-summary.md",
         "review/shared_context.md",
+        "review/pr_thread_context.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/review.json",
@@ -168,6 +169,23 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         fail("review.json model_lanes is not an array")
     if "## UB Ledger Context" not in shared_context:
         fail("shared_context.md missing UB ledger context section")
+    if "## PR Thread Context" not in shared_context:
+        fail("shared_context.md missing PR thread context section")
+    pr_thread_context = load_json(root / "review/pr_thread_context.json")
+    if not isinstance(pr_thread_context, dict):
+        fail("pr_thread_context.json is not an object")
+    if pr_thread_context.get("schema") != "ub-review.pr_thread_context.v1":
+        fail(
+            "pr_thread_context.json schema expected ub-review.pr_thread_context.v1, "
+            f"got {pr_thread_context.get('schema')!r}"
+        )
+    if pr_thread_context.get("status") not in {"seeded", "absent", "unavailable"}:
+        fail(
+            "pr_thread_context.json status expected seeded/absent/unavailable, "
+            f"got {pr_thread_context.get('status')!r}"
+        )
+    if review.get("pr_thread_context") != pr_thread_context:
+        fail("review.json pr_thread_context does not match pr_thread_context.json")
 
     for heading in [
         "## Decision",
@@ -1007,6 +1025,8 @@ def require_post_receipt(root: pathlib.Path) -> None:
 def require_no_secret_markers(root: pathlib.Path) -> None:
     paths = [
         root / "running-summary.md",
+        root / "review/shared_context.md",
+        root / "review/pr_thread_context.json",
         root / "review/review.json",
         root / "review/review.md",
         root / "review/github-review.json",
