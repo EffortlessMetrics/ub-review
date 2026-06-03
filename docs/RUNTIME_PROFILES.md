@@ -23,7 +23,7 @@ Trusted repositories use two passes per PR by default:
 
 There is no default `synchronize` trigger.
 
-Each pass targets 30 minutes and has a hard timeout of 60 minutes. All runtime profiles keep the PR body pure signal and place command logs, lane outputs, model status, resource leases, metrics, raw observations, and proof stdout/stderr in artifacts.
+Each pass targets 30 minutes of local proof work and has a hard timeout of 60 minutes. Model calls are network I/O scheduled concurrently with local commands; their wall time does not reserve the CPU, disk, or local proof budget. All runtime profiles keep the PR body pure signal and place command logs, lane outputs, model status, resource leases, metrics, raw observations, and proof stdout/stderr in artifacts.
 
 ## Profile intent
 
@@ -38,4 +38,4 @@ Each pass targets 30 minutes and has a hard timeout of 60 minutes. All runtime p
 
 ## Resource rule
 
-A lane requests proof; it does not own the runner. The orchestrator ranks and routes the request, the proof broker runs the command, and the resource broker enforces the lease. Work is eligible only when it is relevant to the PR, centrally scheduled, deduped, budgeted, leased, receipted, and likely to change the review decision.
+A lane requests proof; it does not own the runner. The proof-planning lane reads the diff, sensor output, early lane observations, repository configuration, and available receipts, then recommends the smallest proof set that can change the review decision. The orchestrator ranks and routes those requests, the proof broker runs the commands while model lanes continue over the network, and the resource broker enforces the local lease. Work is eligible only when it is relevant to the PR, centrally scheduled, deduped, budgeted, leased, receipted, and likely to change the review decision.
