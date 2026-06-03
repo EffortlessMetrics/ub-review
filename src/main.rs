@@ -4858,6 +4858,7 @@ fn write_review_artifacts(
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
     write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
+    append_follow_up_proof_requests(&mut review.proof_requests, &follow_up_evidence);
     let mut compiler_summary_only_findings = review.summary_only_findings.clone();
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
     let mut compiler_observations = review.observations.clone();
@@ -6240,6 +6241,39 @@ fn follow_up_evidence_from_outputs(outputs: &[FollowUpOutputRecord]) -> FollowUp
         summary_only_findings,
         observations,
         proof_requests,
+    }
+}
+
+fn append_follow_up_proof_requests(
+    proof_requests: &mut Vec<ProofRequest>,
+    evidence: &FollowUpEvidenceArtifact,
+) {
+    let mut seen_ids = proof_requests
+        .iter()
+        .map(|request| request.id.clone())
+        .collect::<BTreeSet<_>>();
+    for request in &evidence.proof_requests {
+        if !seen_ids.insert(request.id.clone()) {
+            continue;
+        }
+        let mut request = request.clone();
+        request.reason = post_broker_follow_up_proof_reason(&request.reason);
+        proof_requests.push(request);
+    }
+}
+
+fn post_broker_follow_up_proof_reason(reason: &str) -> String {
+    const NOTE: &str = "Follow-up proof request arrived after proof broker v0 execution; retained for next broker scheduling pass.";
+    if reason.contains(NOTE) {
+        return reason.to_owned();
+    }
+    let reason = reason.trim();
+    if reason.is_empty() {
+        NOTE.to_owned()
+    } else if reason.ends_with('.') || reason.ends_with('!') || reason.ends_with('?') {
+        format!("{reason} {NOTE}")
+    } else {
+        format!("{reason}. {NOTE}")
     }
 }
 
@@ -14551,20 +14585,21 @@ mod tests {
         ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
         STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
         SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
-        ToolClass, append_follow_up_evidence_witnesses, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, default_lanes,
-        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, normalize_run_args,
-        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
-        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
+        apply_model_output, apply_plan_selectors, apply_refuter_output,
+        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, default_lanes, direct_minimax_spec,
+        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
+        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, normalize_run_args, observation_summary_artifacts,
+        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
@@ -20286,6 +20321,21 @@ index 1111111..2222222 100644
         assert_eq!(evidence.summary_only_findings.len(), 1);
         assert_eq!(evidence.observations.len(), 2);
         assert_eq!(evidence.proof_requests.len(), 1);
+        let mut canonical_proof_requests = Vec::new();
+        append_follow_up_proof_requests(&mut canonical_proof_requests, &evidence);
+        assert_eq!(canonical_proof_requests.len(), 1);
+        assert_eq!(canonical_proof_requests[0].status, "requested");
+        assert_eq!(
+            canonical_proof_requests[0].requested_by,
+            vec![model_lane.clone()]
+        );
+        assert!(
+            canonical_proof_requests[0]
+                .reason
+                .contains("Follow-up proof request arrived after proof broker v0 execution")
+        );
+        append_follow_up_proof_requests(&mut canonical_proof_requests, &evidence);
+        assert_eq!(canonical_proof_requests.len(), 1);
         let mut witnesses = Vec::new();
         append_follow_up_evidence_witnesses(&mut witnesses, &evidence);
         assert_eq!(witnesses.len(), 5);
@@ -20322,6 +20372,13 @@ index 1111111..2222222 100644
         write_follow_up_output_artifacts(temp.path(), &outputs)?;
         write_follow_up_evidence_artifact(temp.path(), &evidence)?;
         write_witness_artifacts(temp.path(), &witnesses)?;
+        write_proof_request_artifacts(
+            temp.path(),
+            &test_diff(),
+            &Profile::default(),
+            &canonical_proof_requests,
+            &[] as &[ProofReceipt],
+        )?;
         let written: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path().join("review/follow_up_outputs.json"),
         )?)?;
@@ -20343,6 +20400,24 @@ index 1111111..2222222 100644
         assert_eq!(
             written_evidence["proof_requests"].as_array().map(Vec::len),
             Some(1)
+        );
+        let proof_json: Vec<super::ProofRequest> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
+        assert_eq!(
+            serde_json::to_value(&proof_json)?,
+            serde_json::to_value(&canonical_proof_requests)?
+        );
+        let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path()
+                .join("proof_requests")
+                .join(format!("{}.json", canonical_proof_requests[0].id)),
+        )?)?;
+        assert_eq!(proof_request_file, serde_json::to_value(&proof_json[0])?);
+        let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
+        assert_eq!(proof_ndjson.lines().count(), 1);
+        assert!(
+            proof_ndjson
+                .contains("Follow-up proof request arrived after proof broker v0 execution")
         );
         let witness_json: Vec<super::WitnessRecord> =
             serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
