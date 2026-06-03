@@ -46,12 +46,20 @@ inputs:
     default: 'true'
     required: false
   install-mode:
-    description: 'Runner install mode for ub-review itself: auto, source, or path.'
+    description: 'Runner install mode for ub-review itself: auto, release, source, or path.'
     default: auto
     required: false
   binary-path:
     description: Existing ub-review binary path when install-mode=path.
     default: ''
+    required: false
+  release-version:
+    description: Release tag to download when install-mode=release. Defaults to the action ref.
+    default: ''
+    required: false
+  release-asset:
+    description: GitHub release asset name for the Linux x64 ub-review archive.
+    default: ub-review-x86_64-unknown-linux-gnu.tar.gz
     required: false
   allow-heavy:
     description: Allow heavy witnesses such as tests/builds/Miri/mutation. Disabled by default.
@@ -218,11 +226,29 @@ runs:
       env:
         UB_REVIEW_INSTALL_MODE: ${{ inputs['install-mode'] }}
         UB_REVIEW_BINARY_PATH: ${{ inputs['binary-path'] }}
+        UB_REVIEW_RELEASE_VERSION: ${{ inputs['release-version'] }}
+        UB_REVIEW_RELEASE_ASSET: ${{ inputs['release-asset'] }}
+        UB_REVIEW_ACTION_REPOSITORY: ${{ github.action_repository }}
+        UB_REVIEW_ACTION_REF: ${{ github.action_ref }}
+        UB_REVIEW_SERVER_URL: ${{ github.server_url }}
       run: |
         set -euo pipefail
 
         mode="${UB_REVIEW_INSTALL_MODE:-auto}"
         bin_path="${UB_REVIEW_BINARY_PATH:-}"
+        release_version="${UB_REVIEW_RELEASE_VERSION:-${UB_REVIEW_ACTION_REF:-}}"
+        release_asset="${UB_REVIEW_RELEASE_ASSET:-ub-review-x86_64-unknown-linux-gnu.tar.gz}"
+        action_repo="${UB_REVIEW_ACTION_REPOSITORY:-}"
+        server_url="${UB_REVIEW_SERVER_URL:-https://github.com}"
+
+        case "$mode" in
+          auto|release|source|path)
+            ;;
+          *)
+            echo "::error::unknown install-mode '$mode'; expected auto, release, source, or path"
+            exit 1
+            ;;
+        esac
 
         if [[ "$mode" == "path" ]]; then
           if [[ -z "$bin_path" || ! -x "$bin_path" ]]; then
@@ -238,38 +264,148 @@ runs:
           exit 0
         fi
 
-        # Source mode is the bootstrap path. It is slower than a release binary,
-        # but token-free and deterministic enough for early adoption. Callers can
-        # cache ~/.cargo and CARGO_TARGET_DIR for faster follow-up runs.
-        workdir="${RUNNER_TEMP:-/tmp}/ub-review-action-src"
-        rm -rf "$workdir"
-        mkdir -p "$workdir"
-        cp -R "$GITHUB_ACTION_PATH/." "$workdir/"
+        build_from_source() {
+          # Source mode remains the deterministic fallback. Callers can cache
+          # ~/.cargo and CARGO_TARGET_DIR for faster follow-up runs.
+          workdir="${RUNNER_TEMP:-/tmp}/ub-review-action-src"
+          rm -rf "$workdir"
+          mkdir -p "$workdir"
+          cp -R "$GITHUB_ACTION_PATH/." "$workdir/"
 
-        echo "::group::Build ub-review from action source"
-        cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
-        cargo build --manifest-path "$workdir/Cargo.toml" --locked --release
-        echo "::endgroup::"
+          echo "::group::Build ub-review from action source"
+          cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
+          cargo build --manifest-path "$workdir/Cargo.toml" --locked --release
+          echo "::endgroup::"
 
-        if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-          case "$CARGO_TARGET_DIR" in
-            /*)
-              cargo_target_dir="$CARGO_TARGET_DIR"
+          if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
+            case "$CARGO_TARGET_DIR" in
+              /*)
+                cargo_target_dir="$CARGO_TARGET_DIR"
+                ;;
+              *)
+                cargo_target_dir="$PWD/$CARGO_TARGET_DIR"
+                ;;
+            esac
+          else
+            cargo_target_dir="$workdir/target"
+          fi
+          bin="$cargo_target_dir/release/ub-review"
+          if [[ ! -x "$bin" ]]; then
+            echo "::error::ub-review binary was not produced at $bin"
+            exit 1
+          fi
+          echo "source-dir=$workdir" >> "$GITHUB_OUTPUT"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+        }
+
+        normalize_release_version() {
+          case "$1" in
+            refs/tags/*)
+              printf '%s\n' "${1#refs/tags/}"
               ;;
             *)
-              cargo_target_dir="$PWD/$CARGO_TARGET_DIR"
+              printf '%s\n' "$1"
               ;;
           esac
-        else
-          cargo_target_dir="$workdir/target"
+        }
+
+        validate_release_request() {
+          if [[ "$release_version" =~ [^A-Za-z0-9._-] ]]; then
+            echo "::error::release-version must be a simple tag name using letters, numbers, dot, underscore, or dash"
+            exit 1
+          fi
+          if [[ -z "$release_asset" || "$release_asset" == */* || "$release_asset" == *\\* || "$release_asset" == *..* ]]; then
+            echo "::error::release-asset must be a file name, not a path"
+            exit 1
+          fi
+          if [[ "$release_asset" =~ [^A-Za-z0-9._-] ]]; then
+            echo "::error::release-asset must use only letters, numbers, dot, underscore, or dash"
+            exit 1
+          fi
+        }
+
+        download_release_binary() {
+          release_version="$(normalize_release_version "$release_version")"
+          if [[ -z "$release_version" ]]; then
+            if [[ "$mode" == "auto" ]]; then
+              echo "::notice::release binary unavailable; no release-version or action ref is set"
+            else
+              echo "::warning::release binary unavailable; no release-version or action ref is set"
+            fi
+            return 1
+          fi
+          if [[ "$mode" == "auto" && ! "$release_version" =~ ^v[0-9] ]]; then
+            echo "::notice::action ref '$release_version' is not a release tag; using source fallback"
+            return 1
+          fi
+          validate_release_request
+          if [[ -z "$action_repo" ]]; then
+            if [[ "$mode" == "auto" ]]; then
+              echo "::notice::release binary unavailable; action repository is unknown"
+            else
+              echo "::warning::release binary unavailable; action repository is unknown"
+            fi
+            return 1
+          fi
+          if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
+            if [[ "$mode" == "auto" ]]; then
+              echo "::notice::release binary unavailable; only Linux x64 runners are supported"
+            else
+              echo "::warning::release binary unavailable; only Linux x64 runners are supported"
+            fi
+            return 1
+          fi
+
+          release_dir="${RUNNER_TEMP:-/tmp}/ub-review-action-release"
+          archive="$release_dir/$release_asset"
+          url="${server_url%/}/$action_repo/releases/download/$release_version/$release_asset"
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir"
+
+          echo "::group::Download ub-review release binary"
+          if ! curl -fL --retry 3 --retry-delay 2 -o "$archive" "$url"; then
+            echo "::endgroup::"
+            echo "::warning::release binary download failed; using source fallback"
+            return 1
+          fi
+
+          case "$release_asset" in
+            *.tar.gz|*.tgz)
+              if ! tar -xzf "$archive" -C "$release_dir"; then
+                echo "::endgroup::"
+                echo "::warning::release binary archive extraction failed; using source fallback"
+                return 1
+              fi
+              candidate="$(find "$release_dir" -type f -name ub-review | head -n 1 || true)"
+              ;;
+            *)
+              candidate="$release_dir/ub-review"
+              cp "$archive" "$candidate"
+              ;;
+          esac
+          echo "::endgroup::"
+
+          if [[ -z "${candidate:-}" || ! -f "$candidate" ]]; then
+            echo "::warning::release binary archive did not contain ub-review; using source fallback"
+            return 1
+          fi
+          chmod +x "$candidate"
+          if [[ ! -x "$candidate" ]]; then
+            echo "::warning::release binary is not executable; using source fallback"
+            return 1
+          fi
+          echo "release-url=$url" >> "$GITHUB_OUTPUT"
+          echo "release-dir=$release_dir" >> "$GITHUB_OUTPUT"
+          echo "bin=$candidate" >> "$GITHUB_OUTPUT"
+        }
+
+        if [[ "$mode" == "release" || "$mode" == "auto" ]]; then
+          if download_release_binary; then
+            exit 0
+          fi
         fi
-        bin="$cargo_target_dir/release/ub-review"
-        if [[ ! -x "$bin" ]]; then
-          echo "::error::ub-review binary was not produced at $bin"
-          exit 1
-        fi
-        echo "source-dir=$workdir" >> "$GITHUB_OUTPUT"
-        echo "bin=$bin" >> "$GITHUB_OUTPUT"
+
+        build_from_source
 
     - name: Install advisory sensors
       if: inputs['install-tools'] == 'true'
