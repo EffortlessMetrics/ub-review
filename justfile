@@ -8,7 +8,7 @@ test:
     cargo test --workspace --all-features --locked
 
 coverage:
-    cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
+    cargo llvm-cov --workspace --all-features --locked --lcov --output-path lcov.info
 
 coverage-html:
-    cargo llvm-cov --workspace --all-features --html
+    cargo llvm-cov --workspace --all-features --locked --html

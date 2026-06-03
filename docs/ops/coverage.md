@@ -13,12 +13,17 @@ Preferred mode:
 - `use_oidc: true`
 - job permission: `id-token: write`
 
-Fallback mode:
+Fallback rollout mode:
 
 - GitHub organization Actions secret
 - secret name: `CODECOV_TOKEN`
 - source: Codecov Global Upload Token
 - access: selected repositories only
+
+The committed workflow is OIDC-only. Do not set `use_oidc: true` and expect a
+token fallback in the same upload step; Codecov ignores supplied tokens when
+OIDC is enabled. Use the fallback only in repos where OIDC is unavailable, and
+make that workflow change explicit.
 
 Public repo mode:
 
@@ -34,7 +39,7 @@ Public repo mode:
 
 ## Common failure modes
 
-- Private repo without OIDC or `CODECOV_TOKEN`
+- Private repo without OIDC, or without `CODECOV_TOKEN` in an explicit fallback workflow
 - Missing `id-token: write` when using OIDC
 - Public repo token auth changed back to `Required`
 - Fork PR expecting normal Actions secrets
