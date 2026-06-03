@@ -282,9 +282,14 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
     proof_plan = read_text(root / "review/proof_plan.md")
     if "# Proof request plan" not in proof_plan:
         fail("review/proof_plan.md missing heading")
-    if proof_requests and "Proof requests are passive" not in proof_plan:
-        fail("review/proof_plan.md does not mark proof requests as passive")
-    if not proof_requests and "No proof requests were emitted" not in proof_plan:
+    if proof_requests and "Grouped proof broker tasks" not in proof_plan:
+        fail("review/proof_plan.md missing grouped proof request summary")
+    if "## Focused red/green proof plan" in proof_plan and "No proof broker commands were executed" not in proof_plan:
+        fail("review/proof_plan.md missing planner-only no-execution note")
+    if not proof_requests and not (
+        "No proof requests were emitted" in proof_plan
+        or "No model-lane proof requests were emitted" in proof_plan
+    ):
         fail("review/proof_plan.md missing empty proof request note")
 
 
@@ -687,6 +692,8 @@ def require_proof_request_schema(request: dict) -> None:
         fail(f"proof request requested_by is not a non-empty string array: {request!r}")
     if request["lane"] not in requested_by:
         fail(f"proof request lane is not listed in requested_by: {request!r}")
+    if request["cost"] not in {"focused-test", "focused-build", "manual"}:
+        fail(f"proof request has unsupported cost: {request!r}")
     timeout = request.get("timeout_sec")
     if not isinstance(timeout, int) or timeout <= 0 or timeout > 900:
         fail(f"proof request timeout_sec is invalid: {request!r}")
@@ -709,6 +716,8 @@ def require_proof_request_group_schema(group: dict) -> None:
         fail(f"proof request group required is not boolean: {group!r}")
     if group["status"] not in {"requested", "invalid"}:
         fail(f"proof request group has unsupported status: {group!r}")
+    if group["cost"] not in {"focused-test", "focused-build", "manual"}:
+        fail(f"proof request group has unsupported cost: {group!r}")
     duplicate_count = group.get("duplicate_count")
     if not isinstance(duplicate_count, int) or duplicate_count <= 0:
         fail(f"proof request group duplicate_count is invalid: {group!r}")
