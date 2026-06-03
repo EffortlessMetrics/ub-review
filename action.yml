@@ -78,7 +78,7 @@ inputs:
     default: review-direct
     required: false
   github-token:
-    description: GitHub token with pull-request write permission when posting=review.
+    description: GitHub token used to seed PR-thread context and, when posting=review, submit the grouped PR review.
     default: ''
     required: false
   minimax-api-key:
@@ -450,6 +450,10 @@ runs:
       run: |
         set -euo pipefail
         extra=()
+        pr_thread_auth="${{ inputs['github-token'] }}"
+        if [[ -n "$pr_thread_auth" ]]; then
+          extra+=(--github-token "$pr_thread_auth")
+        fi
         if [[ "${{ inputs['allow-heavy'] }}" == "true" ]]; then
           extra+=(--allow-heavy)
         fi
