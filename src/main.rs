@@ -663,6 +663,10 @@ struct Budgets {
     artifact_budget_mb: u64,
     scratch_budget_mb: u64,
     default_timeout_sec: u64,
+    proof_max_focused_test_files: usize,
+    proof_max_focused_tests: usize,
+    proof_command_timeout_sec: u64,
+    proof_total_timeout_sec: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1679,6 +1683,12 @@ impl Default for Profile {
             750,
             4_000,
             900,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
         )
     }
 }
@@ -4844,7 +4854,7 @@ fn write_proof_request_artifacts(
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     let proof_groups = proof_request_groups(proof_requests);
-    let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile));
+    let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
     fs::write(
         review_dir.join("proof_requests.json"),
         serde_json::to_vec_pretty(proof_requests)?,
@@ -5051,33 +5061,26 @@ fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGrou
     groups.into_values().collect()
 }
 
-fn proof_budget(profile: &Profile) -> ProofBudget {
-    match profile.name.as_str() {
-        "gh-runner" => ProofBudget {
-            max_focused_test_files: 3,
-            max_focused_tests: 1,
-            per_command_timeout_sec: 300,
-            max_total_seconds: 600,
-        },
-        "cx23" => ProofBudget {
-            max_focused_test_files: 4,
-            max_focused_tests: 2,
-            per_command_timeout_sec: 300,
-            max_total_seconds: 900,
-        },
-        "cx33" => ProofBudget {
-            max_focused_test_files: 6,
-            max_focused_tests: 4,
-            per_command_timeout_sec: 450,
-            max_total_seconds: 1_200,
-        },
-        _ => ProofBudget {
-            max_focused_test_files: 8,
-            max_focused_tests: 6,
-            per_command_timeout_sec: 600,
-            max_total_seconds: 1_800,
-        },
+fn proof_budget(profile: &Profile) -> Result<ProofBudget> {
+    let budget = ProofBudget {
+        max_focused_test_files: profile.budgets.proof_max_focused_test_files,
+        max_focused_tests: profile.budgets.proof_max_focused_tests,
+        per_command_timeout_sec: profile.budgets.proof_command_timeout_sec,
+        max_total_seconds: profile.budgets.proof_total_timeout_sec,
+    };
+    if budget.max_focused_tests > 0 && budget.per_command_timeout_sec == 0 {
+        bail!(
+            "runtime profile {} has proof_command_timeout_sec=0 with focused proof enabled",
+            profile.name
+        );
     }
+    if budget.max_focused_tests > 0 && budget.max_total_seconds == 0 {
+        bail!(
+            "runtime profile {} has proof_total_timeout_sec=0 with focused proof enabled",
+            profile.name
+        );
+    }
+    Ok(budget)
 }
 
 fn focused_proof_plans_from_diff(
@@ -5119,7 +5122,7 @@ fn run_proof_broker_v0(
     proof_requests: &[ProofRequest],
     args: &RunArgs,
 ) -> Result<ProofBrokerResult> {
-    let budget = proof_budget(profile);
+    let budget = proof_budget(profile)?;
     let tasks =
         focused_test_candidates_from_diff(diff, proof_requests, budget.max_focused_test_files);
     run_focused_red_green_proof_tasks_with_runner(
@@ -5188,21 +5191,19 @@ where
             )?);
             continue;
         }
-        if executed_tasks > 0
-            || !focused_proof_budget_allows_next(executed_tasks, estimated_seconds, budget)
-        {
+        if !focused_proof_budget_allows_next(executed_tasks, estimated_seconds, budget) {
             leases.push(focused_test_resource_lease(
                 &task,
                 budget,
                 "exhausted",
-                "proof broker v0 lease budget allows one focused red/green target",
+                "focused red/green proof lease budget exhausted by runtime profile",
             ));
             receipts.push(skipped_focused_proof_receipt(
                 out,
                 diff,
                 &task,
                 "skipped_budget",
-                "proof broker v0 runs one focused red/green target per review packet",
+                "focused red/green proof lease budget exhausted by runtime profile",
             )?);
             continue;
         }
@@ -10828,15 +10829,84 @@ fn builtin_profiles() -> Vec<Profile> {
             750,
             4_000,
             900,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
         ),
         profile(
-            "cx23", 20, 12, 2, 4, 2, 1, 1, 0, 0, 900, 8_000, 3.0, 500, 8_000, 900,
+            "cx23",
+            20,
+            12,
+            2,
+            4,
+            2,
+            1,
+            1,
+            0,
+            0,
+            900,
+            8_000,
+            3.0,
+            500,
+            8_000,
+            900,
+            ProofBudget {
+                max_focused_test_files: 4,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 900,
+            },
         ),
         profile(
-            "cx33", 24, 16, 3, 6, 3, 2, 2, 1, 0, 1_400, 12_000, 5.0, 1_000, 16_000, 1_200,
+            "cx33",
+            24,
+            16,
+            3,
+            6,
+            3,
+            2,
+            2,
+            1,
+            0,
+            1_400,
+            12_000,
+            5.0,
+            1_000,
+            16_000,
+            1_200,
+            ProofBudget {
+                max_focused_test_files: 6,
+                max_focused_tests: 4,
+                per_command_timeout_sec: 450,
+                max_total_seconds: 1_200,
+            },
         ),
         profile(
-            "cx43", 32, 24, 6, 10, 6, 4, 3, 2, 1, 2_500, 20_000, 9.0, 2_000, 40_000, 1_800,
+            "cx43",
+            32,
+            24,
+            6,
+            10,
+            6,
+            4,
+            3,
+            2,
+            1,
+            2_500,
+            20_000,
+            9.0,
+            2_000,
+            40_000,
+            1_800,
+            ProofBudget {
+                max_focused_test_files: 8,
+                max_focused_tests: 6,
+                per_command_timeout_sec: 600,
+                max_total_seconds: 1_800,
+            },
         ),
     ]
 }
@@ -10859,6 +10929,7 @@ fn profile(
     artifact_budget: u64,
     scratch_budget: u64,
     timeout: u64,
+    proof_budget: ProofBudget,
 ) -> Profile {
     Profile {
         name: name.to_owned(),
@@ -10886,6 +10957,10 @@ fn profile(
             artifact_budget_mb: artifact_budget,
             scratch_budget_mb: scratch_budget,
             default_timeout_sec: timeout,
+            proof_max_focused_test_files: proof_budget.max_focused_test_files,
+            proof_max_focused_tests: proof_budget.max_focused_tests,
+            proof_command_timeout_sec: proof_budget.per_command_timeout_sec,
+            proof_total_timeout_sec: proof_budget.max_total_seconds,
         },
     }
 }
@@ -11275,11 +11350,11 @@ mod tests {
     use anyhow::{Context as _, Result};
 
     use super::{
-        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CommandStatus, Config, DiffClass,
-        DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment, LaneModelOutput,
-        LanePlan, Limits, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
-        ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider,
-        ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
+        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CommandStatus, Config,
+        DiffClass, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
+        LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCandidateComment,
+        ModelCandidateFinding, ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks,
+        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
         Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest,
         ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
@@ -12318,7 +12393,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests() {
+    fn focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests() -> Result<()> {
         let patch = "\
 diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
 index 1111111..2222222 100644
@@ -12407,7 +12482,55 @@ index 1111111..2222222 100644
             },
         );
         assert_eq!(time_capped_tasks.len(), 1);
-        assert_eq!(proof_budget(&Profile::default()).max_focused_tests, 1);
+        assert_eq!(proof_budget(&Profile::default())?.max_focused_tests, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn proof_budget_comes_from_runtime_profile_budgets() -> Result<()> {
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+        let cx23 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx23")
+            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
+        let cx43 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx43")
+            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
+
+        assert_eq!(proof_budget(gh_runner)?.max_focused_tests, 1);
+        assert_eq!(proof_budget(cx23)?.max_focused_tests, 2);
+        assert_eq!(proof_budget(cx43)?.max_focused_tests, 6);
+        assert_eq!(proof_budget(cx43)?.per_command_timeout_sec, 600);
+        assert_eq!(proof_budget(cx43)?.max_total_seconds, 1_800);
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_enabled_proof_budget_is_rejected() -> Result<()> {
+        let profile = Profile {
+            name: "broken".to_owned(),
+            budgets: Budgets {
+                proof_max_focused_tests: 1,
+                proof_command_timeout_sec: 0,
+                ..Budgets::default()
+            },
+            ..Profile::default()
+        };
+
+        let err = proof_budget(&profile)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("invalid proof budget unexpectedly passed"))?;
+
+        assert!(
+            err.to_string()
+                .contains("runtime profile broken has proof_command_timeout_sec=0")
+        );
+        Ok(())
     }
 
     #[test]
@@ -12492,7 +12615,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn proof_broker_v0_runs_one_focused_red_green_target_and_writes_receipts() -> Result<()> {
+    fn proof_broker_v0_runs_budgeted_focused_red_green_targets_and_writes_receipts() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
         let base_root = temp.path().join("base-plus-tests");
@@ -12593,7 +12716,7 @@ index 1111111..2222222 100644
         let receipts = proof_result.proof_receipts;
         let resource_leases = proof_result.resource_leases;
 
-        assert_eq!(commands.len(), 2);
+        assert_eq!(commands.len(), 4);
         assert_eq!(receipts.len(), 2);
         assert_eq!(resource_leases.len(), 2);
         assert_eq!(resource_leases[0].schema, "ub-review.resource_lease.v1");
@@ -12601,7 +12724,7 @@ index 1111111..2222222 100644
         assert_eq!(resource_leases[0].consumer, receipts[0].id);
         assert_eq!(resource_leases[0].status, "granted");
         assert_eq!(resource_leases[1].consumer, receipts[1].id);
-        assert_eq!(resource_leases[1].status, "exhausted");
+        assert_eq!(resource_leases[1].status, "granted");
         assert_eq!(receipts[0].schema, "ub-review.proof_receipt.v1");
         assert_eq!(receipts[0].kind, "focused-red-green");
         assert_eq!(receipts[0].test_patch_mode, "base-plus-tests");
@@ -12622,8 +12745,10 @@ index 1111111..2222222 100644
         assert_eq!(receipts[0].commands[1].status, "failed");
         assert!(out.join(&receipts[0].commands[0].stdout).exists());
         assert!(out.join(&receipts[0].commands[1].stdout).exists());
-        assert_eq!(receipts[1].result, "skipped_budget");
-        assert_eq!(receipts[1].commands[0].status, "skipped");
+        assert_eq!(receipts[1].result, "discriminating");
+        assert_eq!(receipts[1].commands.len(), 2);
+        assert_eq!(receipts[1].commands[0].status, "passed");
+        assert_eq!(receipts[1].commands[1].status, "failed");
 
         write_proof_receipt_artifacts(&out, &receipts)?;
         write_resource_lease_artifacts(&out, &resource_leases)?;
@@ -12648,12 +12773,86 @@ index 1111111..2222222 100644
         assert_eq!(lease_ndjson.lines().count(), 2);
         assert!(resource_plan.contains("# Resource lease plan"));
         assert!(resource_plan.contains("status=`granted`"));
-        assert!(resource_plan.contains("status=`exhausted`"));
+        assert!(!resource_plan.contains("status=`exhausted`"));
         assert!(
             proof_plan.contains("Proof broker v0 executed focused proof under the runtime budget")
         );
         assert!(proof_plan.contains("result=`discriminating`"));
         assert!(!proof_plan.contains("No proof broker commands were executed"));
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_exhausts_focused_tests_after_runtime_budget() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let diff = test_diff();
+        let tasks = vec![
+            super::focused_test_task(
+                "test/js/bun/md/md-edge-cases.test.ts",
+                Some("snapshots input".to_owned()),
+                &[] as &[ProofRequestGroup],
+            ),
+            super::focused_test_task(
+                "test/js/bun/md/md-edge-cases.test.ts",
+                Some("getter reentry".to_owned()),
+                &[] as &[ProofRequestGroup],
+            ),
+        ];
+        let args = test_run_args(out.clone());
+        let prepared_base_root = base_root.clone();
+        let mut commands = Vec::<String>::new();
+
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, argv, _timeout, stdout, stderr| {
+                commands.push(command_display(argv));
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(if is_base { 1 } else { 0 }),
+                    timed_out: false,
+                    success: !is_base,
+                    reason: "completed".to_owned(),
+                    duration_ms: 42,
+                })
+            },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
+        )?;
+
+        assert_eq!(commands.len(), 2);
+        assert_eq!(proof_result.proof_receipts.len(), 2);
+        assert_eq!(proof_result.proof_receipts[0].result, "discriminating");
+        assert_eq!(proof_result.proof_receipts[1].result, "skipped_budget");
+        assert_eq!(proof_result.proof_receipts[1].commands[0].status, "skipped");
+        assert_eq!(proof_result.resource_leases.len(), 2);
+        assert_eq!(proof_result.resource_leases[0].status, "granted");
+        assert_eq!(proof_result.resource_leases[1].status, "exhausted");
+        assert_eq!(
+            proof_result.resource_leases[1].reason,
+            "focused red/green proof lease budget exhausted by runtime profile"
+        );
         Ok(())
     }
 
