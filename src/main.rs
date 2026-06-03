@@ -667,6 +667,11 @@ struct Budgets {
     proof_max_focused_tests: usize,
     proof_command_timeout_sec: u64,
     proof_total_timeout_sec: u64,
+    proof_cpu: u32,
+    proof_memory_mb: u64,
+    proof_disk_mb: u64,
+    proof_network: bool,
+    proof_scratch: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1090,6 +1095,15 @@ struct ProofBudget {
     max_focused_tests: usize,
     per_command_timeout_sec: u64,
     max_total_seconds: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ProofLeaseBudget {
+    cpu: u32,
+    memory_mb: u64,
+    disk_mb: u64,
+    network: bool,
+    scratch: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1688,6 +1702,13 @@ impl Default for Profile {
                 max_focused_tests: 1,
                 per_command_timeout_sec: 300,
                 max_total_seconds: 600,
+            },
+            ProofLeaseBudget {
+                cpu: 2,
+                memory_mb: 2_048,
+                disk_mb: 1_024,
+                network: false,
+                scratch: true,
             },
         )
     }
@@ -5083,6 +5104,37 @@ fn proof_budget(profile: &Profile) -> Result<ProofBudget> {
     Ok(budget)
 }
 
+fn proof_lease_budget(profile: &Profile) -> Result<ProofLeaseBudget> {
+    let budget = ProofLeaseBudget {
+        cpu: profile.budgets.proof_cpu,
+        memory_mb: profile.budgets.proof_memory_mb,
+        disk_mb: profile.budgets.proof_disk_mb,
+        network: profile.budgets.proof_network,
+        scratch: profile.budgets.proof_scratch,
+    };
+    if profile.limits.tests > 0 && profile.budgets.proof_max_focused_tests > 0 {
+        if budget.cpu == 0 {
+            bail!(
+                "runtime profile {} has proof_cpu=0 with focused proof enabled",
+                profile.name
+            );
+        }
+        if budget.memory_mb == 0 {
+            bail!(
+                "runtime profile {} has proof_memory_mb=0 with focused proof enabled",
+                profile.name
+            );
+        }
+        if budget.disk_mb == 0 {
+            bail!(
+                "runtime profile {} has proof_disk_mb=0 with focused proof enabled",
+                profile.name
+            );
+        }
+    }
+    Ok(budget)
+}
+
 fn focused_proof_plans_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
@@ -5158,11 +5210,13 @@ where
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
     let mut estimated_seconds = 0_u64;
+    let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
         if args.dry_run {
             leases.push(focused_test_resource_lease(
                 &task,
                 budget,
+                lease_budget,
                 "skipped_profile",
                 "dry-run; resource broker did not grant a proof lease",
             ));
@@ -5179,6 +5233,7 @@ where
             leases.push(focused_test_resource_lease(
                 &task,
                 budget,
+                lease_budget,
                 "skipped_profile",
                 "profile allows zero focused test leases",
             ));
@@ -5195,6 +5250,7 @@ where
             leases.push(focused_test_resource_lease(
                 &task,
                 budget,
+                lease_budget,
                 "exhausted",
                 "focused red/green proof lease budget exhausted by runtime profile",
             ));
@@ -5210,6 +5266,7 @@ where
         leases.push(focused_test_resource_lease(
             &task,
             budget,
+            lease_budget,
             "granted",
             "focused red/green proof lease granted by runtime profile",
         ));
@@ -5579,6 +5636,7 @@ fn focused_test_task(
 fn focused_test_resource_lease(
     task: &FocusedTestTask,
     budget: ProofBudget,
+    lease_budget: ProofLeaseBudget,
     status: &str,
     reason: &str,
 ) -> ResourceLease {
@@ -5589,15 +5647,15 @@ fn focused_test_resource_lease(
         consumer: task.id.clone(),
         status: status.to_owned(),
         reason: reason.to_owned(),
-        cpu: 2,
-        memory_mb: 2_048,
-        disk_mb: 1_024,
+        cpu: lease_budget.cpu,
+        memory_mb: lease_budget.memory_mb,
+        disk_mb: lease_budget.disk_mb,
         timeout_sec: budget
             .per_command_timeout_sec
             .saturating_mul(2)
             .min(budget.max_total_seconds),
-        network: false,
-        scratch: true,
+        network: lease_budget.network,
+        scratch: lease_budget.scratch,
         worktree: Some("base-plus-tests".to_owned()),
         command: Some(command_display(&proof_task_argv(task))),
     }
@@ -10835,6 +10893,13 @@ fn builtin_profiles() -> Vec<Profile> {
                 per_command_timeout_sec: 300,
                 max_total_seconds: 600,
             },
+            ProofLeaseBudget {
+                cpu: 2,
+                memory_mb: 2_048,
+                disk_mb: 1_024,
+                network: false,
+                scratch: true,
+            },
         ),
         profile(
             "cx23",
@@ -10858,6 +10923,13 @@ fn builtin_profiles() -> Vec<Profile> {
                 max_focused_tests: 2,
                 per_command_timeout_sec: 300,
                 max_total_seconds: 900,
+            },
+            ProofLeaseBudget {
+                cpu: 1,
+                memory_mb: 1_024,
+                disk_mb: 512,
+                network: false,
+                scratch: true,
             },
         ),
         profile(
@@ -10883,6 +10955,13 @@ fn builtin_profiles() -> Vec<Profile> {
                 per_command_timeout_sec: 450,
                 max_total_seconds: 1_200,
             },
+            ProofLeaseBudget {
+                cpu: 2,
+                memory_mb: 2_048,
+                disk_mb: 1_024,
+                network: false,
+                scratch: true,
+            },
         ),
         profile(
             "cx43",
@@ -10907,6 +10986,13 @@ fn builtin_profiles() -> Vec<Profile> {
                 per_command_timeout_sec: 600,
                 max_total_seconds: 1_800,
             },
+            ProofLeaseBudget {
+                cpu: 4,
+                memory_mb: 4_096,
+                disk_mb: 2_048,
+                network: false,
+                scratch: true,
+            },
         ),
     ]
 }
@@ -10930,6 +11016,7 @@ fn profile(
     scratch_budget: u64,
     timeout: u64,
     proof_budget: ProofBudget,
+    proof_lease_budget: ProofLeaseBudget,
 ) -> Profile {
     Profile {
         name: name.to_owned(),
@@ -10961,6 +11048,11 @@ fn profile(
             proof_max_focused_tests: proof_budget.max_focused_tests,
             proof_command_timeout_sec: proof_budget.per_command_timeout_sec,
             proof_total_timeout_sec: proof_budget.max_total_seconds,
+            proof_cpu: proof_lease_budget.cpu,
+            proof_memory_mb: proof_lease_budget.memory_mb,
+            proof_disk_mb: proof_lease_budget.disk_mb,
+            proof_network: proof_lease_budget.network,
+            proof_scratch: proof_lease_budget.scratch,
         },
     }
 }
@@ -11372,14 +11464,15 @@ mod tests {
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
         model_auth_header, model_json_payload, model_lane, model_request_payload,
         model_response_shape, normalize_run_args, opencode_canary_spec, pr_decision_sentence,
-        proof_budget, provider_spec_for_lane_with_key_state, read_github_event_pr_context,
-        render_ledger_context, render_pr_thread_context, render_review_body, render_summary,
-        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_override,
-        sensor_job_count, sha256_hex, split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
-        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        proof_budget, proof_lease_budget, provider_spec_for_lane_with_key_state,
+        read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
+        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
+        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -12529,6 +12622,55 @@ index 1111111..2222222 100644
         assert!(
             err.to_string()
                 .contains("runtime profile broken has proof_command_timeout_sec=0")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_lease_budget_comes_from_runtime_profile_budgets() -> Result<()> {
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+        let cx23 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx23")
+            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
+        let cx43 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx43")
+            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
+
+        assert_eq!(proof_lease_budget(gh_runner)?.cpu, 2);
+        assert_eq!(proof_lease_budget(gh_runner)?.memory_mb, 2_048);
+        assert_eq!(proof_lease_budget(gh_runner)?.disk_mb, 1_024);
+        assert_eq!(proof_lease_budget(cx23)?.cpu, 1);
+        assert_eq!(proof_lease_budget(cx23)?.memory_mb, 1_024);
+        assert_eq!(proof_lease_budget(cx43)?.cpu, 4);
+        assert_eq!(proof_lease_budget(cx43)?.disk_mb, 2_048);
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_enabled_proof_lease_budget_is_rejected() -> Result<()> {
+        let profile = Profile {
+            name: "broken".to_owned(),
+            budgets: Budgets {
+                proof_max_focused_tests: 1,
+                proof_cpu: 0,
+                ..Budgets::default()
+            },
+            ..Profile::default()
+        };
+
+        let err = proof_lease_budget(&profile)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("invalid proof lease budget unexpectedly passed"))?;
+
+        assert!(
+            err.to_string()
+                .contains("runtime profile broken has proof_cpu=0")
         );
         Ok(())
     }

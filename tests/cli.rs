@@ -193,6 +193,14 @@ fn active_len_tracks_view_after_resize() {
         resolved_profile["profile"]["budgets"]["proof_command_timeout_sec"],
         serde_json::json!(300)
     );
+    assert_eq!(
+        resolved_profile["profile"]["budgets"]["proof_cpu"],
+        serde_json::json!(2)
+    );
+    assert_eq!(
+        resolved_profile["profile"]["budgets"]["proof_memory_mb"],
+        serde_json::json!(2048)
+    );
     assert_eq!(resolved_profile["review"]["posting_engine"], "artifact");
     assert!(resolved_profile["tools"]["tokmd"]["enabled"].as_bool() == Some(true));
     let resolved_plan: serde_json::Value =
@@ -204,6 +212,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 900);
     assert_eq!(resolved_plan["budgets"]["proof_max_focused_tests"], 1);
     assert_eq!(resolved_plan["budgets"]["proof_total_timeout_sec"], 600);
+    assert_eq!(resolved_plan["budgets"]["proof_disk_mb"], 1024);
     assert_eq!(resolved_plan["limits"]["sensor_jobs"], 4);
     assert_eq!(resolved_plan["selectors"]["depth"], "standard");
     assert_eq!(resolved_plan["selectors"]["lane_width"], 10);
@@ -264,6 +273,8 @@ fn active_len_tracks_view_after_resize() {
         capped_resolved_plan["budgets"]["proof_max_focused_tests"],
         2
     );
+    assert_eq!(capped_resolved_plan["budgets"]["proof_cpu"], 1);
+    assert_eq!(capped_resolved_plan["budgets"]["proof_memory_mb"], 1024);
     assert_eq!(capped_resolved_plan["selectors"]["model_concurrency"], 12);
     assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
         sensors
