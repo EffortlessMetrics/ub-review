@@ -14,7 +14,8 @@ CPU runs focused tests. Disk holds proof worktrees. Memory holds evidence packet
 
 ## Product sentence
 
-ub-review prepares evidence, runs focused investigation lanes, proves what it can, and reports only what changes the reviewer’s decision.
+ub-review prepares evidence, runs focused investigation lanes, proves what it
+can, and reports only what changes the reviewer's decision.
 
 ## Review contract
 
@@ -39,7 +40,8 @@ Everything else goes to artifacts:
 
 ## Execution contract
 
-Models investigate. Tools produce receipts. The compiler decides what earns the reviewer’s time.
+Models investigate. Tools produce receipts. The compiler decides what earns the
+reviewer's time.
 
 ## External positioning
 

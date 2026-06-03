@@ -2,13 +2,17 @@
 
 Runtime profiles keep implementation names plain and technical:
 
+- `gh-runner`
 - `gh-runner-standard`
 - `gh-runner-full`
 - `cx23`
 - `cx33`
 - `cx43`
 
-A runtime profile is a resource lease preset, not a product tier. It defines how much local work ub-review may centrally schedule while preparing evidence for a PR review.
+A runtime profile is a resource lease preset, not a product tier. It defines
+how much local work ub-review may centrally schedule while preparing evidence
+for a PR review. `gh-runner` is the zero-config compatibility alias for
+`gh-runner-standard`.
 
 ## Shared trusted-repository defaults
 
@@ -25,6 +29,7 @@ Each pass targets 30 minutes and has a hard timeout of 60 minutes. All runtime p
 
 | Profile | Intended runner | Local proof posture |
 |---|---|---|
+| `gh-runner` | GitHub-hosted runner | Compatibility alias for `gh-runner-standard`; use this when adopting the action with no extra configuration. |
 | `gh-runner-standard` | GitHub-hosted runner | Focused tests, base+tests red/green, actionlint, scoped source-route checks, and lightweight proof. |
 | `gh-runner-full` | Larger or explicitly leased GitHub runner | Standard proof plus leased heavy witnesses such as targeted mutation or sanitizer work when relevant. |
 | `cx23` | Small local coordinator | Minimal local execution, high selectivity, and model reasoning over prepared evidence. |

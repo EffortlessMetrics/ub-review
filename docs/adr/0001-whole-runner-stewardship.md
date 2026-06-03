@@ -10,7 +10,10 @@ ub-review is an evidence-first CI review gate. It uses the whole runner to turn 
 
 CI review has a short-lived but powerful execution environment: CPU, disk, memory, I/O, model budget, and wall-clock time are all available only while the runner is live. Spending those resources on repeated checkout, duplicated repo navigation, disconnected model work, or verbose posting reduces the evidence available to the human reviewer.
 
-The review gate therefore needs a clear resource rule and plain implementation names. Runtime profile names are technical: `gh-runner-standard`, `gh-runner-full`, `cx23`, `cx33`, and `cx43`.
+The review gate therefore needs a clear resource rule and plain implementation
+names. Runtime profile names are technical: `gh-runner-standard`,
+`gh-runner-full`, `cx23`, `cx33`, and `cx43`. The default action input
+`gh-runner` remains a compatibility alias for the standard GitHub-runner lease.
 
 ## Decision
 
@@ -36,7 +39,8 @@ models    reason over prepared evidence, not repo navigation
 time      is spent producing proof, not posting boilerplate
 ```
 
-ub-review prepares evidence, runs focused investigation lanes, proves what it can, and reports only what changes the reviewer’s decision.
+ub-review prepares evidence, runs focused investigation lanes, proves what it
+can, and reports only what changes the reviewer's decision.
 
 ## Architecture rule
 

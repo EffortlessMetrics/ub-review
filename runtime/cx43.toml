@@ -24,6 +24,7 @@ max_load_1m = 9.0
 artifact_budget_mb = 2000
 scratch_budget_mb = 40000
 default_timeout_sec = 1800
+hard_timeout_sec = 3600
 proof_max_focused_test_files = 8
 proof_max_focused_tests = 6
 proof_command_timeout_sec = 600
@@ -33,3 +34,17 @@ proof_memory_mb = 4096
 proof_disk_mb = 2048
 proof_network = false
 proof_scratch = true
+mutation = true
+sanitizer = true
+
+[trusted_repo]
+pass_triggers = ["opened", "ready_for_review"]
+synchronize = false
+proof_lanes = [
+  "focused-tests",
+  "base-tests-red-green",
+  "actionlint",
+  "scoped-source-route-checks",
+  "targeted-mutation-when-leased",
+  "sanitizer-when-leased",
+]
