@@ -33,6 +33,27 @@ immutable source checkout
 lanes do not post comments directly, and the runner does not create issue
 comments or status-comment chatter.
 
+
+## Standard Rust evidence stack
+
+For Rust repositories, the clean review stack separates static evidence,
+runtime backstops, and retained policy:
+
+```text
+cargo-allow   = durable exception ledger
+ripr          = static mutation-exposure analysis
+unsafe-review = static unsafe-contract review
+xtask         = orchestration / receipts / repo policy
+cargo-mutants = runtime mutation backstop
+Miri          = concrete UB execution backstop
+Codecov       = execution-surface telemetry
+```
+
+The architecture is static first, runtime where it pays, receipts everywhere.
+`ub-review` consumes those receipts and routes them to review lanes; it should
+not blur tool ownership by treating unsafe-review cards as proof of soundness or
+Miri/runtime receipts as retained exception policy.
+
 ## Sensor issue boundary
 
 `ub-review` owns orchestration, routing, model fanout, posting, and fallback
