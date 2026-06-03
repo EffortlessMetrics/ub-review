@@ -13153,6 +13153,38 @@ mod tests {
     }
 
     #[test]
+    fn config_defaults_backfill_partial_tool_without_reenabling_it() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join("ub-review.toml");
+        fs::write(
+            &config_path,
+            r#"profile = "gh-runner"
+
+[tools.ripr]
+enabled = false
+timeout_sec = 0
+artifact_budget_mb = 0
+weight = 0
+"#,
+        )?;
+
+        let config = Config::load_or_default(&config_path, Some("cx33"))?;
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr tool policy missing"))?;
+
+        assert_eq!(config.profile, "cx33");
+        assert!(!ripr.enabled);
+        assert_eq!(ripr.id, "ripr");
+        assert_eq!(ripr.command, "ripr");
+        assert_eq!(ripr.timeout_sec, 240);
+        assert_eq!(ripr.artifact_budget_mb, 128);
+        assert_eq!(ripr.weight, 3);
+        Ok(())
+    }
+
+    #[test]
     fn tokmd_sensor_commands_use_on_diff_analyze_cockpit_and_context() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let repo = temp.path().join("repo");
@@ -13607,6 +13639,48 @@ index 1111111..2222222 100644
         );
         assert!(empty_body.is_err_and(|finding| { finding.reason.contains("body_present=false") }));
         Ok(())
+    }
+
+    #[test]
+    fn right_side_diff_lines_track_context_additions_and_normalized_paths() {
+        let patch = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -10,5 +10,6 @@ pub fn active_len(len: usize) -> usize {
+ unchanged_before
++added_boundary_check
+-removed_old_check
+ unchanged_after
+@@ -40,2 +41,3 @@ pub fn helper() {
++added_second_hunk
+ helper_context
+diff --git a/tests/rab.rs b/tests/rab.rs
+index 3333333..4444444 100644
+--- a/tests/rab.rs
++++ b/tests/rab.rs
+@@ -1,2 +1,3 @@
+ existing_test();
++new_test();
+";
+
+        let lines = right_side_diff_lines(patch);
+
+        for expected in [
+            ("src/lib.rs".to_owned(), 10),
+            ("src/lib.rs".to_owned(), 11),
+            ("src/lib.rs".to_owned(), 12),
+            ("src/lib.rs".to_owned(), 41),
+            ("src/lib.rs".to_owned(), 42),
+            ("tests/rab.rs".to_owned(), 1),
+            ("tests/rab.rs".to_owned(), 2),
+        ] {
+            assert!(lines.contains(&expected), "missing {expected:?}");
+        }
+        assert!(!lines.contains(&("src/lib.rs".to_owned(), 13)));
+        assert!(!lines.contains(&("src/lib.rs".to_owned(), 40)));
+        assert!(lines.contains(&(super::normalize_repo_path("b/src/lib.rs"), 11)));
     }
 
     #[test]
@@ -15627,6 +15701,27 @@ index 1111111..2222222 100644
             ..ok.clone()
         };
         assert!(validate_github_review_payload(&parent_path).is_err());
+
+        let windows_parent_path = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                path: r#"src\..\secret.rs"#.to_owned(),
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        assert!(validate_github_review_payload(&windows_parent_path).is_err());
+
+        let b_prefixed_path = GitHubReview {
+            comments: vec![GitHubReviewComment {
+                path: "b/src/lib.rs".to_owned(),
+                ..ok.comments[0].clone()
+            }],
+            ..ok.clone()
+        };
+        validate_github_review_payload(&b_prefixed_path)?;
+        let b_prefixed_out = tempfile::tempdir()?;
+        write_github_review_payload(b_prefixed_out.path(), &b_prefixed_path, &line_map)?;
+        assert!(b_prefixed_out.path().join("github-review.json").exists());
 
         let empty_body = GitHubReview {
             comments: vec![GitHubReviewComment {
