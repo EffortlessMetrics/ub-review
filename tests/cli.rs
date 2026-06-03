@@ -873,7 +873,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
             "event": "COMMENT",
-            "body": "## Decision\n\nNo blocking finding after checking.\n\n## Residual risk\n\n- Live GitHub posting was not exercised by this fixture.",
+            "body": "## Test proof\n\n- Added bad-free tests pass on HEAD and fail on base+tests.",
             "comments": []
         }))?,
     )?;
