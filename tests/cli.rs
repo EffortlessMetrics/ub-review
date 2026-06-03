@@ -210,6 +210,41 @@ fn active_len_tracks_view_after_resize() {
             .map(std::vec::Vec::len),
         Some(10)
     );
+    let capped_out = temp.path().join("packet-capped");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&capped_out)?,
+            "--runtime-profile",
+            "cx23",
+            "--model-concurrency",
+            "99",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    let capped_review: serde_json::Value =
+        serde_json::from_slice(&fs::read(capped_out.join("review/review.json"))?)?;
+    assert_eq!(capped_review["runtime_profile"], "cx23");
+    assert_eq!(capped_review["model_concurrency"], 12);
+    let capped_resolved_plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(capped_out.join("resolved-plan.json"))?)?;
+    assert_eq!(capped_resolved_plan["runtime_profile"], "cx23");
+    assert_eq!(capped_resolved_plan["limits"]["llm_in_flight"], 12);
+    assert_eq!(capped_resolved_plan["selectors"]["model_concurrency"], 12);
     assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
         sensors
             .iter()

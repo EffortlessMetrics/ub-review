@@ -2061,9 +2061,10 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
 
 fn cmd_run(args: RunArgs) -> Result<()> {
     let run_started = Instant::now();
-    let args = normalize_run_args(args)?;
+    let mut args = normalize_run_args(args)?;
     let (config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    apply_runtime_profile_limits(&mut args, config.selected_profile()?)?;
     let selected_model_lanes = selected_review_lanes_for_args(&plan, &args)?;
     print_plan(&plan, &box_state);
     write_plan_artifacts(
@@ -2173,6 +2174,18 @@ fn validate_run_args(args: &RunArgs) -> Result<()> {
     if args.review_body_max_bytes < 1_000 {
         bail!("--review-body-max-bytes must be at least 1000");
     }
+    Ok(())
+}
+
+fn apply_runtime_profile_limits(args: &mut RunArgs, profile: &Profile) -> Result<()> {
+    let llm_in_flight = profile.limits.llm_in_flight;
+    if llm_in_flight == 0 {
+        bail!(
+            "runtime profile {} has llm_in_flight=0; model concurrency cannot be scheduled",
+            profile.name
+        );
+    }
+    args.model_concurrency = args.model_concurrency.min(llm_in_flight);
     Ok(())
 }
 
@@ -11252,7 +11265,7 @@ mod tests {
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CommandStatus, Config, DiffClass,
         DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment, LaneModelOutput,
-        LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
+        LanePlan, Limits, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider,
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
@@ -11262,10 +11275,11 @@ mod tests {
         ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
         STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
         SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
-        apply_model_output, apply_plan_selectors, apply_refuter_output, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        apply_model_output, apply_plan_selectors, apply_refuter_output,
+        apply_runtime_profile_limits, build_review_metrics, build_review_terminal_state,
+        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
@@ -13722,6 +13736,62 @@ index 1111111..2222222 100644
         assert_eq!(
             review_lanes_for_args(&test_plan(Vec::new()), &args).len(),
             20
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_profile_caps_model_concurrency() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.model_concurrency = 99;
+        let profiles = builtin_profiles();
+        let cx23 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx23")
+            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
+
+        apply_runtime_profile_limits(&mut args, cx23)?;
+
+        assert_eq!(args.model_concurrency, cx23.limits.llm_in_flight);
+        assert_eq!(args.model_concurrency, 12);
+        Ok(())
+    }
+
+    #[test]
+    fn gh_runner_runtime_profile_keeps_standard_model_concurrency() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+
+        apply_runtime_profile_limits(&mut args, gh_runner)?;
+
+        assert_eq!(args.model_concurrency, STANDARD_MODEL_CONCURRENCY);
+        assert_eq!(args.model_concurrency, 8);
+        Ok(())
+    }
+
+    #[test]
+    fn zero_llm_runtime_limit_is_rejected() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let profile = Profile {
+            name: "broken".to_owned(),
+            limits: Limits {
+                llm_in_flight: 0,
+                ..Limits::default()
+            },
+            ..Profile::default()
+        };
+
+        let err = apply_runtime_profile_limits(&mut args, &profile)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("zero llm limit unexpectedly passed"))?;
+
+        assert!(
+            err.to_string()
+                .contains("runtime profile broken has llm_in_flight=0")
         );
         Ok(())
     }
