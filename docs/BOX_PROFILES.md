@@ -1,9 +1,9 @@
 # Box profiles
 
-The Bun review profile lives in `profiles/bun-ub-v0.toml`. Runtime profiles let
-that same review intent run on different hardware safely. Use
-`--runtime-profile` to choose these box budgets explicitly. The older `--profile`
-option remains a compatibility alias for the same runtime profiles.
+The Bun review profile lives in `profiles/bun-ub-v0.toml`. Runtime profiles live
+in `runtime/*.toml` and let that same review intent run on different hardware
+safely. Use `--runtime-profile` to choose these box budgets explicitly. The older
+`--profile` option remains a compatibility alias for the same runtime profiles.
 
 | Profile | Local posture |
 |---|---|
