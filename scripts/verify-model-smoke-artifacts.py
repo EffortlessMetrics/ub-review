@@ -111,6 +111,24 @@ def require_ok_lane_receipt(lane: dict) -> None:
 
 
 def require_metrics(metrics, min_ok_lanes: int) -> None:
+    run = metrics.get("run")
+    if not isinstance(run, dict):
+        fail("metrics.run is missing")
+    if run.get("concurrency_model") != "instrumented-sequential-v0":
+        fail("metrics.run.concurrency_model is invalid")
+    if run.get("local_proof_wall_excludes_model_wait") is not True:
+        fail("metrics.run.local_proof_wall_excludes_model_wait must be true")
+    for field in [
+        "model_wall_ms",
+        "local_proof_wall_ms",
+        "compiler_wall_ms",
+        "model_call_duration_ms_sum",
+        "proof_command_duration_ms_sum",
+        "model_proof_overlap_ms",
+    ]:
+        value = run.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail(f"metrics.run.{field} is not a non-negative integer")
     models = metrics.get("models", {})
     expected = {
         "provider_preflights": 1,
