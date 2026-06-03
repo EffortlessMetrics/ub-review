@@ -148,6 +148,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/resource_leases.json",
         "review/resource_plan.md",
         "follow_up_questions.ndjson",
+        "follow_up_results.ndjson",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
         "resource_leases.ndjson",
@@ -1151,10 +1152,23 @@ def require_follow_up_results(root: pathlib.Path, follow_up_tasks: list[dict]) -
         fail("review/follow_up_results.json is not an array")
     if len(results) != len(follow_up_tasks):
         fail("review/follow_up_results.json count does not match follow_up_tasks")
+    lines = [
+        line
+        for line in read_text(root / "follow_up_results.ndjson").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != len(results):
+        fail("follow_up_results.ndjson line count does not match review/follow_up_results.json")
     for index, task in enumerate(follow_up_tasks):
         result = results[index]
         if not isinstance(result, dict):
             fail(f"follow-up result {index + 1} is not an object: {result!r}")
+        try:
+            parsed = json.loads(lines[index])
+        except json.JSONDecodeError as error:
+            fail(f"invalid follow_up_results.ndjson line {index + 1}: {error}")
+        if parsed != result:
+            fail(f"follow_up_results.ndjson line {index + 1} does not match JSON artifact")
         require_follow_up_result_schema(root, result, task)
 
 

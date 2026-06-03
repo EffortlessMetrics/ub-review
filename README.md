@@ -207,6 +207,7 @@ target/ub-review/
   events.ndjson
   candidates.ndjson
   follow_up_questions.ndjson
+  follow_up_results.ndjson
   proof_requests.ndjson
   running-summary.md
 ```
