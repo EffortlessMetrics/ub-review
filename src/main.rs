@@ -1068,6 +1068,7 @@ struct ReviewMetrics {
     schema_version: u32,
     wall_clock_ms: u128,
     wall_clock_seconds: u64,
+    run: RunLoopMetrics,
     shared_context_id: String,
     base: String,
     head: String,
@@ -1108,6 +1109,33 @@ struct ReviewMetrics {
     github_review_body_bytes: usize,
     review_body_truncated: bool,
     github_review_body_truncated: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunLoopMetrics {
+    concurrency_model: String,
+    local_proof_wall_excludes_model_wait: bool,
+    model_wall_ms: u128,
+    local_proof_wall_ms: u128,
+    compiler_wall_ms: u128,
+    model_call_duration_ms_sum: u128,
+    proof_command_duration_ms_sum: u128,
+    model_proof_overlap_ms: u128,
+    loops: RunLoopTimings,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunLoopTimings {
+    model: LoopTiming,
+    proof: LoopTiming,
+    compiler: LoopTiming,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct LoopTiming {
+    started_at_offset_ms: u128,
+    finished_at_offset_ms: u128,
+    wall_ms: u128,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1947,6 +1975,98 @@ struct EventLog {
     file: Mutex<File>,
 }
 
+struct RunLoopTracker {
+    model: LoopAccumulator,
+    proof: LoopAccumulator,
+    compiler: LoopAccumulator,
+}
+
+impl RunLoopTracker {
+    fn new() -> Self {
+        Self {
+            model: LoopAccumulator::default(),
+            proof: LoopAccumulator::default(),
+            compiler: LoopAccumulator::default(),
+        }
+    }
+
+    fn record(&mut self, loop_id: &str, interval: LoopInterval) {
+        match loop_id {
+            "model" => self.model.record(interval),
+            "proof" => self.proof.record(interval),
+            "compiler" => self.compiler.record(interval),
+            _ => {}
+        }
+    }
+
+    fn metrics(&self) -> RunLoopMetrics {
+        RunLoopMetrics {
+            concurrency_model: "instrumented-sequential-v0".to_owned(),
+            local_proof_wall_excludes_model_wait: true,
+            model_wall_ms: self.model.wall_ms,
+            local_proof_wall_ms: self.proof.wall_ms,
+            compiler_wall_ms: self.compiler.wall_ms,
+            model_call_duration_ms_sum: 0,
+            proof_command_duration_ms_sum: 0,
+            model_proof_overlap_ms: overlap_ms(&self.model.intervals, &self.proof.intervals),
+            loops: RunLoopTimings {
+                model: self.model.timing(),
+                proof: self.proof.timing(),
+                compiler: self.compiler.timing(),
+            },
+        }
+    }
+}
+
+#[derive(Default)]
+struct LoopAccumulator {
+    started_at_offset_ms: Option<u128>,
+    finished_at_offset_ms: Option<u128>,
+    wall_ms: u128,
+    intervals: Vec<LoopInterval>,
+}
+
+impl LoopAccumulator {
+    fn record(&mut self, interval: LoopInterval) {
+        self.started_at_offset_ms = Some(
+            self.started_at_offset_ms
+                .map_or(interval.started_at_offset_ms, |existing| {
+                    existing.min(interval.started_at_offset_ms)
+                }),
+        );
+        self.finished_at_offset_ms = Some(
+            self.finished_at_offset_ms
+                .map_or(interval.finished_at_offset_ms, |existing| {
+                    existing.max(interval.finished_at_offset_ms)
+                }),
+        );
+        self.wall_ms = self.wall_ms.saturating_add(interval.duration_ms);
+        self.intervals.push(interval);
+    }
+
+    fn timing(&self) -> LoopTiming {
+        LoopTiming {
+            started_at_offset_ms: self.started_at_offset_ms.unwrap_or(0),
+            finished_at_offset_ms: self.finished_at_offset_ms.unwrap_or(0),
+            wall_ms: self.wall_ms,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct LoopInterval {
+    started_at_offset_ms: u128,
+    finished_at_offset_ms: u128,
+    duration_ms: u128,
+}
+
+struct ActiveRunLoop {
+    loop_id: &'static str,
+    stage: &'static str,
+    started_at: Instant,
+    started_at_offset_ms: u128,
+}
+
 struct CommandStatus {
     exit_code: Option<i32>,
     timed_out: bool,
@@ -2420,6 +2540,76 @@ impl EventLog {
     }
 }
 
+fn start_run_loop(
+    event_log: &EventLog,
+    run_started: &Instant,
+    loop_id: &'static str,
+    stage: &'static str,
+) -> Result<ActiveRunLoop> {
+    let started_at_offset_ms = run_started.elapsed().as_millis();
+    event_log.append(
+        &format!("{loop_id}_loop_started"),
+        serde_json::json!({
+            "loop_id": loop_id,
+            "stage": stage,
+            "started_at_offset_ms": started_at_offset_ms,
+        }),
+    )?;
+    Ok(ActiveRunLoop {
+        loop_id,
+        stage,
+        started_at: Instant::now(),
+        started_at_offset_ms,
+    })
+}
+
+fn finish_run_loop(
+    event_log: &EventLog,
+    run_started: &Instant,
+    tracker: &mut RunLoopTracker,
+    active: ActiveRunLoop,
+    status: &str,
+) -> Result<()> {
+    let finished_at_offset_ms = run_started.elapsed().as_millis();
+    let duration_ms = active.started_at.elapsed().as_millis();
+    event_log.append(
+        &format!("{}_loop_finished", active.loop_id),
+        serde_json::json!({
+            "loop_id": active.loop_id,
+            "stage": active.stage,
+            "started_at_offset_ms": active.started_at_offset_ms,
+            "finished_at_offset_ms": finished_at_offset_ms,
+            "duration_ms": duration_ms,
+            "status": status,
+        }),
+    )?;
+    tracker.record(
+        active.loop_id,
+        LoopInterval {
+            started_at_offset_ms: active.started_at_offset_ms,
+            finished_at_offset_ms,
+            duration_ms,
+        },
+    );
+    Ok(())
+}
+
+fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
+    let mut total = 0_u128;
+    for left_interval in left {
+        for right_interval in right {
+            let started = left_interval
+                .started_at_offset_ms
+                .max(right_interval.started_at_offset_ms);
+            let finished = left_interval
+                .finished_at_offset_ms
+                .min(right_interval.finished_at_offset_ms);
+            total = total.saturating_add(finished.saturating_sub(started));
+        }
+    }
+    total
+}
+
 fn cmd_init(args: InitArgs) -> Result<()> {
     if args.path.exists() && !args.force {
         bail!(
@@ -2664,6 +2854,8 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         &plan,
         &preliminary_summary,
         &args,
+        &event_log,
+        &run_started,
         run_started.elapsed(),
     )?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
@@ -4689,6 +4881,8 @@ fn write_review_artifacts(
     plan: &Plan,
     running_summary: &str,
     args: &RunArgs,
+    event_log: &EventLog,
+    run_started: &Instant,
     elapsed: Duration,
 ) -> Result<()> {
     let review_dir = out.join("review");
@@ -4725,7 +4919,9 @@ fn write_review_artifacts(
     let mut model_observations = Vec::new();
     let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
+    let mut run_loop_tracker = RunLoopTracker::new();
 
+    let model_loop = start_run_loop(event_log, run_started, "model", "primary")?;
     if matches!(args.model_mode, ModelMode::Auto) {
         run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
         append_preflight_evidence_issues(
@@ -4765,8 +4961,21 @@ fn write_review_artifacts(
             &mut summary_only_findings,
         )?;
     }
+    let model_loop_status = if matches!(args.model_mode, ModelMode::Auto) {
+        "completed"
+    } else {
+        "skipped_model_mode_off"
+    };
+    finish_run_loop(
+        event_log,
+        run_started,
+        &mut run_loop_tracker,
+        model_loop,
+        model_loop_status,
+    )?;
 
     let profile = config.selected_profile()?;
+    let proof_loop = start_run_loop(event_log, run_started, "proof", "planner-and-broker")?;
     write_proof_planner_artifacts(
         out,
         diff,
@@ -4776,8 +4985,16 @@ fn write_review_artifacts(
         &proof_requests,
     )?;
     let proof_result = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
+    finish_run_loop(
+        event_log,
+        run_started,
+        &mut run_loop_tracker,
+        proof_loop,
+        "completed",
+    )?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
+    let compiler_loop = start_run_loop(event_log, run_started, "compiler", "preliminary")?;
     let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
     write_candidate_artifacts(out, &candidates)?;
     let candidates = read_candidate_records(out)?;
@@ -4838,8 +5055,16 @@ fn write_review_artifacts(
     );
     write_observation_artifacts(out, &observations)?;
     write_orchestrator_artifacts(out, &orchestrator_plan)?;
+    finish_run_loop(
+        event_log,
+        run_started,
+        &mut run_loop_tracker,
+        compiler_loop,
+        "completed",
+    )?;
     let mut follow_up_results = Vec::new();
     let mut follow_up_outputs = Vec::new();
+    let follow_up_model_loop = start_run_loop(event_log, run_started, "model", "follow-up")?;
     run_follow_up_model_pass(
         FollowUpRunContext {
             root,
@@ -4854,6 +5079,14 @@ fn write_review_artifacts(
         &mut follow_up_results,
         &mut follow_up_outputs,
     )?;
+    finish_run_loop(
+        event_log,
+        run_started,
+        &mut run_loop_tracker,
+        follow_up_model_loop,
+        "completed",
+    )?;
+    let final_compiler_loop = start_run_loop(event_log, run_started, "compiler", "final")?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
@@ -4901,6 +5134,14 @@ fn write_review_artifacts(
         &review.proof_requests,
         &review.proof_receipts,
     )?;
+    finish_run_loop(
+        event_log,
+        run_started,
+        &mut run_loop_tracker,
+        final_compiler_loop,
+        "completed",
+    )?;
+    let run_loop_metrics = run_loop_tracker.metrics();
     let metrics = build_review_metrics(ReviewMetricsInput {
         out,
         diff,
@@ -4914,6 +5155,7 @@ fn write_review_artifacts(
         review_payload_status,
         observations_count: observations.len(),
         follow_up_results: &follow_up_results,
+        run: run_loop_metrics,
         elapsed,
     });
 
@@ -5313,6 +5555,7 @@ struct ReviewMetricsInput<'a> {
     review_payload_status: &'a str,
     observations_count: usize,
     follow_up_results: &'a [FollowUpResult],
+    run: RunLoopMetrics,
     elapsed: Duration,
 }
 
@@ -5326,6 +5569,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         review_payload_status,
         observations_count,
         follow_up_results,
+        mut run,
         elapsed,
     } = input;
     let sensor_statuses = plan
@@ -5347,11 +5591,14 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         .iter()
         .map(|result| result.status.as_str())
         .collect::<Vec<_>>();
+    run.model_call_duration_ms_sum = model_call_duration_ms_sum(review, follow_up_results);
+    run.proof_command_duration_ms_sum = proof_command_duration_ms_sum(&review.proof_receipts);
 
     ReviewMetrics {
         schema_version: 1,
         wall_clock_ms: elapsed.as_millis(),
         wall_clock_seconds: elapsed.as_secs(),
+        run,
         shared_context_id: review.shared_context_id.clone(),
         base: diff.base.clone(),
         head: diff.head.clone(),
@@ -5434,6 +5681,36 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review_body_truncated: github_review
             .is_some_and(|review| review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim())),
     }
+}
+
+fn model_call_duration_ms_sum(
+    review: &ReviewArtifacts,
+    follow_up_results: &[FollowUpResult],
+) -> u128 {
+    review
+        .provider_preflights
+        .iter()
+        .filter_map(|receipt| receipt.duration_ms)
+        .chain(
+            review
+                .model_lanes
+                .iter()
+                .filter_map(|receipt| receipt.duration_ms),
+        )
+        .chain(
+            follow_up_results
+                .iter()
+                .filter_map(|result| result.duration_ms),
+        )
+        .sum()
+}
+
+fn proof_command_duration_ms_sum(proof_receipts: &[ProofReceipt]) -> u128 {
+    proof_receipts
+        .iter()
+        .flat_map(|receipt| receipt.commands.iter())
+        .map(|command| command.duration_ms)
+        .sum()
 }
 
 fn combined_observations(review: &ReviewArtifacts) -> Vec<Observation> {
@@ -13668,9 +13945,36 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .get("terminal_state")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("unknown");
+    let model_wall = metrics
+        .pointer("/run/model_wall_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let proof_wall = metrics
+        .pointer("/run/local_proof_wall_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let compiler_wall = metrics
+        .pointer("/run/compiler_wall_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let overlap = metrics
+        .pointer("/run/model_proof_overlap_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let concurrency_model = metrics
+        .pointer("/run/concurrency_model")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
 
     text.push_str("\n## Review efficiency\n\n");
     text.push_str(&format!("- Runtime: `{runtime}`\n"));
+    text.push_str(&format!(
+        "- Run loops: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`, model/proof overlap `{overlap}` (`{concurrency_model}`)\n"
+    ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
@@ -13690,6 +13994,14 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
     text.push_str(&format!(
         "- Review payload: `{payload_status}`; post: `{post_status}`\n"
     ));
+}
+
+fn format_millis(ms: u64) -> String {
+    if ms < 1_000 {
+        format!("{ms}ms")
+    } else {
+        format_seconds(ms / 1_000)
+    }
 }
 
 fn format_json_status_counts(counts: &serde_json::Map<String, serde_json::Value>) -> String {
@@ -19388,6 +19700,8 @@ UB_REVIEW_HTTP_STATUS:429
         let diff = test_diff();
         let mut args = test_run_args(out.clone());
         args.model_mode = ModelMode::Off;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let run_started = Instant::now();
 
         write_review_artifacts(
             temp.path(),
@@ -19398,6 +19712,8 @@ UB_REVIEW_HTTP_STATUS:429
             &plan,
             "running summary",
             &args,
+            &event_log,
+            &run_started,
             std::time::Duration::from_secs(73),
         )?;
 
@@ -19515,11 +19831,19 @@ UB_REVIEW_HTTP_STATUS:429
             review_payload_status: "prepared",
             observations_count: 0,
             follow_up_results: &follow_up_results,
+            run: test_run_loop_metrics(),
             elapsed: std::time::Duration::from_secs(601),
         });
 
         assert_eq!(metrics.wall_clock_seconds, 601);
         assert_eq!(metrics.wall_clock_ms, 601_000);
+        assert_eq!(metrics.run.model_wall_ms, 300);
+        assert_eq!(metrics.run.local_proof_wall_ms, 80);
+        assert_eq!(metrics.run.compiler_wall_ms, 40);
+        assert_eq!(metrics.run.model_call_duration_ms_sum, 100);
+        assert_eq!(metrics.run.proof_command_duration_ms_sum, 0);
+        assert_eq!(metrics.run.model_proof_overlap_ms, 0);
+        assert!(metrics.run.local_proof_wall_excludes_model_wait);
         assert_eq!(metrics.off_diff_candidates_rejected, 1);
         assert_eq!(metrics.provider_evidence_failures, 1);
         assert_eq!(metrics.review_payload_status, "prepared");
@@ -21022,6 +21346,36 @@ index 1111111..2222222 100644
             normalized_content_path: None,
             stderr_path: None,
             output_counts: super::FollowUpOutputCounts::default(),
+        }
+    }
+
+    fn test_run_loop_metrics() -> super::RunLoopMetrics {
+        super::RunLoopMetrics {
+            concurrency_model: "instrumented-sequential-v0".to_owned(),
+            local_proof_wall_excludes_model_wait: true,
+            model_wall_ms: 300,
+            local_proof_wall_ms: 80,
+            compiler_wall_ms: 40,
+            model_call_duration_ms_sum: 0,
+            proof_command_duration_ms_sum: 0,
+            model_proof_overlap_ms: 0,
+            loops: super::RunLoopTimings {
+                model: super::LoopTiming {
+                    started_at_offset_ms: 10,
+                    finished_at_offset_ms: 310,
+                    wall_ms: 300,
+                },
+                proof: super::LoopTiming {
+                    started_at_offset_ms: 320,
+                    finished_at_offset_ms: 400,
+                    wall_ms: 80,
+                },
+                compiler: super::LoopTiming {
+                    started_at_offset_ms: 410,
+                    finished_at_offset_ms: 450,
+                    wall_ms: 40,
+                },
+            },
         }
     }
 
