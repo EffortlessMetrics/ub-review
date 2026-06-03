@@ -136,8 +136,11 @@ fn active_len_tracks_view_after_resize() {
         "review/proof_requests.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
+        "review/resource_leases.json",
+        "review/resource_plan.md",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
+        "resource_leases.ndjson",
         "review/github-review.json",
     ] {
         assert!(out.join(path).exists(), "missing {}", path);
@@ -279,6 +282,18 @@ fn active_len_tracks_view_after_resize() {
             .map(std::vec::Vec::len)
             .unwrap_or_default()
     );
+    assert_eq!(
+        metrics["resource_leases"],
+        review["resource_leases"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
+    let resource_leases: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+    assert_eq!(review["resource_leases"], resource_leases);
+    let resource_plan = fs::read_to_string(out.join("review/resource_plan.md"))?;
+    assert!(resource_plan.contains("# Resource lease plan"));
     assert_eq!(metrics["github_review_comments"], 0);
     assert_eq!(
         metrics["review_body_bytes"],
