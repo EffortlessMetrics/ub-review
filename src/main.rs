@@ -613,6 +613,8 @@ struct DiffContext {
     changed_files: Vec<String>,
     patch: String,
     flags: DiffFlags,
+    #[serde(default = "default_diff_class")]
+    diff_class: DiffClass,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -628,11 +630,46 @@ struct DiffFlags {
     unsafe_or_native_risk: bool,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+enum DiffClass {
+    #[serde(rename = "source-ub")]
+    SourceUb,
+    #[serde(rename = "source-general")]
+    SourceGeneral,
+    #[serde(rename = "tests-only")]
+    TestsOnly,
+    #[serde(rename = "workflow/tooling")]
+    WorkflowTooling,
+    #[serde(rename = "docs-only")]
+    DocsOnly,
+    #[serde(rename = "artifact-only-smoke")]
+    ArtifactOnlySmoke,
+}
+
+fn default_diff_class() -> DiffClass {
+    DiffClass::SourceUb
+}
+
+impl DiffClass {
+    fn key(self) -> &'static str {
+        match self {
+            Self::SourceUb => "source-ub",
+            Self::SourceGeneral => "source-general",
+            Self::TestsOnly => "tests-only",
+            Self::WorkflowTooling => "workflow/tooling",
+            Self::DocsOnly => "docs-only",
+            Self::ArtifactOnlySmoke => "artifact-only-smoke",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct Plan {
     base: String,
     head: String,
     profile_name: String,
+    #[serde(default = "default_diff_class")]
+    diff_class: DiffClass,
     sensors: Vec<SensorPlan>,
     lanes: Vec<LanePlan>,
     docs_only: bool,
@@ -2092,6 +2129,7 @@ fn write_plan_artifacts(
 
 fn print_plan(plan: &Plan, box_state: &BoxState) {
     println!("Profile: {}", plan.profile_name);
+    println!("Diff class: {}", plan.diff_class.key());
     println!("Box: {}", box_state.summary_line());
     println!("Sensors:");
     for sensor in &plan.sensors {
@@ -2114,12 +2152,14 @@ impl DiffContext {
             .or_else(|_| git_text(root, &["diff", "--patch", base, head]))
             .unwrap_or_else(|_| String::new());
         let flags = classify_diff(&changed_files, &patch);
+        let diff_class = classify_diff_class(&changed_files, &flags);
         Ok(Self {
             base: base.to_owned(),
             head: head.to_owned(),
             changed_files,
             patch,
             flags,
+            diff_class,
         })
     }
 }
@@ -2208,6 +2248,25 @@ fn classify_diff(files: &[String], patch: &str) -> DiffFlags {
     flags
 }
 
+fn classify_diff_class(files: &[String], flags: &DiffFlags) -> DiffClass {
+    if files.is_empty() {
+        return DiffClass::ArtifactOnlySmoke;
+    }
+    if flags.docs_only {
+        return DiffClass::DocsOnly;
+    }
+    if files.iter().all(|path| is_workflow_tooling_path(path)) {
+        return DiffClass::WorkflowTooling;
+    }
+    if files.iter().all(|path| is_test_or_fixture_path(path)) {
+        return DiffClass::TestsOnly;
+    }
+    if flags.unsafe_or_native_risk {
+        return DiffClass::SourceUb;
+    }
+    DiffClass::SourceGeneral
+}
+
 fn is_source_path(path: &str) -> bool {
     [
         ".rs", ".zig", ".cpp", ".cc", ".c", ".h", ".hpp", ".ts", ".tsx", ".js", ".jsx",
@@ -2235,6 +2294,38 @@ fn is_dependency_path(path: &str) -> bool {
             | "package-lock.json"
     ) || path.ends_with("/cargo.toml")
         || path.ends_with("/cargo.lock")
+}
+
+fn is_workflow_tooling_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.starts_with(".github/workflows/")
+        || lower.starts_with(".github/actions/")
+        || lower.ends_with("action.yml")
+        || lower.ends_with("action.yaml")
+        || lower.starts_with("scripts/")
+        || lower.starts_with("configs/")
+        || matches!(
+            lower.as_str(),
+            "justfile"
+                | "makefile"
+                | "dockerfile"
+                | ".github/dependabot.yml"
+                | ".github/dependabot.yaml"
+        )
+}
+
+fn is_test_or_fixture_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.contains("/test/")
+        || lower.contains("/tests/")
+        || lower.starts_with("test/")
+        || lower.starts_with("tests/")
+        || lower.contains("/fixtures/")
+        || lower.starts_with("fixtures/")
+        || lower.ends_with(".snap")
+        || lower.ends_with(".test.ts")
+        || lower.ends_with(".test.js")
+        || lower.ends_with("_test.rs")
 }
 
 fn build_plan(
@@ -2268,9 +2359,10 @@ fn build_plan(
         base: diff.base.clone(),
         head: diff.head.clone(),
         profile_name: profile.name.clone(),
+        diff_class: diff.diff_class,
         sensors,
         lanes: if config.review.enable_default_lanes {
-            default_lanes()
+            default_lanes_for_diff_class(diff.diff_class)
         } else {
             Vec::new()
         },
@@ -3161,7 +3253,7 @@ fn write_lane_packets(
             text.push_str(&format!("- `{sensor_id}`: `{status}`\n"));
         }
         text.push_str("\n## Review posture\n\n");
-        text.push_str(NO_LGTM_POSTURE);
+        text.push_str(review_posture_for_diff_class(diff.diff_class));
         text.push_str("\n\n## Required output shape\n\n");
         text.push_str(&format!(
             "Start inline comments for this lane with `[{}]`. If no blocking finding exists, write an audit trail: what you checked, strongest failed objection, and residual risk. Do not infer safety from missing sensor receipts.\n",
@@ -4439,6 +4531,7 @@ fn render_shared_context(
         "- Changed files: `{}`\n",
         diff.changed_files.len()
     ));
+    text.push_str(&format!("- Diff class: `{}`\n", diff.diff_class.key()));
     text.push_str(&format!(
         "- Unsafe/native risk touched: `{}`\n",
         diff.flags.unsafe_or_native_risk
@@ -4469,8 +4562,11 @@ fn render_shared_context(
             escape_md(reason)
         ));
     }
-    text.push_str("\n## Bun UB Review Posture\n\n");
-    text.push_str(NO_LGTM_POSTURE);
+    text.push_str(&format!(
+        "\n## {} Review Posture\n\n",
+        diff_class_posture_heading(diff.diff_class)
+    ));
+    text.push_str(review_posture_for_diff_class(diff.diff_class));
     text.push_str("\n\n## UB Ledger Context\n\n");
     text.push_str(&render_ledger_context(root, config, args)?);
     text.push_str("\n\n## Diff Patch\n\n```diff\n");
@@ -4580,18 +4676,119 @@ fn is_ledger_excerpt_candidate(path: &Path) -> bool {
 
 fn review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Vec<LanePlan> {
     match (args.lane_width, args.provider_policy) {
-        (20, ModelProviderPolicy::OpencodeGoWide) => opencode_go_wide_lanes(),
+        (20, ModelProviderPolicy::OpencodeGoWide) if plan.diff_class == DiffClass::SourceUb => {
+            opencode_go_wide_lanes()
+        }
         (width, _) => review_lanes_for_width(width, plan),
     }
 }
 
 fn review_lanes_for_width(width: usize, plan: &Plan) -> Vec<LanePlan> {
-    match width {
-        6 => plan.lanes.clone(),
-        10 => standard_minimax_lanes(),
-        20 => deep_minimax_lanes(),
-        _ => plan.lanes.clone(),
+    match plan.diff_class {
+        DiffClass::SourceUb => match width {
+            6 => plan.lanes.clone(),
+            10 => standard_minimax_lanes(),
+            20 => deep_minimax_lanes(),
+            _ => plan.lanes.clone(),
+        },
+        DiffClass::SourceGeneral => source_general_lanes(),
+        DiffClass::TestsOnly => tests_only_lanes(),
+        DiffClass::WorkflowTooling => workflow_tooling_lanes(),
+        DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => Vec::new(),
     }
+}
+
+fn source_general_lanes() -> Vec<LanePlan> {
+    vec![
+        model_lane(
+            "correctness",
+            "Changed behavior correctness review",
+            &["tokmd", "ripr", "ast-grep"],
+            "Review changed behavior, public API route truth, regression risk, and overclaim/underclaim without source-UB assumptions.",
+        ),
+        model_lane(
+            "tests-red-green",
+            "Red/green changed-behavior proof review",
+            &["tokmd", "ripr"],
+            "Check whether tests distinguish old from new behavior and prove the PR claim.",
+        ),
+        model_lane(
+            "source-route",
+            "Public API source-route review",
+            &["tokmd", "ast-grep", "ripr"],
+            "Trace public API routes, changed helper callers, sibling paths, and PR claim truth.",
+        ),
+        model_lane(
+            "architecture",
+            "Boundary and smallest-complete-fix review",
+            &["tokmd", "ast-grep"],
+            "Check boundary placement, helper shape, scope control, duplication risk, and smallest complete fix.",
+        ),
+        model_lane(
+            "opposition",
+            "Strongest substantiated objection review",
+            &["tokmd", "ripr", "ast-grep"],
+            "Try to disprove the PR across correctness, proof, portability, performance, route truth, and overclaim risk.",
+        ),
+    ]
+}
+
+fn tests_only_lanes() -> Vec<LanePlan> {
+    vec![
+        model_lane(
+            "tests-red-green",
+            "Red/green test proof review",
+            &["tokmd", "ripr"],
+            "Check whether added or changed tests fail on unpatched code and pass on patched code.",
+        ),
+        model_lane(
+            "tests-oracle",
+            "Test oracle strength review",
+            &["tokmd", "ripr"],
+            "Look for smoke-only, tautological, reach-only, flaky, or non-discriminating assertions.",
+        ),
+        model_lane(
+            "proof-request",
+            "Focused proof request review",
+            &["tokmd", "ripr"],
+            "Request only cheap focused proof that would change reviewer confidence.",
+        ),
+        model_lane(
+            "opposition",
+            "Strongest test-suite objection review",
+            &["tokmd", "ripr"],
+            "Try to disprove whether the test change proves the claimed behavior.",
+        ),
+    ]
+}
+
+fn workflow_tooling_lanes() -> Vec<LanePlan> {
+    vec![
+        model_lane(
+            "workflow-permissions",
+            "Workflow permissions and token-scope review",
+            &["tokmd", "actionlint", "zizmor"],
+            "Check workflow permissions, fork safety, pull_request_target absence, checkout credential persistence, and non-blocking auxiliary behavior.",
+        ),
+        model_lane(
+            "workflow-pinning",
+            "Action pinning and runner setup review",
+            &["tokmd", "actionlint", "zizmor"],
+            "Check action pinning, trusted setup boundaries, tool installation posture, and runner assumptions.",
+        ),
+        model_lane(
+            "workflow-proof",
+            "Workflow lint and smoke proof review",
+            &["tokmd", "actionlint"],
+            "Check whether actionlint or focused smoke proof is available and whether missing proof affects trust.",
+        ),
+        model_lane(
+            "workflow-opposition",
+            "Strongest workflow/tooling objection review",
+            &["tokmd", "actionlint", "zizmor"],
+            "Try to disprove the workflow/tooling change across permissions, triggers, pinning, checkout, fork-only behavior, and reviewer-value claims.",
+        ),
+    ]
 }
 
 fn standard_minimax_lanes() -> Vec<LanePlan> {
@@ -6532,7 +6729,10 @@ fn render_review_body(
     }
 
     let mut text = String::new();
-    text.push_str("# UB Review\n\n");
+    text.push_str(&format!(
+        "# {}\n\n",
+        pr_review_heading_for_diff_class(plan.diff_class)
+    ));
     text.push_str(&format!("- Shared context: `{shared_context_id}`\n"));
     text.push_str(&format!("- Profile: `{}`\n", plan.profile_name));
     text.push_str(&format!("- Base: `{}`\n", plan.base));
@@ -6604,7 +6804,10 @@ fn render_review_body(
     text.push_str("- Missing evidence is not a failed objection; it is listed separately below.\n");
 
     text.push_str("\n## Residual risk\n\n");
-    text.push_str("- A human should inspect unsafe/native seams, test-oracle strength, and any unavailable sensor/model evidence before relying on this review.\n");
+    text.push_str(&format!(
+        "- {}\n",
+        residual_risk_for_diff_class(plan.diff_class)
+    ));
 
     text.push_str("\n## Parked follow-ups\n\n");
     let parked = summary_only_findings
@@ -6737,7 +6940,10 @@ fn render_pull_request_review_body(
     let has_review_value = has_actionable_review_finding(inline_comments, summary_only_findings)
         || has_actionable_observation(&observation_items);
 
-    text.push_str("# UB Review\n\n");
+    text.push_str(&format!(
+        "# {}\n\n",
+        pr_review_heading_for_diff_class(plan.diff_class)
+    ));
     text.push_str(&format!("- Shared context: `{shared_context_id}`\n"));
     text.push_str(&format!("- Profile: `{}`\n", plan.profile_name));
     text.push_str(&format!(
@@ -6867,7 +7073,10 @@ fn render_pull_request_review_body(
     }
 
     text.push_str("\n## Residual risk\n\n");
-    text.push_str("- A human should still inspect unsafe/native seams, test-oracle strength, and any unavailable evidence before relying on this review.\n");
+    text.push_str(&format!(
+        "- {}\n",
+        residual_risk_for_diff_class(plan.diff_class)
+    ));
 
     if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
@@ -6914,6 +7123,40 @@ fn is_refuted_observation(observation: &ObservationGroup) -> bool {
 
 fn is_missing_evidence_observation(observation: &ObservationGroup) -> bool {
     observation.kind == "missing-evidence"
+}
+
+fn pr_review_heading_for_diff_class(diff_class: DiffClass) -> &'static str {
+    match diff_class {
+        DiffClass::SourceUb => "UB Review",
+        DiffClass::SourceGeneral => "Source Review",
+        DiffClass::TestsOnly => "Test Review",
+        DiffClass::WorkflowTooling => "Workflow Review",
+        DiffClass::DocsOnly => "Docs Review",
+        DiffClass::ArtifactOnlySmoke => "Review Packet",
+    }
+}
+
+fn residual_risk_for_diff_class(diff_class: DiffClass) -> &'static str {
+    match diff_class {
+        DiffClass::SourceUb => {
+            "A human should still inspect unsafe/native seams, test-oracle strength, and any unavailable evidence before relying on this review."
+        }
+        DiffClass::SourceGeneral => {
+            "A human should still inspect changed behavior, route truth, test strength, and any unavailable evidence before relying on this review."
+        }
+        DiffClass::TestsOnly => {
+            "A human should still inspect red/green discrimination, oracle strength, flake risk, and any unavailable proof evidence before relying on this review."
+        }
+        DiffClass::WorkflowTooling => {
+            "A human should still inspect workflow permissions, trigger safety, action pinning, checkout credentials, fork-only behavior, and any unavailable actionlint/zizmor evidence before relying on this review."
+        }
+        DiffClass::DocsOnly => {
+            "A human should still inspect claim accuracy, links, examples, and any unavailable evidence before relying on this review."
+        }
+        DiffClass::ArtifactOnlySmoke => {
+            "A human should still inspect the artifact packet and any unavailable evidence before relying on this review."
+        }
+    }
 }
 
 fn is_parked_observation(observation: &ObservationGroup) -> bool {
@@ -7849,6 +8092,7 @@ fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String>
         "- Changed files: `{}`\n",
         diff.changed_files.len()
     ));
+    text.push_str(&format!("- Diff class: `{}`\n", diff.diff_class.key()));
     render_review_efficiency_section(&mut text, out);
     text.push_str("\n## Sensors\n\n");
     text.push_str("| Sensor | Planned | Status | Reason | Receipt |\n");
@@ -8690,6 +8934,16 @@ fn tool(
     }
 }
 
+fn default_lanes_for_diff_class(diff_class: DiffClass) -> Vec<LanePlan> {
+    match diff_class {
+        DiffClass::SourceUb => default_lanes(),
+        DiffClass::SourceGeneral => source_general_lanes(),
+        DiffClass::TestsOnly => tests_only_lanes(),
+        DiffClass::WorkflowTooling => workflow_tooling_lanes(),
+        DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => Vec::new(),
+    }
+}
+
 fn default_lanes() -> Vec<LanePlan> {
     vec![
         lane(
@@ -8781,6 +9035,63 @@ A zero-finding review is not approval. It must report:
 4. residual risk for a human to verify.
 "#;
 
+const WORKFLOW_TOOLING_POSTURE: &str = r#"Standalone approval language is banned.
+
+Return workflow/tooling reviewer value only: findings, verification questions, actionlint/zizmor proof results, refutations, residual workflow risk, parked follow-ups, and trust-affecting missing workflow evidence.
+
+Check permissions, trigger safety, action pinning, checkout credential persistence, fork-only behavior, pull_request_target absence, auxiliary/non-blocking semantics, and actionlint availability.
+
+Do not add ArrayBuffer, worker-handoff, native UB, or source-route narrative unless the diff actually touches those paths.
+"#;
+
+const SOURCE_GENERAL_POSTURE: &str = r#"Standalone approval language is banned.
+
+Return changed-behavior reviewer value only: findings, verification questions, proof results, refutations, residual risk, parked follow-ups, and trust-affecting missing evidence.
+
+Check route truth, test proof, overclaims, behavior regressions, performance risk, and smallest-complete-fix boundaries.
+
+Do not add native UB, ArrayBuffer, or worker-handoff narrative unless the diff actually touches those paths.
+"#;
+
+const TESTS_ONLY_POSTURE: &str = r#"Standalone approval language is banned.
+
+Return test-review value only: test-oracle gaps, red/green proof questions, proof results, refutations, residual test risk, parked follow-ups, and trust-affecting missing proof evidence.
+
+Check whether tests discriminate the patch, whether assertions are non-tautological, whether focused proof is cheap, and whether missing base+tests evidence affects trust.
+
+Do not add source UB, ArrayBuffer, worker-handoff, or source-route narrative unless the diff actually touches those paths.
+"#;
+
+const DOCS_ONLY_POSTURE: &str = r#"Standalone approval language is banned.
+
+Return documentation reviewer value only: factual issues, verification questions, refutations, residual documentation risk, parked follow-ups, and trust-affecting missing evidence.
+
+Check claim accuracy, links, examples, release/process promises, and whether docs overstate unproven behavior.
+
+Do not add source UB, ArrayBuffer, worker-handoff, workflow, or test-proof narrative unless the diff actually touches those paths.
+"#;
+
+fn diff_class_posture_heading(diff_class: DiffClass) -> &'static str {
+    match diff_class {
+        DiffClass::SourceUb => "Bun UB",
+        DiffClass::SourceGeneral => "Source-general",
+        DiffClass::TestsOnly => "Tests-only",
+        DiffClass::WorkflowTooling => "Workflow/tooling",
+        DiffClass::DocsOnly => "Docs-only",
+        DiffClass::ArtifactOnlySmoke => "Artifact-only smoke",
+    }
+}
+
+fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static str {
+    match diff_class {
+        DiffClass::SourceUb => NO_LGTM_POSTURE,
+        DiffClass::SourceGeneral => SOURCE_GENERAL_POSTURE,
+        DiffClass::TestsOnly => TESTS_ONLY_POSTURE,
+        DiffClass::WorkflowTooling => WORKFLOW_TOOLING_POSTURE,
+        DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => DOCS_ONLY_POSTURE,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -8791,16 +9102,17 @@ mod tests {
     use anyhow::{Context as _, Result};
 
     use super::{
-        BoxState, Config, DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment,
-        LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
-        ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, OpenCodeEndpointKindArg, Plan, PostArgs,
-        PostingMode, Profile, ProofBudget, ProofRequest, ProofRequestGroup, ProviderKindArg,
-        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
-        ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan,
-        SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_review_metrics, build_tokmd_sensor_commands, builtin_profiles, cap_review_body,
-        classify_diff, classify_proof_cost, cmd_post, collect_sensor_evidence_issues,
+        BoxState, Config, DiffClass, DiffContext, DiffFlags, EventLog, GitHubReview,
+        GitHubReviewComment, LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment,
+        ModelCandidateFinding, ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider,
+        ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
+        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, Profile, ProofBudget, ProofRequest,
+        ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
+        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
+        apply_model_output, apply_refuter_output, build_review_metrics,
+        build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_sensor_evidence_issues,
         combined_observations, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
@@ -8820,6 +9132,10 @@ mod tests {
         let flags = classify_diff(&["docs/readme.md".to_owned()], "");
         assert!(flags.docs_only);
         assert!(!flags.source_changed);
+        assert_eq!(
+            classify_diff_class(&["docs/readme.md".to_owned()], &flags),
+            DiffClass::DocsOnly
+        );
     }
 
     #[test]
@@ -8827,6 +9143,39 @@ mod tests {
         let flags = classify_diff(&["src/lib.rs".to_owned()], "+ let p = bytes.as_ptr();");
         assert!(flags.rust_changed);
         assert!(flags.unsafe_or_native_risk);
+        assert_eq!(
+            classify_diff_class(&["src/lib.rs".to_owned()], &flags),
+            DiffClass::SourceUb
+        );
+    }
+
+    #[test]
+    fn workflow_only_diff_routes_to_workflow_lanes() {
+        let files = vec![".github/workflows/review.yml".to_owned()];
+        let flags = classify_diff(&files, "+permissions:\n+  contents: read\n");
+        assert!(flags.workflow_changed);
+        assert_eq!(
+            classify_diff_class(&files, &flags),
+            DiffClass::WorkflowTooling
+        );
+
+        let mut plan = test_plan(Vec::new());
+        plan.diff_class = DiffClass::WorkflowTooling;
+        plan.lanes = super::default_lanes_for_diff_class(DiffClass::WorkflowTooling);
+        let mut args = test_run_args(std::path::PathBuf::from("out"));
+        args.lane_width = 10;
+        let lanes = review_lanes_for_args(&plan, &args);
+
+        assert!(!lanes.is_empty());
+        assert!(lanes.iter().all(|lane| lane.id.starts_with("workflow-")));
+        assert!(lanes.iter().any(|lane| {
+            lane.focus.contains("pull_request_target") && lane.focus.contains("checkout")
+        }));
+        assert!(!lanes.iter().any(|lane| {
+            lane.focus.contains("ArrayBuffer")
+                || lane.focus.contains("worker handoff")
+                || lane.role.contains("undefined-behavior")
+        }));
     }
 
     #[test]
@@ -9743,6 +10092,7 @@ index 1111111..2222222 100644
             changed_files: vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()],
             patch: patch.to_owned(),
             flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
         };
         let proof_requests = vec![
             ProofRequest {
@@ -9858,6 +10208,7 @@ index 1111111..2222222 100644
             changed_files: vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()],
             patch: patch.to_owned(),
             flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
         };
         let proof_requests = vec![ProofRequest {
             schema: "ub-review.proof_request.v1".to_owned(),
@@ -11033,6 +11384,46 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn workflow_pr_body_uses_workflow_route_language() {
+        let mut plan = test_plan(Vec::new());
+        plan.diff_class = DiffClass::WorkflowTooling;
+        plan.lanes = super::default_lanes_for_diff_class(DiffClass::WorkflowTooling);
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec![".github/workflows/ub-review.yml".to_owned()],
+            patch: "+permissions:\n+  contents: read\n".to_owned(),
+            flags: classify_diff(
+                &[".github/workflows/ub-review.yml".to_owned()],
+                "+permissions:\n+  contents: read\n",
+            ),
+            diff_class: DiffClass::WorkflowTooling,
+        };
+
+        let body = render_review_body(
+            "abc123",
+            &plan,
+            &diff,
+            &[model_lane_receipt("workflow-permissions", "ok")],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.starts_with("# Workflow Review"));
+        assert!(body.contains("workflow permissions"));
+        assert!(body.contains("actionlint/zizmor"));
+        assert!(!body.contains("ArrayBuffer"));
+        assert!(!body.contains("worker handoff"));
+        assert!(!body.contains("unsafe/native seams"));
+        assert!(!body.contains("test-oracle strength"));
+    }
+
+    #[test]
     fn model_off_empty_smoke_writes_skip_receipt_instead_of_review_payload() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -11539,6 +11930,7 @@ UB_REVIEW_HTTP_STATUS:429
             base: "HEAD~1".to_owned(),
             head: "HEAD".to_owned(),
             profile_name: "gh-runner".to_owned(),
+            diff_class: DiffClass::SourceUb,
             sensors,
             lanes: vec![LanePlan {
                 id: "tests".to_owned(),
@@ -11570,6 +11962,7 @@ UB_REVIEW_HTTP_STATUS:429
                 docs_only: false,
                 unsafe_or_native_risk: true,
             },
+            diff_class: DiffClass::SourceUb,
         }
     }
 
