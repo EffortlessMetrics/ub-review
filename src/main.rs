@@ -929,6 +929,7 @@ struct ReviewMetrics {
     github_review_comments: usize,
     summary_only_findings: usize,
     observations: usize,
+    follow_up_results: FollowUpResultMetrics,
     proof_requests: usize,
     proof_receipts: usize,
     resource_leases: usize,
@@ -1131,6 +1132,13 @@ struct ModelMetrics {
     model_lane_status_counts: BTreeMap<String, usize>,
     model_lane_calls_attempted: usize,
     model_fallbacks_used: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FollowUpResultMetrics {
+    total: usize,
+    status_counts: BTreeMap<String, usize>,
+    calls_attempted: usize,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -4350,6 +4358,7 @@ fn write_review_artifacts(
         },
         review_payload_status,
         observations_count: observations.len(),
+        follow_up_results: &follow_up_results,
         elapsed,
     });
 
@@ -4527,6 +4536,7 @@ struct ReviewMetricsInput<'a> {
     github_review: Option<&'a GitHubReview>,
     review_payload_status: &'a str,
     observations_count: usize,
+    follow_up_results: &'a [FollowUpResult],
     elapsed: Duration,
 }
 
@@ -4539,6 +4549,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review,
         review_payload_status,
         observations_count,
+        follow_up_results,
         elapsed,
     } = input;
     let sensor_statuses = plan
@@ -4555,6 +4566,10 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         .model_lanes
         .iter()
         .map(|receipt| receipt.status.as_str())
+        .collect::<Vec<_>>();
+    let follow_up_result_statuses = follow_up_results
+        .iter()
+        .map(|result| result.status.as_str())
         .collect::<Vec<_>>();
 
     ReviewMetrics {
@@ -4609,6 +4624,14 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review_comments: github_review.map_or(0, |review| review.comments.len()),
         summary_only_findings: review.summary_only_findings.len(),
         observations: observations_count,
+        follow_up_results: FollowUpResultMetrics {
+            total: follow_up_results.len(),
+            status_counts: status_counts(follow_up_result_statuses.iter().copied()),
+            calls_attempted: follow_up_results
+                .iter()
+                .filter(|result| model_call_attempted_status(&result.status))
+                .count(),
+        },
         proof_requests: review.proof_requests.len(),
         proof_receipts: review.proof_receipts.len(),
         resource_leases: review.resource_leases.len(),
@@ -16765,6 +16788,10 @@ UB_REVIEW_HTTP_STATUS:429
 
         let diff = test_diff();
         let plan = test_plan(Vec::new());
+        let follow_up_results = vec![
+            test_follow_up_result("follow-up-a", "group-a", "ok"),
+            test_follow_up_result("follow-up-b", "group-b", "skipped_budget"),
+        ];
         let metrics = build_review_metrics(ReviewMetricsInput {
             out: Path::new("target/ub-review-test"),
             diff: &diff,
@@ -16773,6 +16800,7 @@ UB_REVIEW_HTTP_STATUS:429
             github_review: Some(&github_review),
             review_payload_status: "prepared",
             observations_count: 0,
+            follow_up_results: &follow_up_results,
             elapsed: std::time::Duration::from_secs(601),
         });
 
@@ -16784,6 +16812,10 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.post_status, "not_attempted_by_run");
         assert_eq!(metrics.terminal_state, "needs-reviewer-attention");
         assert_eq!(metrics.observations, 0);
+        assert_eq!(metrics.follow_up_results.total, 2);
+        assert_eq!(metrics.follow_up_results.status_counts["ok"], 1);
+        assert_eq!(metrics.follow_up_results.status_counts["skipped_budget"], 1);
+        assert_eq!(metrics.follow_up_results.calls_attempted, 1);
         assert_eq!(metrics.proof_requests, 0);
         assert_eq!(metrics.proof_receipts, 0);
         assert_eq!(metrics.resource_leases, 0);
@@ -17921,6 +17953,27 @@ UB_REVIEW_HTTP_STATUS:429
             http_status: None,
             response_shape: None,
             fallback_from: None,
+        }
+    }
+
+    fn test_follow_up_result(task_id: &str, group_id: &str, status: &str) -> super::FollowUpResult {
+        super::FollowUpResult {
+            schema: "ub-review.follow_up_result.v1".to_owned(),
+            task_id: task_id.to_owned(),
+            group_id: group_id.to_owned(),
+            packet_path: format!("questions/orchestrator-follow-up/{task_id}.json"),
+            model_lane: format!("orchestrator-follow-up-{task_id}"),
+            status: status.to_owned(),
+            reason: "test follow-up result".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            request_path: None,
+            response_path: None,
+            content_path: None,
+            normalized_content_path: None,
+            stderr_path: None,
+            output_counts: super::FollowUpOutputCounts::default(),
         }
     }
 
