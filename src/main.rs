@@ -4885,10 +4885,22 @@ fn write_proof_request_artifacts(
         serde_json::to_vec_pretty(&proof_groups)?,
     )?;
 
+    let proof_request_dir = out.join("proof_requests");
+    if proof_request_dir.exists() {
+        fs::remove_dir_all(&proof_request_dir)
+            .with_context(|| format!("remove {}", proof_request_dir.display()))?;
+    }
+    fs::create_dir_all(&proof_request_dir)
+        .with_context(|| format!("create {}", proof_request_dir.display()))?;
+
     let mut ndjson = String::new();
     for request in proof_requests {
         ndjson.push_str(&serde_json::to_string(request)?);
         ndjson.push('\n');
+        fs::write(
+            proof_request_dir.join(format!("{}.json", sanitize_artifact_name(&request.id))),
+            serde_json::to_vec_pretty(request)?,
+        )?;
     }
     fs::write(out.join("proof_requests.ndjson"), ndjson)?;
 
@@ -12262,9 +12274,15 @@ index 1111111..2222222 100644
         let proof_groups: Vec<ProofRequestGroup> = serde_json::from_slice(&fs::read(
             temp.path().join("review/proof_request_groups.json"),
         )?)?;
+        let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path()
+                .join("proof_requests")
+                .join(format!("{}.json", proof_requests[0].id)),
+        )?)?;
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
         assert_eq!(proof_json.len(), 1);
+        assert_eq!(proof_request_file, serde_json::to_value(&proof_json[0])?);
         assert_eq!(proof_groups.len(), 1);
         assert_eq!(proof_groups[0].duplicate_count, 1);
         assert!(
