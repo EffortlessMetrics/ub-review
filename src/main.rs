@@ -1300,6 +1300,69 @@ struct FocusedProofPlan {
     reason: String,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerInput<'a> {
+    schema: &'static str,
+    diff_class: &'static str,
+    changed_files: &'a [String],
+    pr_thread_context_status: &'a str,
+    proof_requests: &'a [ProofRequest],
+    runtime_budget: ProofPlannerRuntimeBudget,
+    box_shape: &'a BoxState,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerRuntimeBudget {
+    target_timeout_sec: u64,
+    hard_timeout_sec: u64,
+    max_focused_tests: usize,
+    per_command_timeout_sec: u64,
+    total_proof_timeout_sec: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerOutput {
+    schema: &'static str,
+    lane: &'static str,
+    proof_tasks: Vec<ProofTaskArtifact>,
+    skip: Vec<ProofPlannerSkip>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofTaskArtifact {
+    schema: &'static str,
+    id: String,
+    kind: String,
+    command: String,
+    head_command: String,
+    base_plus_tests_command: Option<String>,
+    purpose: String,
+    consumers: Vec<String>,
+    value: String,
+    cost: String,
+    timeout_sec: u64,
+    lease: ProofTaskLease,
+    test_file: String,
+    test_name: Option<String>,
+    mode: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofTaskLease {
+    cpu: u32,
+    memory_mb: u64,
+    disk_mb: u64,
+    network: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ProofPlannerSkip {
+    kind: String,
+    reason: String,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ProofBudget {
     max_focused_test_files: usize,
@@ -2597,6 +2660,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         &args.review.out,
         &config,
         &diff,
+        &box_state,
         &plan,
         &preliminary_summary,
         &args,
@@ -4598,6 +4662,7 @@ fn write_review_artifacts(
     out: &Path,
     config: &Config,
     diff: &DiffContext,
+    box_state: &BoxState,
     plan: &Plan,
     running_summary: &str,
     args: &RunArgs,
@@ -4679,6 +4744,14 @@ fn write_review_artifacts(
     }
 
     let profile = config.selected_profile()?;
+    write_proof_planner_artifacts(
+        out,
+        diff,
+        profile,
+        box_state,
+        &pr_thread_context,
+        &proof_requests,
+    )?;
     let proof_result = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
@@ -6694,6 +6767,142 @@ fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -> Result<()
     }
     fs::write(out.join("witnesses.ndjson"), ndjson)?;
     Ok(())
+}
+
+fn write_proof_planner_artifacts(
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    box_state: &BoxState,
+    pr_thread_context: &PrThreadContext,
+    proof_requests: &[ProofRequest],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let budget = proof_budget(profile)?;
+    let lease_budget = proof_lease_budget(profile)?;
+    let input = ProofPlannerInput {
+        schema: "ub-review.proof_planner_input.v1",
+        diff_class: diff.diff_class.key(),
+        changed_files: &diff.changed_files,
+        pr_thread_context_status: &pr_thread_context.status,
+        proof_requests,
+        runtime_budget: ProofPlannerRuntimeBudget {
+            target_timeout_sec: profile.budgets.default_timeout_sec,
+            hard_timeout_sec: profile.budgets.hard_timeout_sec,
+            max_focused_tests: budget.max_focused_tests,
+            per_command_timeout_sec: budget.per_command_timeout_sec,
+            total_proof_timeout_sec: budget.max_total_seconds,
+        },
+        box_shape: box_state,
+    };
+    let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
+    let proof_tasks = plans
+        .into_iter()
+        .map(|plan| proof_task_artifact(plan, budget, lease_budget))
+        .collect::<Vec<_>>();
+    let skip = proof_planner_skips(diff, &proof_tasks);
+    let output = ProofPlannerOutput {
+        schema: "ub-review.proof_planner_output.v1",
+        lane: "proof-planner",
+        proof_tasks,
+        skip,
+    };
+    fs::write(
+        review_dir.join("proof_planner_input.json"),
+        serde_json::to_vec_pretty(&input)?,
+    )?;
+    fs::write(
+        review_dir.join("proof_planner_output.json"),
+        serde_json::to_vec_pretty(&output)?,
+    )?;
+    let mut ndjson = String::new();
+    for task in &output.proof_tasks {
+        ndjson.push_str(&serde_json::to_string(task)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("proof_tasks.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn proof_task_artifact(
+    plan: FocusedProofPlan,
+    budget: ProofBudget,
+    lease_budget: ProofLeaseBudget,
+) -> ProofTaskArtifact {
+    let base_plus_tests_command =
+        (plan.mode == FocusedProofMode::RedGreen).then(|| plan.base_plus_tests_command.clone());
+    let command = match &base_plus_tests_command {
+        Some(base_command) => format!("{} && {}", plan.head_command, base_command),
+        None => plan.head_command.clone(),
+    };
+    let purpose = focused_proof_task_purpose(&plan);
+    ProofTaskArtifact {
+        schema: "ub-review.proof_task.v1",
+        id: plan.id,
+        kind: "focused-test".to_owned(),
+        command,
+        head_command: plan.head_command,
+        base_plus_tests_command,
+        purpose,
+        consumers: vec![
+            "tests-oracle".to_owned(),
+            "opposition".to_owned(),
+            "compiler".to_owned(),
+        ],
+        value: "high".to_owned(),
+        cost: "low".to_owned(),
+        timeout_sec: budget
+            .per_command_timeout_sec
+            .saturating_mul(plan.mode.command_count())
+            .min(budget.max_total_seconds),
+        lease: ProofTaskLease {
+            cpu: lease_budget.cpu,
+            memory_mb: lease_budget.memory_mb,
+            disk_mb: lease_budget.disk_mb,
+            network: lease_budget.network,
+        },
+        test_file: plan.test_file,
+        test_name: plan.test_name,
+        mode: plan.mode.key().to_owned(),
+        requested_by: plan.requested_by,
+        request_ids: plan.request_ids,
+    }
+}
+
+fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
+    match plan.mode {
+        FocusedProofMode::HeadOnly => {
+            format!(
+                "Prove the focused test target `{}` passes on HEAD.",
+                plan.test_file
+            )
+        }
+        FocusedProofMode::RedGreen => format!(
+            "Prove the focused test target `{}` fails on base+tests and passes on HEAD.",
+            plan.test_file
+        ),
+    }
+}
+
+fn proof_planner_skips(
+    diff: &DiffContext,
+    proof_tasks: &[ProofTaskArtifact],
+) -> Vec<ProofPlannerSkip> {
+    let mut skip = Vec::new();
+    if !diff.flags.unsafe_or_native_risk {
+        skip.push(ProofPlannerSkip {
+            kind: "miri".to_owned(),
+            reason: "No new unsafe/native aliasing seam was detected; cheaper focused proof is preferred when available.".to_owned(),
+        });
+    }
+    if proof_tasks.is_empty() && !diff.flags.workflow_changed {
+        skip.push(ProofPlannerSkip {
+            kind: "actionlint".to_owned(),
+            reason: "No workflow files changed.".to_owned(),
+        });
+    }
+    skip
 }
 
 fn write_proof_request_artifacts(
@@ -14408,6 +14617,16 @@ mod tests {
         assert_eq!(box_state.suggested_profile(), "gh-runner");
     }
 
+    fn test_box_state() -> BoxState {
+        BoxState {
+            cpus: 2,
+            free_mem_mb: Some(7_000),
+            free_disk_mb: Some(10_000),
+            load_1m: Some(0.5),
+            github_actions: false,
+        }
+    }
+
     #[test]
     fn runtime_profile_override_takes_precedence_over_legacy_profile() {
         assert_eq!(
@@ -18957,6 +19176,7 @@ UB_REVIEW_HTTP_STATUS:429
             &out,
             &config,
             &diff,
+            &test_box_state(),
             &plan,
             "running summary",
             &args,
