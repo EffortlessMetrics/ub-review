@@ -9453,10 +9453,24 @@ fn parse_lane_model_output_or_degrade(
     match serde_json::from_str::<LaneModelOutput>(json_payload) {
         Ok(output) => {
             let degraded = output.degraded;
-            Ok((output, degraded))
+            if degraded || lane_model_output_has_value(&output) {
+                Ok((output, degraded))
+            } else if lane_model_json_payload_has_content(json_payload) {
+                Ok((
+                    degraded_lane_model_output(
+                        json_payload,
+                        "Output parsed as JSON but did not contain recognized lane evidence.",
+                        parse_path,
+                    ),
+                    true,
+                ))
+            } else {
+                Err(anyhow::anyhow!("lane model output was empty or unusable"))
+                    .with_context(|| format!("parse {}", parse_path.display()))
+            }
         }
         Err(err) if lane_model_raw_content_is_usable(json_payload) => Ok((
-            degraded_lane_model_output(json_payload, &err, parse_path),
+            degraded_lane_model_output(json_payload, &format!("Parse error: {err}"), parse_path),
             true,
         )),
         Err(err) => {
@@ -9465,23 +9479,48 @@ fn parse_lane_model_output_or_degrade(
     }
 }
 
+fn lane_model_output_has_value(output: &LaneModelOutput) -> bool {
+    output
+        .summary
+        .as_deref()
+        .is_some_and(|summary| !summary.trim().is_empty())
+        || !output.inline_comments.is_empty()
+        || !output.candidate_findings.is_empty()
+        || !output.summary_only_findings.is_empty()
+        || !output.observations.is_empty()
+        || !output.failed_objections.is_empty()
+        || !output.proof_requests.is_empty()
+}
+
+fn lane_model_json_payload_has_content(json_payload: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(json_payload)
+        .ok()
+        .is_some_and(|value| lane_model_json_value_has_content(&value))
+}
+
+fn lane_model_json_value_has_content(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => false,
+        serde_json::Value::Bool(_) | serde_json::Value::Number(_) => true,
+        serde_json::Value::String(raw) => !raw.trim().is_empty(),
+        serde_json::Value::Array(items) => items.iter().any(lane_model_json_value_has_content),
+        serde_json::Value::Object(fields) => fields.values().any(lane_model_json_value_has_content),
+    }
+}
+
 fn lane_model_raw_content_is_usable(value: &str) -> bool {
     let trimmed = value.trim();
     !trimmed.is_empty() && trimmed.chars().any(char::is_alphabetic)
 }
 
-fn degraded_lane_model_output(
-    raw: &str,
-    err: &serde_json::Error,
-    parse_path: &Path,
-) -> LaneModelOutput {
+fn degraded_lane_model_output(raw: &str, reason: &str, parse_path: &Path) -> LaneModelOutput {
     LaneModelOutput {
         summary: None,
         inline_comments: Vec::new(),
         candidate_findings: Vec::new(),
         summary_only_findings: Vec::new(),
         observations: vec![lane_output_malformed_content_observation(
-            raw, err, parse_path,
+            raw, reason, parse_path,
         )],
         failed_objections: Vec::new(),
         proof_requests: Vec::new(),
@@ -9491,7 +9530,7 @@ fn degraded_lane_model_output(
 
 fn lane_output_malformed_content_observation(
     raw: &str,
-    err: &serde_json::Error,
+    reason: &str,
     parse_path: &Path,
 ) -> ModelCandidateObservation {
     let raw = truncate_chars(raw.trim(), 240);
@@ -9510,7 +9549,7 @@ fn lane_output_malformed_content_observation(
         path: None,
         line: None,
         evidence: vec![
-            format!("Parse error: {err}"),
+            reason.to_owned(),
             format!("Raw content artifact: {}", parse_path.display()),
         ],
         dedupe_key: Some("lane-output-malformed-content".to_owned()),
@@ -13925,6 +13964,47 @@ index 1111111..2222222 100644
                 .iter()
                 .any(|item| item.contains("content.json"))
         );
+        Ok(())
+    }
+
+    #[test]
+    fn lane_output_split_degrades_contentful_schema_wrong_json() -> Result<()> {
+        let raw = r#"{"findings":"EncodedSlice route excerpt survived as text"}"#;
+        let parse_path = Path::new("target/ub-review/review/model/ub-worker-handoff/content.json");
+
+        let (output, degraded) = super::parse_lane_model_output_or_degrade(raw, parse_path)?;
+
+        assert!(degraded);
+        assert!(output.degraded);
+        assert!(output.inline_comments.is_empty());
+        assert!(output.candidate_findings.is_empty());
+        assert!(output.summary_only_findings.is_empty());
+        assert_eq!(output.observations.len(), 1);
+        assert!(
+            output.observations[0]
+                .claim
+                .contains("EncodedSlice route excerpt")
+        );
+        assert!(
+            output.observations[0]
+                .evidence
+                .iter()
+                .any(|item| item.contains("recognized lane evidence"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn lane_output_split_rejects_empty_unusable_output() -> Result<()> {
+        let parse_path = Path::new("target/ub-review/review/model/ub-active-view/content.json");
+
+        for raw in ["{}", r#"{"observations": ""}"#] {
+            let err = super::parse_lane_model_output_or_degrade(raw, parse_path)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("empty lane output unexpectedly parsed"))?;
+            assert_eq!(super::classify_model_error(&err), "invalid_json");
+            assert!(format!("{err:#}").contains("empty or unusable"));
+        }
         Ok(())
     }
 
