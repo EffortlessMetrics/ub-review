@@ -16,6 +16,12 @@ Do not give every lane every artifact. Route evidence by job.
 
 The summary reducer sees everything. Individual lanes receive the evidence that sharpens their specialty.
 
+The first-class tool plan is recorded in `review/resolved-tools.json` and
+`review/tool-status.json`. That plan is a routing contract, not a second
+implementation of the tools: each tool owns its own receipt, `ub-review` records
+whether the receipt is relevant to the diff, and the compiler renders only
+reviewer-value findings or trust-affecting evidence gaps.
+
 ## Sensor issue escalation
 
 Sensors are receipts, not local subsystems to fork inside `ub-review`. If a

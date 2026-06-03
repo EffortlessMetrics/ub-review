@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 use toml::Value;
@@ -30,17 +31,90 @@ fn run() -> Result<()> {
             let report = check_policy(&root)?;
             print!("{}", report.inventory());
         }
+        "policy-report" => {
+            reject_extra_args(args)?;
+            let report = check_policy(&root)?;
+            print!("{}", report.inventory());
+        }
+        "precommit" => {
+            reject_extra_args(args)?;
+            run_precommit(&root)?;
+        }
+        "ci" => match args.next().as_deref() {
+            Some("plan") => {
+                reject_extra_args(args)?;
+                print_ci_plan(&root)?;
+            }
+            Some("actuals") => {
+                reject_extra_args(args)?;
+                print_ci_actuals(&root)?;
+            }
+            Some(other) => bail!("unknown xtask ci command `{other}`; expected plan or actuals"),
+            None => bail!("missing xtask ci command; expected plan or actuals"),
+        },
         "help" | "-h" | "--help" => {
             reject_extra_args(args)?;
             print_help();
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, or help"
+                "unknown xtask command `{other}`; expected precommit, policy-check, policy-inventory, policy-report, ci, or help"
             )
         }
     }
 
+    Ok(())
+}
+
+fn run_precommit(root: &Path) -> Result<()> {
+    run_command(root, "cargo", &["fmt", "--check"])?;
+    run_command(root, "cargo", &["check"])?;
+    run_command(
+        root,
+        "cargo",
+        &["clippy", "--all-targets", "--", "-D", "warnings"],
+    )?;
+    let report = check_policy(root)?;
+    println!("{}", report.summary());
+    Ok(())
+}
+
+fn print_ci_plan(root: &Path) -> Result<()> {
+    let report = check_policy(root)?;
+    println!("# CI plan\n");
+    println!("- summary check: PR Gate Success");
+    println!("- policy files: {}", report.policy_files);
+    println!("- CI lanes: {}", report.ci_lanes);
+    println!("- implemented CI lanes: {}", report.implemented_lanes);
+    println!("- CI risk packs: {}", report.risk_packs);
+    println!("- control plane: cargo xtask precommit, policy-report, ci plan, ci actuals");
+    Ok(())
+}
+
+fn print_ci_actuals(root: &Path) -> Result<()> {
+    let report = check_policy(root)?;
+    println!("# CI actuals baseline\n");
+    print!("{}", report.inventory());
+    println!("- timing actuals: not collected by xtask yet");
+    println!("- coverage actuals: ingested from external coverage receipts when available");
+    Ok(())
+}
+
+fn run_command(root: &Path, program: &str, args: &[&str]) -> Result<()> {
+    let display = if args.is_empty() {
+        program.to_owned()
+    } else {
+        format!("{} {}", program, args.join(" "))
+    };
+    println!("$ {display}");
+    let status = Command::new(program)
+        .args(args)
+        .current_dir(root)
+        .status()
+        .with_context(|| format!("run {display}"))?;
+    if !status.success() {
+        bail!("{display} failed with {status}");
+    }
     Ok(())
 }
 
@@ -56,8 +130,12 @@ fn print_help() {
         "\
 cargo xtask commands
 
+  cargo xtask precommit         run the fast local Rust/policy gate
   cargo xtask policy-check      parse and validate repo policy receipts
   cargo xtask policy-inventory  print receipt and CI policy counts
+  cargo xtask policy-report     alias for policy-inventory
+  cargo xtask ci plan           print policy-ledger CI plan
+  cargo xtask ci actuals        print current policy inventory as CI actuals baseline
 "
     );
 }

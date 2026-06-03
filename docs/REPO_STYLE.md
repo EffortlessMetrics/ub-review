@@ -52,8 +52,10 @@ Serious repo:
 
 High-volume repo:
 
+- `cargo xtask precommit` for the fast local Rust/policy gate;
 - `cargo xtask policy-check` for parse-only policy receipt validation;
-- `cargo xtask policy-inventory` for receipt and CI policy counts;
+- `cargo xtask policy-inventory` / `cargo xtask policy-report` for receipt and CI policy counts;
+- `cargo xtask ci plan` and `cargo xtask ci actuals` for the local CI control-plane view;
 - inventory/propose commands for exceptions;
 - risk packs that select deeper proof;
 - CI summary output that distinguishes pass, fail, advisory, and skipped by

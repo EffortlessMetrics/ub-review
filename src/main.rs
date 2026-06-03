@@ -783,6 +783,7 @@ enum ToolClass {
     Search,
     Workflow,
     Security,
+    Telemetry,
     Test,
     Build,
     HeavyWitness,
@@ -793,6 +794,7 @@ enum ToolClass {
 enum Trigger {
     Always,
     SourceChanged,
+    RustChanged,
     RustBehaviorOrTestsChanged,
     UnsafeOrNativeRiskChanged,
     WorkflowChanged,
@@ -894,6 +896,36 @@ struct SensorPlan {
     class: ToolClass,
     weight: u32,
     requires_lease: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ReviewToolRegistryEntry {
+    id: &'static str,
+    command: &'static str,
+    role: &'static str,
+    modes: &'static [&'static str],
+    required: bool,
+    required_if: Option<&'static str>,
+    receipts: &'static [&'static str],
+    reviewer_value_rule: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ReviewToolStatus {
+    id: String,
+    command: String,
+    role: String,
+    modes: Vec<String>,
+    required: bool,
+    required_if: Option<String>,
+    planned: bool,
+    plan_reason: String,
+    installed: bool,
+    version: Option<String>,
+    status: String,
+    evidence_gap: bool,
+    receipts: Vec<String>,
+    reviewer_value_rule: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2851,6 +2883,15 @@ fn write_plan_artifacts(
             selectors.effective_model_lanes,
         ))?,
     )?;
+    fs::create_dir_all(out.join("review"))?;
+    fs::write(
+        out.join("review/resolved-tools.json"),
+        serde_json::to_vec_pretty(&resolved_tools_artifact(config, diff, plan))?,
+    )?;
+    fs::write(
+        out.join("review/tool-status.json"),
+        serde_json::to_vec_pretty(&tool_status_artifact(config, diff, plan))?,
+    )?;
     fs::write(
         out.join("box-state.json"),
         serde_json::to_vec_pretty(box_state)?,
@@ -2873,6 +2914,184 @@ struct PlanArtifactSelectors<'a> {
     run_args: Option<&'a RunArgs>,
     selectors: &'a SelectorArgs,
     effective_model_lanes: Option<&'a [LanePlan]>,
+}
+
+fn review_tool_registry() -> Vec<ReviewToolRegistryEntry> {
+    vec![
+        ReviewToolRegistryEntry {
+            id: "tokmd",
+            command: "tokmd",
+            role: "PR packet / cockpit / bounded context",
+            modes: &["analyze-on-diff", "cockpit", "context"],
+            required: true,
+            required_if: None,
+            receipts: &[
+                "sensors/tokmd/analyze.md",
+                "sensors/tokmd/cockpit.md",
+                "sensors/tokmd/context.md",
+            ],
+            reviewer_value_rule: "render only lane evidence, cockpit context, or missing packet context that changes reviewer action",
+        },
+        ReviewToolRegistryEntry {
+            id: "ripr",
+            command: "ripr",
+            role: "static mutation-exposure / weak-oracle signal",
+            modes: &["on-diff"],
+            required: false,
+            required_if: Some("rust_changed"),
+            receipts: &["sensors/ripr/report.json"],
+            reviewer_value_rule: "render changed behavior, oracle weakness, or suggested proof question only when actionable",
+        },
+        ReviewToolRegistryEntry {
+            id: "unsafe-review",
+            command: "unsafe-review",
+            role: "unsafe/native reviewability",
+            modes: &["on-diff"],
+            required: false,
+            required_if: Some("unsafe_or_native_changed"),
+            receipts: &["sensors/unsafe-review/cards.json"],
+            reviewer_value_rule: "render contract, guard, reach, witness-route, or external-harness gaps only when actionable",
+        },
+        ReviewToolRegistryEntry {
+            id: "ast-grep",
+            command: "ast-grep",
+            role: "structural search and sibling-route scans",
+            modes: &["changed-plus-siblings"],
+            required: false,
+            required_if: None,
+            receipts: &["sensors/ast-grep/findings.json"],
+            reviewer_value_rule: "render sibling-route structural findings only when they alter review scope",
+        },
+        ReviewToolRegistryEntry {
+            id: "actionlint",
+            command: "actionlint",
+            role: "workflow/tooling diffs",
+            modes: &["workflow-diff"],
+            required: false,
+            required_if: Some("workflow_changed"),
+            receipts: &["sensors/actionlint/report.json"],
+            reviewer_value_rule: "render workflow findings or trust-affecting missing workflow evidence only",
+        },
+        ReviewToolRegistryEntry {
+            id: "codecov",
+            command: "codecov",
+            role: "execution-surface telemetry",
+            modes: &["changed-files"],
+            required: false,
+            required_if: None,
+            receipts: &["sensors/codecov/coverage.json"],
+            reviewer_value_rule: "render changed-surface coverage regression telemetry only; never claim correctness",
+        },
+        ReviewToolRegistryEntry {
+            id: "cargo-allow",
+            command: "cargo-allow",
+            role: "source-tree exception ledger",
+            modes: &["changed-exceptions"],
+            required: false,
+            required_if: Some("rust_changed"),
+            receipts: &["sensors/cargo-allow/report.json"],
+            reviewer_value_rule: "render anonymous source exceptions or missing owned ledger receipts only",
+        },
+    ]
+}
+
+fn resolved_tools_artifact(config: &Config, diff: &DiffContext, plan: &Plan) -> serde_json::Value {
+    let tools = tool_statuses(config, diff, plan);
+    serde_json::json!({
+        "schema": "ub-review.resolved_tools.v1",
+        "contract": "tools produce receipts; orchestrator routes evidence; compiler posts only reviewer-value signal; artifacts keep full reports",
+        "diff_flags": &diff.flags,
+        "tools": tools,
+    })
+}
+
+fn tool_status_artifact(config: &Config, diff: &DiffContext, plan: &Plan) -> serde_json::Value {
+    let tools = tool_statuses(config, diff, plan);
+    let missing_evidence = tools
+        .iter()
+        .filter(|tool| tool.evidence_gap)
+        .map(|tool| tool.id.clone())
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "schema": "ub-review.tool_status.v1",
+        "missing_evidence": missing_evidence,
+        "tools": tools,
+    })
+}
+
+fn tool_statuses(config: &Config, diff: &DiffContext, plan: &Plan) -> Vec<ReviewToolStatus> {
+    review_tool_registry()
+        .into_iter()
+        .map(|entry| review_tool_status(config, diff, plan, &entry))
+        .collect()
+}
+
+fn review_tool_status(
+    config: &Config,
+    diff: &DiffContext,
+    plan: &Plan,
+    entry: &ReviewToolRegistryEntry,
+) -> ReviewToolStatus {
+    let plan_sensor = plan.sensors.iter().find(|sensor| sensor.id == entry.id);
+    let planned = plan_sensor.is_some_and(|sensor| sensor.run);
+    let plan_reason = plan_sensor
+        .map(|sensor| sensor.reason.clone())
+        .unwrap_or_else(|| {
+            required_if_match(entry.required_if, &diff.flags)
+                .unwrap_or_else(|| "not in sensor execution plan yet".to_owned())
+        });
+    let command = config
+        .tools
+        .get(entry.id)
+        .map(|tool| tool.command.clone())
+        .unwrap_or_else(|| entry.command.to_owned());
+    let installed = command_on_path(&command);
+    let version = command_version(&command);
+    let required_now =
+        entry.required || required_if_match(entry.required_if, &diff.flags).is_some();
+    let evidence_gap = required_now && !installed;
+    let status = if installed {
+        "available"
+    } else if required_now {
+        "missing-required-evidence"
+    } else {
+        "missing-optional-evidence"
+    };
+    ReviewToolStatus {
+        id: entry.id.to_owned(),
+        command,
+        role: entry.role.to_owned(),
+        modes: entry.modes.iter().map(|mode| (*mode).to_owned()).collect(),
+        required: entry.required,
+        required_if: entry.required_if.map(str::to_owned),
+        planned,
+        plan_reason,
+        installed,
+        version,
+        status: status.to_owned(),
+        evidence_gap,
+        receipts: entry
+            .receipts
+            .iter()
+            .map(|receipt| (*receipt).to_owned())
+            .collect(),
+        reviewer_value_rule: entry.reviewer_value_rule.to_owned(),
+    }
+}
+
+fn required_if_match(required_if: Option<&str>, flags: &DiffFlags) -> Option<String> {
+    match required_if {
+        Some("rust_changed") if flags.rust_changed => {
+            Some("required because Rust changed".to_owned())
+        }
+        Some("unsafe_or_native_changed") if flags.unsafe_or_native_risk => {
+            Some("required because unsafe/native risk changed".to_owned())
+        }
+        Some("workflow_changed") if flags.workflow_changed => {
+            Some("required because workflow/tooling changed".to_owned())
+        }
+        _ => None,
+    }
 }
 
 fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::Value {
@@ -3430,6 +3649,7 @@ fn trigger_match(trigger: Trigger, flags: &DiffFlags) -> Option<String> {
     match trigger {
         Trigger::Always => Some("always-on base packet".to_owned()),
         Trigger::SourceChanged if flags.source_changed => Some("source file changed".to_owned()),
+        Trigger::RustChanged if flags.rust_changed => Some("Rust source changed".to_owned()),
         Trigger::RustBehaviorOrTestsChanged if flags.rust_changed || flags.rust_tests_changed => {
             Some("Rust behavior or tests changed".to_owned())
         }
@@ -13084,6 +13304,8 @@ fn evidence_label(sensor_id: &str) -> &'static str {
         "ast-grep" => "structural route scan",
         "semgrep" => "semantic security scan",
         "actionlint" => "workflow lint packet",
+        "codecov" => "changed-surface coverage telemetry",
+        "cargo-allow" => "source exception ledger packet",
         "zizmor" => "workflow hardening packet",
         "gitleaks" => "secret-scan packet",
         "osv-scanner" => "dependency advisory packet",
@@ -13994,6 +14216,66 @@ mod tests {
             .get("ripr")
             .ok_or_else(|| anyhow::anyhow!("ripr tool policy missing"))?;
         assert!(ripr.enabled);
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_review_tool_registry_records_required_roles_and_receipts() -> Result<()> {
+        let registry = super::review_tool_registry();
+        let tokmd = registry
+            .iter()
+            .find(|tool| tool.id == "tokmd")
+            .ok_or_else(|| anyhow::anyhow!("tokmd registry entry missing"))?;
+        assert!(tokmd.required);
+        assert_eq!(tokmd.modes, ["analyze-on-diff", "cockpit", "context"]);
+        assert!(tokmd.receipts.contains(&"sensors/tokmd/analyze.md"));
+
+        let ripr = registry
+            .iter()
+            .find(|tool| tool.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr registry entry missing"))?;
+        assert_eq!(ripr.required_if, Some("rust_changed"));
+        assert!(ripr.role.contains("weak-oracle"));
+
+        let cargo_allow = registry
+            .iter()
+            .find(|tool| tool.id == "cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("cargo-allow registry entry missing"))?;
+        assert_eq!(cargo_allow.receipts, ["sensors/cargo-allow/report.json"]);
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_tool_status_marks_required_diff_tools_as_evidence_gaps() -> Result<()> {
+        let config = Config::default();
+        let diff = DiffContext {
+            base: "HEAD~1".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: String::new(),
+            flags: DiffFlags {
+                source_changed: true,
+                rust_changed: true,
+                ..DiffFlags::default()
+            },
+            diff_class: DiffClass::SourceGeneral,
+        };
+        let plan = test_plan(Vec::new());
+        let artifact = super::tool_status_artifact(&config, &diff, &plan);
+        let tools = artifact["tools"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("tools array missing"))?;
+        let ripr = tools
+            .iter()
+            .find(|tool| tool["id"] == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr status missing"))?;
+        assert_eq!(ripr["required_if"], "rust_changed");
+        assert_eq!(ripr["plan_reason"], "required because Rust changed");
+        assert!(ripr["receipts"].as_array().is_some_and(|receipts| {
+            receipts
+                .iter()
+                .any(|receipt| receipt == "sensors/ripr/report.json")
+        }));
         Ok(())
     }
 

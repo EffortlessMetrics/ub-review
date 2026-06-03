@@ -128,6 +128,19 @@ Doctor reports:
 - base cache hit or miss;
 - rule cache hit or miss.
 
+Every `ub-review plan --write` and `ub-review run` also writes the resolved
+tool registry under the run directory:
+
+```text
+review/resolved-tools.json
+review/tool-status.json
+```
+
+Those files are planning receipts only. They record the canonical role, mode,
+receipt path, install status, and diff relevance for each first-class review
+tool without executing the tool or turning missing optional tools into code
+findings.
+
 ## Policy
 
 For the Bun profile:
