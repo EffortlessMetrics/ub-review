@@ -365,6 +365,7 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
     for request in proof_requests:
         require_proof_request_schema(request)
     require_proof_request_groups(root, proof_requests)
+    require_proof_request_files(root, proof_requests)
     ndjson_path = root / "proof_requests.ndjson"
     text = read_text(ndjson_path)
     lines = [line for line in text.splitlines() if line.strip()]
@@ -393,6 +394,20 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
         or "No model-lane proof requests were emitted" in proof_plan
     ):
         fail("review/proof_plan.md missing empty proof request note")
+
+
+def require_proof_request_files(root: pathlib.Path, proof_requests: list[dict]) -> None:
+    proof_request_dir = root / "proof_requests"
+    if not proof_request_dir.is_dir():
+        fail("missing proof_requests directory")
+    expected = {f"{sanitize_artifact_name(request['id'])}.json": request for request in proof_requests}
+    actual = sorted(path.name for path in proof_request_dir.glob("*.json"))
+    if actual != sorted(expected):
+        fail("proof_requests directory entries do not match review/proof_requests.json")
+    for name, expected_request in expected.items():
+        parsed = load_json(proof_request_dir / name)
+        if parsed != expected_request:
+            fail(f"proof_requests/{name} does not match review/proof_requests.json")
 
 
 def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict]) -> None:

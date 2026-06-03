@@ -165,6 +165,10 @@ target/ub-review/
     source-route.ndjson
     ...
 
+  proof_requests/
+    proof-001.json
+    ...
+
   review/
     shared_context.md
     metrics.json
