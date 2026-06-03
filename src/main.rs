@@ -3611,6 +3611,7 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
         "## Refuted",
         "## Residual risk",
         "## Parked follow-ups",
+        "## Evidence gaps",
         "## Missing evidence",
     ]
     .iter()
@@ -7853,12 +7854,6 @@ fn render_pull_request_review_body(
             || verification_observations
                 .iter()
                 .any(|observation| text_is_test_proof_review_question(&observation.claim)),
-        residual_risk_count: residual_risk_observations.len() + residual_risk_receipts.len(),
-        missing_evidence_count: missing_observations.len()
-            + proof_receipts
-                .iter()
-                .filter(|receipt| proof_receipt_is_missing_evidence(receipt))
-                .count(),
         current_proof_failure: proof_receipts
             .iter()
             .any(|receipt| receipt.result == "head_failed"),
@@ -7936,7 +7931,7 @@ fn render_pull_request_review_body(
     }
 
     if has_specific_missing_evidence {
-        text.push_str("\n## Missing evidence\n\n");
+        text.push_str("\n## Evidence gaps\n\n");
         for observation in &missing_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
@@ -7967,8 +7962,6 @@ struct PrDecisionContext {
     finding_count: usize,
     verification_count: usize,
     has_test_proof_verification: bool,
-    residual_risk_count: usize,
-    missing_evidence_count: usize,
     current_proof_failure: bool,
 }
 
@@ -7979,12 +7972,6 @@ fn pr_decision_sentence(context: PrDecisionContext) -> String {
     if context.current_proof_failure {
         return "Needs focused proof failure resolved before upstream.".to_owned();
     }
-    let attention_kinds = (context.verification_count > 0) as usize
-        + (context.residual_risk_count > 0) as usize
-        + (context.missing_evidence_count > 0) as usize;
-    if attention_kinds > 1 {
-        return "Needs reviewer attention before upstream: verification, residual risk, or missing evidence remains.".to_owned();
-    }
     if context.verification_count == 1 {
         if context.has_test_proof_verification {
             return "Needs one test-proof clarification before upstream.".to_owned();
@@ -7993,18 +7980,6 @@ fn pr_decision_sentence(context: PrDecisionContext) -> String {
     }
     if context.verification_count > 1 {
         return "Needs verification checks before upstream.".to_owned();
-    }
-    if context.residual_risk_count == 1 {
-        return "Needs one residual-risk check before upstream.".to_owned();
-    }
-    if context.residual_risk_count > 1 {
-        return "Needs residual-risk checks before upstream.".to_owned();
-    }
-    if context.missing_evidence_count == 1 {
-        return "Needs one missing evidence item resolved before upstream.".to_owned();
-    }
-    if context.missing_evidence_count > 1 {
-        return "Needs missing evidence resolved before upstream.".to_owned();
     }
     no_blocking_decision_for_diff_class(context.diff_class).to_owned()
 }
@@ -13304,9 +13279,11 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
+        assert!(body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("## Residual risk"));
         assert!(body.contains("HEAD and base+tests both passed"));
         assert!(!body.contains("## Test proof"));
+        assert!(!body.contains("Needs one residual-risk check"));
         assert!(!body.contains("A human should still inspect"));
         assert!(!has_standalone_approval_line(&body));
     }
@@ -13329,11 +13306,12 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("Needs one missing evidence item resolved before upstream."));
-        assert!(body.contains("## Missing evidence"));
+        assert!(body.contains("No blocking UB finding from this pass."));
+        assert!(body.contains("## Evidence gaps"));
         assert!(body.contains("Focused proof timed out"));
         assert!(!body.contains("## Test proof"));
         assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("Needs one missing evidence item resolved before upstream."));
         assert!(!body.contains("A human should still inspect"));
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
@@ -13710,7 +13688,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.contains("Confirm a typed-array view over a resizable ArrayBuffer"));
         assert!(!body.contains("## Refuted"));
         assert!(!body.contains("Box::from(slice) can return None"));
-        assert!(body.contains("## Missing evidence"));
+        assert!(body.contains("## Evidence gaps"));
         assert!(!body.contains("duplicate lane summary"));
         assert!(!body.contains("Evidence:"));
         assert!(!body.contains("medium-high"));
@@ -13744,6 +13722,7 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
+        assert!(!body.contains("## Evidence gaps"));
         assert!(!body.contains("## Missing evidence"));
         assert!(!body.contains("Lane output was contentful"));
         assert!(!body.contains("EncodedSlice route excerpt"));
