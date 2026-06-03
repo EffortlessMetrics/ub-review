@@ -1065,6 +1065,7 @@ struct LaneModelOutput {
     observations: Vec<ModelCandidateObservation>,
     failed_objections: Vec<ModelFailedObjection>,
     proof_requests: Vec<ModelProofRequest>,
+    degraded: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1090,11 +1091,11 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
         D: serde::Deserializer<'de>,
     {
         let mut value = serde_json::Value::deserialize(deserializer)?;
-        let degraded_observations = normalize_lane_model_output_value(&mut value);
+        let normalization = normalize_lane_model_output_value(&mut value);
         let wire: LaneModelOutputWire =
             serde_json::from_value(value).map_err(serde::de::Error::custom)?;
         let mut observations = wire.observations;
-        observations.extend(degraded_observations);
+        observations.extend(normalization.degraded_observations);
         Ok(Self {
             summary: wire.summary,
             inline_comments: wire.inline_comments,
@@ -1103,6 +1104,7 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
             observations,
             failed_objections: wire.failed_objections,
             proof_requests: wire.proof_requests,
+            degraded: normalization.degraded,
         })
     }
 }
@@ -1181,40 +1183,51 @@ const LANE_MODEL_ARRAY_FIELDS: &[&str] = &[
     "proof_requests",
 ];
 
-fn normalize_lane_model_output_value(
-    value: &mut serde_json::Value,
-) -> Vec<ModelCandidateObservation> {
+struct LaneModelNormalization {
+    degraded_observations: Vec<ModelCandidateObservation>,
+    degraded: bool,
+}
+
+fn normalize_lane_model_output_value(value: &mut serde_json::Value) -> LaneModelNormalization {
     let Some(object) = value.as_object_mut() else {
-        return Vec::new();
+        return LaneModelNormalization {
+            degraded_observations: Vec::new(),
+            degraded: false,
+        };
     };
-    let mut degraded_observations = Vec::new();
+    let mut normalization = LaneModelNormalization {
+        degraded_observations: Vec::new(),
+        degraded: false,
+    };
     for field in LANE_MODEL_ARRAY_FIELDS {
         if let Some(field_value) = object.get_mut(*field) {
-            normalize_lane_model_array_field(field, field_value, &mut degraded_observations);
+            normalize_lane_model_array_field(field, field_value, &mut normalization);
         }
     }
-    degraded_observations
+    normalization
 }
 
 fn normalize_lane_model_array_field(
     field: &str,
     value: &mut serde_json::Value,
-    degraded_observations: &mut Vec<ModelCandidateObservation>,
+    normalization: &mut LaneModelNormalization,
 ) {
     match value {
         serde_json::Value::Array(items) => {
             for item in items {
-                normalize_lane_model_array_item(field, item);
+                normalization.degraded |= normalize_lane_model_array_item(field, item);
             }
         }
         serde_json::Value::Object(_) => {
             let mut item = std::mem::replace(value, serde_json::Value::Null);
             normalize_lane_model_array_item(field, &mut item);
             *value = serde_json::Value::Array(vec![item]);
+            normalization.degraded = true;
         }
         serde_json::Value::String(raw) => {
             if let Some(observation) = lane_output_scalar_field_observation(field, raw) {
-                degraded_observations.push(observation);
+                normalization.degraded_observations.push(observation);
+                normalization.degraded = true;
             }
             *value = serde_json::Value::Array(Vec::new());
         }
@@ -1224,39 +1237,44 @@ fn normalize_lane_model_array_field(
         other => {
             let raw = other.to_string();
             if let Some(observation) = lane_output_scalar_field_observation(field, &raw) {
-                degraded_observations.push(observation);
+                normalization.degraded_observations.push(observation);
+                normalization.degraded = true;
             }
             *other = serde_json::Value::Array(Vec::new());
         }
     }
 }
 
-fn normalize_lane_model_array_item(field: &str, value: &mut serde_json::Value) {
+fn normalize_lane_model_array_item(field: &str, value: &mut serde_json::Value) -> bool {
     if !matches!(field, "observations" | "failed_objections") {
-        return;
+        return false;
     }
     let Some(object) = value.as_object_mut() else {
-        return;
+        return false;
     };
     if let Some(evidence) = object.get_mut("evidence") {
-        normalize_string_array_field(evidence);
+        return normalize_string_array_field(evidence);
     }
+    false
 }
 
-fn normalize_string_array_field(value: &mut serde_json::Value) {
+fn normalize_string_array_field(value: &mut serde_json::Value) -> bool {
     match value {
         serde_json::Value::String(raw) => {
-            let raw = raw.trim();
+            let raw = raw.trim().to_owned();
+            let degraded = !raw.is_empty();
             *value = if raw.is_empty() {
                 serde_json::Value::Array(Vec::new())
             } else {
                 serde_json::Value::Array(vec![serde_json::Value::String(raw.to_owned())])
             };
+            degraded
         }
         serde_json::Value::Null => {
             *value = serde_json::Value::Array(Vec::new());
+            false
         }
-        _ => {}
+        _ => false,
     }
 }
 
@@ -7127,7 +7145,10 @@ fn parse_lane_model_output_or_degrade(
     parse_path: &Path,
 ) -> Result<(LaneModelOutput, bool)> {
     match serde_json::from_str::<LaneModelOutput>(json_payload) {
-        Ok(output) => Ok((output, false)),
+        Ok(output) => {
+            let degraded = output.degraded;
+            Ok((output, degraded))
+        }
         Err(err) if lane_model_raw_content_is_usable(json_payload) => Ok((
             degraded_lane_model_output(json_payload, &err, parse_path),
             true,
@@ -7158,6 +7179,7 @@ fn degraded_lane_model_output(
         )],
         failed_objections: Vec::new(),
         proof_requests: Vec::new(),
+        degraded: true,
     }
 }
 
@@ -11193,6 +11215,7 @@ index 1111111..2222222 100644
             observations: Vec::new(),
             failed_objections: Vec::new(),
             proof_requests: Vec::new(),
+            degraded: false,
         };
         let mut inline_comments = Vec::new();
         let mut summary_only_findings = Vec::new();
@@ -11378,6 +11401,7 @@ index 1111111..2222222 100644
   ]
 }"#;
         let output: LaneModelOutput = serde_json::from_str(json)?;
+        assert!(output.degraded);
         assert_eq!(
             output.observations[0].evidence,
             vec!["route excerpt was scalar text".to_owned()]
@@ -11428,7 +11452,12 @@ index 1111111..2222222 100644
   "observations": "The added regression test still needs base+tests red/green proof.",
   "candidate_findings": "Malformed inline finding text should not erase the whole lane."
 }"#;
-        let output: LaneModelOutput = serde_json::from_str(json)?;
+        let (output, degraded) = super::parse_lane_model_output_or_degrade(
+            json,
+            Path::new("target/ub-review/review/model/tests-oracle/content.json"),
+        )?;
+        assert!(degraded);
+        assert!(output.degraded);
         assert!(output.candidate_findings.is_empty());
         assert_eq!(output.observations.len(), 2);
 
@@ -11479,6 +11508,7 @@ index 1111111..2222222 100644
         let (output, degraded) = super::parse_lane_model_output_or_degrade(raw, parse_path)?;
 
         assert!(degraded);
+        assert!(output.degraded);
         assert!(output.inline_comments.is_empty());
         assert!(output.candidate_findings.is_empty());
         assert!(output.summary_only_findings.is_empty());
@@ -12338,6 +12368,7 @@ index 1111111..2222222 100644
                 observations: Vec::new(),
                 failed_objections: Vec::new(),
                 proof_requests: Vec::new(),
+                degraded: false,
             };
             let mut inline_comments = Vec::new();
             let mut summary_only_findings = Vec::new();
