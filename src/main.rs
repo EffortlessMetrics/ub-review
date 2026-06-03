@@ -4339,12 +4339,6 @@ fn write_review_artifacts(
         &review.proof_receipts,
         &review.resource_leases,
     );
-    let witnesses = build_witness_records(
-        &review.inline_comments,
-        &review.summary_only_findings,
-        &observations,
-        &review.proof_receipts,
-    );
     write_observation_artifacts(out, &observations)?;
     write_orchestrator_artifacts(out, &orchestrator_plan)?;
     let mut follow_up_results = Vec::new();
@@ -4367,6 +4361,13 @@ fn write_review_artifacts(
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
     write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
+    let mut witnesses = build_witness_records(
+        &review.inline_comments,
+        &review.summary_only_findings,
+        &observations,
+        &review.proof_receipts,
+    );
+    append_follow_up_evidence_witnesses(&mut witnesses, &follow_up_evidence);
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -5040,6 +5041,81 @@ fn build_witness_records(
         }));
     }
     witnesses
+}
+
+fn append_follow_up_evidence_witnesses(
+    witnesses: &mut Vec<WitnessRecord>,
+    evidence: &FollowUpEvidenceArtifact,
+) {
+    for comment in &evidence.inline_comments {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: "needs-witness",
+            kind: "inline-finding",
+            source: "follow-up-inline-comment",
+            claim: &comment.body,
+            dedupe_key: &format!(
+                "follow-up-inline:{}:{}:{}",
+                comment.path,
+                comment.line,
+                sha256_hex(comment.body.as_bytes())
+            ),
+            evidence: vec![comment.evidence.clone()],
+            lane: Some(comment.lane.clone()),
+            path: Some(comment.path.clone()),
+            line: Some(comment.line),
+            observation_id: None,
+            proof_receipt_id: None,
+        }));
+    }
+    for finding in &evidence.summary_only_findings {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: witness_status_for_summary_finding(finding),
+            kind: "summary-finding",
+            source: "follow-up-summary-only-finding",
+            claim: &finding.reason,
+            dedupe_key: &format!(
+                "follow-up-summary:{}:{}",
+                finding.lane,
+                sha256_hex(format!("{}\n{}", finding.reason, finding.evidence).as_bytes())
+            ),
+            evidence: vec![finding.evidence.clone()],
+            lane: Some(finding.lane.clone()),
+            path: None,
+            line: None,
+            observation_id: None,
+            proof_receipt_id: None,
+        }));
+    }
+    for observation in &evidence.observations {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: witness_status_for_observation(observation),
+            kind: &observation.kind,
+            source: &format!("follow-up-{}", observation.source),
+            claim: &observation.claim,
+            dedupe_key: &format!("follow-up-observation:{}", observation.dedupe_key),
+            evidence: observation.evidence.clone(),
+            lane: Some(observation.lane.clone()),
+            path: observation.path.clone(),
+            line: observation.line,
+            observation_id: None,
+            proof_receipt_id: None,
+        }));
+    }
+    for request in &evidence.proof_requests {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: "needs-witness",
+            kind: "proof-request",
+            source: "follow-up-proof-request",
+            claim: &request.reason,
+            dedupe_key: &format!("follow-up-proof-request:{}", request.id),
+            evidence: vec![request.command.clone()],
+            lane: Some(request.lane.clone()),
+            path: None,
+            line: None,
+            observation_id: None,
+            proof_receipt_id: None,
+        }));
+    }
 }
 
 fn build_candidate_records(
@@ -12868,12 +12944,12 @@ mod tests {
         ReviewDepth, ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs,
         RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
         SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
         follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
@@ -17711,7 +17787,7 @@ index 1111111..2222222 100644
     {
       "severity": "low",
       "confidence": "medium",
-      "reason": "Follow-up narrowed the remaining route check to one helper.",
+      "reason": "Routed evidence narrowed the remaining route check to one helper.",
       "evidence": "routed evidence packet"
     }
   ],
@@ -17772,9 +17848,42 @@ index 1111111..2222222 100644
         assert_eq!(evidence.summary_only_findings.len(), 1);
         assert_eq!(evidence.observations.len(), 2);
         assert_eq!(evidence.proof_requests.len(), 1);
+        let mut witnesses = Vec::new();
+        append_follow_up_evidence_witnesses(&mut witnesses, &evidence);
+        assert_eq!(witnesses.len(), 5);
+        assert!(witnesses.iter().any(|witness| {
+            witness.source == "follow-up-inline-comment"
+                && witness.kind == "inline-finding"
+                && witness.status == "needs-witness"
+        }));
+        assert!(witnesses.iter().any(|witness| {
+            witness.source == "follow-up-summary-only-finding"
+                && witness.kind == "summary-finding"
+                && witness.status == "needs-witness"
+        }));
+        assert!(witnesses.iter().any(|witness| {
+            witness.source == "follow-up-model-observation"
+                && witness.dedupe_key == "follow-up-observation:filehandle-write-route"
+                && witness.status == "tool-confirmed"
+        }));
+        assert!(witnesses.iter().any(|witness| {
+            witness.source == "follow-up-model-failed-objection"
+                && witness.kind == "false-premise"
+                && witness.status == "refuted"
+        }));
+        assert!(witnesses.iter().any(|witness| {
+            witness.source == "follow-up-proof-request"
+                && witness.kind == "proof-request"
+                && witness.status == "needs-witness"
+                && witness
+                    .evidence
+                    .iter()
+                    .any(|item| item.contains("bun test test/js/bun/fs/fs.write.test.ts"))
+        }));
 
         write_follow_up_output_artifacts(temp.path(), &outputs)?;
         write_follow_up_evidence_artifact(temp.path(), &evidence)?;
+        write_witness_artifacts(temp.path(), &witnesses)?;
         let written: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path().join("review/follow_up_outputs.json"),
         )?)?;
@@ -17797,6 +17906,9 @@ index 1111111..2222222 100644
             written_evidence["proof_requests"].as_array().map(Vec::len),
             Some(1)
         );
+        let witness_json: Vec<super::WitnessRecord> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
+        assert_eq!(witness_json.len(), 5);
         Ok(())
     }
 

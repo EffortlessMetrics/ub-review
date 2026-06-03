@@ -195,6 +195,7 @@ target/ub-review/
     follow_up_results.json
     follow_up_outputs.json
     follow_up_evidence.json
+    witnesses.json
     proof_requests.json
     proof_request_groups.json
     proof_plan.md
@@ -211,6 +212,7 @@ target/ub-review/
   follow_up_questions.ndjson
   follow_up_results.ndjson
   follow_up_outputs.ndjson
+  witnesses.ndjson
   proof_requests.ndjson
   running-summary.md
 ```
