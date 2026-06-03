@@ -15,8 +15,8 @@ reason = "Cheap compile, format, lint, and unit-test proof for ordinary Rust PRs
 id = "policy-gate"
 when = "pull_request"
 target_required = true
-implemented = false
-reason = "Policy ledgers and receipt schemas must remain parseable and enforceable once a checker lands."
+implemented = true
+reason = "Policy ledgers and receipt schemas are parsed by cargo xtask policy-check."
 
 [[lane]]
 id = "ripr-advisory"
