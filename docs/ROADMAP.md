@@ -64,6 +64,7 @@ box fully without letting lanes duplicate tests, exhaust disk, or post directly.
 ```text
 evidence store      = shared packet, sensor receipts, diff map, ledger context
 lane workers        = specialist model questions
+proof planner lane  = adaptive evidence-plan selector
 orchestrator        = dispatcher, context router, editor, referee
 proof broker        = central test/tool scheduler
 resource broker     = CPU/memory/disk/time governor
@@ -71,23 +72,29 @@ review compiler     = only component allowed to post
 ```
 
 The orchestrator is not another free-roaming reviewer. Lanes investigate and
-emit structured events. The orchestrator routes evidence, asks bounded follow-up
-questions, collects proof requests, and sends allowed commands to the proof
-broker. The compiler validates, dedupes, caps, and posts one grouped review.
+emit structured events. One lane has an explicit proof-planning job: read the
+diff, sensor output, early observations, repository configuration, and available
+receipts, then choose the focused proof that should run for this PR. The
+orchestrator routes evidence, asks bounded follow-up questions, collects proof
+requests, and sends allowed commands to the proof broker. The compiler
+validates, dedupes, caps, and posts one grouped review.
 
 The first missing layer is shared intra-run memory. Direct provider lanes cannot
 read files while a model call is running, so the runner owns observation reads
 and writes. The runner injects relevant existing observations into prompts and
 collects new observations from model output.
 
-Standard mode should optimize for review quality under a hard runtime budget, not
-minimum wall time. The target is 8-10 minutes with a 15-minute hard cap on
-GitHub-hosted runners. That extra time should buy coordination and confirmation:
+Standard mode should optimize for review quality under the local proof lease,
+not minimum wall time. A 30-minute local proof lease should be spent on commands
+likely to change the review decision while model lanes wait on providers.
+Model calls are concurrent network I/O; they do not reserve the device, and the
+end-to-end pass still obeys the configured runtime timeout. That time should buy
+coordination and confirmation:
 
 ```text
 model lanes: 10
 follow-up budget: 4-6 calls
-focused proof budget: 1-2 commands
+focused proof budget: adaptive to PR risk and lease
 inline comments: max 8
 ```
 
@@ -113,7 +120,8 @@ lane prompt
 
 Do not block every lane on every sensor, proof command, or follow-up. Direct
 provider lanes cannot read `observations/*.ndjson` while a model call is already
-running, so the runner owns the shared-memory turn:
+running, and they do not lock local compute while waiting on providers, so the
+runner owns the shared-memory turn and keeps local proof moving:
 
 ```text
 phase 1: read-only lanes start immediately
@@ -137,13 +145,14 @@ The core control loop should become:
 4. Build evidence store.
 5. Start first-pass lane questions.
 6. Watch lane events and candidate findings.
-7. Route targeted evidence to follow-up questions.
-8. Dedupe proof requests.
-9. Run allowed central proof jobs once.
-10. Route proof receipts back to lanes and compiler.
-11. Confirm, refute, or demote candidates.
-12. Compile one grouped Pull Request Review.
-13. Write metrics, calibration, and artifact receipts.
+7. Ask the proof-planning lane for the PR-specific evidence plan.
+8. Route targeted evidence to follow-up questions.
+9. Dedupe proof requests.
+10. Run allowed central proof jobs once.
+11. Route proof receipts back to lanes and compiler.
+12. Confirm, refute, or demote candidates.
+13. Compile one grouped Pull Request Review.
+14. Write metrics, calibration, and artifact receipts.
 ```
 
 Only the proof broker runs local commands. Only the review compiler posts. The
