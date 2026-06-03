@@ -149,6 +149,8 @@ fn active_len_tracks_view_after_resize() {
         "review/witnesses.json",
         "review/witness_registry.json",
         "review/proof_requests.json",
+        "review/proof_planner_input.json",
+        "review/proof_planner_output.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
         "review/resource_leases.json",
@@ -158,6 +160,7 @@ fn active_len_tracks_view_after_resize() {
         "follow_up_results.ndjson",
         "follow_up_outputs.ndjson",
         "proof_requests.ndjson",
+        "proof_tasks.ndjson",
         "proof_receipts.ndjson",
         "witnesses.ndjson",
         "resource_leases.ndjson",
@@ -988,6 +991,40 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         ],
         &[("PATH", path.as_str())],
     )?;
+
+    let planner_input: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_input.json"))?)?;
+    assert_eq!(planner_input["schema"], "ub-review.proof_planner_input.v1");
+    assert_eq!(planner_input["diff_class"], "tests-only");
+    assert_eq!(planner_input["runtime_budget"]["max_focused_tests"], 1);
+
+    let planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    assert_eq!(
+        planner_output["schema"],
+        "ub-review.proof_planner_output.v1"
+    );
+    assert_eq!(planner_output["lane"], "proof-planner");
+    let proof_tasks = json_array_field(&planner_output, "proof_tasks")?;
+    assert_eq!(proof_tasks.len(), 1);
+    assert_eq!(proof_tasks[0]["schema"], "ub-review.proof_task.v1");
+    assert_eq!(proof_tasks[0]["kind"], "focused-test");
+    assert_eq!(proof_tasks[0]["mode"], "red-green");
+    assert_eq!(proof_tasks[0]["lease"]["cpu"], 2);
+    assert_eq!(proof_tasks[0]["lease"]["network"], false);
+    assert!(
+        proof_tasks[0]["purpose"]
+            .as_str()
+            .is_some_and(|purpose| { purpose.contains("fails on base+tests and passes on HEAD") })
+    );
+    let proof_tasks_ndjson = fs::read_to_string(out.join("proof_tasks.ndjson"))?;
+    assert_eq!(
+        proof_tasks_ndjson
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+        1
+    );
 
     let receipts: Vec<serde_json::Value> =
         serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
