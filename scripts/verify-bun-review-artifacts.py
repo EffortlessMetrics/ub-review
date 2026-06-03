@@ -563,6 +563,65 @@ def require_observation_files(root: pathlib.Path, observations: list[dict]) -> N
         expected = [observation for observation in observations if observation["lane"] == lane]
         if lane_observations != expected:
             fail(f"observation NDJSON {path} does not match review/observations.json")
+    require_question_observation_files(root, observations)
+
+
+def require_question_observation_files(
+    root: pathlib.Path, observations: list[dict]
+) -> None:
+    questions_dir = root / "questions"
+    if not questions_dir.is_dir():
+        fail("missing questions directory")
+
+    expected: dict[str, dict[str, dict]] = {}
+    for observation in observations:
+        lane_name = sanitize_artifact_name(observation["lane"])
+        question_name = f"{sanitize_artifact_name(observation['question'])}.json"
+        lane_questions = expected.setdefault(lane_name, {})
+        artifact = lane_questions.setdefault(
+            question_name,
+            {
+                "schema": "ub-review.question_observations.v1",
+                "lane": observation["lane"],
+                "question": observation["question"],
+                "observations": [],
+            },
+        )
+        if (
+            artifact["lane"] != observation["lane"]
+            or artifact["question"] != observation["question"]
+        ):
+            fail(
+                "questions artifact path collision for "
+                f"{observation['lane']}/{observation['question']}"
+            )
+        artifact["observations"].append(observation)
+
+    actual_lane_dirs = []
+    for path in questions_dir.iterdir():
+        if not path.is_dir():
+            fail(f"unexpected questions entry: {path.name}")
+        actual_lane_dirs.append(path.name)
+    if sorted(actual_lane_dirs) != sorted(expected):
+        fail("questions directory entries do not match review/observations.json")
+
+    for lane_name, expected_questions in expected.items():
+        lane_dir = questions_dir / lane_name
+        actual_question_files = []
+        for path in lane_dir.iterdir():
+            if not path.is_file():
+                fail(f"unexpected questions/{lane_name} entry: {path.name}")
+            actual_question_files.append(path.name)
+        if sorted(actual_question_files) != sorted(expected_questions):
+            fail(
+                f"questions/{lane_name} entries do not match review/observations.json"
+            )
+        for name, expected_artifact in expected_questions.items():
+            parsed = load_json(lane_dir / name)
+            if parsed != expected_artifact:
+                fail(
+                    f"questions/{lane_name}/{name} does not match review/observations.json"
+                )
 
 
 def require_observation_summary_artifacts(

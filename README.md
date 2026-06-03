@@ -169,6 +169,11 @@ target/ub-review/
     proof-001.json
     ...
 
+  questions/
+    tests-oracle/
+      red-green.json
+      ...
+
   review/
     shared_context.md
     metrics.json
