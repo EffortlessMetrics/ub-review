@@ -721,6 +721,7 @@ struct ReviewArtifacts {
     summary_only_findings: Vec<SummaryOnlyFinding>,
     observations: Vec<Observation>,
     proof_requests: Vec<ProofRequest>,
+    proof_receipts: Vec<ProofReceipt>,
     body: String,
 }
 
@@ -765,6 +766,7 @@ struct ReviewMetrics {
     summary_only_findings: usize,
     observations: usize,
     proof_requests: usize,
+    proof_receipts: usize,
     off_diff_candidates_rejected: usize,
     missing_or_failed_sensor_evidence: usize,
     missing_or_failed_model_evidence: usize,
@@ -826,6 +828,35 @@ struct ProofRequestGroup {
     request_ids: Vec<String>,
     reasons: Vec<String>,
     duplicate_count: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ProofReceipt {
+    schema: String,
+    id: String,
+    kind: String,
+    base: String,
+    head: String,
+    test_patch_mode: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+    commands: Vec<ProofCommandReceipt>,
+    result: String,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ProofCommandReceipt {
+    side: String,
+    command: String,
+    status: String,
+    exit_code: Option<i32>,
+    timed_out: bool,
+    timeout_sec: u64,
+    duration_ms: u128,
+    stdout: String,
+    stderr: String,
+    reason: String,
 }
 
 #[derive(Clone, Debug)]
@@ -3370,6 +3401,9 @@ fn write_review_artifacts(
         )?;
     }
 
+    let profile = config.selected_profile()?;
+    let proof_receipts = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
+
     let artifact_body = render_review_body(
         &shared_context_id,
         plan,
@@ -3380,6 +3414,7 @@ fn write_review_artifacts(
         &inline_comments,
         &summary_only_findings,
         &model_observations,
+        &proof_receipts,
         args.review_body_max_bytes,
         ReviewBodyAudience::Artifact,
     );
@@ -3393,6 +3428,7 @@ fn write_review_artifacts(
         &inline_comments,
         &summary_only_findings,
         &model_observations,
+        &proof_receipts,
         args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
@@ -3409,8 +3445,12 @@ fn write_review_artifacts(
             })
             .collect(),
     };
-    let should_prepare_github_review =
-        should_prepare_github_review_payload(args, &inline_comments, &summary_only_findings);
+    let should_prepare_github_review = should_prepare_github_review_payload(
+        args,
+        &inline_comments,
+        &summary_only_findings,
+        &proof_receipts,
+    );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
     } else {
@@ -3438,12 +3478,19 @@ fn write_review_artifacts(
         summary_only_findings,
         observations: model_observations,
         proof_requests,
+        proof_receipts,
         body: artifact_body.clone(),
     };
     let observations = combined_observations(&review);
     write_observation_artifacts(out, &observations)?;
-    let profile = config.selected_profile()?;
-    write_proof_request_artifacts(out, diff, profile, &review.proof_requests)?;
+    write_proof_receipt_artifacts(out, &review.proof_receipts)?;
+    write_proof_request_artifacts(
+        out,
+        diff,
+        profile,
+        &review.proof_requests,
+        &review.proof_receipts,
+    )?;
     let metrics = build_review_metrics(ReviewMetricsInput {
         out,
         diff,
@@ -3491,8 +3538,15 @@ fn should_prepare_github_review_payload(
     args: &RunArgs,
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
+    proof_receipts: &[ProofReceipt],
 ) -> bool {
     if has_reviewer_value(inline_comments, summary_only_findings) {
+        return true;
+    }
+    if proof_receipts
+        .iter()
+        .any(proof_receipt_changes_review_value)
+    {
         return true;
     }
     !matches!(args.model_mode, ModelMode::Off)
@@ -3604,6 +3658,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         summary_only_findings: review.summary_only_findings.len(),
         observations: observations_count,
         proof_requests: review.proof_requests.len(),
+        proof_receipts: review.proof_receipts.len(),
         off_diff_candidates_rejected: review
             .summary_only_findings
             .iter()
@@ -3869,6 +3924,7 @@ fn write_proof_request_artifacts(
     diff: &DiffContext,
     profile: &Profile,
     proof_requests: &[ProofRequest],
+    proof_receipts: &[ProofReceipt],
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
@@ -3925,7 +3981,25 @@ fn write_proof_request_artifacts(
             plan.push_str("No focused red/green test targets were planned from the diff.\n");
         } else {
             plan.push_str("## Focused red/green proof plan\n\n");
-            plan.push_str("No proof broker commands were executed in this planner-only pass.\n\n");
+            if proof_receipts.is_empty() {
+                plan.push_str(
+                    "No proof broker commands were executed in this planner-only pass.\n\n",
+                );
+            } else {
+                plan.push_str(
+                    "Proof broker v0 executed focused HEAD proof only; base+tests red/green was not run in this pass.\n\n",
+                );
+                for receipt in proof_receipts {
+                    plan.push_str(&format!(
+                        "- Receipt `{}`: kind=`{}`, result=`{}`, commands=`{}`.\n",
+                        receipt.id,
+                        receipt.kind,
+                        receipt.result,
+                        receipt.commands.len()
+                    ));
+                }
+                plan.push('\n');
+            }
             for plan_item in focused_plans {
                 plan.push_str(&format!(
                     "- `{}` `{}`{} requested by `{}`: status=`{}`, cost=`focused-test`, head=`{}`, base+tests=`{}`. {}\n",
@@ -3952,6 +4026,22 @@ fn write_proof_request_artifacts(
         }
     }
     fs::write(review_dir.join("proof_plan.md"), plan)?;
+    Ok(())
+}
+
+fn write_proof_receipt_artifacts(out: &Path, proof_receipts: &[ProofReceipt]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("proof_receipts.json"),
+        serde_json::to_vec_pretty(proof_receipts)?,
+    )?;
+    let mut ndjson = String::new();
+    for receipt in proof_receipts {
+        ndjson.push_str(&serde_json::to_string(receipt)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("proof_receipts.ndjson"), ndjson)?;
     Ok(())
 }
 
@@ -4056,6 +4146,229 @@ fn focused_proof_plans_from_diff(
             }
         })
         .collect()
+}
+
+fn run_proof_broker_v0(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+    args: &RunArgs,
+) -> Result<Vec<ProofReceipt>> {
+    let budget = proof_budget(profile);
+    let tasks = focused_test_tasks_from_diff(diff, proof_requests, budget);
+    run_focused_head_proof_tasks_with_runner(
+        root,
+        out,
+        diff,
+        args,
+        budget,
+        tasks,
+        |root, argv, timeout, stdout, stderr| {
+            run_command_to_files(root, argv, timeout, stdout, stderr)
+        },
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_focused_head_proof_tasks_with_runner<F>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    args: &RunArgs,
+    budget: ProofBudget,
+    tasks: Vec<FocusedTestTask>,
+    mut runner: F,
+) -> Result<Vec<ProofReceipt>>
+where
+    F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+{
+    let mut receipts = Vec::new();
+    for (index, task) in tasks.into_iter().enumerate() {
+        if args.dry_run {
+            receipts.push(skipped_head_proof_receipt(
+                out,
+                diff,
+                &task,
+                "skipped_profile",
+                "dry-run; proof broker did not execute focused tests",
+            )?);
+            continue;
+        }
+        if index > 0 {
+            receipts.push(skipped_head_proof_receipt(
+                out,
+                diff,
+                &task,
+                "skipped_budget",
+                "proof broker v0 runs one focused HEAD command per review packet",
+            )?);
+            continue;
+        }
+        receipts.push(run_focused_head_proof_task(
+            root,
+            out,
+            diff,
+            &task,
+            budget.per_command_timeout_sec,
+            &mut runner,
+        )?);
+    }
+    Ok(receipts)
+}
+
+fn run_focused_head_proof_task<F>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    timeout_sec: u64,
+    runner: &mut F,
+) -> Result<ProofReceipt>
+where
+    F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+{
+    let paths = proof_command_paths(out, &task.id, "head")?;
+    let argv = proof_task_argv(task);
+    let command = command_display(&argv);
+    let status = runner(
+        root,
+        &argv,
+        timeout_sec,
+        &paths.stdout_path,
+        &paths.stderr_path,
+    );
+    let (command_status, result, reason, exit_code, timed_out, duration_ms) = match status {
+        Ok(status) if status.timed_out => (
+            "timed_out".to_owned(),
+            "timed_out".to_owned(),
+            status.reason,
+            status.exit_code,
+            true,
+            status.duration_ms,
+        ),
+        Ok(status) if status.success => (
+            "passed".to_owned(),
+            "head_passed".to_owned(),
+            status.reason,
+            status.exit_code,
+            false,
+            status.duration_ms,
+        ),
+        Ok(status) => (
+            "failed".to_owned(),
+            "head_failed".to_owned(),
+            status.reason,
+            status.exit_code,
+            false,
+            status.duration_ms,
+        ),
+        Err(error) => (
+            "skipped".to_owned(),
+            "skipped_profile".to_owned(),
+            format!("focused proof command unavailable: {error:#}"),
+            None,
+            false,
+            0,
+        ),
+    };
+    Ok(head_proof_receipt(
+        diff,
+        task,
+        ProofCommandReceipt {
+            side: "head".to_owned(),
+            command,
+            status: command_status,
+            exit_code,
+            timed_out,
+            timeout_sec,
+            duration_ms,
+            stdout: paths.stdout_rel,
+            stderr: paths.stderr_rel,
+            reason: reason.clone(),
+        },
+        result,
+        reason,
+    ))
+}
+
+fn skipped_head_proof_receipt(
+    out: &Path,
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    result: &str,
+    reason: &str,
+) -> Result<ProofReceipt> {
+    let paths = proof_command_paths(out, &task.id, "head")?;
+    let argv = proof_task_argv(task);
+    Ok(head_proof_receipt(
+        diff,
+        task,
+        ProofCommandReceipt {
+            side: "head".to_owned(),
+            command: command_display(&argv),
+            status: "skipped".to_owned(),
+            exit_code: None,
+            timed_out: false,
+            timeout_sec: 0,
+            duration_ms: 0,
+            stdout: paths.stdout_rel,
+            stderr: paths.stderr_rel,
+            reason: reason.to_owned(),
+        },
+        result.to_owned(),
+        reason.to_owned(),
+    ))
+}
+
+fn head_proof_receipt(
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    command: ProofCommandReceipt,
+    result: String,
+    reason: String,
+) -> ProofReceipt {
+    ProofReceipt {
+        schema: "ub-review.proof_receipt.v1".to_owned(),
+        id: task.id.clone(),
+        kind: "focused-head".to_owned(),
+        base: diff.base.clone(),
+        head: diff.head.clone(),
+        test_patch_mode: "head-only".to_owned(),
+        requested_by: task.requested_by.clone(),
+        request_ids: task.request_ids.clone(),
+        commands: vec![command],
+        result,
+        reason,
+    }
+}
+
+struct ProofCommandPaths {
+    stdout_path: PathBuf,
+    stderr_path: PathBuf,
+    stdout_rel: String,
+    stderr_rel: String,
+}
+
+fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<ProofCommandPaths> {
+    let rel_dir = format!("proof/{receipt_id}/{side}");
+    let dir = out.join(&rel_dir);
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    let stdout_path = dir.join("stdout.txt");
+    let stderr_path = dir.join("stderr.txt");
+    if !stdout_path.exists() {
+        fs::write(&stdout_path, b"")?;
+    }
+    if !stderr_path.exists() {
+        fs::write(&stderr_path, b"")?;
+    }
+    Ok(ProofCommandPaths {
+        stdout_path,
+        stderr_path,
+        stdout_rel: format!("{rel_dir}/stdout.txt"),
+        stderr_rel: format!("{rel_dir}/stderr.txt"),
+    })
 }
 
 fn focused_test_tasks_from_diff(
@@ -6711,6 +7024,7 @@ fn render_review_body(
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
     observations: &[Observation],
+    proof_receipts: &[ProofReceipt],
     review_body_max_bytes: usize,
     audience: ReviewBodyAudience,
 ) -> String {
@@ -6724,6 +7038,7 @@ fn render_review_body(
             inline_comments,
             summary_only_findings,
             observations,
+            proof_receipts,
             review_body_max_bytes,
         );
     }
@@ -6880,6 +7195,7 @@ fn render_pull_request_review_body(
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
     observations: &[Observation],
+    proof_receipts: &[ProofReceipt],
     review_body_max_bytes: usize,
 ) -> String {
     let mut text = String::new();
@@ -6942,7 +7258,10 @@ fn render_pull_request_review_body(
         .collect::<Vec<_>>();
     let has_review_value = has_actionable_inline_comment(inline_comments)
         || has_actionable_pr_body_summary_finding(summary_only_findings)
-        || has_actionable_observation(&observation_items);
+        || has_actionable_observation(&observation_items)
+        || proof_receipts
+            .iter()
+            .any(proof_receipt_changes_review_value);
 
     text.push_str("## Decision\n\n");
     text.push_str("- ");
@@ -6953,6 +7272,7 @@ fn render_pull_request_review_body(
     } else if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
         || !missing_observations.is_empty()
+        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
     {
         text.push_str(
             "No blocking finding from this pass; missing evidence below limits confidence.\n",
@@ -7000,6 +7320,17 @@ fn render_pull_request_review_body(
         }
     }
 
+    let proof_result_receipts = proof_receipts
+        .iter()
+        .filter(|receipt| proof_receipt_changes_review_value(receipt))
+        .collect::<Vec<_>>();
+    if !proof_result_receipts.is_empty() {
+        text.push_str("\n## Test proof\n\n");
+        for receipt in proof_result_receipts {
+            render_proof_receipt_summary(&mut text, receipt);
+        }
+    }
+
     if !parked.is_empty() {
         text.push_str("\n## Parked follow-ups\n\n");
         for observation in &parked_observations {
@@ -7024,10 +7355,17 @@ fn render_pull_request_review_body(
     if !missing_or_failed_sensor_evidence.is_empty()
         || !missing_or_failed_model_evidence.is_empty()
         || !missing_observations.is_empty()
+        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
     {
         text.push_str("\n## Missing evidence\n\n");
         for observation in &missing_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
+        }
+        for receipt in proof_receipts
+            .iter()
+            .filter(|receipt| proof_receipt_is_missing_evidence(receipt))
+        {
+            render_missing_proof_receipt_summary(&mut text, receipt);
         }
         render_compact_missing_evidence(
             &mut text,
@@ -7073,6 +7411,17 @@ fn has_actionable_pr_body_summary_finding(summary_only_findings: &[SummaryOnlyFi
         !is_pr_body_artifact_only_finding(finding)
             && matches!(finding.severity.as_str(), "blocker" | "high" | "medium")
     })
+}
+
+fn proof_receipt_changes_review_value(receipt: &ProofReceipt) -> bool {
+    matches!(receipt.result.as_str(), "head_passed" | "head_failed")
+}
+
+fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
+    matches!(
+        receipt.result.as_str(),
+        "timed_out" | "skipped_budget" | "skipped_profile"
+    )
 }
 
 fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
@@ -7225,6 +7574,55 @@ fn render_pr_signal(text: &mut String, value: &str) {
 fn render_pr_verification(text: &mut String, value: &str) {
     let sentence = verification_sentence(value);
     text.push_str(&format!("- {}\n", escape_md(&sentence)));
+}
+
+fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
+    let command = receipt
+        .commands
+        .first()
+        .map(|command| command.command.as_str())
+        .unwrap_or("focused test");
+    let summary = match receipt.result.as_str() {
+        "head_passed" => format!(
+            "Focused HEAD proof passed: `{}`. Base+tests red/green was not run in this v0 proof.",
+            command
+        ),
+        "head_failed" => format!(
+            "Focused HEAD proof failed: `{}`. This is a current failure, not a red/green witness.",
+            command
+        ),
+        _ => format!(
+            "Focused proof result `{}` for `{}` is recorded in artifacts.",
+            receipt.result, command
+        ),
+    };
+    render_pr_signal(text, &summary);
+}
+
+fn render_missing_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
+    let command = receipt
+        .commands
+        .first()
+        .map(|command| command.command.as_str())
+        .unwrap_or("focused test");
+    let summary = match receipt.result.as_str() {
+        "timed_out" => format!("Focused proof timed out for `{command}`; logs are in artifacts."),
+        "skipped_budget" => {
+            format!(
+                "Focused proof was skipped by budget for `{command}`; plan details are in artifacts."
+            )
+        }
+        "skipped_profile" => {
+            format!(
+                "Focused proof was unavailable for `{command}`; profile/tool details are in artifacts."
+            )
+        }
+        _ => format!(
+            "Focused proof result `{}` for `{}` needs artifact review.",
+            receipt.result, command
+        ),
+    };
+    render_pr_signal(text, &summary);
 }
 
 fn verification_sentence(value: &str) -> String {
@@ -9127,29 +9525,30 @@ mod tests {
     use anyhow::{Context as _, Result};
 
     use super::{
-        BoxState, Config, DiffClass, DiffContext, DiffFlags, EventLog, GitHubReview,
+        BoxState, CommandStatus, Config, DiffClass, DiffContext, DiffFlags, EventLog, GitHubReview,
         GitHubReviewComment, LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment,
         ModelCandidateFinding, ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider,
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, Profile, ProofBudget, ProofRequest,
-        ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
-        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
-        apply_model_output, apply_refuter_output, build_review_metrics,
-        build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_sensor_evidence_issues,
-        combined_observations, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, opencode_canary_spec, proof_budget,
-        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
-        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, sha256_hex, split_curl_http_status,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
-        write_proof_request_artifacts, write_review_artifacts, write_sensor_status,
+        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, Profile, ProofBudget,
+        ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
+        ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan,
+        SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
+        build_review_metrics, build_tokmd_sensor_commands, builtin_profiles, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        opencode_canary_spec, proof_budget, provider_spec_for_lane_with_key_state,
+        render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_review_artifacts, write_sensor_status,
     };
 
     #[test]
@@ -9888,6 +10287,7 @@ index 1111111..2222222 100644
             &test_diff(),
             &Profile::default(),
             &proof_requests,
+            &[] as &[ProofReceipt],
         )?;
         let proof_json: Vec<super::ProofRequest> =
             serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
@@ -10060,6 +10460,7 @@ index 1111111..2222222 100644
             &test_diff(),
             &Profile::default(),
             &proof_requests,
+            &[] as &[ProofReceipt],
         )?;
 
         let proof_json: Vec<super::ProofRequest> =
@@ -10248,7 +10649,13 @@ index 1111111..2222222 100644
             status: "requested".to_owned(),
         }];
 
-        write_proof_request_artifacts(temp.path(), &diff, &Profile::default(), &proof_requests)?;
+        write_proof_request_artifacts(
+            temp.path(),
+            &diff,
+            &Profile::default(),
+            &proof_requests,
+            &[] as &[ProofReceipt],
+        )?;
 
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
 
@@ -10264,6 +10671,135 @@ index 1111111..2222222 100644
         );
         assert!(!temp.path().join("review/proof_receipts.json").exists());
         assert!(!temp.path().join("proof_receipts.ndjson").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_runs_one_focused_head_command_and_writes_receipts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let patch = "\
+diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
+index 1111111..2222222 100644
+--- a/test/js/bun/md/md-edge-cases.test.ts
++++ b/test/js/bun/md/md-edge-cases.test.ts
+@@ -1,2 +1,4 @@
+ import { test } from 'bun:test';
++test(\"snapshots resizable ArrayBuffer input\", () => {});
++it('keeps stable bytes after getter reentry', () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-tests-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+                reason: "Need green witness.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-opposition-001".to_owned(),
+                lane: "opposition".to_owned(),
+                requested_by: vec!["opposition".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+                reason: "Confirm the same focused test.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            },
+        ];
+        let tasks = focused_test_tasks_from_diff(
+            &diff,
+            &proof_requests,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+        );
+        assert_eq!(tasks.len(), 2);
+        let args = test_run_args(out.clone());
+        let mut commands = Vec::<String>::new();
+        let receipts = super::run_focused_head_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, argv, timeout, stdout, stderr| {
+                commands.push(command_display(argv));
+                fs::write(stdout, b"head ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: format!("completed with timeout {timeout}s"),
+                    duration_ms: 42,
+                })
+            },
+        )?;
+
+        assert_eq!(commands.len(), 1);
+        assert_eq!(receipts.len(), 2);
+        assert_eq!(receipts[0].schema, "ub-review.proof_receipt.v1");
+        assert_eq!(receipts[0].kind, "focused-head");
+        assert_eq!(receipts[0].test_patch_mode, "head-only");
+        assert_eq!(receipts[0].result, "head_passed");
+        assert_eq!(
+            receipts[0].requested_by,
+            vec!["tests-oracle".to_owned(), "opposition".to_owned()]
+        );
+        assert_eq!(
+            receipts[0].request_ids,
+            vec![
+                "proof-tests-001".to_owned(),
+                "proof-opposition-001".to_owned()
+            ]
+        );
+        assert_eq!(receipts[0].commands[0].status, "passed");
+        assert!(out.join(&receipts[0].commands[0].stdout).exists());
+        assert_eq!(receipts[1].result, "skipped_budget");
+        assert_eq!(receipts[1].commands[0].status, "skipped");
+
+        write_proof_receipt_artifacts(&out, &receipts)?;
+        write_proof_request_artifacts(
+            &out,
+            &diff,
+            &Profile::default(),
+            &proof_requests,
+            &receipts,
+        )?;
+        let receipt_json: Vec<ProofReceipt> =
+            serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+        let receipt_ndjson = fs::read_to_string(out.join("proof_receipts.ndjson"))?;
+        let proof_plan = fs::read_to_string(out.join("review/proof_plan.md"))?;
+        assert_eq!(receipt_json.len(), 2);
+        assert_eq!(receipt_ndjson.lines().count(), 2);
+        assert!(proof_plan.contains("Proof broker v0 executed focused HEAD proof only"));
+        assert!(proof_plan.contains("result=`head_passed`"));
+        assert!(!proof_plan.contains("No proof broker commands were executed"));
         Ok(())
     }
 
@@ -11342,6 +11878,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11377,6 +11914,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11405,6 +11943,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::Artifact,
         );
@@ -11443,6 +11982,7 @@ UB_REVIEW_HTTP_STATUS:429
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11477,6 +12017,7 @@ UB_REVIEW_HTTP_STATUS:429
             }],
             &[] as &[SummaryOnlyFinding],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11513,6 +12054,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "compiler guard metadata".to_owned(),
             }],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11523,6 +12065,60 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("compiler guard metadata"));
         assert!(!body.contains("## Confirmed findings"));
         assert!(!body.contains("## Verification questions"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_renders_focused_head_proof_receipt_once() {
+        let receipt = test_proof_receipt("head_passed", "passed");
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Test proof"));
+        assert!(body.contains("Focused HEAD proof passed"));
+        assert!(body.contains("Base+tests red/green was not run in this v0 proof"));
+        assert!(!body.contains("stdout.txt"));
+        assert!(!body.contains("stderr.txt"));
+        assert!(!body.contains("## Model lanes"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_collapses_timed_out_proof_to_missing_evidence() {
+        let receipt = test_proof_receipt("timed_out", "timed_out");
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("missing evidence below limits confidence"));
+        assert!(body.contains("## Missing evidence"));
+        assert!(body.contains("Focused proof timed out"));
+        assert!(!body.contains("## Test proof"));
+        assert!(!body.contains("stdout.txt"));
+        assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -11626,6 +12222,7 @@ UB_REVIEW_HTTP_STATUS:429
             }],
             observations: Vec::new(),
             proof_requests: Vec::new(),
+            proof_receipts: Vec::new(),
             body: "artifact body".to_owned(),
         };
         let github_review = GitHubReview {
@@ -11655,6 +12252,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.post_status, "not_attempted_by_run");
         assert_eq!(metrics.observations, 0);
         assert_eq!(metrics.proof_requests, 0);
+        assert_eq!(metrics.proof_receipts, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
     }
@@ -11731,6 +12329,7 @@ UB_REVIEW_HTTP_STATUS:429
                 ),
             ],
             proof_requests: Vec::new(),
+            proof_receipts: Vec::new(),
             body: "artifact body".to_owned(),
         };
 
@@ -11805,6 +12404,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "UB ledger excerpt".to_owned(),
             }],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11872,6 +12472,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "duplicate lane summary".to_owned(),
             }],
             &observations,
+            &[] as &[ProofReceipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
@@ -11925,6 +12526,7 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "RIPR proof gap excerpt".to_owned(),
             }],
             &[] as &[Observation],
+            &[] as &[ProofReceipt],
             1_000,
             ReviewBodyAudience::Artifact,
         );
@@ -11987,6 +12589,34 @@ UB_REVIEW_HTTP_STATUS:429
             http_status: None,
             response_shape: None,
             fallback_from: None,
+        }
+    }
+
+    fn test_proof_receipt(result: &str, command_status: &str) -> ProofReceipt {
+        ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-red-green-test".to_owned(),
+            kind: "focused-head".to_owned(),
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["proof-tests-001".to_owned()],
+            commands: vec![ProofCommandReceipt {
+                side: "head".to_owned(),
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                    .to_owned(),
+                status: command_status.to_owned(),
+                exit_code: Some(0),
+                timed_out: result == "timed_out",
+                timeout_sec: 300,
+                duration_ms: 42,
+                stdout: "proof/proof-red-green-test/head/stdout.txt".to_owned(),
+                stderr: "proof/proof-red-green-test/head/stderr.txt".to_owned(),
+                reason: "test receipt fixture".to_owned(),
+            }],
+            result: result.to_owned(),
+            reason: "test receipt fixture".to_owned(),
         }
     }
 
