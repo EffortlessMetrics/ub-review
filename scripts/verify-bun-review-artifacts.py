@@ -153,6 +153,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
+        "review/witnesses.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
@@ -162,6 +163,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "follow_up_questions.ndjson",
         "follow_up_results.ndjson",
         "follow_up_outputs.ndjson",
+        "witnesses.ndjson",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
         "resource_leases.ndjson",
@@ -396,7 +398,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
     follow_up_outputs = require_follow_up_outputs(root, follow_up_results)
-    require_follow_up_evidence(root, follow_up_outputs)
+    follow_up_evidence = require_follow_up_evidence(root, follow_up_outputs)
+    require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
@@ -1246,6 +1249,47 @@ def require_follow_up_evidence(root: pathlib.Path, outputs: list[dict]) -> dict:
     return evidence
 
 
+def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> list[dict]:
+    witnesses = load_json(root / "review/witnesses.json")
+    if not isinstance(witnesses, list):
+        fail("review/witnesses.json is not an array")
+    lines = [
+        line
+        for line in read_text(root / "witnesses.ndjson").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != len(witnesses):
+        fail("witnesses.ndjson line count does not match review/witnesses.json")
+    for index, witness in enumerate(witnesses):
+        if not isinstance(witness, dict):
+            fail(f"witness {index + 1} is not an object: {witness!r}")
+        try:
+            parsed = json.loads(lines[index])
+        except json.JSONDecodeError as error:
+            fail(f"invalid witnesses.ndjson line {index + 1}: {error}")
+        if parsed != witness:
+            fail(f"witnesses.ndjson line {index + 1} does not match JSON artifact")
+        require_witness_schema(witness)
+    expected_follow_up = sum(
+        len(follow_up_evidence[field])
+        for field in [
+            "inline_comments",
+            "summary_only_findings",
+            "observations",
+            "proof_requests",
+        ]
+    )
+    actual_follow_up = sum(
+        1
+        for witness in witnesses
+        if isinstance(witness.get("source"), str)
+        and witness["source"].startswith("follow-up-")
+    )
+    if actual_follow_up != expected_follow_up:
+        fail("follow-up witness count does not match follow_up_evidence")
+    return witnesses
+
+
 def require_follow_up_result_metrics(metrics: dict, results: list[dict]) -> None:
     result_metrics = metrics.get("follow_up_results")
     if not isinstance(result_metrics, dict):
@@ -1393,6 +1437,50 @@ def require_follow_up_summary_only_schema(finding: dict, model_lane: str) -> Non
             fail(f"follow-up summary-only finding missing string field {field}: {finding!r}")
     if finding["lane"] != model_lane:
         fail(f"follow-up summary-only finding lane does not match output lane: {finding!r}")
+
+
+def require_witness_schema(witness: dict) -> None:
+    if witness.get("schema") != "ub-review.witness.v1":
+        fail(f"witness has wrong schema: {witness!r}")
+    for field in ["id", "status", "kind", "source", "claim", "dedupe_key"]:
+        if not isinstance(witness.get(field), str) or not witness[field]:
+            fail(f"witness missing string field {field}: {witness!r}")
+    if witness["status"] not in {
+        "tool-confirmed",
+        "type-confirmed",
+        "needs-witness",
+        "refuted",
+        "parked",
+    }:
+        fail(f"witness has unsupported status: {witness!r}")
+    evidence = witness.get("evidence")
+    if not isinstance(evidence, list) or not evidence or not all(
+        isinstance(item, str) and item for item in evidence
+    ):
+        fail(f"witness evidence is not a non-empty string array: {witness!r}")
+    lane = witness.get("lane")
+    if lane is not None and (not isinstance(lane, str) or not lane):
+        fail(f"witness lane is not string/null: {witness!r}")
+    path = witness.get("path")
+    if path is not None and (
+        not isinstance(path, str)
+        or path.startswith(("/", "\\"))
+        or ".." in pathlib.PurePosixPath(path).parts
+    ):
+        fail(f"witness path is not repo-relative: {witness!r}")
+    line = witness.get("line")
+    if line is not None and (not isinstance(line, int) or line <= 0):
+        fail(f"witness line is invalid: {witness!r}")
+    observation_id = witness.get("observation_id")
+    if observation_id is not None and (
+        not isinstance(observation_id, str) or not observation_id
+    ):
+        fail(f"witness observation_id is not string/null: {witness!r}")
+    proof_receipt_id = witness.get("proof_receipt_id")
+    if proof_receipt_id is not None and (
+        not isinstance(proof_receipt_id, str) or not proof_receipt_id
+    ):
+        fail(f"witness proof_receipt_id is not string/null: {witness!r}")
 
 
 def expected_follow_up_question_packet(task: dict) -> dict:
