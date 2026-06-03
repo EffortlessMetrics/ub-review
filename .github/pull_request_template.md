@@ -19,7 +19,7 @@ If this PR adds or changes any controlled surface, link the TOML receipt here:
 Cheapest relevant proof first, deeper proof where it buys signal.
 
 - [ ] Rust fast gate
-- [ ] policy gate
+- [ ] policy ledger parse/check, if available
 - [ ] selected risk-pack checks, if any
 - [ ] deep lanes only when label/reason requires them
 

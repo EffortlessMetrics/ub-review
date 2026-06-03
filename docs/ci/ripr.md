@@ -1,7 +1,7 @@
 # ripr
 
 `ripr` is static mutation-exposure analysis. It catches the same class of
-findings mutation testing catches — weak test/oracle exposure — but earlier
+findings mutation testing catches - weak test/oracle exposure - but earlier
 and cheaper because it is static and PR-time.
 
 Mutation testing remains the slower runtime backstop for findings static

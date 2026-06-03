@@ -1,26 +1,33 @@
 schema_version = 1
 summary_check = "PR Gate Success"
 
+# Seed contract only. Existing GitHub workflow checks remain authoritative until
+# a summary workflow and policy checker land.
+
 [[lane]]
 id = "rust-fast-gate"
 when = "pull_request"
-required = true
+target_required = true
+implemented = true
 reason = "Cheap compile, format, lint, and unit-test proof for ordinary Rust PRs."
 
 [[lane]]
 id = "policy-gate"
 when = "pull_request"
-required = true
-reason = "Policy ledgers and receipt schemas must remain parseable and enforceable."
+target_required = true
+implemented = false
+reason = "Policy ledgers and receipt schemas must remain parseable and enforceable once a checker lands."
 
 [[lane]]
 id = "ripr-advisory"
 when = "pull_request"
-required = false
+target_required = false
+implemented = false
 reason = "Static mutation-exposure signal should shift weak-oracle findings left without making every PR pay runtime mutation cost."
 
 [[lane]]
 id = "deep-verification"
 when = "main/nightly/label"
-required = false
+target_required = false
+implemented = false
 reason = "Coverage, mutation, fuzz, feature matrix, Docker, and release dry-run lanes stay strong but are label or schedule gated."

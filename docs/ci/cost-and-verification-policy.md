@@ -8,7 +8,7 @@ The answer is verification architecture.
 The model is:
 
 ```text
-Suggestions → Assisted → Native → Industrialized
+Suggestions -> Assisted -> Native -> Industrialized
 ```
 
 As work moves toward industrialized throughput, the repo needs scoped,
@@ -18,11 +18,11 @@ lanes should preserve the high-resolution scan.
 
 ## PR-time posture
 
-Default PRs should run:
+The target default PR posture is:
 
 - PR plan;
 - Rust fast gate;
-- policy gate;
+- policy ledger parse/check once implemented;
 - `ripr` advisory/static exposure where available;
 - selected risk-pack checks;
 - one summary check named `PR Gate Success`.
