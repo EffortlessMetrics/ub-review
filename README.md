@@ -18,6 +18,14 @@ bun-ub
 The initial target is the Bun UB hunt. Other repo presets should be added after
 this one proves useful on real PRs.
 
+## Repository style
+
+`ub-review` is Rust-first, not Rust-only. Rust is the default for production
+logic, repo automation, checks, and reporting; non-Rust files are treated as
+owned adapter surfaces with explicit reasons and checks. See
+[`docs/RUST_REPO_STYLE.md`](docs/RUST_REPO_STYLE.md) for the repository doctrine
+and PR evidence expectations.
+
 ## Why this exists
 
 Most review bots do this:

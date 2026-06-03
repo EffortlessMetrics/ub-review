@@ -9,6 +9,13 @@ https://github.com/EffortlessMetrics/ub-review
 Current development should happen through small PRs against `main`. Do not treat
 `origin/main` as an empty bootstrap target.
 
+## Repository style
+
+Before adding new repository machinery, read `docs/RUST_REPO_STYLE.md`. Rust is
+the default control-plane language for production behavior, policy checks, and
+release automation. Non-Rust surfaces should be narrow, owned, reasoned, and
+covered by a check.
+
 ## Local verification
 
 Before opening a PR, run:
