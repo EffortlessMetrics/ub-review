@@ -12989,21 +12989,22 @@ mod tests {
         apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
         build_candidate_records, build_orchestrator_plan, build_review_metrics,
         build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
-        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_post_error,
+        classify_proof_cost, cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues,
+        combined_observations, command_display, dedupe_inline_comments, default_lanes,
+        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
+        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, parse_selector_set,
+        pr_decision_sentence, proof_budget, proof_lease_budget,
         provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
-        read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
-        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
-        split_curl_http_status, validate_github_review_payload,
+        read_github_event_pr_context, read_github_review_metadata, render_ledger_context,
+        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, runtime_profile_from_toml, runtime_profile_override, selector_values_or_empty,
+        sensor_job_count, sha256_hex, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
@@ -15759,6 +15760,136 @@ index 1111111..2222222 100644
         assert_eq!(result["status"], "skipped");
         assert_eq!(result["review_payload_status"], "skipped_empty_smoke");
         assert!(!temp.path().join("post/post-error.json").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn selector_parsing_trims_sorts_dedupes_and_rejects_shell_tokens() -> Result<()> {
+        assert_eq!(
+            selector_values_or_empty(" tests-oracle,source-route,tests-oracle, ast.grep "),
+            vec!["ast.grep", "source-route", "tests-oracle"]
+        );
+
+        let parsed = parse_selector_set("tokmd, unsafe-review,ast_grep.v2", "--tools")?;
+        assert_eq!(
+            parsed.iter().map(String::as_str).collect::<Vec<_>>(),
+            vec!["ast_grep.v2", "tokmd", "unsafe-review"]
+        );
+
+        let err = parse_selector_set("tokmd,$(touch injected)", "--tools")
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("invalid selector unexpectedly parsed"))?;
+        assert!(
+            err.to_string()
+                .contains("--tools contains invalid selector id `$(touch injected)`")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn post_error_classification_prioritizes_preflight_before_network_failures() {
+        let mut args = PostArgs {
+            review_json: Path::new("target/ub-review/review/github-review.json").to_path_buf(),
+            diff_patch: None,
+            out: Path::new("target/ub-review/review").to_path_buf(),
+            github_token: None,
+            repo: Some("EffortlessMetrics/ub-review".to_owned()),
+            pull_number: Some(12),
+            github_api_url: "https://api.github.com".to_owned(),
+            fail_on_post_error: false,
+        };
+        let network_err = anyhow::anyhow!("GitHub review post failed: curl exited with 7");
+
+        assert_eq!(
+            classify_post_error(&args, &network_err, true, Some(12), true, Some(502)),
+            ("missing_token".to_owned(), "preflight".to_owned())
+        );
+
+        args.github_token = Some("token".to_owned());
+        assert_eq!(
+            classify_post_error(&args, &network_err, false, Some(12), true, Some(502)),
+            ("invalid_repo".to_owned(), "preflight".to_owned())
+        );
+        assert_eq!(
+            classify_post_error(&args, &network_err, true, None, true, Some(502)),
+            ("missing_pull_number".to_owned(), "preflight".to_owned())
+        );
+        assert_eq!(
+            classify_post_error(&args, &network_err, true, Some(12), false, Some(502)),
+            (
+                "invalid_review_payload".to_owned(),
+                "payload_validation".to_owned()
+            )
+        );
+        assert_eq!(
+            classify_post_error(&args, &network_err, true, Some(12), true, Some(502)),
+            ("post_http_error".to_owned(), "network_post".to_owned())
+        );
+        assert_eq!(
+            classify_post_error(&args, &network_err, true, Some(12), true, None),
+            ("post_failed".to_owned(), "network_post".to_owned())
+        );
+    }
+
+    #[test]
+    fn github_review_metadata_counts_comments_outside_current_diff() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff_patch = temp.path().join("diff.patch");
+        fs::write(
+            &diff_patch,
+            "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+",
+        )?;
+        let review_json = temp.path().join("github-review.json");
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "Review body".to_owned(),
+            comments: vec![
+                GitHubReviewComment {
+                    path: "src/lib.rs".to_owned(),
+                    line: 2,
+                    side: "RIGHT".to_owned(),
+                    body: "[tests] This test reaches the helper but not the boundary.".to_owned(),
+                },
+                GitHubReviewComment {
+                    path: "src/lib.rs".to_owned(),
+                    line: 99,
+                    side: "RIGHT".to_owned(),
+                    body: "[ub] This line is stale and must be reported as off-diff.".to_owned(),
+                },
+            ],
+        };
+        fs::write(&review_json, serde_json::to_vec_pretty(&review)?)?;
+        let args = PostArgs {
+            review_json,
+            diff_patch: Some(diff_patch),
+            out: temp.path().join("post"),
+            github_token: Some("token".to_owned()),
+            repo: Some("EffortlessMetrics/ub-review".to_owned()),
+            pull_number: Some(1),
+            github_api_url: "https://api.github.com".to_owned(),
+            fail_on_post_error: false,
+        };
+
+        let metadata = read_github_review_metadata(&args)
+            .ok_or_else(|| anyhow::anyhow!("review metadata unexpectedly missing"))?;
+
+        assert!(!metadata.valid);
+        assert_eq!(metadata.comments, 2);
+        assert_eq!(metadata.event, "COMMENT");
+        assert!(metadata.diff_patch_exists);
+        assert!(metadata.diff_patch_valid);
+        assert_eq!(metadata.diff_line_count, Some(1));
+        assert_eq!(metadata.off_diff_comment_count, Some(1));
         Ok(())
     }
 
