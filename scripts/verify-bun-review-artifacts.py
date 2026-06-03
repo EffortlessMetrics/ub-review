@@ -695,10 +695,13 @@ def follow_up_task_for_group(
     task_id = "follow-up-" + hashlib.sha256(
         f"{group_id}\n{evidence_need}".encode("utf-8")
     ).hexdigest()[:12]
+    stage = follow_up_stage(disposition, evidence_need, routed_evidence)
     return {
         "schema": "ub-review.follow_up_question.v1",
         "id": task_id,
         "group_id": group_id,
+        "stage": stage,
+        "stage_reason": follow_up_stage_reason(stage),
         "evidence_need": evidence_need,
         "disposition": disposition,
         "candidate_ids": candidate_ids,
@@ -721,10 +724,13 @@ def follow_up_task_for_observation_group(
     task_id = "follow-up-" + hashlib.sha256(
         f"{group['id']}\n{group['evidence_need']}".encode("utf-8")
     ).hexdigest()[:12]
+    stage = follow_up_stage("observation", group["evidence_need"], routed_evidence)
     return {
         "schema": "ub-review.follow_up_question.v1",
         "id": task_id,
         "group_id": group["id"],
+        "stage": stage,
+        "stage_reason": follow_up_stage_reason(stage),
         "evidence_need": group["evidence_need"],
         "disposition": "observation",
         "candidate_ids": [],
@@ -734,6 +740,30 @@ def follow_up_task_for_observation_group(
         "status": "planned",
         "reason": "deterministic observation follow-up; no shell commands or posting side effects",
     }
+
+
+def follow_up_stage(
+    disposition: str, evidence_need: str, routed_evidence: list[dict]
+) -> str:
+    if (
+        routed_evidence
+        or disposition in {"refuted", "parked-follow-up"}
+        or evidence_need in {"refutation-confirmation", "parked-follow-up-confirmation"}
+    ):
+        return "tertiary"
+    return "secondary"
+
+
+def follow_up_stage_reason(stage: str) -> str:
+    if stage == "tertiary":
+        return (
+            "routed evidence or prior disposition is available; refine, refute, "
+            "drop, or park instead of restating the concern"
+        )
+    return (
+        "no routed proof receipt is available; ask for the smallest remaining "
+        "evidence or proof request"
+    )
 
 
 def routed_evidence_for_group(
@@ -1406,6 +1436,7 @@ def require_follow_up_result_schema(
     for field in [
         "task_id",
         "group_id",
+        "stage",
         "packet_path",
         "model_lane",
         "status",
@@ -1419,6 +1450,8 @@ def require_follow_up_result_schema(
     expected_model_lane = f"orchestrator-follow-up-{sanitize_artifact_name(task['id'])}"
     if result["task_id"] != task["id"] or result["group_id"] != task["group_id"]:
         fail(f"follow-up result does not match task identity: {result!r}")
+    if result["stage"] != task["stage"]:
+        fail(f"follow-up result stage does not match task: {result!r}")
     if result["packet_path"] != expected_packet_path:
         fail(f"follow-up result packet_path does not match task: {result!r}")
     if result["model_lane"] != expected_model_lane:
@@ -1476,10 +1509,10 @@ def require_follow_up_result_schema(
 def require_follow_up_output_schema(output: dict, result: dict) -> None:
     if output.get("schema") != "ub-review.follow_up_output.v1":
         fail(f"follow-up output has wrong schema: {output!r}")
-    for field in ["task_id", "group_id", "model_lane", "status", "reason"]:
+    for field in ["task_id", "group_id", "stage", "model_lane", "status", "reason"]:
         if not isinstance(output.get(field), str) or not output[field]:
             fail(f"follow-up output missing string field {field}: {output!r}")
-    for field in ["task_id", "group_id", "model_lane", "status", "reason"]:
+    for field in ["task_id", "group_id", "stage", "model_lane", "status", "reason"]:
         if output[field] != result[field]:
             fail(f"follow-up output field {field} does not match result: {output!r}")
     inline_comments = output.get("inline_comments")
@@ -1578,6 +1611,8 @@ def expected_follow_up_question_packet(task: dict) -> dict:
         "id": task["id"],
         "task_id": task["id"],
         "group_id": task["group_id"],
+        "stage": task["stage"],
+        "stage_reason": task["stage_reason"],
         "evidence_need": task["evidence_need"],
         "disposition": task["disposition"],
         "candidate_ids": task["candidate_ids"],
@@ -1594,6 +1629,7 @@ def follow_up_question_prompt(task: dict) -> str:
     prompt = "Follow-up question task\n\n"
     prompt += f"- Task: `{task['id']}`\n"
     prompt += f"- Group: `{task['group_id']}`\n"
+    prompt += f"- Stage: `{task['stage']}` - {task['stage_reason']}\n"
     prompt += f"- Evidence need: `{task['evidence_need']}`\n"
     prompt += f"- Disposition: `{task['disposition']}`\n"
     if task["candidate_ids"]:
@@ -1614,6 +1650,16 @@ def follow_up_question_prompt(task: dict) -> str:
                 f"artifact=`{evidence['artifact']}` reason={evidence['reason']}\n"
             )
         prompt += "\n"
+    if task["stage"] == "tertiary":
+        prompt += (
+            "Stage instruction: use routed evidence to refine, refute, drop, "
+            "or park the concern; do not repeat an already-resolved question.\n"
+        )
+    else:
+        prompt += (
+            "Stage instruction: identify the smallest remaining evidence or "
+            "proof request needed before promotion.\n"
+        )
     prompt += (
         "Return strict JSON with observations, summary_only_findings, "
         "failed_objections, and proof_requests. "
@@ -2073,6 +2119,8 @@ def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
     for field in [
         "id",
         "group_id",
+        "stage",
+        "stage_reason",
         "evidence_need",
         "disposition",
         "question",
@@ -2083,6 +2131,8 @@ def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
             fail(f"follow-up task missing string field {field}: {task!r}")
     if task["group_id"] not in group_ids:
         fail(f"follow-up task references unknown group: {task!r}")
+    if task["stage"] not in {"secondary", "tertiary"}:
+        fail(f"follow-up task has unsupported stage: {task!r}")
     if task["status"] != "planned":
         fail(f"follow-up task has unsupported status: {task!r}")
     candidate_ids = task.get("candidate_ids")
@@ -2109,6 +2159,8 @@ def require_follow_up_question_packet_schema(packet: dict) -> None:
         "id",
         "task_id",
         "group_id",
+        "stage",
+        "stage_reason",
         "evidence_need",
         "disposition",
         "question",
@@ -2120,6 +2172,8 @@ def require_follow_up_question_packet_schema(packet: dict) -> None:
             fail(f"follow-up question packet missing string field {field}: {packet!r}")
     if packet["source_artifact"] != "review/orchestrator_plan.json":
         fail(f"follow-up question packet has unsupported source artifact: {packet!r}")
+    if packet["stage"] not in {"secondary", "tertiary"}:
+        fail(f"follow-up question packet has unsupported stage: {packet!r}")
     for field in ["candidate_ids", "observation_group_ids"]:
         values = packet.get(field)
         if not isinstance(values, list) or not all(
