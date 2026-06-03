@@ -9719,28 +9719,30 @@ fn build_model_lane_receipts(
                 ModelMode::Off => ("skipped", "model-mode off".to_owned()),
                 ModelMode::Auto => {
                     let primary_env = model_api_key_env(spec.provider);
+                    let primary_label = model_api_key_label(spec.provider);
                     if env_value_present(primary_env) {
                         (
                             "planned",
                             format!(
-                                "{primary_env} present; lane eligible for {} call",
+                                "{primary_label} present; lane eligible for {} call",
                                 spec.provider.key()
                             ),
                         )
                     } else if let Some(fallback) = &assignment.fallback {
                         let fallback_env = model_api_key_env(fallback.provider);
+                        let fallback_label = model_api_key_label(fallback.provider);
                         if env_value_present(fallback_env) {
                             (
                                 "planned",
                                 format!(
-                                    "{primary_env} not provided; fallback {fallback_env} present"
+                                    "{primary_label} not provided; fallback {fallback_label} present"
                                 ),
                             )
                         } else {
                             (
                                 "missing_key",
                                 format!(
-                                    "{primary_env} and fallback {fallback_env} not provided; lane output unavailable"
+                                    "{primary_label} and fallback {fallback_label} not provided; lane output unavailable"
                                 ),
                             )
                         }
@@ -9748,7 +9750,7 @@ fn build_model_lane_receipts(
                         (
                             "missing_key",
                             format!(
-                                "{primary_env} not provided; {} lane output unavailable",
+                                "{primary_label} not provided; {} lane output unavailable",
                                 spec.provider.key()
                             ),
                         )
@@ -9789,12 +9791,13 @@ fn build_provider_preflight_receipts(
                 ModelMode::Off => ("skipped", "model-mode off".to_owned()),
                 ModelMode::Auto => {
                     let env_name = model_api_key_env(spec.provider);
+                    let key_label = model_api_key_label(spec.provider);
                     if env_value_present(env_name) {
-                        ("planned", format!("{env_name} present; preflight planned"))
+                        ("planned", format!("{key_label} present; preflight planned"))
                     } else {
                         (
                             "missing_key",
-                            format!("{env_name} not provided; provider unavailable"),
+                            format!("{key_label} not provided; provider unavailable"),
                         )
                     }
                 }
@@ -10026,9 +10029,10 @@ fn run_available_model_lanes(
             receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             let env_name = model_api_key_env(spec.provider);
             if !env_value_present(env_name) {
+                let key_label = model_api_key_label(spec.provider);
                 receipt.status = "missing_key".to_owned();
                 receipt.reason = format!(
-                    "{env_name} not provided; {} lane output unavailable",
+                    "{key_label} not provided; {} lane output unavailable",
                     spec.provider.key()
                 );
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
@@ -10529,8 +10533,9 @@ fn run_refuter_pass(
     }
     let env_name = model_api_key_env(spec.provider);
     if !env_value_present(env_name) {
+        let key_label = model_api_key_label(spec.provider);
         receipt.status = "missing_key".to_owned();
-        receipt.reason = format!("{env_name} not provided; refuter output unavailable");
+        receipt.reason = format!("{key_label} not provided; refuter output unavailable");
         missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
         demote_inline_candidates_for_refuter_unavailable(
             &receipt.reason,
@@ -12840,6 +12845,13 @@ fn model_api_key_env(provider: ModelProvider) -> &'static str {
     match provider {
         ModelProvider::MiniMaxDirect => "UB_REVIEW_MINIMAX_API_KEY",
         ModelProvider::OpenCodeGo => "UB_REVIEW_OPENCODE_API_KEY",
+    }
+}
+
+fn model_api_key_label(provider: ModelProvider) -> &'static str {
+    match provider {
+        ModelProvider::MiniMaxDirect => "minimax API key",
+        ModelProvider::OpenCodeGo => "opencode-go API key",
     }
 }
 
