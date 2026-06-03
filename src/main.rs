@@ -9041,6 +9041,10 @@ fn render_pr_thread_context(context: &PrThreadContext) -> String {
     if let Some(title) = context.title.as_deref() {
         text.push_str(&format!("- Title: {}\n", escape_md(title)));
     }
+    if let Some(guidance) = pr_thread_reuse_guidance(context) {
+        text.push('\n');
+        text.push_str(guidance);
+    }
     if let Some(body) = context.body.as_deref() {
         text.push_str("\n### PR Body\n\n```text\n");
         text.push_str(body);
@@ -9061,6 +9065,18 @@ fn render_pr_thread_context(context: &PrThreadContext) -> String {
         text.push_str("- No PR thread context was provided for this run.\n");
     }
     text
+}
+
+fn pr_thread_reuse_guidance(context: &PrThreadContext) -> Option<&'static str> {
+    if context.status != "seeded" {
+        return None;
+    }
+    Some(
+        "### Seeded Thread Reuse Rules\n\n\
+- Treat PR body claims, author replies, prior ub-review comments, resolved/dismissed discussion notes, and proof receipts in this context as lane evidence.\n\
+- Before emitting a verification question or proof request, compare it with the seeded thread. If the same concern is already answered and the current diff does not reopen it, emit a `resolved-check` observation or `failed_objection` instead of a fresh candidate.\n\
+- If the current diff reopens an answered concern, cite the changed file/line or proof receipt that makes the prior answer stale.\n",
+    )
 }
 
 fn render_ledger_context(root: &Path, config: &Config, args: &RunArgs) -> Result<String> {
@@ -17809,6 +17825,38 @@ index 1111111..2222222 100644
         assert!(rendered.contains("[truncated]"));
         assert!(!rendered.contains("tail should be truncated"));
         Ok(())
+    }
+
+    #[test]
+    fn seeded_pr_thread_context_tells_lanes_not_to_reask_answered_questions() {
+        let mut context = test_pr_thread_context();
+        context.status = "seeded".to_owned();
+        context.title = Some("Harden bad-free proof".to_owned());
+        context.body = Some(
+            "PR body: base+tests receipt shows the new focused test fails on base and passes on HEAD."
+                .to_owned(),
+        );
+        context.thread_context = Some(
+            "Author reply: ASAN receipt attached; prior ub-review verification question is answered."
+                .to_owned(),
+        );
+
+        let rendered = render_pr_thread_context(&context);
+
+        assert!(rendered.contains("### Seeded Thread Reuse Rules"));
+        assert!(rendered.contains("Treat PR body claims, author replies"));
+        assert!(rendered.contains("proof receipts in this context as lane evidence"));
+        assert!(rendered.contains("already answered and the current diff does not reopen it"));
+        assert!(rendered.contains("`resolved-check` observation or `failed_objection`"));
+        assert!(rendered.contains("makes the prior answer stale"));
+    }
+
+    #[test]
+    fn absent_pr_thread_context_omits_reuse_rules() {
+        let rendered = render_pr_thread_context(&test_pr_thread_context());
+
+        assert!(!rendered.contains("### Seeded Thread Reuse Rules"));
+        assert!(rendered.contains("- No PR thread context was provided for this run."));
     }
 
     #[test]
