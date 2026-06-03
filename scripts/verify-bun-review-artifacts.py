@@ -97,6 +97,29 @@ def has_reviewer_value_heading(body: str) -> bool:
     )
 
 
+FOLLOW_UP_RESULT_STATUSES = {
+    "ok",
+    "degraded",
+    "skipped",
+    "skipped_budget",
+    "missing_key",
+    "preflight_failed",
+    "failed",
+    "timed_out",
+    "rate_limited",
+    "auth_failed",
+    "invalid_json",
+    "bad_envelope",
+}
+FOLLOW_UP_OUTPUT_COUNT_FIELDS = [
+    "observations",
+    "candidate_findings",
+    "summary_only_findings",
+    "failed_objections",
+    "proof_requests",
+]
+
+
 def require_common_tree(root: pathlib.Path) -> None:
     for path in [
         "input/changed-files.txt",
@@ -117,6 +140,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/merged_observations.json",
         "review/dropped_observations.json",
         "review/orchestrator_plan.json",
+        "review/follow_up_results.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
@@ -353,6 +377,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("review resource_leases does not match review/resource_leases.json")
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
+    require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
         if metrics.get("review_payload_status") != "skipped_empty_smoke":
@@ -1120,6 +1145,94 @@ def require_follow_up_question_packet_files(
             )
 
 
+def require_follow_up_results(root: pathlib.Path, follow_up_tasks: list[dict]) -> None:
+    results = load_json(root / "review/follow_up_results.json")
+    if not isinstance(results, list):
+        fail("review/follow_up_results.json is not an array")
+    if len(results) != len(follow_up_tasks):
+        fail("review/follow_up_results.json count does not match follow_up_tasks")
+    for index, task in enumerate(follow_up_tasks):
+        result = results[index]
+        if not isinstance(result, dict):
+            fail(f"follow-up result {index + 1} is not an object: {result!r}")
+        require_follow_up_result_schema(root, result, task)
+
+
+def require_follow_up_result_schema(
+    root: pathlib.Path, result: dict, task: dict
+) -> None:
+    if result.get("schema") != "ub-review.follow_up_result.v1":
+        fail(f"follow-up result has wrong schema: {result!r}")
+    for field in [
+        "task_id",
+        "group_id",
+        "packet_path",
+        "model_lane",
+        "status",
+        "reason",
+    ]:
+        if not isinstance(result.get(field), str) or not result[field]:
+            fail(f"follow-up result missing string field {field}: {result!r}")
+    expected_packet_path = (
+        f"questions/orchestrator-follow-up/{sanitize_artifact_name(task['id'])}.json"
+    )
+    expected_model_lane = f"orchestrator-follow-up-{sanitize_artifact_name(task['id'])}"
+    if result["task_id"] != task["id"] or result["group_id"] != task["group_id"]:
+        fail(f"follow-up result does not match task identity: {result!r}")
+    if result["packet_path"] != expected_packet_path:
+        fail(f"follow-up result packet_path does not match task: {result!r}")
+    if result["model_lane"] != expected_model_lane:
+        fail(f"follow-up result model_lane does not match task: {result!r}")
+    if result["status"] not in FOLLOW_UP_RESULT_STATUSES:
+        fail(f"follow-up result has unsupported status: {result!r}")
+
+    counts = result.get("output_counts")
+    if not isinstance(counts, dict):
+        fail(f"follow-up result output_counts is not an object: {result!r}")
+    if sorted(counts) != sorted(FOLLOW_UP_OUTPUT_COUNT_FIELDS):
+        fail(f"follow-up result output_counts has wrong fields: {result!r}")
+    for field in FOLLOW_UP_OUTPUT_COUNT_FIELDS:
+        if not isinstance(counts.get(field), int) or counts[field] < 0:
+            fail(f"follow-up result output_counts field is invalid: {result!r}")
+
+    if "duration_ms" in result and (
+        not isinstance(result["duration_ms"], int) or result["duration_ms"] < 0
+    ):
+        fail(f"follow-up result duration_ms is invalid: {result!r}")
+    if "http_status" in result and (
+        not isinstance(result["http_status"], int)
+        or result["http_status"] < 100
+        or result["http_status"] > 599
+    ):
+        fail(f"follow-up result http_status is invalid: {result!r}")
+    if "response_shape" in result and (
+        not isinstance(result["response_shape"], str) or not result["response_shape"]
+    ):
+        fail(f"follow-up result response_shape is invalid: {result!r}")
+
+    required_for_success = {
+        "request_path",
+        "response_path",
+        "content_path",
+        "stderr_path",
+    }
+    for field in required_for_success:
+        if result["status"] in {"ok", "degraded"} and field not in result:
+            fail(f"follow-up success result missing {field}: {result!r}")
+
+    allowed_artifact_fields = required_for_success | {"normalized_content_path"}
+    for field in allowed_artifact_fields:
+        value = result.get(field)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value:
+            fail(f"follow-up result {field} is invalid: {result!r}")
+        expected_prefix = f"review/model/{result['model_lane']}/"
+        if not value.startswith(expected_prefix):
+            fail(f"follow-up result {field} is outside its model lane: {result!r}")
+        require_file(root / value)
+
+
 def expected_follow_up_question_packet(task: dict) -> dict:
     return {
         "schema": "ub-review.follow_up_question_packet.v1",
@@ -1163,8 +1276,10 @@ def follow_up_question_prompt(task: dict) -> str:
             )
         prompt += "\n"
     prompt += (
-        "Return strict JSON with observations, candidate_findings, "
-        "summary_only_findings, failed_objections, and proof_requests. "
+        "Return strict JSON with observations, summary_only_findings, "
+        "failed_objections, and proof_requests. "
+        f"Use question `{task['id']}` for observations. "
+        "Do not emit candidate_findings or inline_comments. "
         "Do not post, mutate, or run shell commands.\n"
     )
     return prompt
