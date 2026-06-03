@@ -167,6 +167,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["mode"], "review-direct");
     assert_eq!(review["provider_policy"], "minimax-primary");
     assert_eq!(review["model_provider_policy"], "minimax-primary");
+    assert_eq!(review["depth"], "standard");
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
     assert_eq!(review["max_model_calls"], 14);
@@ -186,6 +187,10 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["profile_name"], "gh-runner");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
     assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 900);
+    assert_eq!(resolved_plan["selectors"]["depth"], "standard");
+    assert_eq!(resolved_plan["selectors"]["lane_width"], 10);
+    assert_eq!(resolved_plan["selectors"]["model_concurrency"], 8);
+    assert_eq!(resolved_plan["selectors"]["max_model_calls"], 14);
     assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
         sensors
             .iter()
@@ -225,6 +230,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
     assert_eq!(metrics["profile_name"], "gh-runner");
+    assert_eq!(metrics["depth"], "standard");
     assert_eq!(
         metrics["changed_files"],
         diff_context["changed_files"]

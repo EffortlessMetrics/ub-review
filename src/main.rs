@@ -20,6 +20,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use wait_timeout::ChildExt;
 
+const STANDARD_LANE_WIDTH: usize = 10;
+const STANDARD_MODEL_CONCURRENCY: usize = 8;
+const STANDARD_MAX_MODEL_CALLS: usize = 14;
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -109,6 +113,46 @@ impl ModelMode {
         match self {
             Self::Auto => "auto",
             Self::Off => "off",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+enum ReviewDepth {
+    Quick,
+    Standard,
+    Deep,
+}
+
+impl ReviewDepth {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Quick => "quick",
+            Self::Standard => "standard",
+            Self::Deep => "deep",
+        }
+    }
+
+    fn lane_width(self) -> usize {
+        match self {
+            Self::Quick => 6,
+            Self::Standard => STANDARD_LANE_WIDTH,
+            Self::Deep => 20,
+        }
+    }
+
+    fn model_concurrency(self) -> usize {
+        match self {
+            Self::Quick => 4,
+            Self::Standard | Self::Deep => STANDARD_MODEL_CONCURRENCY,
+        }
+    }
+
+    fn max_model_calls(self) -> usize {
+        match self {
+            Self::Quick => 6,
+            Self::Standard => STANDARD_MAX_MODEL_CALLS,
+            Self::Deep => 24,
         }
     }
 }
@@ -285,14 +329,25 @@ struct RunArgs {
     /// Model execution mode.
     #[arg(long, value_enum, default_value = "auto", env = "UB_REVIEW_MODEL_MODE")]
     model_mode: ModelMode,
+    /// Review depth selector. Nonstandard depths expand to lane/model budgets.
+    #[arg(long, value_enum, default_value = "standard", env = "UB_REVIEW_DEPTH")]
+    depth: ReviewDepth,
     /// Maximum inline comments to include in github-review.json.
     #[arg(long, default_value_t = 8, env = "UB_REVIEW_MAX_INLINE_COMMENTS")]
     max_inline_comments: usize,
     /// Planned model concurrency for model lane packets.
-    #[arg(long, default_value_t = 8, env = "UB_REVIEW_MODEL_CONCURRENCY")]
+    #[arg(
+        long,
+        default_value_t = STANDARD_MODEL_CONCURRENCY,
+        env = "UB_REVIEW_MODEL_CONCURRENCY"
+    )]
     model_concurrency: usize,
     /// Maximum planned model calls.
-    #[arg(long, default_value_t = 14, env = "UB_REVIEW_MAX_MODEL_CALLS")]
+    #[arg(
+        long,
+        default_value_t = STANDARD_MAX_MODEL_CALLS,
+        env = "UB_REVIEW_MAX_MODEL_CALLS"
+    )]
     max_model_calls: usize,
     /// Provider policy.
     #[arg(
@@ -304,7 +359,7 @@ struct RunArgs {
     )]
     provider_policy: ModelProviderPolicy,
     /// Number of Bun review lanes to prepare: 6, 10, or 20.
-    #[arg(long, default_value_t = 10, env = "UB_REVIEW_LANE_WIDTH")]
+    #[arg(long, default_value_t = STANDARD_LANE_WIDTH, env = "UB_REVIEW_LANE_WIDTH")]
     lane_width: usize,
     /// Per-model-call timeout in seconds.
     #[arg(long, default_value_t = 300, env = "UB_REVIEW_MODEL_TIMEOUT_SEC")]
@@ -748,6 +803,7 @@ struct ReviewArtifacts {
     mode: String,
     posting: String,
     model_mode: String,
+    depth: String,
     provider_policy: String,
     model_provider_policy: String,
     lane_width: usize,
@@ -777,6 +833,8 @@ struct ReviewSummaryReceipt {
     #[serde(default)]
     model_mode: String,
     #[serde(default)]
+    depth: String,
+    #[serde(default)]
     provider_policy: String,
     #[serde(default)]
     lane_width: usize,
@@ -798,6 +856,7 @@ struct ReviewMetrics {
     mode: String,
     posting: String,
     model_mode: String,
+    depth: String,
     provider_policy: String,
     lane_width: usize,
     model_concurrency: usize,
@@ -1921,17 +1980,24 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
     let (config, diff, box_state, plan) = prepare_plan(&args.review, args.allow_heavy)?;
     print_plan(&plan, &box_state);
     if args.write {
-        write_plan_artifacts(&args.review.out, &config, &diff, &box_state, &plan)?;
+        write_plan_artifacts(&args.review.out, &config, &diff, &box_state, &plan, None)?;
     }
     Ok(())
 }
 
 fn cmd_run(args: RunArgs) -> Result<()> {
     let run_started = Instant::now();
-    validate_run_args(&args)?;
+    let args = normalize_run_args(args)?;
     let (config, diff, box_state, plan) = prepare_plan(&args.review, args.allow_heavy)?;
     print_plan(&plan, &box_state);
-    write_plan_artifacts(&args.review.out, &config, &diff, &box_state, &plan)?;
+    write_plan_artifacts(
+        &args.review.out,
+        &config,
+        &diff,
+        &box_state,
+        &plan,
+        Some(&args),
+    )?;
 
     let event_log = EventLog::open(&args.review.out.join("events.ndjson"))?;
     event_log.append(
@@ -1974,6 +2040,31 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     )?;
     println!("wrote {}", args.review.out.display());
     println!("open {}/running-summary.md", args.review.out.display());
+    Ok(())
+}
+
+fn normalize_run_args(mut args: RunArgs) -> Result<RunArgs> {
+    apply_depth_defaults(&mut args)?;
+    validate_run_args(&args)?;
+    Ok(args)
+}
+
+fn apply_depth_defaults(args: &mut RunArgs) -> Result<()> {
+    if args.depth == ReviewDepth::Standard {
+        return Ok(());
+    }
+    if args.lane_width != STANDARD_LANE_WIDTH
+        || args.model_concurrency != STANDARD_MODEL_CONCURRENCY
+        || args.max_model_calls != STANDARD_MAX_MODEL_CALLS
+    {
+        bail!(
+            "--depth {} cannot be combined with --lane-width, --model-concurrency, or --max-model-calls overrides; use --depth standard for custom raw budgets",
+            args.depth.key()
+        );
+    }
+    args.lane_width = args.depth.lane_width();
+    args.model_concurrency = args.depth.model_concurrency();
+    args.max_model_calls = args.depth.max_model_calls();
     Ok(())
 }
 
@@ -2243,6 +2334,7 @@ fn write_plan_artifacts(
     diff: &DiffContext,
     box_state: &BoxState,
     plan: &Plan,
+    run_args: Option<&RunArgs>,
 ) -> Result<()> {
     fs::create_dir_all(out.join("input"))?;
     let profile = config.selected_profile()?;
@@ -2257,7 +2349,9 @@ fn write_plan_artifacts(
     )?;
     fs::write(
         out.join("resolved-plan.json"),
-        serde_json::to_vec_pretty(&resolved_plan_artifact(config, profile, diff, plan))?,
+        serde_json::to_vec_pretty(&resolved_plan_artifact(
+            config, profile, diff, plan, run_args,
+        ))?,
     )?;
     fs::write(
         out.join("box-state.json"),
@@ -2293,6 +2387,7 @@ fn resolved_plan_artifact(
     profile: &Profile,
     diff: &DiffContext,
     plan: &Plan,
+    run_args: Option<&RunArgs>,
 ) -> serde_json::Value {
     serde_json::json!({
         "schema": "ub-review.resolved_plan.v1",
@@ -2304,10 +2399,32 @@ fn resolved_plan_artifact(
         "guards": &profile.guards,
         "limits": &profile.limits,
         "posting": &config.review,
+        "selectors": resolved_selector_artifact(run_args),
         "sensors": &plan.sensors,
         "lanes": &plan.lanes,
         "notes": &plan.notes,
     })
+}
+
+fn resolved_selector_artifact(run_args: Option<&RunArgs>) -> serde_json::Value {
+    if let Some(args) = run_args {
+        serde_json::json!({
+            "depth": args.depth.key(),
+            "lane_width": args.lane_width,
+            "model_concurrency": args.model_concurrency,
+            "max_model_calls": args.max_model_calls,
+            "max_inline_comments": args.max_inline_comments,
+        })
+    } else {
+        serde_json::json!({
+            "depth": ReviewDepth::Standard.key(),
+            "lane_width": STANDARD_LANE_WIDTH,
+            "model_concurrency": STANDARD_MODEL_CONCURRENCY,
+            "max_model_calls": STANDARD_MAX_MODEL_CALLS,
+            "max_inline_comments": 8,
+            "source": "plan-default",
+        })
+    }
 }
 
 fn print_plan(plan: &Plan, box_state: &BoxState) {
@@ -3659,6 +3776,7 @@ fn write_review_artifacts(
         mode: args.mode.key().to_owned(),
         posting: args.posting.key().to_owned(),
         model_mode: args.model_mode.key().to_owned(),
+        depth: args.depth.key().to_owned(),
         provider_policy: args.provider_policy.key().to_owned(),
         model_provider_policy: args.provider_policy.key().to_owned(),
         lane_width: args.lane_width,
@@ -3930,6 +4048,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         mode: review.mode.clone(),
         posting: review.posting.clone(),
         model_mode: review.model_mode.clone(),
+        depth: review.depth.clone(),
         provider_policy: review.provider_policy.clone(),
         lane_width: review.lane_width,
         model_concurrency: review.model_concurrency,
@@ -10081,8 +10200,15 @@ fn render_model_status_sections(text: &mut String, out: &Path) {
 
     text.push_str("\n## Provider preflights\n\n");
     text.push_str(&format!(
-        "- Model mode: `{}`\n- Provider policy: `{}`\n- Lane width: `{}`\n\n",
-        review.model_mode, review.provider_policy, review.lane_width
+        "- Model mode: `{}`\n- Depth: `{}`\n- Provider policy: `{}`\n- Lane width: `{}`\n\n",
+        review.model_mode,
+        if review.depth.is_empty() {
+            ReviewDepth::Standard.key()
+        } else {
+            review.depth.as_str()
+        },
+        review.provider_policy,
+        review.lane_width
     ));
     if review.provider_preflights.is_empty() {
         text.push_str("- No provider preflight receipts were produced.\n");
@@ -10855,8 +10981,9 @@ mod tests {
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
         Profile, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
         ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
+        ReviewArgs, ReviewBodyAudience, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
+        STANDARD_MODEL_CONCURRENCY, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, TerminalStateInput, ToolClass, apply_model_output,
         apply_refuter_output, build_review_metrics, build_review_terminal_state,
         build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
@@ -10866,14 +10993,15 @@ mod tests {
         extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
         model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, opencode_canary_spec, pr_decision_sentence, proof_budget,
-        provider_spec_for_lane_with_key_state, read_github_event_pr_context, render_ledger_context,
-        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
-        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        model_response_shape, normalize_run_args, opencode_canary_spec, pr_decision_sentence,
+        proof_budget, provider_spec_for_lane_with_key_state, read_github_event_pr_context,
+        render_ledger_context, render_pr_thread_context, render_review_body, render_summary,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, sha256_hex, split_curl_http_status,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -13273,6 +13401,56 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn quick_depth_expands_to_small_lane_budget() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.depth = ReviewDepth::Quick;
+
+        let args = normalize_run_args(args)?;
+
+        assert_eq!(args.lane_width, 6);
+        assert_eq!(args.model_concurrency, 4);
+        assert_eq!(args.max_model_calls, 6);
+        assert_eq!(args.max_inline_comments, 8);
+        assert_eq!(
+            review_lanes_for_args(&test_plan(Vec::new()), &args).len(),
+            1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn deep_depth_expands_to_wide_lane_budget() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.depth = ReviewDepth::Deep;
+
+        let args = normalize_run_args(args)?;
+
+        assert_eq!(args.lane_width, 20);
+        assert_eq!(args.model_concurrency, 8);
+        assert_eq!(args.max_model_calls, 24);
+        assert_eq!(args.max_inline_comments, 8);
+        assert_eq!(
+            review_lanes_for_args(&test_plan(Vec::new()), &args).len(),
+            20
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nonstandard_depth_rejects_raw_budget_override() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.depth = ReviewDepth::Deep;
+        args.max_model_calls = 30;
+
+        let err = normalize_run_args(args)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("conflicting deep budget unexpectedly passed"))?;
+
+        assert!(err.to_string().contains("--depth deep cannot be combined"));
+        Ok(())
+    }
+
+    #[test]
     fn direct_minimax_openai_uses_chat_endpoint_and_bearer_header() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.minimax_provider_kind = ProviderKindArg::Openai;
@@ -14248,6 +14426,7 @@ UB_REVIEW_HTTP_STATUS:429
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
             model_mode: "auto".to_owned(),
+            depth: "standard".to_owned(),
             provider_policy: "minimax-only".to_owned(),
             model_provider_policy: "minimax-only".to_owned(),
             lane_width: 10,
@@ -14340,6 +14519,7 @@ UB_REVIEW_HTTP_STATUS:429
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
             model_mode: "auto".to_owned(),
+            depth: "standard".to_owned(),
             provider_policy: "minimax-only".to_owned(),
             model_provider_policy: "minimax-only".to_owned(),
             lane_width: 10,
@@ -15018,11 +15198,12 @@ UB_REVIEW_HTTP_STATUS:429
             posting: PostingMode::ArtifactOnly,
             mode: RunMode::ReviewDirect,
             model_mode: ModelMode::Auto,
+            depth: ReviewDepth::Standard,
             max_inline_comments: 8,
-            model_concurrency: 8,
-            max_model_calls: 14,
+            model_concurrency: STANDARD_MODEL_CONCURRENCY,
+            max_model_calls: STANDARD_MAX_MODEL_CALLS,
             provider_policy: ModelProviderPolicy::MinimaxPrimary,
-            lane_width: 10,
+            lane_width: STANDARD_LANE_WIDTH,
             model_timeout_sec: 300,
             ledger_path: String::new(),
             ledger_max_bytes: 65_536,
