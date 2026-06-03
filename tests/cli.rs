@@ -136,8 +136,11 @@ fn active_len_tracks_view_after_resize() {
         "review/proof_requests.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
+        "review/resource_leases.json",
+        "review/resource_plan.md",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
+        "resource_leases.ndjson",
         "review/github-review-skip.json",
     ] {
         assert!(out.join(path).exists(), "missing {}", path);
@@ -240,6 +243,7 @@ fn active_len_tracks_view_after_resize() {
             .unwrap_or_default()
     );
     assert_eq!(metrics["github_review_comments"], 0);
+    assert_eq!(metrics["resource_leases"], 0);
     assert_eq!(
         metrics["review_body_bytes"],
         review["body"].as_str().map(str::len).unwrap_or_default()

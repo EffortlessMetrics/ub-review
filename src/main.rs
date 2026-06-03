@@ -722,6 +722,7 @@ struct ReviewArtifacts {
     observations: Vec<Observation>,
     proof_requests: Vec<ProofRequest>,
     proof_receipts: Vec<ProofReceipt>,
+    resource_leases: Vec<ResourceLease>,
     body: String,
 }
 
@@ -767,6 +768,7 @@ struct ReviewMetrics {
     observations: usize,
     proof_requests: usize,
     proof_receipts: usize,
+    resource_leases: usize,
     off_diff_candidates_rejected: usize,
     missing_or_failed_sensor_evidence: usize,
     missing_or_failed_model_evidence: usize,
@@ -857,6 +859,26 @@ struct ProofCommandReceipt {
     stdout: String,
     stderr: String,
     reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ResourceLease {
+    schema: String,
+    id: String,
+    kind: String,
+    consumer: String,
+    status: String,
+    reason: String,
+    cpu: u32,
+    memory_mb: u64,
+    disk_mb: u64,
+    timeout_sec: u64,
+    network: bool,
+    scratch: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    worktree: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    command: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -3419,7 +3441,9 @@ fn write_review_artifacts(
     }
 
     let profile = config.selected_profile()?;
-    let proof_receipts = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
+    let proof_result = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
+    let proof_receipts = proof_result.proof_receipts;
+    let resource_leases = proof_result.resource_leases;
 
     let artifact_body = render_review_body(
         &shared_context_id,
@@ -3497,11 +3521,13 @@ fn write_review_artifacts(
         observations: model_observations,
         proof_requests,
         proof_receipts,
+        resource_leases,
         body: artifact_body.clone(),
     };
     let observations = combined_observations(&review);
     write_observation_artifacts(out, &observations)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
+    write_resource_lease_artifacts(out, &review.resource_leases)?;
     write_proof_request_artifacts(
         out,
         diff,
@@ -3697,6 +3723,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         observations: observations_count,
         proof_requests: review.proof_requests.len(),
         proof_receipts: review.proof_receipts.len(),
+        resource_leases: review.resource_leases.len(),
         off_diff_candidates_rejected: review
             .summary_only_findings
             .iter()
@@ -4083,6 +4110,54 @@ fn write_proof_receipt_artifacts(out: &Path, proof_receipts: &[ProofReceipt]) ->
     Ok(())
 }
 
+fn write_resource_lease_artifacts(out: &Path, resource_leases: &[ResourceLease]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("resource_leases.json"),
+        serde_json::to_vec_pretty(resource_leases)?,
+    )?;
+
+    let mut ndjson = String::new();
+    for lease in resource_leases {
+        ndjson.push_str(&serde_json::to_string(lease)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("resource_leases.ndjson"), ndjson)?;
+
+    let mut plan = String::new();
+    plan.push_str("# Resource lease plan\n\n");
+    if resource_leases.is_empty() {
+        plan.push_str("No local proof leases were requested in this packet.\n");
+    } else {
+        plan.push_str("## Focused proof leases\n\n");
+        for lease in resource_leases {
+            plan.push_str(&format!(
+                "- `{}` kind=`{}` consumer=`{}` status=`{}` cpu=`{}` memory_mb=`{}` disk_mb=`{}` timeout_sec=`{}` network=`{}` scratch=`{}`",
+                lease.id,
+                lease.kind,
+                lease.consumer,
+                lease.status,
+                lease.cpu,
+                lease.memory_mb,
+                lease.disk_mb,
+                lease.timeout_sec,
+                lease.network,
+                lease.scratch
+            ));
+            if let Some(worktree) = &lease.worktree {
+                plan.push_str(&format!(" worktree=`{}`", escape_md(worktree)));
+            }
+            if let Some(command) = &lease.command {
+                plan.push_str(&format!(" command=`{}`", escape_md(command)));
+            }
+            plan.push_str(&format!(". {}\n", escape_md(&lease.reason)));
+        }
+    }
+    fs::write(review_dir.join("resource_plan.md"), plan)?;
+    Ok(())
+}
+
 fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGroup> {
     let mut groups = BTreeMap::<(String, String, u64), ProofRequestGroup>::new();
     for request in proof_requests {
@@ -4193,13 +4268,15 @@ fn run_proof_broker_v0(
     profile: &Profile,
     proof_requests: &[ProofRequest],
     args: &RunArgs,
-) -> Result<Vec<ProofReceipt>> {
+) -> Result<ProofBrokerResult> {
     let budget = proof_budget(profile);
-    let tasks = focused_test_tasks_from_diff(diff, proof_requests, budget);
+    let tasks =
+        focused_test_candidates_from_diff(diff, proof_requests, budget.max_focused_test_files);
     run_focused_red_green_proof_tasks_with_runner(
         root,
         out,
         diff,
+        profile,
         args,
         budget,
         tasks,
@@ -4213,19 +4290,29 @@ fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
+    profile: &Profile,
     args: &RunArgs,
     budget: ProofBudget,
     tasks: Vec<FocusedTestTask>,
     mut runner: F,
     mut prepare_base_plus_tests: G,
-) -> Result<Vec<ProofReceipt>>
+) -> Result<ProofBrokerResult>
 where
     F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
     let mut receipts = Vec::new();
-    for (index, task) in tasks.into_iter().enumerate() {
+    let mut leases = Vec::new();
+    let mut executed_tasks = 0_usize;
+    let mut estimated_seconds = 0_u64;
+    for task in tasks {
         if args.dry_run {
+            leases.push(focused_test_resource_lease(
+                &task,
+                budget,
+                "skipped_profile",
+                "dry-run; resource broker did not grant a proof lease",
+            ));
             receipts.push(skipped_focused_proof_receipt(
                 out,
                 diff,
@@ -4235,7 +4322,31 @@ where
             )?);
             continue;
         }
-        if index > 0 {
+        if profile.limits.tests == 0 {
+            leases.push(focused_test_resource_lease(
+                &task,
+                budget,
+                "skipped_profile",
+                "profile allows zero focused test leases",
+            ));
+            receipts.push(skipped_focused_proof_receipt(
+                out,
+                diff,
+                &task,
+                "skipped_profile",
+                "profile allows zero focused test leases",
+            )?);
+            continue;
+        }
+        if executed_tasks > 0
+            || !focused_proof_budget_allows_next(executed_tasks, estimated_seconds, budget)
+        {
+            leases.push(focused_test_resource_lease(
+                &task,
+                budget,
+                "exhausted",
+                "proof broker v0 lease budget allows one focused red/green target",
+            ));
             receipts.push(skipped_focused_proof_receipt(
                 out,
                 diff,
@@ -4245,6 +4356,12 @@ where
             )?);
             continue;
         }
+        leases.push(focused_test_resource_lease(
+            &task,
+            budget,
+            "granted",
+            "focused red/green proof lease granted by runtime profile",
+        ));
         receipts.push(run_focused_red_green_proof_task(
             root,
             out,
@@ -4254,8 +4371,13 @@ where
             &mut runner,
             &mut prepare_base_plus_tests,
         )?);
+        executed_tasks += 1;
+        estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
     }
-    Ok(receipts)
+    Ok(ProofBrokerResult {
+        proof_receipts: receipts,
+        resource_leases: leases,
+    })
 }
 
 fn run_focused_red_green_proof_task<F, G>(
@@ -4489,6 +4611,11 @@ struct ProofCommandPaths {
     stderr_rel: String,
 }
 
+struct ProofBrokerResult {
+    proof_receipts: Vec<ProofReceipt>,
+    resource_leases: Vec<ResourceLease>,
+}
+
 fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<ProofCommandPaths> {
     let rel_dir = format!("proof/{receipt_id}/{side}");
     let dir = out.join(&rel_dir);
@@ -4514,30 +4641,39 @@ fn focused_test_tasks_from_diff(
     proof_requests: &[ProofRequest],
     budget: ProofBudget,
 ) -> Vec<FocusedTestTask> {
-    let request_groups = proof_request_groups(proof_requests);
+    let candidates =
+        focused_test_candidates_from_diff(diff, proof_requests, budget.max_focused_test_files);
     let mut tasks = Vec::new();
     let mut estimated_seconds = 0_u64;
+    for task in candidates {
+        if !focused_proof_budget_allows_next(tasks.len(), estimated_seconds, budget) {
+            return tasks;
+        }
+        tasks.push(task);
+        estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
+    }
+    tasks
+}
+
+fn focused_test_candidates_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    max_focused_test_files: usize,
+) -> Vec<FocusedTestTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
     for file in diff
         .changed_files
         .iter()
         .filter(|path| is_bun_focused_test_file(path))
-        .take(budget.max_focused_test_files)
+        .take(max_focused_test_files)
     {
         let names = focused_test_names_for_file(&diff.patch, file);
         if names.is_empty() {
-            if !focused_proof_budget_allows_next(tasks.len(), estimated_seconds, budget) {
-                return tasks;
-            }
             tasks.push(focused_test_task(file, None, &request_groups));
-            estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
         } else {
             for name in names {
-                if !focused_proof_budget_allows_next(tasks.len(), estimated_seconds, budget) {
-                    return tasks;
-                }
                 tasks.push(focused_test_task(file, Some(name), &request_groups));
-                estimated_seconds =
-                    estimated_seconds.saturating_add(budget.per_command_timeout_sec);
             }
         }
     }
@@ -4586,6 +4722,33 @@ fn focused_test_task(
         test_name,
         requested_by,
         request_ids,
+    }
+}
+
+fn focused_test_resource_lease(
+    task: &FocusedTestTask,
+    budget: ProofBudget,
+    status: &str,
+    reason: &str,
+) -> ResourceLease {
+    ResourceLease {
+        schema: "ub-review.resource_lease.v1".to_owned(),
+        id: format!("lease-{}", task.id),
+        kind: "focused-test".to_owned(),
+        consumer: task.id.clone(),
+        status: status.to_owned(),
+        reason: reason.to_owned(),
+        cpu: 2,
+        memory_mb: 2_048,
+        disk_mb: 1_024,
+        timeout_sec: budget
+            .per_command_timeout_sec
+            .saturating_mul(2)
+            .min(budget.max_total_seconds),
+        network: false,
+        scratch: true,
+        worktree: Some("base-plus-tests".to_owned()),
+        command: Some(command_display(&proof_task_argv(task))),
     }
 }
 
@@ -9944,24 +10107,25 @@ mod tests {
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, Profile, ProofBudget,
         ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg,
-        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
-        ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan,
-        SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
-        build_review_metrics, build_tokmd_sensor_commands, builtin_profiles, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_lane, model_request_payload, model_response_shape,
-        opencode_canary_spec, proof_budget, provider_spec_for_lane_with_key_state,
-        render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
-        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_review_artifacts, write_sensor_status,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs,
+        ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
+        apply_model_output, apply_refuter_output, build_review_metrics,
+        build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_sensor_evidence_issues,
+        combined_observations, command_display, dedupe_inline_comments, default_lanes,
+        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, opencode_canary_spec, proof_budget,
+        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
+        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, sha256_hex, split_curl_http_status,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
     };
 
     #[test]
@@ -11151,10 +11315,11 @@ index 1111111..2222222 100644
         let args = test_run_args(out.clone());
         let mut commands = Vec::<String>::new();
         let prepared_base_root = base_root.clone();
-        let receipts = super::run_focused_red_green_proof_tasks_with_runner(
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
             temp.path(),
             &out,
             &diff,
+            &Profile::default(),
             &args,
             ProofBudget {
                 max_focused_test_files: 3,
@@ -11185,9 +11350,18 @@ index 1111111..2222222 100644
             },
             move |_root, _out, _diff| Ok(prepared_base_root.clone()),
         )?;
+        let receipts = proof_result.proof_receipts;
+        let resource_leases = proof_result.resource_leases;
 
         assert_eq!(commands.len(), 2);
         assert_eq!(receipts.len(), 2);
+        assert_eq!(resource_leases.len(), 2);
+        assert_eq!(resource_leases[0].schema, "ub-review.resource_lease.v1");
+        assert_eq!(resource_leases[0].kind, "focused-test");
+        assert_eq!(resource_leases[0].consumer, receipts[0].id);
+        assert_eq!(resource_leases[0].status, "granted");
+        assert_eq!(resource_leases[1].consumer, receipts[1].id);
+        assert_eq!(resource_leases[1].status, "exhausted");
         assert_eq!(receipts[0].schema, "ub-review.proof_receipt.v1");
         assert_eq!(receipts[0].kind, "focused-red-green");
         assert_eq!(receipts[0].test_patch_mode, "base-plus-tests");
@@ -11212,6 +11386,7 @@ index 1111111..2222222 100644
         assert_eq!(receipts[1].commands[0].status, "skipped");
 
         write_proof_receipt_artifacts(&out, &receipts)?;
+        write_resource_lease_artifacts(&out, &resource_leases)?;
         write_proof_request_artifacts(
             &out,
             &diff,
@@ -11222,9 +11397,18 @@ index 1111111..2222222 100644
         let receipt_json: Vec<ProofReceipt> =
             serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
         let receipt_ndjson = fs::read_to_string(out.join("proof_receipts.ndjson"))?;
+        let lease_json: Vec<ResourceLease> =
+            serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+        let lease_ndjson = fs::read_to_string(out.join("resource_leases.ndjson"))?;
+        let resource_plan = fs::read_to_string(out.join("review/resource_plan.md"))?;
         let proof_plan = fs::read_to_string(out.join("review/proof_plan.md"))?;
         assert_eq!(receipt_json.len(), 2);
         assert_eq!(receipt_ndjson.lines().count(), 2);
+        assert_eq!(lease_json.len(), 2);
+        assert_eq!(lease_ndjson.lines().count(), 2);
+        assert!(resource_plan.contains("# Resource lease plan"));
+        assert!(resource_plan.contains("status=`granted`"));
+        assert!(resource_plan.contains("status=`exhausted`"));
         assert!(
             proof_plan.contains("Proof broker v0 executed focused proof under the runtime budget")
         );
@@ -11385,6 +11569,92 @@ index 1111111..2222222 100644
         assert_eq!(receipt.commands[1].side, "base-plus-tests");
         assert_eq!(receipt.commands[1].status, "skipped");
         assert!(super::proof_receipt_is_missing_evidence(&receipt));
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_does_not_execute_without_focused_test_lease() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let tasks = vec![super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        )];
+        let args = test_run_args(out.clone());
+        let mut profile = Profile::default();
+        profile.limits.tests = 0;
+
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, _argv, _timeout, _stdout, _stderr| {
+                unreachable!("proof command should not run without a lease")
+            },
+            |_root, _out, _diff| {
+                unreachable!("base+tests worktree should not be prepared without a lease")
+            },
+        )?;
+
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.proof_receipts[0].result, "skipped_profile");
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        assert_eq!(proof_result.resource_leases[0].status, "skipped_profile");
+        assert_eq!(
+            proof_result.resource_leases[0].reason,
+            "profile allows zero focused test leases"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_does_not_execute_when_focused_test_budget_is_zero() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let tasks = vec![super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        )];
+        let args = test_run_args(out.clone());
+
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 0,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, _argv, _timeout, _stdout, _stderr| {
+                unreachable!("proof command should not run when proof budget is zero")
+            },
+            |_root, _out, _diff| {
+                unreachable!("base+tests worktree should not be prepared when proof budget is zero")
+            },
+        )?;
+
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.proof_receipts[0].result, "skipped_budget");
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        assert_eq!(proof_result.resource_leases[0].status, "exhausted");
         Ok(())
     }
 
@@ -12998,6 +13268,7 @@ UB_REVIEW_HTTP_STATUS:429
             observations: Vec::new(),
             proof_requests: Vec::new(),
             proof_receipts: Vec::new(),
+            resource_leases: Vec::new(),
             body: "artifact body".to_owned(),
         };
         let github_review = GitHubReview {
@@ -13028,6 +13299,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.observations, 0);
         assert_eq!(metrics.proof_requests, 0);
         assert_eq!(metrics.proof_receipts, 0);
+        assert_eq!(metrics.resource_leases, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
     }
@@ -13105,6 +13377,7 @@ UB_REVIEW_HTTP_STATUS:429
             ],
             proof_requests: Vec::new(),
             proof_receipts: Vec::new(),
+            resource_leases: Vec::new(),
             body: "artifact body".to_owned(),
         };
 
