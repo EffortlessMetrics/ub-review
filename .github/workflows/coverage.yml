@@ -1,0 +1,83 @@
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-core:
+    name: ub-review-core coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate scoped coverage artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p target/coverage
+          cargo llvm-cov --workspace --all-targets --locked --lcov --output-path target/coverage/lcov.info
+          cargo llvm-cov report --json --output-path target/coverage/coverage.json
+          cargo llvm-cov report > target/coverage/coverage.txt
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          receipt = {
+              "schema_version": 1,
+              "repo": "ub-review",
+              "lane": "coverage",
+              "tool": "cargo-llvm-cov",
+              "flag": "ub-review-core",
+              "workflow": "Coverage",
+              "artifacts": {
+                  "coverage_json": Path("target/coverage/coverage.json").is_file(),
+                  "coverage_text": Path("target/coverage/coverage.txt").is_file(),
+                  "lcov": Path("target/coverage/lcov.info").is_file(),
+              },
+              "claim_boundary": [
+                  "execution_surface_only",
+                  "not_behavior_correctness",
+                  "not_release_readiness",
+              ],
+          }
+          Path("target/coverage/coverage-receipt.json").write_text(
+              json.dumps(receipt, indent=2, sort_keys=True) + "\n"
+          )
+          PY
+      - name: Upload Codecov report
+        uses: codecov/codecov-action@v5
+        with:
+          files: target/coverage/lcov.info
+          flags: ub-review-core
+          name: ub-review-core
+          fail_ci_if_error: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Upload coverage receipt artifacts
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: coverage-ub-review-core
+          path: |
+            target/coverage/coverage-receipt.json
+            target/coverage/coverage.json
+            target/coverage/coverage.txt
+            target/coverage/lcov.info
+          if-no-files-found: warn
+          retention-days: 14

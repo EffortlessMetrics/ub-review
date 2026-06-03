@@ -303,6 +303,15 @@ Do not run many independent review jobs that rediscover the repository. This
 action builds shared context once, runs bounded model lanes over that context,
 validates inline candidates, and submits one grouped PR review when configured.
 
+The repo-level evidence posture is documented in
+[docs/ci/CI_ECONOMICS.md](docs/ci/CI_ECONOMICS.md): cheap per-PR static and
+scoped checks first, heavier empirical lanes only when their marginal signal
+justifies their cost, and durable receipts for every lane that makes a claim.
+Coverage remains execution-surface telemetry, documented in
+[docs/ci/coverage.md](docs/ci/coverage.md), while
+[docs/ci/ripr.md](docs/ci/ripr.md) records ripr as static mutation-exposure
+analysis rather than a parallel runtime mutation lane.
+
 ## Inputs
 
 | Input | Default | Meaning |
