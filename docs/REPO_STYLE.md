@@ -77,3 +77,6 @@ existing tooling.
 
 If two PRs encode the same doctrine, keep the better layer and close or
 supersede the weaker one.
+
+See [REPO_OPERATING_HANDOFF.md](REPO_OPERATING_HANDOFF.md) for the current
+cross-repo adoption package and lane handoff notes.
