@@ -138,60 +138,20 @@ fn active_len_tracks_view_after_resize() {
         "review/proof_plan.md",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
-        "review/github-review.json",
+        "review/github-review-skip.json",
     ] {
         assert!(out.join(path).exists(), "missing {}", path);
     }
 
-    let github_review: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/github-review.json"))?)?;
-    assert_eq!(github_review["event"], "COMMENT");
-    let github_review_body = github_review["body"]
-        .as_str()
-        .ok_or_else(|| anyhow::anyhow!("github review body missing"))?;
-    let required_headings = ["## Decision", "## Residual risk", "## Missing evidence"];
-    let mut previous_heading_index = 0;
-    for heading in required_headings {
-        assert!(github_review_body.contains(heading), "missing {heading}");
-        let heading_index = github_review_body
-            .find(heading)
-            .ok_or_else(|| anyhow::anyhow!("heading disappeared after contains check"))?;
-        assert!(
-            heading_index >= previous_heading_index,
-            "{heading} rendered out of order"
-        );
-        previous_heading_index = heading_index;
-    }
-    assert!(github_review_body.contains("missing evidence below limits confidence"));
-    assert!(!github_review_body.contains("Shared context"));
-    assert!(!github_review_body.contains("Profile:"));
-    assert!(!github_review_body.contains("Changed files:"));
-    assert!(!github_review_body.contains("Inline comments:"));
-    assert!(!github_review_body.contains("## Review result"));
-    assert!(!github_review_body.contains("## Missing or failed model evidence"));
-    assert!(!github_review_body.contains("## Confirmed findings"));
-    assert!(!github_review_body.contains("## Summary-only findings"));
-    assert!(!github_review_body.contains("## Failed objections"));
-    assert!(!github_review_body.contains("## Model lanes"));
-    assert!(!has_standalone_approval_line(github_review_body));
+    assert!(!out.join("review/github-review.json").exists());
+    let github_skip: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/github-review-skip.json"))?)?;
+    assert_eq!(github_skip["status"], "skipped");
+    assert_eq!(github_skip["review_payload_status"], "skipped_empty_smoke");
     let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
     assert!(artifact_body.contains("## Confirmed findings"));
     assert!(artifact_body.contains("## Missing or failed evidence"));
     assert!(artifact_body.contains("## Model lanes"));
-    assert_eq!(
-        github_review["comments"]
-            .as_array()
-            .map(std::vec::Vec::len)
-            .unwrap_or_default(),
-        0
-    );
-    if let Some(comments) = github_review["comments"].as_array() {
-        for comment in comments {
-            if let Some(body) = comment["body"].as_str() {
-                assert!(!has_standalone_approval_line(body));
-            }
-        }
-    }
     let review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
     assert_eq!(review["mode"], "review-direct");
@@ -303,62 +263,6 @@ fn active_len_tracks_view_after_resize() {
     let review_body = fs::read_to_string(out.join("review/review.md"))?;
     assert!(review_body.contains("## Missing or failed evidence"));
     assert!(!has_standalone_approval_line(&review_body));
-
-    run(
-        temp.path(),
-        bin,
-        &[
-            "post",
-            "--review-json",
-            path_str(&out.join("review/github-review.json"))?,
-            "--out",
-            path_str(&out.join("review"))?,
-            "--repo",
-            "EffortlessMetrics/ub-review",
-            "--pull-number",
-            "1",
-        ],
-    )?;
-    let post_error_path = out.join("review/post-error.json");
-    assert!(post_error_path.exists());
-    let post_error_text = fs::read_to_string(&post_error_path)?;
-    let post_error: serde_json::Value = serde_json::from_str(&post_error_text)?;
-    assert_eq!(post_error["schema_version"], 1);
-    assert_eq!(post_error["status"], "failed");
-    assert_eq!(post_error["error_kind"], "missing_token");
-    assert_eq!(post_error["failure_stage"], "preflight");
-    assert_eq!(post_error["repo"], "EffortlessMetrics/ub-review");
-    assert_eq!(post_error["repo_valid"], true);
-    assert_eq!(post_error["pull_number"], 1);
-    assert_eq!(post_error["comments"], 0);
-    assert_eq!(post_error["review_comment_count"], 0);
-    assert_eq!(post_error["review_event"], "COMMENT");
-    assert!(
-        post_error["review_body_bytes"]
-            .as_u64()
-            .is_some_and(|bytes| bytes > 0)
-    );
-    assert_eq!(post_error["review_json_exists"], true);
-    assert_eq!(post_error["review_json_valid"], true);
-    assert_eq!(post_error["token_present"], false);
-    assert_eq!(post_error["payload_written"], false);
-    assert_eq!(post_error["would_post"], false);
-    assert_eq!(post_error["failure_tolerated"], true);
-    assert_eq!(post_error["fail_on_post_error"], false);
-    assert!(post_error["http_status"].is_null());
-    assert!(
-        post_error["reason"]
-            .as_str()
-            .is_some_and(|reason| reason.contains("github token is required"))
-    );
-    assert!(
-        post_error["review_json"]
-            .as_str()
-            .is_some_and(|path| path.ends_with("github-review.json"))
-    );
-    assert!(!post_error_text.contains("github_token"));
-    assert!(!post_error_text.contains("Authorization"));
-    assert!(!post_error_text.contains("Bearer"));
 
     for lane in [
         "ub",

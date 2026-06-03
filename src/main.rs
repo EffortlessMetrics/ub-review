@@ -3451,7 +3451,7 @@ fn write_review_artifacts(
     );
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
-        body: pr_body,
+        body: pr_body.clone(),
         comments: inline_comments
             .iter()
             .map(|comment| GitHubReviewComment {
@@ -3467,6 +3467,7 @@ fn write_review_artifacts(
         &inline_comments,
         &summary_only_findings,
         &proof_receipts,
+        &pr_body,
     );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
@@ -3554,10 +3555,14 @@ fn write_review_artifacts(
 fn should_prepare_github_review_payload(
     args: &RunArgs,
     inline_comments: &[ReviewInlineComment],
-    summary_only_findings: &[SummaryOnlyFinding],
+    _summary_only_findings: &[SummaryOnlyFinding],
     proof_receipts: &[ProofReceipt],
+    pr_body: &str,
 ) -> bool {
-    if has_reviewer_value(inline_comments, summary_only_findings) {
+    if matches!(args.model_mode, ModelMode::Off) {
+        return false;
+    }
+    if has_reviewer_value(inline_comments, pr_body) {
         return true;
     }
     if proof_receipts
@@ -3566,7 +3571,23 @@ fn should_prepare_github_review_payload(
     {
         return true;
     }
-    !matches!(args.model_mode, ModelMode::Off)
+    pr_body_has_reviewer_value(pr_body)
+}
+
+fn pr_body_has_reviewer_value(body: &str) -> bool {
+    [
+        "## Confirmed findings",
+        "## Findings",
+        "## Verification questions",
+        "## Test proof",
+        "## Proof results",
+        "## Refuted",
+        "## Residual risk",
+        "## Parked follow-ups",
+        "## Missing evidence",
+    ]
+    .iter()
+    .any(|heading| body.contains(heading))
 }
 
 fn write_github_review_payload(
@@ -6563,7 +6584,7 @@ Use the shared context below. Return only one strict JSON object:
     {{
       "claim": "terse unique observation, 300 chars max",
       "question": "{lane}",
-      "kind": "bug|verification-question|missing-evidence|test-gap|source-route-gap|security-risk|false-premise|parked-follow-up|resolved-check",
+      "kind": "bug|verification-question|missing-evidence|test-gap|source-route-gap|security-risk|false-premise|parked-follow-up|residual-risk|resolved-check",
       "status": "open|covered|confirmed|refuted|demoted|parked|duplicate",
       "severity": "blocker|high|medium|low",
       "confidence": "high|medium-high|medium|low",
@@ -7059,6 +7080,7 @@ fn allowed_observation_kind(value: &str) -> bool {
             | "security-risk"
             | "false-premise"
             | "parked-follow-up"
+            | "residual-risk"
             | "resolved-check"
     )
 }
@@ -7453,8 +7475,8 @@ fn render_pull_request_review_body(
     _shared_context_id: &str,
     plan: &Plan,
     _diff: &DiffContext,
-    missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
-    missing_or_failed_model_evidence: &[ModelEvidenceIssue],
+    _missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
+    _missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
     observations: &[Observation],
@@ -7465,7 +7487,7 @@ fn render_pull_request_review_body(
     let observation_items = unique_review_observations(observations);
     let refuted_observations = observation_items
         .iter()
-        .filter(|observation| is_refuted_observation(observation))
+        .filter(|observation| is_pr_body_refuted_observation(observation))
         .collect::<Vec<_>>();
     let missing_observations = observation_items
         .iter()
@@ -7475,12 +7497,17 @@ fn render_pull_request_review_body(
         .iter()
         .filter(|observation| is_parked_observation(observation))
         .collect::<Vec<_>>();
+    let residual_risk_observations = observation_items
+        .iter()
+        .filter(|observation| is_residual_risk_observation(observation))
+        .collect::<Vec<_>>();
     let verification_observations = observation_items
         .iter()
         .filter(|observation| {
             !is_refuted_observation(observation)
                 && !is_missing_evidence_observation(observation)
                 && !is_parked_observation(observation)
+                && !is_residual_risk_observation(observation)
                 && is_verification_observation(observation)
         })
         .collect::<Vec<_>>();
@@ -7490,6 +7517,7 @@ fn render_pull_request_review_body(
             !is_refuted_observation(observation)
                 && !is_missing_evidence_observation(observation)
                 && !is_parked_observation(observation)
+                && !is_residual_risk_observation(observation)
                 && !is_verification_observation(observation)
         })
         .collect::<Vec<_>>();
@@ -7519,31 +7547,40 @@ fn render_pull_request_review_body(
                 && !summary_finding_matches_observations(finding, &observation_items)
         })
         .collect::<Vec<_>>();
-    let has_review_value = has_actionable_inline_comment(inline_comments)
-        || has_actionable_pr_body_summary_finding(summary_only_findings)
-        || has_actionable_observation(&observation_items)
-        || proof_receipts
-            .iter()
-            .any(proof_receipt_changes_review_value);
+    let has_specific_missing_evidence = !missing_observations.is_empty()
+        || proof_receipts.iter().any(proof_receipt_is_missing_evidence);
+    let residual_risk_receipts = proof_receipts
+        .iter()
+        .filter(|receipt| proof_receipt_is_residual_risk(receipt))
+        .collect::<Vec<_>>();
+    let proof_result_receipts = proof_receipts
+        .iter()
+        .filter(|receipt| proof_receipt_is_test_proof_result(receipt))
+        .collect::<Vec<_>>();
 
     text.push_str("## Decision\n\n");
     text.push_str("- ");
-    if has_review_value {
-        text.push_str(
-            "Needs reviewer attention before upstream: findings or verification questions remain.\n",
-        );
-    } else if !missing_or_failed_sensor_evidence.is_empty()
-        || !missing_or_failed_model_evidence.is_empty()
-        || !missing_observations.is_empty()
-        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
-    {
-        text.push_str(
-            "No blocking finding from this pass; missing evidence below limits confidence.\n",
-        );
-    } else {
-        text.push_str(no_blocking_decision_for_diff_class(plan.diff_class));
-        text.push('\n');
-    }
+    text.push_str(&pr_decision_sentence(PrDecisionContext {
+        diff_class: plan.diff_class,
+        finding_count: inline_comments.len() + summary_concerns.len() + concern_observations.len(),
+        verification_count: verification_questions.len() + verification_observations.len(),
+        has_test_proof_verification: verification_questions
+            .iter()
+            .any(|finding| text_is_test_proof_review_question(&finding.reason))
+            || verification_observations
+                .iter()
+                .any(|observation| text_is_test_proof_review_question(&observation.claim)),
+        residual_risk_count: residual_risk_observations.len() + residual_risk_receipts.len(),
+        missing_evidence_count: missing_observations.len()
+            + proof_receipts
+                .iter()
+                .filter(|receipt| proof_receipt_is_missing_evidence(receipt))
+                .count(),
+        current_proof_failure: proof_receipts
+            .iter()
+            .any(|receipt| receipt.result == "head_failed"),
+    }));
+    text.push('\n');
 
     if !inline_comments.is_empty()
         || !summary_concerns.is_empty()
@@ -7551,13 +7588,13 @@ fn render_pull_request_review_body(
     {
         text.push_str("\n## Confirmed findings\n\n");
         for comment in inline_comments {
-            render_pr_signal(&mut text, &comment.body);
+            render_pr_model_signal(&mut text, &comment.body);
         }
         for observation in &concern_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
         for finding in summary_concerns {
-            render_pr_signal(&mut text, &finding.reason);
+            render_pr_model_signal(&mut text, &finding.reason);
         }
     }
 
@@ -7567,7 +7604,7 @@ fn render_pull_request_review_body(
             render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
         for finding in verification_questions {
-            render_pr_verification(&mut text, &finding.reason);
+            render_pr_model_verification(&mut text, &finding.reason);
         }
     } else if !verification_observations.is_empty() {
         text.push_str("\n## Verification questions\n\n");
@@ -7583,10 +7620,6 @@ fn render_pull_request_review_body(
         }
     }
 
-    let proof_result_receipts = proof_receipts
-        .iter()
-        .filter(|receipt| proof_receipt_changes_review_value(receipt))
-        .collect::<Vec<_>>();
     if !proof_result_receipts.is_empty() {
         text.push_str("\n## Test proof\n\n");
         for receipt in proof_result_receipts {
@@ -7600,7 +7633,7 @@ fn render_pull_request_review_body(
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
         for finding in parked {
-            render_pr_signal(&mut text, &finding.reason);
+            render_pr_model_signal(&mut text, &finding.reason);
         }
     } else if !parked_observations.is_empty() {
         text.push_str("\n## Parked follow-ups\n\n");
@@ -7609,17 +7642,17 @@ fn render_pull_request_review_body(
         }
     }
 
-    text.push_str("\n## Residual risk\n\n");
-    text.push_str(&format!(
-        "- {}\n",
-        residual_risk_for_diff_class(plan.diff_class)
-    ));
+    if !residual_risk_observations.is_empty() || !residual_risk_receipts.is_empty() {
+        text.push_str("\n## Residual risk\n\n");
+        for observation in &residual_risk_observations {
+            render_review_observation(&mut text, observation, PrObservationTone::Signal);
+        }
+        for receipt in residual_risk_receipts {
+            render_residual_risk_proof_receipt_summary(&mut text, receipt);
+        }
+    }
 
-    if !missing_or_failed_sensor_evidence.is_empty()
-        || !missing_or_failed_model_evidence.is_empty()
-        || !missing_observations.is_empty()
-        || proof_receipts.iter().any(proof_receipt_is_missing_evidence)
-    {
+    if has_specific_missing_evidence {
         text.push_str("\n## Missing evidence\n\n");
         for observation in &missing_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
@@ -7630,11 +7663,6 @@ fn render_pull_request_review_body(
         {
             render_missing_proof_receipt_summary(&mut text, receipt);
         }
-        render_compact_missing_evidence(
-            &mut text,
-            missing_or_failed_sensor_evidence,
-            missing_or_failed_model_evidence,
-        );
     }
 
     cap_review_body(text, review_body_max_bytes)
@@ -7642,38 +7670,60 @@ fn render_pull_request_review_body(
 
 fn no_blocking_decision_for_diff_class(diff_class: DiffClass) -> &'static str {
     match diff_class {
-        DiffClass::SourceUb => {
-            "No blocking UB finding from this pass; residual risk remains for human review."
-        }
-        DiffClass::SourceGeneral => {
-            "No blocking source finding from this pass; residual risk remains for human review."
-        }
-        DiffClass::TestsOnly => {
-            "No blocking test finding from this pass; residual risk remains for human review."
-        }
-        DiffClass::WorkflowTooling => {
-            "No blocking workflow finding from this pass; residual risk remains for human review."
-        }
-        DiffClass::DocsOnly => {
-            "No blocking docs finding from this pass; residual risk remains for human review."
-        }
-        DiffClass::ArtifactOnlySmoke => {
-            "No blocking review-packet finding from this pass; residual risk remains for human review."
-        }
+        DiffClass::SourceUb => "No blocking UB finding from this pass.",
+        DiffClass::SourceGeneral => "No blocking source finding from this pass.",
+        DiffClass::TestsOnly => "No blocking test finding from this pass.",
+        DiffClass::WorkflowTooling => "No blocking workflow finding from this pass.",
+        DiffClass::DocsOnly => "No blocking docs finding from this pass.",
+        DiffClass::ArtifactOnlySmoke => "No blocking review-packet finding from this pass.",
     }
 }
 
-fn has_actionable_inline_comment(inline_comments: &[ReviewInlineComment]) -> bool {
-    inline_comments
-        .iter()
-        .any(|comment| matches!(comment.severity.as_str(), "blocker" | "high" | "medium"))
+struct PrDecisionContext {
+    diff_class: DiffClass,
+    finding_count: usize,
+    verification_count: usize,
+    has_test_proof_verification: bool,
+    residual_risk_count: usize,
+    missing_evidence_count: usize,
+    current_proof_failure: bool,
 }
 
-fn has_actionable_pr_body_summary_finding(summary_only_findings: &[SummaryOnlyFinding]) -> bool {
-    summary_only_findings.iter().any(|finding| {
-        !is_pr_body_artifact_only_finding(finding)
-            && matches!(finding.severity.as_str(), "blocker" | "high" | "medium")
-    })
+fn pr_decision_sentence(context: PrDecisionContext) -> String {
+    if context.finding_count > 0 {
+        return "Needs reviewer attention before upstream: findings remain.".to_owned();
+    }
+    if context.current_proof_failure {
+        return "Needs focused proof failure resolved before upstream.".to_owned();
+    }
+    let attention_kinds = (context.verification_count > 0) as usize
+        + (context.residual_risk_count > 0) as usize
+        + (context.missing_evidence_count > 0) as usize;
+    if attention_kinds > 1 {
+        return "Needs reviewer attention before upstream: verification, residual risk, or missing evidence remains.".to_owned();
+    }
+    if context.verification_count == 1 {
+        if context.has_test_proof_verification {
+            return "Needs one test-proof clarification before upstream.".to_owned();
+        }
+        return "Needs one verification check before upstream.".to_owned();
+    }
+    if context.verification_count > 1 {
+        return "Needs verification checks before upstream.".to_owned();
+    }
+    if context.residual_risk_count == 1 {
+        return "Needs one residual-risk check before upstream.".to_owned();
+    }
+    if context.residual_risk_count > 1 {
+        return "Needs residual-risk checks before upstream.".to_owned();
+    }
+    if context.missing_evidence_count == 1 {
+        return "Needs one missing evidence item resolved before upstream.".to_owned();
+    }
+    if context.missing_evidence_count > 1 {
+        return "Needs missing evidence resolved before upstream.".to_owned();
+    }
+    no_blocking_decision_for_diff_class(context.diff_class).to_owned()
 }
 
 fn proof_receipt_changes_review_value(receipt: &ProofReceipt) -> bool {
@@ -7681,6 +7731,17 @@ fn proof_receipt_changes_review_value(receipt: &ProofReceipt) -> bool {
         receipt.result.as_str(),
         "discriminating" | "non_discriminating" | "head_passed" | "head_failed"
     )
+}
+
+fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool {
+    matches!(
+        receipt.result.as_str(),
+        "discriminating" | "head_passed" | "head_failed"
+    )
+}
+
+fn proof_receipt_is_residual_risk(receipt: &ProofReceipt) -> bool {
+    matches!(receipt.result.as_str(), "non_discriminating")
 }
 
 fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
@@ -7710,6 +7771,9 @@ fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
         || text.contains("witness")
         || text.contains("red/green")
         || text.contains("proof")
+        || text.contains("prove")
+        || text.contains("proves")
+        || text.contains("proven")
 }
 
 fn is_verification_observation(observation: &ObservationGroup) -> bool {
@@ -7726,8 +7790,25 @@ fn is_refuted_observation(observation: &ObservationGroup) -> bool {
         )
 }
 
+fn is_pr_body_refuted_observation(observation: &ObservationGroup) -> bool {
+    is_refuted_observation(observation) && !is_global_calibration_refutation(observation)
+}
+
+fn is_global_calibration_refutation(observation: &ObservationGroup) -> bool {
+    observation.dedupe_key == BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY
+        && observation.path.is_none()
+        && observation
+            .sources
+            .iter()
+            .any(|source| source == "model-false-premise-guard")
+}
+
 fn is_missing_evidence_observation(observation: &ObservationGroup) -> bool {
     observation.kind == "missing-evidence"
+}
+
+fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
+    observation.kind == "residual-risk"
 }
 
 fn pr_review_heading_for_diff_class(diff_class: DiffClass) -> &'static str {
@@ -7744,37 +7825,28 @@ fn pr_review_heading_for_diff_class(diff_class: DiffClass) -> &'static str {
 fn residual_risk_for_diff_class(diff_class: DiffClass) -> &'static str {
     match diff_class {
         DiffClass::SourceUb => {
-            "A human should still inspect unsafe/native seams, test-oracle strength, and any unavailable evidence before relying on this review."
+            "Artifact audit note: unsafe/native route truth, oracle strength, and unavailable evidence remain tracked in artifacts."
         }
         DiffClass::SourceGeneral => {
-            "A human should still inspect changed behavior, route truth, test strength, and any unavailable evidence before relying on this review."
+            "Artifact audit note: changed behavior, route truth, test strength, and unavailable evidence remain tracked in artifacts."
         }
         DiffClass::TestsOnly => {
-            "A human should still inspect red/green discrimination, oracle strength, flake risk, and any unavailable proof evidence before relying on this review."
+            "Artifact audit note: red/green discrimination, oracle strength, flake risk, and unavailable proof evidence remain tracked in artifacts."
         }
         DiffClass::WorkflowTooling => {
-            "A human should still inspect workflow permissions, trigger safety, action pinning, checkout credentials, fork-only behavior, and any unavailable actionlint/zizmor evidence before relying on this review."
+            "Artifact audit note: workflow permissions, trigger safety, action pinning, checkout credentials, fork behavior, and actionlint/zizmor evidence remain tracked in artifacts."
         }
         DiffClass::DocsOnly => {
-            "A human should still inspect claim accuracy, links, examples, and any unavailable evidence before relying on this review."
+            "Artifact audit note: claim accuracy, links, examples, and unavailable evidence remain tracked in artifacts."
         }
         DiffClass::ArtifactOnlySmoke => {
-            "A human should still inspect the artifact packet and any unavailable evidence before relying on this review."
+            "Artifact audit note: packet completeness and unavailable evidence remain tracked in artifacts."
         }
     }
 }
 
 fn is_parked_observation(observation: &ObservationGroup) -> bool {
     observation.status == "parked" || observation.kind == "parked-follow-up"
-}
-
-fn has_actionable_observation(observations: &[ObservationGroup]) -> bool {
-    observations.iter().any(|observation| {
-        !is_refuted_observation(observation)
-            && !is_missing_evidence_observation(observation)
-            && !is_parked_observation(observation)
-            && matches!(observation.severity.as_str(), "blocker" | "high" | "medium")
-    })
 }
 
 fn text_is_verification_question(text: &str) -> bool {
@@ -7786,6 +7858,21 @@ fn text_is_verification_question(text: &str) -> bool {
         || text.contains("witness")
         || text.contains("red/green")
         || text.contains("proof")
+        || text.contains("prove")
+        || text.contains("proves")
+        || text.contains("proven")
+}
+
+fn text_is_test_proof_review_question(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    text.contains("proof")
+        || text.contains("prove")
+        || text.contains("proves")
+        || text.contains("proven")
+        || text.contains("red/green")
+        || text.contains("base+tests")
+        || text.contains("asan")
+        || text.contains("bad-free")
 }
 
 fn summary_finding_matches_observations(
@@ -7827,8 +7914,8 @@ fn render_review_observation(
     tone: PrObservationTone,
 ) {
     match tone {
-        PrObservationTone::Signal => render_pr_signal(text, &observation.claim),
-        PrObservationTone::Verification => render_pr_verification(text, &observation.claim),
+        PrObservationTone::Signal => render_pr_model_signal(text, &observation.claim),
+        PrObservationTone::Verification => render_pr_model_verification(text, &observation.claim),
     }
 }
 
@@ -7840,6 +7927,61 @@ fn render_pr_signal(text: &mut String, value: &str) {
 fn render_pr_verification(text: &mut String, value: &str) {
     let sentence = verification_sentence(value);
     text.push_str(&format!("- {}\n", escape_md(&sentence)));
+}
+
+fn render_pr_model_signal(text: &mut String, value: &str) {
+    render_pr_signal(text, &reviewer_facing_pr_text(value));
+}
+
+fn render_pr_model_verification(text: &mut String, value: &str) {
+    render_pr_verification(text, &reviewer_facing_pr_text(value));
+}
+
+fn reviewer_facing_pr_text(value: &str) -> String {
+    let mut text = value.trim();
+    if let Some(stripped) = strip_bracketed_lane_prefix(text) {
+        text = stripped;
+    }
+    if let Some(stripped) = strip_raw_lane_metadata_prefix(text) {
+        text = stripped;
+    }
+    strip_embedded_evidence_label(text).trim().to_owned()
+}
+
+fn strip_bracketed_lane_prefix(value: &str) -> Option<&str> {
+    let trimmed = value.trim_start();
+    if !trimmed.starts_with('[') {
+        return None;
+    }
+    let end = trimmed.find(']')?;
+    if end > 80 {
+        return None;
+    }
+    Some(trimmed[end + 1..].trim_start())
+}
+
+fn strip_raw_lane_metadata_prefix(value: &str) -> Option<&str> {
+    let lower = value.to_ascii_lowercase();
+    let at_index = lower.find(" at ")?;
+    let prefix = lower[..at_index].trim();
+    if !prefix
+        .split_whitespace()
+        .all(|token| matches!(token, "blocker" | "high" | "medium" | "low" | "medium-high"))
+    {
+        return None;
+    }
+    let after_at = &value[at_index + 4..];
+    let body_index = after_at.find(": ")?;
+    Some(after_at[body_index + 2..].trim_start())
+}
+
+fn strip_embedded_evidence_label(value: &str) -> &str {
+    for marker in [" Evidence:", " evidence:"] {
+        if let Some(index) = value.find(marker) {
+            return value[..index].trim_end();
+        }
+    }
+    value
 }
 
 fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
@@ -7867,6 +8009,25 @@ fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
         ),
         _ => format!(
             "Focused proof result `{}` for `{}` is recorded in artifacts.",
+            receipt.result, command
+        ),
+    };
+    render_pr_signal(text, &summary);
+}
+
+fn render_residual_risk_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
+    let command = receipt
+        .commands
+        .first()
+        .map(|command| command.command.as_str())
+        .unwrap_or("focused test");
+    let summary = match receipt.result.as_str() {
+        "non_discriminating" => format!(
+            "Focused red/green proof did not discriminate the patch: HEAD and base+tests both passed for `{}`.",
+            command
+        ),
+        _ => format!(
+            "Focused proof result `{}` leaves residual risk for `{}`.",
             receipt.result, command
         ),
     };
@@ -7955,29 +8116,6 @@ fn lower_first_ascii(value: &str) -> String {
     }
 }
 
-fn render_compact_missing_evidence(
-    text: &mut String,
-    sensor_issues: &[SensorEvidenceIssue],
-    model_issues: &[ModelEvidenceIssue],
-) {
-    match (sensor_issues.is_empty(), model_issues.is_empty()) {
-        (true, true) => {}
-        (false, false) => {
-            text.push_str("- Some sensor and model evidence was unavailable; setup and lane diagnostics are in the review artifacts.\n");
-        }
-        (false, true) => {
-            text.push_str(
-                "- Some sensor evidence was unavailable; tool diagnostics are in the review artifacts.\n",
-            );
-        }
-        (true, false) => {
-            text.push_str(
-                "- Some model evidence was unavailable; lane diagnostics are in the review artifacts.\n",
-            );
-        }
-    }
-}
-
 fn review_decision(
     missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     missing_or_failed_model_evidence: &[ModelEvidenceIssue],
@@ -8007,11 +8145,8 @@ fn has_actionable_review_finding(
             .any(|finding| matches!(finding.severity.as_str(), "blocker" | "high" | "medium"))
 }
 
-fn has_reviewer_value(
-    inline_comments: &[ReviewInlineComment],
-    summary_only_findings: &[SummaryOnlyFinding],
-) -> bool {
-    !inline_comments.is_empty() || !summary_only_findings.is_empty()
+fn has_reviewer_value(inline_comments: &[ReviewInlineComment], pr_body: &str) -> bool {
+    !inline_comments.is_empty() || pr_body_has_reviewer_value(pr_body)
 }
 
 fn is_parked_follow_up(finding: &SummaryOnlyFinding) -> bool {
@@ -9802,9 +9937,10 @@ mod tests {
     use anyhow::{Context as _, Result};
 
     use super::{
-        BoxState, CommandStatus, Config, DiffClass, DiffContext, DiffFlags, EventLog, GitHubReview,
-        GitHubReviewComment, LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment,
-        ModelCandidateFinding, ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider,
+        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CommandStatus, Config, DiffClass,
+        DiffContext, DiffFlags, EventLog, GitHubReview, GitHubReviewComment, LaneModelOutput,
+        LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
+        ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider,
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, Profile, ProofBudget,
         ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg,
@@ -12362,12 +12498,12 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Decision"));
-        assert!(body.contains("missing evidence below limits confidence"));
+        assert!(body.contains("No blocking UB finding from this pass."));
         assert!(!body.contains("## Review result"));
-        assert!(body.contains("## Residual risk"));
-        assert!(body.contains("## Missing evidence"));
-        assert!(body.contains("Some sensor and model evidence was unavailable"));
-        assert!(body.contains("review artifacts"));
+        assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("## Missing evidence"));
+        assert!(!body.contains("Some sensor and model evidence was unavailable"));
+        assert!(!body.contains("review artifacts"));
         assert!(!body.contains("Sensor `ripr` unavailable"));
         assert!(!body.contains("command not found"));
         assert!(!body.contains("rate_limited"));
@@ -12377,6 +12513,39 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("## Summary-only findings"));
         assert!(!body.contains("## Failed objections"));
         assert!(!body.contains("## No blocking finding after checking"));
+        assert!(!body.contains("A human should still inspect"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_renders_specific_residual_risk_only() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[] as &[ModelLaneReceipt],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[test_observation(
+                "tests-oracle",
+                "The added FileHandle.write test was not proven to hit the patched scalar-write branch.",
+                "residual-risk",
+                "open",
+                "medium",
+                "high",
+                "filehandle-route-proof",
+            )],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Residual risk"));
+        assert!(body.contains("FileHandle.write test was not proven"));
+        assert!(!body.contains("A human should still inspect"));
+        assert!(!body.contains("residual risk remains for human review"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -12406,7 +12575,37 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("Lane: `ub-memory-lifetime`"));
         assert!(!body.contains("Provider: `minimax`"));
         assert!(!body.contains("Model: `MiniMax-M3`"));
+        assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("A human should still inspect"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn no_value_pr_body_is_not_prepared_for_posting() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.model_mode = ModelMode::Auto;
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[model_lane_receipt("ub-memory-lifetime", "ok")],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(!super::should_prepare_github_review_payload(
+            &args,
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[ProofReceipt],
+            &body
+        ));
     }
 
     #[test]
@@ -12466,12 +12665,14 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.starts_with("## Decision"));
-        assert!(body.contains("workflow permissions"));
-        assert!(body.contains("actionlint/zizmor"));
+        assert!(body.contains("No blocking workflow finding from this pass."));
         assert!(!body.contains("ArrayBuffer"));
         assert!(!body.contains("worker handoff"));
         assert!(!body.contains("unsafe/native seams"));
         assert!(!body.contains("test-oracle strength"));
+        assert!(!body.contains("actionlint/zizmor"));
+        assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("A human should still inspect"));
     }
 
     #[test]
@@ -12547,6 +12748,71 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn pr_review_body_compiles_ffi_test_gap_as_decision_memo() {
+        let mut global_box_refutation = test_observation(
+            "ub-active-view",
+            "Box::from(slice) can return None on allocation failure; refuted because allocation failure does not return None.",
+            "false-premise",
+            "refuted",
+            "low",
+            "high",
+            BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY,
+        );
+        global_box_refutation.source = "model-false-premise-guard".to_owned();
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "[tests-red-green] high high at test/js/bun/ffi/ffi.test.js:985: The no-finalizer `toBuffer(ptr(buffer))` subprocess tests assert process survival after GC, but they do not prove memory remains valid after collection/reuse. Attach the ASAN bad-free witness, or strengthen the subprocess test so it observes a real post-GC memory-validity condition rather than only `exitCode === 0`.".to_owned(),
+                evidence: "lane transcript".to_owned(),
+            }],
+            &[
+                test_observation(
+                    "tests-oracle",
+                    "The explicit-finalizer regression is useful guard coverage, but it is not the red/green proof for this bug. It checks that explicit ownership still works; the no-finalizer path is the actual fix surface.",
+                    "parked-follow-up",
+                    "parked",
+                    "low",
+                    "medium-high",
+                    "explicit-finalizer-guard",
+                ),
+                global_box_refutation,
+            ],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Decision"));
+        assert!(body.contains("Needs one test-proof clarification before upstream."));
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains("Confirm the no-finalizer `toBuffer(ptr(buffer))` subprocess tests"));
+        assert!(body.contains("## Parked follow-ups"));
+        assert!(body.contains("explicit-finalizer regression is useful guard coverage"));
+        assert!(!body.contains("Shared context"));
+        assert!(!body.contains("Profile:"));
+        assert!(!body.contains("Changed files:"));
+        assert!(!body.contains("Inline comments:"));
+        assert!(!body.contains("[tests-red-green]"));
+        assert!(!body.contains("high high at"));
+        assert!(!body.contains("test/js/bun/ffi/ffi.test.js:985"));
+        assert!(!body.contains("lane transcript"));
+        assert!(!body.contains("A human should still inspect"));
+        assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("## Refuted"));
+        assert!(!body.contains("Box::from(slice)"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
     fn pr_review_body_renders_discriminating_proof_receipt_once() {
         let receipt = test_red_green_proof_receipt("discriminating", "failed");
         let body = render_review_body(
@@ -12565,11 +12831,40 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Test proof"));
+        assert!(body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("Focused red/green proof discriminates the patch"));
         assert!(body.contains("HEAD passed and base+tests failed"));
+        assert!(!body.contains("Needs reviewer attention"));
+        assert!(!body.contains("## Residual risk"));
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!body.contains("## Model lanes"));
+        assert!(!body.contains("A human should still inspect"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_renders_non_discriminating_proof_as_residual_risk() {
+        let receipt = test_red_green_proof_receipt("non_discriminating", "passed");
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Residual risk"));
+        assert!(body.contains("HEAD and base+tests both passed"));
+        assert!(!body.contains("## Test proof"));
+        assert!(!body.contains("A human should still inspect"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -12591,10 +12886,12 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("missing evidence below limits confidence"));
+        assert!(body.contains("Needs one missing evidence item resolved before upstream."));
         assert!(body.contains("## Missing evidence"));
         assert!(body.contains("Focused proof timed out"));
         assert!(!body.contains("## Test proof"));
+        assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("A human should still inspect"));
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
@@ -12896,6 +13193,16 @@ UB_REVIEW_HTTP_STATUS:429
 
     #[test]
     fn pr_review_body_dedupes_observations_before_rendering() {
+        let mut global_box_refutation = test_observation(
+            "ub-active-view",
+            "Box::from(slice) can return None on allocation failure; refuted because: allocation failure does not return None",
+            "false-premise",
+            "refuted",
+            "low",
+            "high",
+            "rust-box-from-allocation-failure",
+        );
+        global_box_refutation.source = "model-false-premise-guard".to_owned();
         let observations = vec![
             test_observation(
                 "tests-oracle",
@@ -12915,15 +13222,7 @@ UB_REVIEW_HTTP_STATUS:429
                 "medium-high",
                 "markdown-red-green-witness",
             ),
-            test_observation(
-                "ub-active-view",
-                "Box::from(slice) can return None on allocation failure; refuted because: allocation failure does not return None",
-                "false-premise",
-                "refuted",
-                "low",
-                "high",
-                "rust-box-from-allocation-failure",
-            ),
+            global_box_refutation,
             test_observation(
                 "source-route",
                 "A typed-array view over a resizable ArrayBuffer carries the resizable flag through PinnedView.",
@@ -12963,8 +13262,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("`[tests-oracle, opposition]`"));
         assert!(body.contains("## Verification questions"));
         assert!(body.contains("Confirm a typed-array view over a resizable ArrayBuffer"));
-        assert!(body.contains("## Refuted"));
-        assert!(body.contains("Box::from(slice) can return None"));
+        assert!(!body.contains("## Refuted"));
+        assert!(!body.contains("Box::from(slice) can return None"));
         assert!(body.contains("## Missing evidence"));
         assert!(!body.contains("duplicate lane summary"));
         assert!(!body.contains("Evidence:"));

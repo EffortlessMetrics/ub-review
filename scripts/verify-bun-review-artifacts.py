@@ -877,6 +877,14 @@ def require_post_receipt(root: pathlib.Path) -> None:
     post_result = root / "review/post-result.json"
     post_error = root / "review/post-error.json"
     if not post_result.exists() and not post_error.exists():
+        github_skip = root / "review/github-review-skip.json"
+        if github_skip.exists():
+            skip = load_json(github_skip)
+            if (
+                skip.get("status") == "skipped"
+                and skip.get("review_payload_status") == "skipped_empty_smoke"
+            ):
+                return
         fail("neither post-result.json nor post-error.json exists")
     if post_result.exists():
         receipt = load_json(post_result)
