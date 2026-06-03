@@ -5610,7 +5610,8 @@ fn focused_test_task(
     let mut requested_by = Vec::new();
     let mut request_ids = Vec::new();
     for group in request_groups {
-        if group.command.contains(file)
+        if group.status == "requested"
+            && group.command.contains(file)
             && test_name
                 .as_ref()
                 .is_none_or(|name| group.command.contains(name))
@@ -12796,6 +12797,14 @@ index 1111111..2222222 100644
         assert!(groups.iter().any(|group| group.status == "requested"));
         assert!(groups.iter().any(|group| group.status == "unsupported"));
         assert!(groups.iter().any(|group| group.status == "invalid"));
+
+        let task = super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &groups,
+        );
+        assert_eq!(task.requested_by, vec!["tests-oracle".to_owned()]);
+        assert_eq!(task.request_ids, vec![requests[0].id.clone()]);
     }
 
     #[test]
