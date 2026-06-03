@@ -1,0 +1,41 @@
+schema_version = 1
+policy = "ci-risk-packs"
+owner = "EffortlessMetrics"
+status = "advisory"
+
+[risk_pack.manifest]
+description = "Cargo manifest, lockfile, toolchain, or Rust formatting policy changed."
+paths = ["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "rustfmt.toml", ".cargo/**"]
+lanes = ["rust_fast_gate", "release_pr_build", "workflow_policy"]
+labels = ["release-check"]
+
+[risk_pack.github_action_contract]
+description = "Action metadata, runner profiles, prompts, or artifact verification changed."
+paths = ["action.yml", "configs/**", "profiles/**", "runtime/**", "templates/**", "scripts/verify-*-artifacts.py"]
+lanes = ["action_smoke"]
+labels = []
+
+[risk_pack.provider_or_model]
+description = "Provider fixtures, model routing, or model-evidence verification changed."
+paths = ["fixtures/providers/**", "scripts/verify-model-smoke-artifacts.py", "docs/*MODEL*", "docs/*BUN*"]
+keywords = ["MiniMax", "model", "provider", "evidence", "lane"]
+lanes = ["action_smoke", "model_smoke"]
+labels = ["ub-review-model-smoke"]
+
+[risk_pack.public_cli]
+description = "Public command-line behavior, documented runner contracts, or examples changed."
+paths = ["src/main.rs", "tests/**", "examples/**", "README.md", "docs/**"]
+lanes = ["rust_fast_gate", "action_smoke"]
+labels = []
+
+[risk_pack.release]
+description = "Release packaging, release notes, binary workflow, or version metadata changed."
+paths = [".github/workflows/release-binary.yml", "RELEASE_NOTES*.md", "Cargo.toml", "Cargo.lock"]
+lanes = ["rust_fast_gate", "release_pr_build"]
+labels = ["release-check"]
+
+[risk_pack.ci_control_plane]
+description = "Workflow, CI policy, budget, or lane documentation changed."
+paths = [".github/workflows/**", "policy/**", "docs/ci/**"]
+lanes = ["workflow_policy"]
+labels = ["ci-budget-ack"]

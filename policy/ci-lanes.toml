@@ -1,0 +1,95 @@
+schema_version = 1
+policy = "ci-lanes"
+owner = "EffortlessMetrics"
+status = "advisory"
+
+[lane.rust_fast_gate]
+description = "Default Rust PR gate: format, check, tests, Clippy, and docs on the canonical Linux path."
+intent = "merge-blocking Rust correctness"
+workflow = ".github/workflows/ci.yml"
+job = "rust"
+runner = "ubuntu_latest"
+base_lem = 20
+default_pr = true
+blocking = true
+paths = ["src/**", "tests/**", "Cargo.toml", "Cargo.lock", "rust-toolchain.toml", "rustfmt.toml"]
+outputs = ["cargo fmt", "cargo check", "cargo test", "cargo clippy", "cargo doc"]
+duplicate_of = []
+
+[lane.action_smoke]
+description = "Local GitHub Action contract smoke with model mode disabled and artifact contract verification."
+intent = "merge-blocking action packaging and artifact contract proof"
+workflow = ".github/workflows/action-smoke.yml"
+job = "smoke"
+runner = "ubuntu_latest"
+base_lem = 20
+default_pr = true
+blocking = true
+paths = ["action.yml", "src/**", "scripts/**", "configs/**", "profiles/**", "runtime/**", "templates/**"]
+outputs = ["target/ub-review-smoke", "ub-review-smoke artifact"]
+duplicate_of = []
+
+[lane.model_smoke]
+description = "MiniMax-backed action smoke for provider/model integration and evidence packet quality."
+intent = "label-gated model/provider integration proof"
+workflow = ".github/workflows/action-smoke.yml"
+job = "model-smoke"
+runner = "ubuntu_latest"
+base_lem = 25
+default_pr = false
+blocking = false
+labels = ["ub-review-model-smoke", "full-ci"]
+outputs = ["target/ub-review-model-smoke", "ub-review-model-smoke artifact"]
+duplicate_of = ["action_smoke:uses_same_action_contract_but_exercises_model_path"]
+
+[lane.release_pr_build]
+description = "Pull-request release binary dry run for packaging-sensitive Rust changes."
+intent = "label/path-gated release packaging proof"
+workflow = ".github/workflows/release-binary.yml"
+job = "build-linux-x64"
+runner = "ubuntu_latest"
+base_lem = 20
+default_pr = false
+blocking = false
+paths = [".github/workflows/release-binary.yml", "Cargo.lock", "Cargo.toml", "src/**"]
+labels = ["release-check", "full-ci"]
+outputs = ["dist/ub-review-x86_64-unknown-linux-gnu.tar.gz", "sha256", "workflow artifact"]
+duplicate_of = ["rust_fast_gate:builds_same_binary_in_release_mode_with_packaging_receipts"]
+
+[lane.release_publish]
+description = "Tagged release build and GitHub release asset publication."
+intent = "release-only binary publication"
+workflow = ".github/workflows/release-binary.yml"
+job = "publish"
+runner = "ubuntu_latest"
+base_lem = 20
+default_pr = false
+blocking = true
+branches = ["refs/tags/v*"]
+outputs = ["GitHub release asset", "sha256", "workflow artifact"]
+duplicate_of = ["release_pr_build:release_tag_publication_variant"]
+
+[lane.ripr_advisory]
+description = "Reserved lane for static RIPR exposure analysis over production Rust diffs."
+intent = "oracle-gap detection"
+workflow = "planned:.github/workflows/ripr.yml"
+runner = "ubuntu_24_04"
+base_lem = 4
+default_pr = false
+blocking = false
+paths = ["src/**", "crates/**/src/**", "xtask/src/**"]
+labels = ["ripr", "full-ci"]
+outputs = ["target/ripr/ripr.json", "target/ripr/ripr.sarif", "step-summary"]
+duplicate_of = []
+
+[lane.workflow_policy]
+description = "Reserved lane for linting workflow jobs against the CI lane registry."
+intent = "CI control-plane integrity"
+workflow = "planned:.github/workflows/workflow-policy.yml"
+runner = "ubuntu_24_04"
+base_lem = 2
+default_pr = true
+blocking = false
+paths = [".github/workflows/**", "policy/ci-*.toml", "docs/ci/**"]
+outputs = ["workflow-policy summary"]
+duplicate_of = []

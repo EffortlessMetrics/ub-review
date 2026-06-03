@@ -1,0 +1,43 @@
+schema_version = 1
+policy = "ci-exceptions"
+owner = "EffortlessMetrics"
+status = "advisory"
+
+[[exception]]
+id = "ci-exception-action-smoke-default-pr"
+kind = "default_pr_lane_above_preferred"
+lane = "action_smoke"
+scope = "repo"
+allowed = true
+owner = "EffortlessMetrics"
+issue = "TODO"
+reason = "The repository is itself a GitHub Action; the local action smoke is the cheapest merge-time proof that packaging, output paths, and artifact contracts still work without model spend."
+created = "2026-06-03"
+review_after = "2026-07-03"
+expires = "2026-09-03"
+
+[[exception]]
+id = "ci-exception-rust-fast-gate-docs-in-default"
+kind = "lane_contains_docs_check"
+lane = "rust_fast_gate"
+scope = "repo"
+allowed = true
+owner = "EffortlessMetrics"
+issue = "TODO"
+reason = "cargo doc is currently local, deterministic, and keeps public CLI/library documentation wiring honest; remove from default PR if learned actuals show it pushes the gate above budget."
+created = "2026-06-03"
+review_after = "2026-07-03"
+expires = "2026-09-03"
+
+[[exception]]
+id = "ci-exception-release-pr-build-path-gated"
+kind = "expensive_lane_not_default_pr"
+lane = "release_pr_build"
+scope = "repo"
+allowed = true
+owner = "EffortlessMetrics"
+issue = "TODO"
+reason = "Release packaging proof is valuable, but it duplicates parts of the Rust gate and should remain path/label-gated instead of an ordinary PR default."
+created = "2026-06-03"
+review_after = "2026-07-03"
+expires = "2026-09-03"

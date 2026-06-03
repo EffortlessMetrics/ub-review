@@ -1,0 +1,13 @@
+schema_version = 1
+policy = "ripr"
+owner = "EffortlessMetrics"
+status = "planned-advisory"
+
+[analysis]
+mode = "diff"
+blocking = false
+changed_paths = ["src/**", "crates/**/src/**", "xtask/src/**"]
+outputs = ["target/ripr/ripr.json", "target/ripr/ripr.sarif"]
+
+[suppressions]
+file = "policy/ripr-suppressions.toml"

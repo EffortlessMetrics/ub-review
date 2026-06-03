@@ -1,0 +1,19 @@
+schema_version = 1
+policy = "ci-non-rust-allowlist"
+owner = "EffortlessMetrics"
+status = "advisory"
+
+[[allow]]
+paths = ["docs/**", "README.md", "RELEASE_NOTES*.md", "REPO_READY.md"]
+lanes = ["workflow_policy"]
+reason = "Documentation-only changes should get policy visibility without automatically buying Rust, action, model, or release proof."
+
+[[allow]]
+paths = ["configs/**", "profiles/**", "runtime/**", "templates/**", "action.yml"]
+lanes = ["action_smoke"]
+reason = "Action and runner contract data is non-Rust but can break the packaged action contract."
+
+[[allow]]
+paths = ["fixtures/**"]
+lanes = ["rust_fast_gate", "action_smoke"]
+reason = "Fixtures support Rust tests and action artifact verification."

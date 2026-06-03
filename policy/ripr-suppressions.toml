@@ -1,0 +1,8 @@
+schema_version = 1
+policy = "ripr-suppressions"
+owner = "EffortlessMetrics"
+status = "advisory"
+
+# Add suppressions only after a human-readable finding has been reviewed.
+# Each entry must include: id, path, finding, owner, issue, reason, created,
+# review_after, and expires.
