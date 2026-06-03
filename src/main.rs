@@ -12987,17 +12987,18 @@ mod tests {
         SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
         TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses, apply_model_output,
         apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
-        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
+        build_candidate_records, build_orchestrator_plan, build_post_error_receipt,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        normalize_run_args, observation_summary_artifacts, opencode_canary_spec,
+        pr_decision_sentence, proof_budget, proof_lease_budget,
         provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
         render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
@@ -15720,6 +15721,109 @@ index 1111111..2222222 100644
             .err()
             .ok_or_else(|| anyhow::anyhow!("wrong file unexpectedly passed diff validation"))?;
         assert!(err.to_string().contains("not a valid RIGHT-side diff line"));
+        Ok(())
+    }
+
+    #[test]
+    fn post_error_receipt_reports_malformed_review_json_as_payload_validation() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_json = temp.path().join("github-review.json");
+        fs::write(&review_json, "{not valid json")?;
+        let args = PostArgs {
+            review_json,
+            diff_patch: None,
+            out: temp.path().join("post"),
+            github_token: Some("token".to_owned()),
+            repo: Some("EffortlessMetrics/ub-review".to_owned()),
+            pull_number: Some(1),
+            github_api_url: "https://api.github.com".to_owned(),
+            fail_on_post_error: false,
+        };
+
+        let receipt = build_post_error_receipt(&args, &anyhow::anyhow!("review json parse failed"));
+
+        assert_eq!(receipt.status, "failed");
+        assert_eq!(receipt.error_kind, "invalid_review_payload");
+        assert_eq!(receipt.failure_stage, "payload_validation");
+        assert!(receipt.review_json_exists);
+        assert!(!receipt.review_json_valid);
+        assert_eq!(receipt.review_event, None);
+        assert_eq!(receipt.review_body_bytes, None);
+        assert_eq!(receipt.review_comment_count, None);
+        assert!(!receipt.diff_patch_exists);
+        assert!(!receipt.diff_patch_valid);
+        assert_eq!(receipt.diff_line_count, None);
+        assert_eq!(receipt.off_diff_comment_count, None);
+        assert_eq!(receipt.repo, Some("EffortlessMetrics/ub-review".to_owned()));
+        assert!(receipt.repo_valid);
+        assert_eq!(receipt.pull_number, Some(1));
+        assert_eq!(receipt.comments, None);
+        assert!(receipt.token_present);
+        assert!(!receipt.payload_written);
+        assert!(!receipt.would_post);
+        assert!(receipt.failure_tolerated);
+        assert!(!receipt.fail_on_post_error);
+        Ok(())
+    }
+
+    #[test]
+    fn post_error_receipt_classifies_preflight_failures_before_network_post() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_json = temp.path().join("github-review.json");
+        fs::write(
+            &review_json,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "event": "COMMENT",
+                "body": "Review body",
+                "comments": []
+            }))?,
+        )?;
+        let error = anyhow::anyhow!("github review post failed with http 403");
+
+        for (github_token, repo, pull_number, error_kind) in [
+            (
+                None,
+                Some("EffortlessMetrics/ub-review"),
+                Some(1),
+                "missing_token",
+            ),
+            (
+                Some("token"),
+                Some("not-a-valid-slug"),
+                Some(1),
+                "invalid_repo",
+            ),
+            (
+                Some("token"),
+                Some("EffortlessMetrics/ub-review"),
+                None,
+                "missing_pull_number",
+            ),
+        ] {
+            let args = PostArgs {
+                review_json: review_json.clone(),
+                diff_patch: None,
+                out: temp.path().join(format!("post-{error_kind}")),
+                github_token: github_token.map(str::to_owned),
+                repo: repo.map(str::to_owned),
+                pull_number,
+                github_api_url: "https://api.github.com".to_owned(),
+                fail_on_post_error: true,
+            };
+
+            let receipt = build_post_error_receipt(&args, &error);
+
+            assert_eq!(receipt.error_kind, error_kind);
+            assert_eq!(receipt.failure_stage, "preflight");
+            assert!(receipt.review_json_valid);
+            assert_eq!(receipt.review_event, Some("COMMENT".to_owned()));
+            assert_eq!(receipt.review_comment_count, Some(0));
+            assert_eq!(receipt.comments, Some(0));
+            assert!(!receipt.payload_written);
+            assert!(!receipt.would_post);
+            assert!(!receipt.failure_tolerated);
+            assert!(receipt.fail_on_post_error);
+        }
         Ok(())
     }
 
