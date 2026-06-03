@@ -352,7 +352,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if review.get("resource_leases", []) != resource_leases:
         fail("review resource_leases does not match review/resource_leases.json")
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
-    require_observation_files(root, observations)
+    orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
+    require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
         if metrics.get("review_payload_status") != "skipped_empty_smoke":
             fail("metrics review_payload_status does not match github-review-skip.json")
@@ -996,7 +997,9 @@ def append_unique(values: list[str], value: str) -> None:
         values.append(value)
 
 
-def require_observation_files(root: pathlib.Path, observations: list[dict]) -> None:
+def require_observation_files(
+    root: pathlib.Path, observations: list[dict], follow_up_tasks: list[dict]
+) -> None:
     observation_dir = root / "observations"
     if not observation_dir.is_dir():
         fail("missing observations directory")
@@ -1021,11 +1024,11 @@ def require_observation_files(root: pathlib.Path, observations: list[dict]) -> N
         expected = [observation for observation in observations if observation["lane"] == lane]
         if lane_observations != expected:
             fail(f"observation NDJSON {path} does not match review/observations.json")
-    require_question_observation_files(root, observations)
+    require_question_observation_files(root, observations, follow_up_tasks)
 
 
 def require_question_observation_files(
-    root: pathlib.Path, observations: list[dict]
+    root: pathlib.Path, observations: list[dict], follow_up_tasks: list[dict]
 ) -> None:
     questions_dir = root / "questions"
     if not questions_dir.is_dir():
@@ -1060,10 +1063,14 @@ def require_question_observation_files(
         if not path.is_dir():
             fail(f"unexpected questions entry: {path.name}")
         actual_lane_dirs.append(path.name)
+    if follow_up_tasks:
+        expected.setdefault("orchestrator-follow-up", {})
     if sorted(actual_lane_dirs) != sorted(expected):
         fail("questions directory entries do not match review/observations.json")
 
     for lane_name, expected_questions in expected.items():
+        if lane_name == "orchestrator-follow-up":
+            continue
         lane_dir = questions_dir / lane_name
         actual_question_files = []
         for path in lane_dir.iterdir():
@@ -1080,6 +1087,87 @@ def require_question_observation_files(
                 fail(
                     f"questions/{lane_name}/{name} does not match review/observations.json"
                 )
+    require_follow_up_question_packet_files(root, follow_up_tasks)
+
+
+def require_follow_up_question_packet_files(
+    root: pathlib.Path, follow_up_tasks: list[dict]
+) -> None:
+    follow_up_dir = root / "questions" / "orchestrator-follow-up"
+    if not follow_up_tasks:
+        if follow_up_dir.exists():
+            fail("questions/orchestrator-follow-up exists without follow-up tasks")
+        return
+    if not follow_up_dir.is_dir():
+        fail("missing questions/orchestrator-follow-up directory")
+    expected = {
+        f"{sanitize_artifact_name(task['id'])}.json": expected_follow_up_question_packet(task)
+        for task in follow_up_tasks
+    }
+    actual_files = []
+    for path in follow_up_dir.iterdir():
+        if not path.is_file():
+            fail(f"unexpected questions/orchestrator-follow-up entry: {path.name}")
+        actual_files.append(path.name)
+    if sorted(actual_files) != sorted(expected):
+        fail("questions/orchestrator-follow-up entries do not match follow_up_tasks")
+    for name, expected_packet in expected.items():
+        parsed = load_json(follow_up_dir / name)
+        require_follow_up_question_packet_schema(parsed)
+        if parsed != expected_packet:
+            fail(
+                f"questions/orchestrator-follow-up/{name} does not match orchestrator plan"
+            )
+
+
+def expected_follow_up_question_packet(task: dict) -> dict:
+    return {
+        "schema": "ub-review.follow_up_question_packet.v1",
+        "id": task["id"],
+        "task_id": task["id"],
+        "group_id": task["group_id"],
+        "evidence_need": task["evidence_need"],
+        "disposition": task["disposition"],
+        "candidate_ids": task["candidate_ids"],
+        "observation_group_ids": task["observation_group_ids"],
+        "routed_evidence": task["routed_evidence"],
+        "question": task["question"],
+        "status": task["status"],
+        "source_artifact": "review/orchestrator_plan.json",
+        "prompt": follow_up_question_prompt(task),
+    }
+
+
+def follow_up_question_prompt(task: dict) -> str:
+    prompt = "Follow-up question task\n\n"
+    prompt += f"- Task: `{task['id']}`\n"
+    prompt += f"- Group: `{task['group_id']}`\n"
+    prompt += f"- Evidence need: `{task['evidence_need']}`\n"
+    prompt += f"- Disposition: `{task['disposition']}`\n"
+    if task["candidate_ids"]:
+        prompt += f"- Candidate ids: `{'`, `'.join(task['candidate_ids'])}`\n"
+    if task["observation_group_ids"]:
+        prompt += (
+            f"- Observation group ids: `{'`, `'.join(task['observation_group_ids'])}`\n"
+        )
+    prompt += f"\nQuestion: {task['question']}\n\n"
+    if not task["routed_evidence"]:
+        prompt += "Routed evidence: none.\n\n"
+    else:
+        prompt += "Routed evidence:\n"
+        for evidence in task["routed_evidence"]:
+            prompt += (
+                f"- `{evidence['id']}` kind=`{evidence['kind']}` "
+                f"status=`{evidence['status']}` result=`{evidence['result']}` "
+                f"artifact=`{evidence['artifact']}` reason={evidence['reason']}\n"
+            )
+        prompt += "\n"
+    prompt += (
+        "Return strict JSON with observations, candidate_findings, "
+        "summary_only_findings, failed_objections, and proof_requests. "
+        "Do not post, mutate, or run shell commands.\n"
+    )
+    return prompt
 
 
 def require_observation_summary_artifacts(
@@ -1556,6 +1644,37 @@ def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
     routed_evidence = task.get("routed_evidence")
     if not isinstance(routed_evidence, list):
         fail(f"follow-up task routed_evidence is not an array: {task!r}")
+    for evidence in routed_evidence:
+        require_orchestrator_routed_evidence_schema(evidence)
+
+
+def require_follow_up_question_packet_schema(packet: dict) -> None:
+    if packet.get("schema") != "ub-review.follow_up_question_packet.v1":
+        fail(f"follow-up question packet has wrong schema: {packet!r}")
+    for field in [
+        "id",
+        "task_id",
+        "group_id",
+        "evidence_need",
+        "disposition",
+        "question",
+        "status",
+        "source_artifact",
+        "prompt",
+    ]:
+        if not isinstance(packet.get(field), str) or not packet[field]:
+            fail(f"follow-up question packet missing string field {field}: {packet!r}")
+    if packet["source_artifact"] != "review/orchestrator_plan.json":
+        fail(f"follow-up question packet has unsupported source artifact: {packet!r}")
+    for field in ["candidate_ids", "observation_group_ids"]:
+        values = packet.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item for item in values
+        ):
+            fail(f"follow-up question packet {field} is not a string array: {packet!r}")
+    routed_evidence = packet.get("routed_evidence")
+    if not isinstance(routed_evidence, list):
+        fail(f"follow-up question packet routed_evidence is not an array: {packet!r}")
     for evidence in routed_evidence:
         require_orchestrator_routed_evidence_schema(evidence)
 

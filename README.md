@@ -177,6 +177,9 @@ target/ub-review/
     tests-oracle/
       red-green.json
       ...
+    orchestrator-follow-up/
+      follow-up-001.json
+      ...
 
   review/
     shared_context.md
