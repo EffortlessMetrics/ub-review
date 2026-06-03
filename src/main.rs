@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         Command::Doctor(args) => cmd_doctor(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
-        Command::Run(args) => cmd_run(args),
+        Command::Run(args) => cmd_run(*args),
         Command::Summary(args) => cmd_summary(args),
         Command::Post(args) => cmd_post(args),
     }
@@ -58,7 +58,7 @@ enum Command {
     /// Build and print a run plan without executing sensors.
     Plan(PlanArgs),
     /// Build packets, run eligible sensors, and render lane packets.
-    Run(RunArgs),
+    Run(Box<RunArgs>),
     /// Re-render a running summary from an existing run directory.
     Summary(SummaryArgs),
     /// Submit a prepared GitHub pull request review.
@@ -404,6 +404,22 @@ struct RunArgs {
         env = "UB_REVIEW_PR_THREAD_CONTEXT_MAX_BYTES"
     )]
     pr_thread_context_max_bytes: usize,
+    /// GitHub token used only to fetch bounded PR-thread context during `run`.
+    #[arg(long = "github-token", env = "UB_REVIEW_GITHUB_TOKEN")]
+    github_token: Option<String>,
+    /// owner/repo used to fetch bounded PR-thread context. Defaults to GITHUB_REPOSITORY.
+    #[arg(long = "github-repo", env = "GITHUB_REPOSITORY")]
+    github_repo: Option<String>,
+    /// Pull request number used to fetch bounded PR-thread context.
+    #[arg(long = "github-pull-number", env = "UB_REVIEW_PULL_NUMBER")]
+    github_pull_number: Option<u64>,
+    /// GitHub API base URL used to fetch bounded PR-thread context.
+    #[arg(
+        long = "github-api-url",
+        default_value = "https://api.github.com",
+        env = "UB_REVIEW_GITHUB_API_URL"
+    )]
+    github_api_url: String,
     /// MiniMax provider request/response family.
     #[arg(
         long,
@@ -7882,6 +7898,9 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
                 .push(format!("github-event unavailable: {err}")),
         }
     }
+    if context.pull_number.is_none() {
+        context.pull_number = args.github_pull_number;
+    }
 
     let configured_thread_path = args.pr_thread_context.trim();
     if !configured_thread_path.is_empty() {
@@ -7906,6 +7925,28 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
         }
     }
 
+    match github_thread_api_request(args, context.pull_number) {
+        None => {}
+        Some(Err(err)) => context
+            .warnings
+            .push(format!("github-api thread context unavailable: {err}")),
+        Some(Ok(request)) => {
+            match read_github_pr_thread_context(root, &request, args.pr_thread_context_max_bytes) {
+                Ok(api_context) => {
+                    context.sources.extend(api_context.sources);
+                    append_thread_context(
+                        &mut context,
+                        &api_context.thread_context,
+                        args.pr_thread_context_max_bytes,
+                    );
+                }
+                Err(err) => context
+                    .warnings
+                    .push(format!("github-api thread context unavailable: {err}")),
+            }
+        }
+    }
+
     context.status =
         if context.title.is_some() || context.body.is_some() || context.thread_context.is_some() {
             "seeded".to_owned()
@@ -7916,6 +7957,263 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
         };
 
     Ok(context)
+}
+
+struct GitHubThreadApiRequest<'a> {
+    token: &'a str,
+    repo: &'a str,
+    pull_number: u64,
+    api_url: &'a str,
+}
+
+struct GitHubThreadApiContext {
+    sources: Vec<String>,
+    thread_context: String,
+}
+
+fn github_thread_api_request<'a>(
+    args: &'a RunArgs,
+    event_pull_number: Option<u64>,
+) -> Option<Result<GitHubThreadApiRequest<'a>>> {
+    let token = args
+        .github_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    let Some(repo) = args
+        .github_repo
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    else {
+        return Some(Err(anyhow::anyhow!(
+            "GitHub repository slug is unavailable"
+        )));
+    };
+    if !is_valid_repo_slug(repo) {
+        return Some(Err(anyhow::anyhow!(
+            "GitHub repository slug is invalid: {repo}"
+        )));
+    }
+    let Some(pull_number) = args.github_pull_number.or(event_pull_number) else {
+        return Some(Err(anyhow::anyhow!("pull request number is unavailable")));
+    };
+    Some(Ok(GitHubThreadApiRequest {
+        token,
+        repo,
+        pull_number,
+        api_url: args.github_api_url.trim_end_matches('/'),
+    }))
+}
+
+fn read_github_pr_thread_context(
+    root: &Path,
+    request: &GitHubThreadApiRequest<'_>,
+    max_bytes: usize,
+) -> Result<GitHubThreadApiContext> {
+    let endpoints = [
+        (
+            "issue-comments",
+            format!(
+                "{}/repos/{}/issues/{}/comments?per_page=30",
+                request.api_url, request.repo, request.pull_number
+            ),
+        ),
+        (
+            "review-summaries",
+            format!(
+                "{}/repos/{}/pulls/{}/reviews?per_page=30",
+                request.api_url, request.repo, request.pull_number
+            ),
+        ),
+        (
+            "review-comments",
+            format!(
+                "{}/repos/{}/pulls/{}/comments?per_page=50",
+                request.api_url, request.repo, request.pull_number
+            ),
+        ),
+    ];
+    let mut sections = Vec::new();
+    let mut sources = Vec::new();
+    for (kind, url) in endpoints {
+        let value = run_github_api_get(root, &url, request.token)
+            .with_context(|| format!("fetch GitHub PR thread {kind}"))?;
+        sources.push(format!(
+            "github-api:{}/{}/{}",
+            request.repo, request.pull_number, kind
+        ));
+        sections.push(render_github_pr_thread_section(kind, &value, max_bytes));
+    }
+
+    let mut text = String::new();
+    text.push_str("## GitHub PR Thread Snapshot\n\n");
+    text.push_str(&format!(
+        "Source: `{}` PR `#{}`. Bounded to lane context; full GitHub thread remains source of truth.\n\n",
+        escape_md(request.repo),
+        request.pull_number
+    ));
+    text.push_str(&sections.join("\n"));
+    let bounded = bounded_string(&text, max_bytes);
+    Ok(GitHubThreadApiContext {
+        sources,
+        thread_context: bounded.text,
+    })
+}
+
+fn run_github_api_get(root: &Path, url: &str, token: &str) -> Result<serde_json::Value> {
+    let mut command = ProcessCommand::new("curl");
+    command
+        .arg("-sS")
+        .arg("--fail-with-body")
+        .arg("--max-time")
+        .arg("30")
+        .arg("-w")
+        .arg("\nUB_REVIEW_HTTP_STATUS:%{http_code}\n")
+        .arg("-K")
+        .arg("-")
+        .arg(url)
+        .current_dir(root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().with_context(|| "spawn GitHub API curl")?;
+    {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("curl stdin unavailable"))?;
+        use std::io::Write as _;
+        for header in [
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+            &format!("Authorization: Bearer {token}"),
+        ] {
+            writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .with_context(|| "wait for GitHub API curl")?;
+    let (stdout, http_status) = split_curl_http_status(output.stdout);
+    if !output.status.success() {
+        bail!(
+            "GitHub API curl exited {:?} with http status {:?}: stderr: {}; stdout: {}",
+            output.status.code(),
+            http_status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&stdout)
+        );
+    }
+    serde_json::from_slice(&stdout).with_context(|| "parse GitHub API response")
+}
+
+fn render_github_pr_thread_section(
+    kind: &str,
+    value: &serde_json::Value,
+    max_bytes: usize,
+) -> String {
+    let title = match kind {
+        "issue-comments" => "Issue Comments",
+        "review-summaries" => "Review Summaries",
+        "review-comments" => "Review Comments",
+        _ => "Thread Items",
+    };
+    let mut text = format!("### {title}\n\n");
+    let Some(items) = value.as_array() else {
+        text.push_str("- GitHub response was not an array.\n");
+        return text;
+    };
+    if items.is_empty() {
+        text.push_str("- None found.\n");
+        return text;
+    }
+    for item in items {
+        text.push_str(&render_github_pr_thread_item(kind, item, max_bytes));
+    }
+    text
+}
+
+fn render_github_pr_thread_item(kind: &str, item: &serde_json::Value, max_bytes: usize) -> String {
+    let author = item
+        .pointer("/user/login")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let created_at = item
+        .get("created_at")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown-time");
+    let state = item
+        .get("state")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let path = item
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let line = item
+        .get("line")
+        .or_else(|| item.get("original_line"))
+        .and_then(serde_json::Value::as_u64);
+    let body = item
+        .get("body")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let bounded_body = bounded_string(body.trim(), max_bytes.min(1200));
+    let location = if !path.is_empty() {
+        match line {
+            Some(line) => format!(" `{}`:`{line}`", escape_md(path)),
+            None => format!(" `{}`", escape_md(path)),
+        }
+    } else {
+        String::new()
+    };
+    let state = if state.is_empty() {
+        String::new()
+    } else {
+        format!(" `{}`", escape_md(state))
+    };
+    let item_kind = match kind {
+        "issue-comments" => "issue-comment",
+        "review-summaries" => "review",
+        "review-comments" => "review-comment",
+        _ => "thread-item",
+    };
+    let mut text = format!(
+        "- `{}` `{}` by `{}`{}{}\n",
+        item_kind,
+        escape_md(created_at),
+        escape_md(author),
+        state,
+        location
+    );
+    if !bounded_body.text.is_empty() {
+        text.push_str("  ```text\n");
+        text.push_str(&bounded_body.text);
+        if !bounded_body.text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("  ```\n");
+    }
+    text
+}
+
+fn append_thread_context(context: &mut PrThreadContext, addition: &str, max_bytes: usize) {
+    if addition.trim().is_empty() {
+        return;
+    }
+    let mut merged = String::new();
+    if let Some(existing) = context.thread_context.as_deref() {
+        merged.push_str(existing);
+        if !existing.ends_with('\n') {
+            merged.push('\n');
+        }
+        merged.push('\n');
+    }
+    merged.push_str(addition);
+    let bounded = bounded_string(&merged, max_bytes);
+    context.thread_context = Some(bounded.text);
+    context.thread_context_truncated |= bounded.truncated;
 }
 
 struct GitHubEventPrContext {
@@ -13363,10 +13661,14 @@ fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static str {
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
     use std::process::{Command as ProcessCommand, Stdio};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
-    use anyhow::{Context as _, Result};
+    use anyhow::{Context as _, Result, bail};
 
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CommandStatus, Config,
@@ -16534,6 +16836,54 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn pr_thread_context_fetches_github_thread_snapshot() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (github_api_url, handle) = spawn_fake_github_thread_api(3)?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.github_token = Some("thread-token-redacted".to_owned());
+        args.github_repo = Some("EffortlessMetrics/ub-review".to_owned());
+        args.github_pull_number = Some(76);
+        args.github_api_url = github_api_url;
+        args.pr_thread_context_max_bytes = 8_192;
+
+        let context = collect_pr_thread_context(temp.path(), &args)?;
+        let requests = join_fake_github_thread_api(handle)?;
+        let rendered = render_pr_thread_context(&context);
+
+        assert_eq!(requests.len(), 3);
+        assert!(requests.iter().any(|request| request.contains(
+            "GET /repos/EffortlessMetrics/ub-review/issues/76/comments?per_page=30 HTTP/1.1"
+        )));
+        assert!(requests.iter().any(|request| request.contains(
+            "GET /repos/EffortlessMetrics/ub-review/pulls/76/reviews?per_page=30 HTTP/1.1"
+        )));
+        assert!(requests.iter().any(|request| request.contains(
+            "GET /repos/EffortlessMetrics/ub-review/pulls/76/comments?per_page=50 HTTP/1.1"
+        )));
+        assert!(
+            requests
+                .iter()
+                .all(|request| request.contains("Authorization: Bearer thread-token-redacted"))
+        );
+        assert_eq!(context.status, "seeded");
+        assert_eq!(context.pull_number, Some(76));
+        assert!(context.sources.iter().any(|source| {
+            source.contains("github-api:EffortlessMetrics/ub-review/76/issue-comments")
+        }));
+        assert!(
+            context
+                .thread_context
+                .as_deref()
+                .is_some_and(|thread| thread.contains("ASAN receipt attached"))
+        );
+        assert!(rendered.contains("## GitHub PR Thread Snapshot"));
+        assert!(rendered.contains("ub-review previous question resolved"));
+        assert!(rendered.contains("`src/lib.rs`:`12`"));
+        assert!(!rendered.contains("thread-token-redacted"));
+        Ok(())
+    }
+
+    #[test]
     fn provider_policy_minimax_only_uses_direct_m3() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::MinimaxOnly;
@@ -19517,12 +19867,113 @@ index 1111111..2222222 100644
             ledger_max_bytes: 65_536,
             pr_thread_context: String::new(),
             pr_thread_context_max_bytes: 65_536,
+            github_token: None,
+            github_repo: None,
+            github_pull_number: None,
+            github_api_url: "https://api.github.com".to_owned(),
             minimax_provider_kind: ProviderKindArg::Anthropic,
             minimax_model: "MiniMax-M3".to_owned(),
             opencode_model: "minimax-m3".to_owned(),
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,
             review_body_max_bytes: 60_000,
         }
+    }
+
+    fn spawn_fake_github_thread_api(
+        expected_requests: usize,
+    ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let handle = thread::spawn(move || -> Result<Vec<String>> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < expected_requests {
+                match listener.accept() {
+                    Ok((stream, _addr)) => {
+                        requests.push(handle_fake_github_thread_request(stream)?);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            bail!(
+                                "fake GitHub thread API received {} of {} requests",
+                                requests.len(),
+                                expected_requests
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            Ok(requests)
+        });
+        Ok((url, handle))
+    }
+
+    fn handle_fake_github_thread_request(mut stream: TcpStream) -> Result<String> {
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                bail!("fake GitHub thread request ended before headers finished");
+            }
+            headers.push_str(&line);
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+        let request_line = headers.lines().next().unwrap_or_default();
+        let response_body = if request_line.contains("/issues/76/comments?per_page=30") {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "created_at": "2026-06-03T10:00:00Z",
+                    "user": {"login": "author"},
+                    "body": "Author reply: ASAN receipt attached; prior verification question is answered."
+                }
+            ]))?
+        } else if request_line.contains("/pulls/76/reviews?per_page=30") {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "created_at": "2026-06-03T10:05:00Z",
+                    "user": {"login": "ub-review[bot]"},
+                    "state": "COMMENTED",
+                    "body": "ub-review previous question resolved by the receipt."
+                }
+            ]))?
+        } else if request_line.contains("/pulls/76/comments?per_page=50") {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "created_at": "2026-06-03T10:10:00Z",
+                    "user": {"login": "maintainer"},
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "body": "Inline thread points at the route proof receipt."
+                }
+            ]))?
+        } else {
+            serde_json::to_vec(&serde_json::json!([]))?
+        };
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+        stream.write_all(&response_body)?;
+        Ok(headers)
+    }
+
+    fn join_fake_github_thread_api(
+        handle: thread::JoinHandle<Result<Vec<String>>>,
+    ) -> Result<Vec<String>> {
+        handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("fake GitHub thread API thread panicked"))?
     }
 
     fn summary_section<'a>(text: &'a str, heading: &str, next_heading: &str) -> Option<&'a str> {

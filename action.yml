@@ -78,7 +78,7 @@ inputs:
     default: review-direct
     required: false
   github-token:
-    description: GitHub token with pull-request write permission when posting=review.
+    description: GitHub token used to seed PR-thread context and, when posting=review, submit the grouped PR review.
     default: ''
     required: false
   minimax-api-key:
@@ -447,6 +447,7 @@ runs:
         UB_REVIEW_MINIMAX_API_URL: ${{ inputs['minimax-api-url'] }}
         UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
         UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
+        UB_REVIEW_GITHUB_TOKEN: ${{ inputs['github-token'] }}
       run: |
         set -euo pipefail
         extra=()
