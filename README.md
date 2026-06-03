@@ -261,7 +261,7 @@ lanes remain available later through `provider-policy: minimax-primary`,
 Default core sensors are best-effort:
 
 - `tokmd` for deterministic repository/diff packets and LLM-ready context;
-- `ripr` for Rust changed-behavior test-oracle weakness;
+- `ripr` for static mutation-exposure analysis and repair routing for Rust changed behavior;
 - `unsafe-review` for Rust unsafe/native-boundary reviewability;
 - `ast-grep` for cheap structural route scans.
 

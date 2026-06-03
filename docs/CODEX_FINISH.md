@@ -40,10 +40,10 @@ never treated as safety.
   investigation or patching, never the default hot-path orchestrator.
 - Skip `cockpitctl` until a separate receipt director is actually needed.
 
-Keep sensors advisory:
+Keep sensor claim boundaries explicit:
 
 - `tokmd` produces deterministic PR packets and LLM-ready context.
-- `ripr` reports Rust changed-behavior test-oracle weakness.
+- `ripr` is the PR-lane static mutation-exposure and repair-routing layer for Rust changed behavior; it does not run mutants or prove mutation outcomes.
 - `unsafe-review` reports unsafe/native reviewability.
 - `ast-grep` reports cheap structural route hits.
 

@@ -16,6 +16,8 @@ Do not give every lane every artifact. Route evidence by job.
 
 The summary reducer sees everything. Individual lanes receive the evidence that sharpens their specialty.
 
+`ripr` evidence is routed as static mutation-exposure and repair-routing evidence: lanes should use it to identify one changed behavior with weak or missing oracle coverage, request one focused proof, and reserve runtime mutation for targeted, nightly, or release confirmation.
+
 ## Sensor issue escalation
 
 Sensors are receipts, not local subsystems to fork inside `ub-review`. If a

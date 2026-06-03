@@ -33,6 +33,20 @@ immutable source checkout
 lanes do not post comments directly, and the runner does not create issue
 comments or status-comment chatter.
 
+## Repo-style quality stack
+
+For Rust repos, `ub-review` treats `ripr` as the static mutation-exposure layer in the quality stack, not merely as a loose advisory note:
+
+```text
+cargo-allow = durable source-exception ledger
+ripr = static mutation-exposure / repair-routing layer
+xtask = repo control plane and receipt aggregator
+cargo-mutants = runtime backstop
+Codecov = execution-surface receipt
+```
+
+`ripr` should answer whether changed behavior appears exposed to a meaningful oracle in the current tests. Runtime mutation remains the targeted/nightly/release confirmation path. See `docs/ci/ripr.md` for the claim boundary, packet shape, and repair loop.
+
 ## Sensor issue boundary
 
 `ub-review` owns orchestration, routing, model fanout, posting, and fallback

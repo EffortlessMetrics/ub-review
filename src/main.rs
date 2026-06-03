@@ -3583,6 +3583,9 @@ fn run_sensor(
     let result = run_command_to_files(root, &argv, sensor.timeout_sec, &stdout_path, &stderr_path);
     match result {
         Ok(result) => {
+            if sensor.id == "ripr" {
+                mirror_ripr_pr_artifacts(root, &dir, event_log)?;
+            }
             let status = if result.timed_out {
                 "timed_out"
             } else if result.success {
@@ -3629,6 +3632,59 @@ fn run_sensor(
                 "sensor_failed",
                 serde_json::json!({"sensor": sensor.id, "reason": reason}),
             )?;
+        }
+    }
+    Ok(())
+}
+
+fn mirror_ripr_pr_artifacts(root: &Path, sensor_dir: &Path, event_log: &EventLog) -> Result<()> {
+    let source = root.join("target/ripr/pr");
+    if !source.exists() {
+        return Ok(());
+    }
+    let dest = sensor_dir.join("pr");
+    if dest.exists() {
+        fs::remove_dir_all(&dest)
+            .with_context(|| format!("remove stale ripr artifact mirror {}", dest.display()))?;
+    }
+    copy_dir_all(&source, &dest).with_context(|| {
+        format!(
+            "mirror ripr first-pr artifacts from {} to {}",
+            source.display(),
+            dest.display()
+        )
+    })?;
+    event_log.append(
+        "sensor_artifacts_mirrored",
+        serde_json::json!({
+            "sensor": "ripr",
+            "source": source,
+            "dest": dest,
+        }),
+    )?;
+    Ok(())
+}
+
+fn copy_dir_all(source: &Path, dest: &Path) -> Result<()> {
+    fs::create_dir_all(dest).with_context(|| format!("create directory {}", dest.display()))?;
+    for entry in
+        fs::read_dir(source).with_context(|| format!("read directory {}", source.display()))?
+    {
+        let entry = entry.with_context(|| format!("read entry in {}", source.display()))?;
+        let file_type = entry
+            .file_type()
+            .with_context(|| format!("read file type for {}", entry.path().display()))?;
+        let target = dest.join(entry.file_name());
+        if file_type.is_dir() {
+            copy_dir_all(&entry.path(), &target)?;
+        } else if file_type.is_file() {
+            fs::copy(entry.path(), &target).with_context(|| {
+                format!(
+                    "copy ripr artifact {} to {}",
+                    entry.path().display(),
+                    target.display()
+                )
+            })?;
         }
     }
     Ok(())
@@ -12994,11 +13050,11 @@ mod tests {
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
         follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
-        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        http_status_from_error, is_model_receipt_evidence_issue, mirror_ripr_pr_artifacts,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
+        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
         render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
@@ -13233,6 +13289,35 @@ mod tests {
         assert_eq!(value["reason"], "command not found");
         assert!(out.join("sensors/ripr/stdout.txt").exists());
         assert!(out.join("sensors/ripr/stderr.txt").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_pr_artifacts_are_mirrored_into_sensor_packet() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let source = root.join("target/ripr/pr/nested");
+        fs::create_dir_all(&source)?;
+        fs::write(
+            root.join("target/ripr/pr/pr-summary.md"),
+            "# ripr summary\n",
+        )?;
+        fs::write(source.join("agent-packet.json"), "{}\n")?;
+
+        let sensor_dir = temp.path().join("out/sensors/ripr");
+        let event_log = EventLog::open(&temp.path().join("out/events.ndjson"))?;
+        mirror_ripr_pr_artifacts(&root, &sensor_dir, &event_log)?;
+
+        assert_eq!(
+            fs::read_to_string(sensor_dir.join("pr/pr-summary.md"))?,
+            "# ripr summary\n"
+        );
+        assert_eq!(
+            fs::read_to_string(sensor_dir.join("pr/nested/agent-packet.json"))?,
+            "{}\n"
+        );
+        let events = fs::read_to_string(temp.path().join("out/events.ndjson"))?;
+        assert!(events.contains("sensor_artifacts_mirrored"));
         Ok(())
     }
 
