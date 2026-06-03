@@ -147,12 +147,7 @@ fn active_len_tracks_view_after_resize() {
     let github_review_body = github_review["body"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("github review body missing"))?;
-    let required_headings = [
-        "## Decision",
-        "## Review result",
-        "## Residual risk",
-        "## Missing evidence",
-    ];
+    let required_headings = ["## Decision", "## Residual risk", "## Missing evidence"];
     let mut previous_heading_index = 0;
     for heading in required_headings {
         assert!(github_review_body.contains(heading), "missing {heading}");
@@ -165,6 +160,12 @@ fn active_len_tracks_view_after_resize() {
         );
         previous_heading_index = heading_index;
     }
+    assert!(github_review_body.contains("missing evidence below limits confidence"));
+    assert!(!github_review_body.contains("Shared context"));
+    assert!(!github_review_body.contains("Profile:"));
+    assert!(!github_review_body.contains("Changed files:"));
+    assert!(!github_review_body.contains("Inline comments:"));
+    assert!(!github_review_body.contains("## Review result"));
     assert!(!github_review_body.contains("## Missing or failed model evidence"));
     assert!(!github_review_body.contains("## Confirmed findings"));
     assert!(!github_review_body.contains("## Summary-only findings"));
