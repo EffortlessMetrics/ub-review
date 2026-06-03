@@ -2221,6 +2221,23 @@ fn git_text(root: &Path, args: &[&str]) -> Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+fn git_text_owned(root: &Path, args: &[String]) -> Result<String> {
+    let output = ProcessCommand::new("git")
+        .arg("-C")
+        .arg(root)
+        .args(args)
+        .output()
+        .with_context(|| "run git")?;
+    if !output.status.success() {
+        bail!(
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
 fn classify_diff(files: &[String], patch: &str) -> DiffFlags {
     let mut flags = DiffFlags {
         docs_only: !files.is_empty(),
@@ -3987,7 +4004,7 @@ fn write_proof_request_artifacts(
                 );
             } else {
                 plan.push_str(
-                    "Proof broker v0 executed focused HEAD proof only; base+tests red/green was not run in this pass.\n\n",
+                    "Proof broker v0 executed focused proof under the runtime budget.\n\n",
                 );
                 for receipt in proof_receipts {
                     plan.push_str(&format!(
@@ -4158,21 +4175,20 @@ fn run_proof_broker_v0(
 ) -> Result<Vec<ProofReceipt>> {
     let budget = proof_budget(profile);
     let tasks = focused_test_tasks_from_diff(diff, proof_requests, budget);
-    run_focused_head_proof_tasks_with_runner(
+    run_focused_red_green_proof_tasks_with_runner(
         root,
         out,
         diff,
         args,
         budget,
         tasks,
-        |root, argv, timeout, stdout, stderr| {
-            run_command_to_files(root, argv, timeout, stdout, stderr)
-        },
+        run_command_to_files,
+        prepare_base_plus_tests_worktree,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn run_focused_head_proof_tasks_with_runner<F>(
+fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
@@ -4180,14 +4196,16 @@ fn run_focused_head_proof_tasks_with_runner<F>(
     budget: ProofBudget,
     tasks: Vec<FocusedTestTask>,
     mut runner: F,
+    mut prepare_base_plus_tests: G,
 ) -> Result<Vec<ProofReceipt>>
 where
     F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
     let mut receipts = Vec::new();
     for (index, task) in tasks.into_iter().enumerate() {
         if args.dry_run {
-            receipts.push(skipped_head_proof_receipt(
+            receipts.push(skipped_focused_proof_receipt(
                 out,
                 diff,
                 &task,
@@ -4197,51 +4215,141 @@ where
             continue;
         }
         if index > 0 {
-            receipts.push(skipped_head_proof_receipt(
+            receipts.push(skipped_focused_proof_receipt(
                 out,
                 diff,
                 &task,
                 "skipped_budget",
-                "proof broker v0 runs one focused HEAD command per review packet",
+                "proof broker v0 runs one focused red/green target per review packet",
             )?);
             continue;
         }
-        receipts.push(run_focused_head_proof_task(
+        receipts.push(run_focused_red_green_proof_task(
             root,
             out,
             diff,
             &task,
             budget.per_command_timeout_sec,
             &mut runner,
+            &mut prepare_base_plus_tests,
         )?);
     }
     Ok(receipts)
 }
 
-fn run_focused_head_proof_task<F>(
+fn run_focused_red_green_proof_task<F, G>(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
     task: &FocusedTestTask,
     timeout_sec: u64,
     runner: &mut F,
+    prepare_base_plus_tests: &mut G,
 ) -> Result<ProofReceipt>
 where
     F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
-    let paths = proof_command_paths(out, &task.id, "head")?;
     let argv = proof_task_argv(task);
-    let command = command_display(&argv);
-    let status = runner(
-        root,
+    let head = run_proof_command_receipt(root, out, task, "head", &argv, timeout_sec, runner)?;
+    let head_status = head.status.clone();
+    if head_status != "passed" {
+        let result = match head_status.as_str() {
+            "timed_out" => "timed_out",
+            "failed" => "head_failed",
+            _ => "skipped_profile",
+        };
+        let reason = format!("HEAD proof {}: {}", head.status, head.reason);
+        return Ok(focused_red_green_receipt(
+            diff,
+            task,
+            vec![head],
+            result.to_owned(),
+            reason,
+        ));
+    }
+
+    let base_root = match prepare_base_plus_tests(root, out, diff) {
+        Ok(path) => path,
+        Err(error) => {
+            let mut commands = vec![head];
+            commands.push(skipped_proof_command_receipt(
+                out,
+                task,
+                "base-plus-tests",
+                &argv,
+                "skipped",
+                format!("base+tests patch failed: {error:#}"),
+            )?);
+            return Ok(focused_red_green_receipt(
+                diff,
+                task,
+                commands,
+                "base_patch_failed".to_owned(),
+                "base+tests patch failed".to_owned(),
+            ));
+        }
+    };
+    let base = run_proof_command_receipt(
+        &base_root,
+        out,
+        task,
+        "base-plus-tests",
         &argv,
+        timeout_sec,
+        runner,
+    )?;
+    let (result, reason) = match base.status.as_str() {
+        "failed" => (
+            "discriminating".to_owned(),
+            format!("HEAD passed; base+tests failed: {}", base.reason),
+        ),
+        "passed" => (
+            "non_discriminating".to_owned(),
+            "HEAD and base+tests both passed".to_owned(),
+        ),
+        "timed_out" => (
+            "timed_out".to_owned(),
+            format!("base+tests timed out: {}", base.reason),
+        ),
+        _ => (
+            "skipped_profile".to_owned(),
+            format!("base+tests proof unavailable: {}", base.reason),
+        ),
+    };
+    let _ = cleanup_base_plus_tests_worktree(root, &base_root);
+    Ok(focused_red_green_receipt(
+        diff,
+        task,
+        vec![head, base],
+        result,
+        reason,
+    ))
+}
+
+fn run_proof_command_receipt<F>(
+    command_root: &Path,
+    out: &Path,
+    task: &FocusedTestTask,
+    side: &str,
+    argv: &[String],
+    timeout_sec: u64,
+    runner: &mut F,
+) -> Result<ProofCommandReceipt>
+where
+    F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+{
+    let paths = proof_command_paths(out, &task.id, side)?;
+    let command = command_display(argv);
+    let status = runner(
+        command_root,
+        argv,
         timeout_sec,
         &paths.stdout_path,
         &paths.stderr_path,
     );
-    let (command_status, result, reason, exit_code, timed_out, duration_ms) = match status {
+    let (command_status, reason, exit_code, timed_out, duration_ms) = match status {
         Ok(status) if status.timed_out => (
-            "timed_out".to_owned(),
             "timed_out".to_owned(),
             status.reason,
             status.exit_code,
@@ -4250,7 +4358,6 @@ where
         ),
         Ok(status) if status.success => (
             "passed".to_owned(),
-            "head_passed".to_owned(),
             status.reason,
             status.exit_code,
             false,
@@ -4258,7 +4365,6 @@ where
         ),
         Ok(status) => (
             "failed".to_owned(),
-            "head_failed".to_owned(),
             status.reason,
             status.exit_code,
             false,
@@ -4266,79 +4372,90 @@ where
         ),
         Err(error) => (
             "skipped".to_owned(),
-            "skipped_profile".to_owned(),
             format!("focused proof command unavailable: {error:#}"),
             None,
             false,
             0,
         ),
     };
-    Ok(head_proof_receipt(
-        diff,
-        task,
-        ProofCommandReceipt {
-            side: "head".to_owned(),
-            command,
-            status: command_status,
-            exit_code,
-            timed_out,
-            timeout_sec,
-            duration_ms,
-            stdout: paths.stdout_rel,
-            stderr: paths.stderr_rel,
-            reason: reason.clone(),
-        },
-        result,
+    Ok(ProofCommandReceipt {
+        side: side.to_owned(),
+        command,
+        status: command_status,
+        exit_code,
+        timed_out,
+        timeout_sec,
+        duration_ms,
+        stdout: paths.stdout_rel,
+        stderr: paths.stderr_rel,
         reason,
-    ))
+    })
 }
 
-fn skipped_head_proof_receipt(
+fn skipped_proof_command_receipt(
+    out: &Path,
+    task: &FocusedTestTask,
+    side: &str,
+    argv: &[String],
+    status: &str,
+    reason: String,
+) -> Result<ProofCommandReceipt> {
+    let paths = proof_command_paths(out, &task.id, side)?;
+    Ok(ProofCommandReceipt {
+        side: side.to_owned(),
+        command: command_display(argv),
+        status: status.to_owned(),
+        exit_code: None,
+        timed_out: false,
+        timeout_sec: 0,
+        duration_ms: 0,
+        stdout: paths.stdout_rel,
+        stderr: paths.stderr_rel,
+        reason,
+    })
+}
+
+fn skipped_focused_proof_receipt(
     out: &Path,
     diff: &DiffContext,
     task: &FocusedTestTask,
     result: &str,
     reason: &str,
 ) -> Result<ProofReceipt> {
-    let paths = proof_command_paths(out, &task.id, "head")?;
     let argv = proof_task_argv(task);
-    Ok(head_proof_receipt(
+    Ok(focused_red_green_receipt(
         diff,
         task,
-        ProofCommandReceipt {
-            side: "head".to_owned(),
-            command: command_display(&argv),
-            status: "skipped".to_owned(),
-            exit_code: None,
-            timed_out: false,
-            timeout_sec: 0,
-            duration_ms: 0,
-            stdout: paths.stdout_rel,
-            stderr: paths.stderr_rel,
-            reason: reason.to_owned(),
-        },
+        vec![skipped_proof_command_receipt(
+            out,
+            task,
+            "head",
+            &argv,
+            "skipped",
+            reason.to_owned(),
+        )?],
         result.to_owned(),
         reason.to_owned(),
     ))
 }
 
-fn head_proof_receipt(
+fn focused_red_green_receipt(
     diff: &DiffContext,
     task: &FocusedTestTask,
-    command: ProofCommandReceipt,
+    commands: Vec<ProofCommandReceipt>,
     result: String,
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
         schema: "ub-review.proof_receipt.v1".to_owned(),
         id: task.id.clone(),
-        kind: "focused-head".to_owned(),
+        kind: "focused-red-green".to_owned(),
         base: diff.base.clone(),
         head: diff.head.clone(),
-        test_patch_mode: "head-only".to_owned(),
+        test_patch_mode: "base-plus-tests".to_owned(),
         requested_by: task.requested_by.clone(),
         request_ids: task.request_ids.clone(),
-        commands: vec![command],
+        commands,
         result,
         reason,
     }
@@ -4537,6 +4654,152 @@ fn proof_task_plan_command(task: &FocusedTestTask, worktree: &str) -> String {
         "cwd=target/ub-review/proof-worktrees/{worktree} {}",
         command_display(&proof_task_argv(task))
     )
+}
+
+fn prepare_base_plus_tests_worktree(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+) -> Result<PathBuf> {
+    let patch_files = base_plus_tests_patch_files(diff);
+    if patch_files.is_empty() {
+        bail!("no test, fixture, or doc-test files were available for base+tests patching");
+    }
+
+    let worktrees_dir = out.join("proof-worktrees");
+    fs::create_dir_all(&worktrees_dir)
+        .with_context(|| format!("create {}", worktrees_dir.display()))?;
+    let worktree = worktrees_dir.join("base-plus-tests");
+    if worktree.exists() {
+        let _ = cleanup_base_plus_tests_worktree(root, &worktree);
+        if worktree.exists() {
+            safe_remove_dir_all_under(&worktrees_dir, &worktree)?;
+        }
+    }
+
+    let patch = base_plus_tests_patch(root, diff, &patch_files)?;
+    let proof_dir = out.join("proof");
+    fs::create_dir_all(&proof_dir).with_context(|| format!("create {}", proof_dir.display()))?;
+    let patch_path = proof_dir.join("base-plus-tests.patch");
+    fs::write(&patch_path, patch).with_context(|| format!("write {}", patch_path.display()))?;
+
+    let add_args = vec![
+        "worktree".to_owned(),
+        "add".to_owned(),
+        "--detach".to_owned(),
+        worktree.to_string_lossy().to_string(),
+        diff.base.clone(),
+    ];
+    git_text_owned(root, &add_args).with_context(|| {
+        format!(
+            "create base+tests worktree at {} from {}",
+            worktree.display(),
+            diff.base
+        )
+    })?;
+
+    let apply_args = vec![
+        "apply".to_owned(),
+        "--whitespace=nowarn".to_owned(),
+        patch_path.to_string_lossy().to_string(),
+    ];
+    if let Err(error) = git_text_owned(&worktree, &apply_args)
+        .with_context(|| format!("apply test-only patch in {}", worktree.display()))
+    {
+        let _ = cleanup_base_plus_tests_worktree(root, &worktree);
+        return Err(error);
+    }
+
+    Ok(worktree)
+}
+
+fn base_plus_tests_patch(root: &Path, diff: &DiffContext, files: &[String]) -> Result<String> {
+    let mut args = vec![
+        "diff".to_owned(),
+        "--patch".to_owned(),
+        format!("{}...{}", diff.base, diff.head),
+        "--".to_owned(),
+    ];
+    args.extend(files.iter().cloned());
+    let patch = git_text_owned(root, &args).or_else(|_| {
+        let mut fallback = vec![
+            "diff".to_owned(),
+            "--patch".to_owned(),
+            diff.base.clone(),
+            diff.head.clone(),
+            "--".to_owned(),
+        ];
+        fallback.extend(files.iter().cloned());
+        git_text_owned(root, &fallback)
+    })?;
+    if patch.trim().is_empty() {
+        bail!("test-only diff for base+tests worktree was empty");
+    }
+    Ok(patch)
+}
+
+fn base_plus_tests_patch_files(diff: &DiffContext) -> Vec<String> {
+    diff.changed_files
+        .iter()
+        .filter(|path| is_base_plus_tests_patch_file(path))
+        .cloned()
+        .collect()
+}
+
+fn is_base_plus_tests_patch_file(path: &str) -> bool {
+    let path = normalize_repo_path(path);
+    if !is_repo_relative_path(&path) {
+        return false;
+    }
+    if is_bun_focused_test_file(&path) {
+        return true;
+    }
+    let lower = path.to_ascii_lowercase();
+    lower.starts_with("test/")
+        || lower.starts_with("tests/")
+        || lower.starts_with("fixtures/")
+        || lower.contains("/fixtures/")
+        || lower.contains("/fixture/")
+        || lower.contains("doc-test")
+        || lower.contains("doctest")
+}
+
+fn cleanup_base_plus_tests_worktree(root: &Path, worktree: &Path) -> Result<()> {
+    let worktree_arg = worktree.to_string_lossy().to_string();
+    let remove_args = vec![
+        "worktree".to_owned(),
+        "remove".to_owned(),
+        "--force".to_owned(),
+        worktree_arg,
+    ];
+    let _ = git_text_owned(root, &remove_args);
+    if worktree.exists() {
+        let parent = worktree
+            .parent()
+            .context("base+tests worktree had no parent directory")?;
+        safe_remove_dir_all_under(parent, worktree)?;
+    }
+    let prune_args = vec!["worktree".to_owned(), "prune".to_owned()];
+    let _ = git_text_owned(root, &prune_args);
+    Ok(())
+}
+
+fn safe_remove_dir_all_under(parent: &Path, target: &Path) -> Result<()> {
+    let parent_abs = parent
+        .canonicalize()
+        .with_context(|| format!("resolve {}", parent.display()))?;
+    let target_abs = target
+        .canonicalize()
+        .with_context(|| format!("resolve {}", target.display()))?;
+    if !target_abs.starts_with(&parent_abs) {
+        bail!(
+            "refusing to remove {} outside {}",
+            target_abs.display(),
+            parent_abs.display()
+        );
+    }
+    fs::remove_dir_all(&target_abs).with_context(|| format!("remove {}", target_abs.display()))?;
+    Ok(())
 }
 
 fn command_display(argv: &[String]) -> String {
@@ -7414,13 +7677,16 @@ fn has_actionable_pr_body_summary_finding(summary_only_findings: &[SummaryOnlyFi
 }
 
 fn proof_receipt_changes_review_value(receipt: &ProofReceipt) -> bool {
-    matches!(receipt.result.as_str(), "head_passed" | "head_failed")
+    matches!(
+        receipt.result.as_str(),
+        "discriminating" | "non_discriminating" | "head_passed" | "head_failed"
+    )
 }
 
 fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
     matches!(
         receipt.result.as_str(),
-        "timed_out" | "skipped_budget" | "skipped_profile"
+        "base_patch_failed" | "timed_out" | "skipped_budget" | "skipped_profile"
     )
 }
 
@@ -7583,6 +7849,14 @@ fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
         .map(|command| command.command.as_str())
         .unwrap_or("focused test");
     let summary = match receipt.result.as_str() {
+        "discriminating" => format!(
+            "Focused red/green proof discriminates the patch: HEAD passed and base+tests failed for `{}`.",
+            command
+        ),
+        "non_discriminating" => format!(
+            "Focused red/green proof did not discriminate the patch: HEAD and base+tests both passed for `{}`.",
+            command
+        ),
         "head_passed" => format!(
             "Focused HEAD proof passed: `{}`. Base+tests red/green was not run in this v0 proof.",
             command
@@ -7606,6 +7880,9 @@ fn render_missing_proof_receipt_summary(text: &mut String, receipt: &ProofReceip
         .map(|command| command.command.as_str())
         .unwrap_or("focused test");
     let summary = match receipt.result.as_str() {
+        "base_patch_failed" => format!(
+            "Base+tests proof was unavailable for `{command}` because the test-only patch did not apply cleanly."
+        ),
         "timed_out" => format!("Focused proof timed out for `{command}`; logs are in artifacts."),
         "skipped_budget" => {
             format!(
@@ -9519,7 +9796,7 @@ fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static str {
 mod tests {
     use std::collections::BTreeSet;
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::process::{Command as ProcessCommand, Stdio};
 
     use anyhow::{Context as _, Result};
@@ -10675,9 +10952,11 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn proof_broker_v0_runs_one_focused_head_command_and_writes_receipts() -> Result<()> {
+    fn proof_broker_v0_runs_one_focused_red_green_target_and_writes_receipts() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
         let patch = "\
 diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
 index 1111111..2222222 100644
@@ -10735,7 +11014,8 @@ index 1111111..2222222 100644
         assert_eq!(tasks.len(), 2);
         let args = test_run_args(out.clone());
         let mut commands = Vec::<String>::new();
-        let receipts = super::run_focused_head_proof_tasks_with_runner(
+        let prepared_base_root = base_root.clone();
+        let receipts = super::run_focused_red_green_proof_tasks_with_runner(
             temp.path(),
             &out,
             &diff,
@@ -10749,24 +11029,33 @@ index 1111111..2222222 100644
             tasks,
             |_root, argv, timeout, stdout, stderr| {
                 commands.push(command_display(argv));
-                fs::write(stdout, b"head ok\n")?;
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
                 fs::write(stderr, b"")?;
                 Ok(CommandStatus {
-                    exit_code: Some(0),
+                    exit_code: Some(if is_base { 1 } else { 0 }),
                     timed_out: false,
-                    success: true,
+                    success: !is_base,
                     reason: format!("completed with timeout {timeout}s"),
                     duration_ms: 42,
                 })
             },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
         )?;
 
-        assert_eq!(commands.len(), 1);
+        assert_eq!(commands.len(), 2);
         assert_eq!(receipts.len(), 2);
         assert_eq!(receipts[0].schema, "ub-review.proof_receipt.v1");
-        assert_eq!(receipts[0].kind, "focused-head");
-        assert_eq!(receipts[0].test_patch_mode, "head-only");
-        assert_eq!(receipts[0].result, "head_passed");
+        assert_eq!(receipts[0].kind, "focused-red-green");
+        assert_eq!(receipts[0].test_patch_mode, "base-plus-tests");
+        assert_eq!(receipts[0].result, "discriminating");
         assert_eq!(
             receipts[0].requested_by,
             vec!["tests-oracle".to_owned(), "opposition".to_owned()]
@@ -10779,7 +11068,10 @@ index 1111111..2222222 100644
             ]
         );
         assert_eq!(receipts[0].commands[0].status, "passed");
+        assert_eq!(receipts[0].commands[1].side, "base-plus-tests");
+        assert_eq!(receipts[0].commands[1].status, "failed");
         assert!(out.join(&receipts[0].commands[0].stdout).exists());
+        assert!(out.join(&receipts[0].commands[1].stdout).exists());
         assert_eq!(receipts[1].result, "skipped_budget");
         assert_eq!(receipts[1].commands[0].status, "skipped");
 
@@ -10797,10 +11089,196 @@ index 1111111..2222222 100644
         let proof_plan = fs::read_to_string(out.join("review/proof_plan.md"))?;
         assert_eq!(receipt_json.len(), 2);
         assert_eq!(receipt_ndjson.lines().count(), 2);
-        assert!(proof_plan.contains("Proof broker v0 executed focused HEAD proof only"));
-        assert!(proof_plan.contains("result=`head_passed`"));
+        assert!(
+            proof_plan.contains("Proof broker v0 executed focused proof under the runtime budget")
+        );
+        assert!(proof_plan.contains("result=`discriminating`"));
         assert!(!proof_plan.contains("No proof broker commands were executed"));
         Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let diff = test_diff();
+        let task = super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        );
+        let mut runner_calls = 0;
+        let mut prepare_calls = 0;
+        let mut runner = |_root: &Path,
+                          _argv: &[String],
+                          _timeout: u64,
+                          stdout: &Path,
+                          stderr: &Path|
+         -> Result<CommandStatus> {
+            runner_calls += 1;
+            fs::write(stdout, b"ok\n")?;
+            fs::write(stderr, b"")?;
+            Ok(CommandStatus {
+                exit_code: Some(0),
+                timed_out: false,
+                success: true,
+                reason: "completed".to_owned(),
+                duration_ms: 7,
+            })
+        };
+        let prepared_base_root = base_root.clone();
+        let mut prepare = |_root: &Path, _out: &Path, _diff: &DiffContext| -> Result<_> {
+            prepare_calls += 1;
+            Ok(prepared_base_root.clone())
+        };
+
+        let receipt = super::run_focused_red_green_proof_task(
+            temp.path(),
+            &out,
+            &diff,
+            &task,
+            300,
+            &mut runner,
+            &mut prepare,
+        )?;
+
+        assert_eq!(runner_calls, 2);
+        assert_eq!(prepare_calls, 1);
+        assert_eq!(receipt.kind, "focused-red-green");
+        assert_eq!(receipt.result, "non_discriminating");
+        assert_eq!(receipt.commands.len(), 2);
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[1].status, "passed");
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_skips_base_plus_tests_when_head_fails() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let task = super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        );
+        let mut prepare_calls = 0;
+        let mut runner = |_root: &Path,
+                          _argv: &[String],
+                          _timeout: u64,
+                          stdout: &Path,
+                          stderr: &Path|
+         -> Result<CommandStatus> {
+            fs::write(stdout, b"failed\n")?;
+            fs::write(stderr, b"")?;
+            Ok(CommandStatus {
+                exit_code: Some(1),
+                timed_out: false,
+                success: false,
+                reason: "exit code Some(1)".to_owned(),
+                duration_ms: 7,
+            })
+        };
+        let mut prepare = |_root: &Path, _out: &Path, _diff: &DiffContext| -> Result<_> {
+            prepare_calls += 1;
+            Ok(temp.path().join("base-plus-tests"))
+        };
+
+        let receipt = super::run_focused_red_green_proof_task(
+            temp.path(),
+            &out,
+            &diff,
+            &task,
+            300,
+            &mut runner,
+            &mut prepare,
+        )?;
+
+        assert_eq!(prepare_calls, 0);
+        assert_eq!(receipt.result, "head_failed");
+        assert_eq!(receipt.commands.len(), 1);
+        assert_eq!(receipt.commands[0].status, "failed");
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_records_base_patch_failed_as_missing_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let task = super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        );
+        let mut runner = |_root: &Path,
+                          _argv: &[String],
+                          _timeout: u64,
+                          stdout: &Path,
+                          stderr: &Path|
+         -> Result<CommandStatus> {
+            fs::write(stdout, b"head ok\n")?;
+            fs::write(stderr, b"")?;
+            Ok(CommandStatus {
+                exit_code: Some(0),
+                timed_out: false,
+                success: true,
+                reason: "completed".to_owned(),
+                duration_ms: 7,
+            })
+        };
+        let mut prepare = |_root: &Path, _out: &Path, _diff: &DiffContext| -> Result<PathBuf> {
+            Err(anyhow::anyhow!("patch did not apply"))
+        };
+
+        let receipt = super::run_focused_red_green_proof_task(
+            temp.path(),
+            &out,
+            &diff,
+            &task,
+            300,
+            &mut runner,
+            &mut prepare,
+        )?;
+
+        assert_eq!(receipt.result, "base_patch_failed");
+        assert_eq!(receipt.commands.len(), 2);
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[1].side, "base-plus-tests");
+        assert_eq!(receipt.commands[1].status, "skipped");
+        assert!(super::proof_receipt_is_missing_evidence(&receipt));
+        Ok(())
+    }
+
+    #[test]
+    fn base_plus_tests_patch_files_excludes_source_fix_files() {
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec![
+                "src/native/write.rs".to_owned(),
+                "test/js/node/fs/write.test.ts".to_owned(),
+                "test/fixtures/fs/write.bin".to_owned(),
+                "docs/usage.md".to_owned(),
+                "tests/doctest/bytea.md".to_owned(),
+            ],
+            patch: String::new(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::SourceUb,
+        };
+
+        let files = super::base_plus_tests_patch_files(&diff);
+
+        assert_eq!(
+            files,
+            vec![
+                "test/js/node/fs/write.test.ts".to_owned(),
+                "test/fixtures/fs/write.bin".to_owned(),
+                "tests/doctest/bytea.md".to_owned(),
+            ]
+        );
     }
 
     #[test]
@@ -12069,8 +12547,8 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn pr_review_body_renders_focused_head_proof_receipt_once() {
-        let receipt = test_proof_receipt("head_passed", "passed");
+    fn pr_review_body_renders_discriminating_proof_receipt_once() {
+        let receipt = test_red_green_proof_receipt("discriminating", "failed");
         let body = render_review_body(
             "abc123",
             &test_plan(Vec::new()),
@@ -12087,8 +12565,8 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Test proof"));
-        assert!(body.contains("Focused HEAD proof passed"));
-        assert!(body.contains("Base+tests red/green was not run in this v0 proof"));
+        assert!(body.contains("Focused red/green proof discriminates the patch"));
+        assert!(body.contains("HEAD passed and base+tests failed"));
         assert!(!body.contains("stdout.txt"));
         assert!(!body.contains("stderr.txt"));
         assert!(!body.contains("## Model lanes"));
@@ -12615,6 +13093,49 @@ UB_REVIEW_HTTP_STATUS:429
                 stderr: "proof/proof-red-green-test/head/stderr.txt".to_owned(),
                 reason: "test receipt fixture".to_owned(),
             }],
+            result: result.to_owned(),
+            reason: "test receipt fixture".to_owned(),
+        }
+    }
+
+    fn test_red_green_proof_receipt(result: &str, base_status: &str) -> ProofReceipt {
+        ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-red-green-test".to_owned(),
+            kind: "focused-red-green".to_owned(),
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["proof-tests-001".to_owned()],
+            commands: vec![
+                ProofCommandReceipt {
+                    side: "head".to_owned(),
+                    command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                        .to_owned(),
+                    status: "passed".to_owned(),
+                    exit_code: Some(0),
+                    timed_out: false,
+                    timeout_sec: 300,
+                    duration_ms: 42,
+                    stdout: "proof/proof-red-green-test/head/stdout.txt".to_owned(),
+                    stderr: "proof/proof-red-green-test/head/stderr.txt".to_owned(),
+                    reason: "test receipt fixture".to_owned(),
+                },
+                ProofCommandReceipt {
+                    side: "base-plus-tests".to_owned(),
+                    command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                        .to_owned(),
+                    status: base_status.to_owned(),
+                    exit_code: Some(if base_status == "passed" { 0 } else { 1 }),
+                    timed_out: false,
+                    timeout_sec: 300,
+                    duration_ms: 42,
+                    stdout: "proof/proof-red-green-test/base-plus-tests/stdout.txt".to_owned(),
+                    stderr: "proof/proof-red-green-test/base-plus-tests/stderr.txt".to_owned(),
+                    reason: "test receipt fixture".to_owned(),
+                },
+            ],
             result: result.to_owned(),
             reason: "test receipt fixture".to_owned(),
         }

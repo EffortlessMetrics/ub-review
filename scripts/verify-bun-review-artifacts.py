@@ -310,6 +310,7 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
     if "## Focused red/green proof plan" in proof_plan and not (
         "No proof broker commands were executed" in proof_plan
         or "Proof broker v0 executed focused HEAD proof only" in proof_plan
+        or "Proof broker v0 executed focused proof under the runtime budget" in proof_plan
     ):
         fail("review/proof_plan.md missing proof execution/planner note")
     if not proof_requests and not (
@@ -752,7 +753,7 @@ def require_proof_receipt_schema(receipt: dict) -> None:
     for field in ["id", "kind", "base", "head", "test_patch_mode", "result", "reason"]:
         if not isinstance(receipt.get(field), str) or not receipt[field]:
             fail(f"proof receipt missing string field {field}: {receipt!r}")
-    if receipt["kind"] not in {"focused-head"}:
+    if receipt["kind"] not in {"focused-head", "focused-red-green"}:
         fail(f"proof receipt has unsupported kind: {receipt!r}")
     if receipt["test_patch_mode"] not in {"head-only", "base-plus-tests"}:
         fail(f"proof receipt has unsupported test_patch_mode: {receipt!r}")
