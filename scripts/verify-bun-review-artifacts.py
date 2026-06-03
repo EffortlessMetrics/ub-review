@@ -425,6 +425,7 @@ def expected_candidate_records(review: dict) -> list[dict]:
                 "lane": comment.get("lane"),
                 "source": "inline-comment",
                 "status": "accepted-inline",
+                "disposition": "inline",
                 "severity": comment.get("severity"),
                 "confidence": comment.get("confidence"),
                 "claim": comment.get("body"),
@@ -450,6 +451,7 @@ def expected_candidate_records(review: dict) -> list[dict]:
                 "lane": finding.get("lane"),
                 "source": "summary-only-finding",
                 "status": "summary-only",
+                "disposition": candidate_disposition_for_summary_finding(finding),
                 "severity": finding.get("severity"),
                 "confidence": finding.get("confidence"),
                 "claim": finding.get("reason"),
@@ -457,6 +459,31 @@ def expected_candidate_records(review: dict) -> list[dict]:
             }
         )
     return candidates
+
+
+def candidate_disposition_for_summary_finding(finding: dict) -> str:
+    reason = str(finding.get("reason", "")).lower()
+    evidence = str(finding.get("evidence", "")).lower()
+    if (
+        "parked" in reason
+        or "follow-up" in reason
+        or "parked" in evidence
+        or "follow-up" in evidence
+    ):
+        return "parked-follow-up"
+    if (
+        "false premise" in reason
+        or "refuted" in reason
+        or "false premise" in evidence
+        or "refuted" in evidence
+    ):
+        return "refuted"
+    if (
+        "duplicate inline candidate merged" in reason
+        or "summary-only guard rejected candidate" in reason
+    ):
+        return "dropped"
+    return "summary-only"
 
 
 def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict]) -> None:
@@ -1037,6 +1064,7 @@ def require_candidate_schema(candidate: dict) -> None:
         "lane",
         "source",
         "status",
+        "disposition",
         "severity",
         "confidence",
         "claim",
@@ -1048,6 +1076,14 @@ def require_candidate_schema(candidate: dict) -> None:
         fail(f"candidate has unsupported source: {candidate!r}")
     if candidate["status"] not in {"accepted-inline", "summary-only"}:
         fail(f"candidate has unsupported status: {candidate!r}")
+    if candidate["disposition"] not in {
+        "inline",
+        "summary-only",
+        "parked-follow-up",
+        "refuted",
+        "dropped",
+    }:
+        fail(f"candidate has unsupported disposition: {candidate!r}")
     if candidate["severity"] not in {"blocker", "high", "medium", "low"}:
         fail(f"candidate has unsupported severity: {candidate!r}")
     if candidate["confidence"] not in {"high", "medium-high", "medium", "low"}:
@@ -1056,6 +1092,8 @@ def require_candidate_schema(candidate: dict) -> None:
     line = candidate.get("line")
     side = candidate.get("side")
     if candidate["status"] == "accepted-inline":
+        if candidate["disposition"] != "inline":
+            fail(f"inline candidate disposition is not inline: {candidate!r}")
         if (
             not isinstance(path, str)
             or not path
@@ -1068,6 +1106,8 @@ def require_candidate_schema(candidate: dict) -> None:
         if side != "RIGHT":
             fail(f"inline candidate side is not RIGHT: {candidate!r}")
     else:
+        if candidate["disposition"] == "inline":
+            fail(f"summary-only candidate disposition is inline: {candidate!r}")
         if path is not None or line is not None or side is not None:
             fail(f"summary-only candidate should not have inline fields: {candidate!r}")
 

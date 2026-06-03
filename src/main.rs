@@ -1204,6 +1204,7 @@ struct CandidateRecord {
     lane: String,
     source: String,
     status: String,
+    disposition: String,
     severity: String,
     confidence: String,
     claim: String,
@@ -4846,6 +4847,7 @@ fn build_candidate_records(
             lane: comment.lane.clone(),
             source: "inline-comment".to_owned(),
             status: "accepted-inline".to_owned(),
+            disposition: "inline".to_owned(),
             severity: comment.severity.clone(),
             confidence: comment.confidence.clone(),
             claim: comment.body.clone(),
@@ -4873,6 +4875,7 @@ fn build_candidate_records(
             lane: finding.lane.clone(),
             source: "summary-only-finding".to_owned(),
             status: "summary-only".to_owned(),
+            disposition: candidate_disposition_for_summary_finding(finding).to_owned(),
             severity: finding.severity.clone(),
             confidence: finding.confidence.clone(),
             claim: finding.reason.clone(),
@@ -4883,6 +4886,26 @@ fn build_candidate_records(
         });
     }
     candidates
+}
+
+fn candidate_disposition_for_summary_finding(finding: &SummaryOnlyFinding) -> &'static str {
+    let reason = finding.reason.to_ascii_lowercase();
+    let evidence = finding.evidence.to_ascii_lowercase();
+    if is_parked_follow_up(finding) {
+        "parked-follow-up"
+    } else if reason.contains("false premise")
+        || reason.contains("refuted")
+        || evidence.contains("false premise")
+        || evidence.contains("refuted")
+    {
+        "refuted"
+    } else if reason.contains("duplicate inline candidate merged")
+        || reason.contains("summary-only guard rejected candidate")
+    {
+        "dropped"
+    } else {
+        "summary-only"
+    }
 }
 
 fn write_candidate_artifacts(out: &Path, candidates: &[CandidateRecord]) -> Result<()> {
@@ -4934,8 +4957,24 @@ fn candidate_review_surfaces(
         if candidate.schema != "ub-review.candidate.v1" {
             bail!("candidate {} has unsupported schema", candidate.id);
         }
+        if !matches!(
+            candidate.disposition.as_str(),
+            "inline" | "summary-only" | "parked-follow-up" | "refuted" | "dropped"
+        ) {
+            bail!(
+                "candidate {} has unsupported disposition {}",
+                candidate.id,
+                candidate.disposition
+            );
+        }
         match (candidate.source.as_str(), candidate.status.as_str()) {
             ("inline-comment", "accepted-inline") => {
+                if candidate.disposition != "inline" {
+                    bail!(
+                        "inline candidate {} disposition must be inline",
+                        candidate.id
+                    );
+                }
                 let path = candidate
                     .path
                     .clone()
@@ -4962,6 +5001,12 @@ fn candidate_review_surfaces(
                 });
             }
             ("summary-only-finding", "summary-only") => {
+                if candidate.disposition == "inline" {
+                    bail!(
+                        "summary-only candidate {} disposition cannot be inline",
+                        candidate.id
+                    );
+                }
                 if candidate.path.is_some() || candidate.line.is_some() || candidate.side.is_some()
                 {
                     bail!("summary-only candidate {} has inline fields", candidate.id);
@@ -15749,13 +15794,37 @@ UB_REVIEW_HTTP_STATUS:429
             body: "[tests-oracle] Added regression needs a red witness.".to_owned(),
             evidence: "RIGHT-side line map and test proof request".to_owned(),
         }];
-        let summary_only_findings = vec![SummaryOnlyFinding {
-            lane: "source-route".to_owned(),
-            severity: "low".to_owned(),
-            confidence: "medium-high".to_owned(),
-            reason: "inline guard rejected src/lib.rs:99; line_valid=false".to_owned(),
-            evidence: "line map receipt".to_owned(),
-        }];
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "source-route".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "inline guard rejected src/lib.rs:99; line_valid=false".to_owned(),
+                evidence: "line map receipt".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "source-route".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "PBKDF2 sibling path is parked as follow-up, not current PR scope."
+                    .to_owned(),
+                evidence: "UB ledger follow-up".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "`Box::from(slice)` allocation fallback claim was refuted.".to_owned(),
+                evidence: "false premise calibration".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "tests-oracle".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "duplicate inline candidate merged into src/lib.rs:2".to_owned(),
+                evidence: "duplicate evidence".to_owned(),
+            },
+        ];
         let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
 
         write_candidate_artifacts(temp.path(), &candidates)?;
@@ -15770,10 +15839,11 @@ UB_REVIEW_HTTP_STATUS:429
         let ndjson = fs::read_to_string(temp.path().join("candidates.ndjson"))?;
         let (hydrated_inline, hydrated_summary) = read_candidate_review_surfaces(temp.path())?;
 
-        assert_eq!(aggregate.len(), 2);
+        assert_eq!(aggregate.len(), 5);
         assert_eq!(aggregate[0].schema, "ub-review.candidate.v1");
         assert_eq!(aggregate[0].source, "inline-comment");
         assert_eq!(aggregate[0].status, "accepted-inline");
+        assert_eq!(aggregate[0].disposition, "inline");
         assert_eq!(
             aggregate[0].path.as_deref(),
             Some(inline_comments[0].path.as_str())
@@ -15782,14 +15852,18 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(aggregate[0].side.as_deref(), Some("RIGHT"));
         assert_eq!(aggregate[1].source, "summary-only-finding");
         assert_eq!(aggregate[1].status, "summary-only");
+        assert_eq!(aggregate[1].disposition, "summary-only");
         assert!(aggregate[1].path.is_none());
+        assert_eq!(aggregate[2].disposition, "parked-follow-up");
+        assert_eq!(aggregate[3].disposition, "refuted");
+        assert_eq!(aggregate[4].disposition, "dropped");
         assert_eq!(first_file, serde_json::to_value(&aggregate[0])?);
-        assert_eq!(ndjson.lines().count(), 2);
+        assert_eq!(ndjson.lines().count(), 5);
         assert!(ndjson.contains("\"schema\":\"ub-review.candidate.v1\""));
         assert_eq!(hydrated_inline.len(), 1);
         assert_eq!(hydrated_inline[0].body, inline_comments[0].body);
         assert_eq!(hydrated_inline[0].side, "RIGHT");
-        assert_eq!(hydrated_summary.len(), 1);
+        assert_eq!(hydrated_summary.len(), 4);
         assert_eq!(hydrated_summary[0].reason, summary_only_findings[0].reason);
         Ok(())
     }
@@ -15807,6 +15881,7 @@ UB_REVIEW_HTTP_STATUS:429
                     "lane": "tests-oracle",
                     "source": "inline-comment",
                     "status": "accepted-inline",
+                    "disposition": "inline",
                     "severity": "medium",
                     "confidence": "high",
                     "claim": "[tests-oracle] Missing path should fail readback.",
@@ -15827,6 +15902,39 @@ UB_REVIEW_HTTP_STATUS:429
                 .to_string()
                 .contains("candidate candidate-bad missing path")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn candidate_artifact_readback_rejects_inconsistent_disposition() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("review"))?;
+        fs::write(
+            temp.path().join("review/candidates.json"),
+            serde_json::to_vec_pretty(&serde_json::json!([
+                {
+                    "schema": "ub-review.candidate.v1",
+                    "id": "candidate-bad-disposition",
+                    "lane": "tests-oracle",
+                    "source": "summary-only-finding",
+                    "status": "summary-only",
+                    "disposition": "inline",
+                    "severity": "medium",
+                    "confidence": "high",
+                    "claim": "Summary-only record cannot have inline disposition.",
+                    "evidence": "candidate artifact fixture"
+                }
+            ]))?,
+        )?;
+
+        let error = match read_candidate_review_surfaces(temp.path()) {
+            Ok(_) => return Err(anyhow::anyhow!("inconsistent candidate was accepted")),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains(
+            "summary-only candidate candidate-bad-disposition disposition cannot be inline"
+        ));
         Ok(())
     }
 

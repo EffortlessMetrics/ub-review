@@ -1107,6 +1107,7 @@ path = "src/lib.rs"
     assert_eq!(candidate["schema"], "ub-review.candidate.v1");
     assert_eq!(candidate["source"], "summary-only-finding");
     assert_eq!(candidate["status"], "summary-only");
+    assert_eq!(candidate["disposition"], "summary-only");
     assert_eq!(candidate["claim"], "fake provider ok");
     assert_eq!(candidate["evidence"], "lane model summary");
     let candidate_file: serde_json::Value = serde_json::from_slice(&fs::read(
