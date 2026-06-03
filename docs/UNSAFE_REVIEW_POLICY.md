@@ -74,21 +74,13 @@ run-specific sensor packet at `target/ub-review/sensors/unsafe-review/`.
 Missing unsafe-review receipts must be reported as missing evidence, never as a
 clean result.
 
-## Policy files
+## Policy receipts
 
-Repos should keep unsafe review policy alongside other CI policy:
-
-```text
-policy/unsafe-review.toml
-policy/unsafe-review-suppressions.toml
-policy/unsafe-witnesses.toml
-docs/UNSAFE_REVIEW_POLICY.md
-docs/ci/unsafe-review.md
-```
-
-Suppression entries must be narrow, owned, evidenced, and time-bounded. A
-suppression is not a substitute for a witness route when a high-risk unsafe seam
-can reasonably be exercised.
+Use `policy/allow.toml` for retained unsafe exceptions and durable
+unsafe-review suppressions until real volume proves that a separate ledger would
+improve reviewability. Suppression entries must be narrow, owned, evidenced, and
+time-bounded. A suppression is not a substitute for a witness route when a
+high-risk unsafe seam can reasonably be exercised.
 
 ## CI posture
 
@@ -106,7 +98,7 @@ unsafe seam is reviewable. Runtime tools provide concrete witness receipts. A
 retained exception should cite all three layers when available:
 
 ```toml
-[[allow]]
+[[exception]]
 id = "allow-unsafe-0042"
 kind = "unsafe"
 path = "crates/foo/src/raw.rs"

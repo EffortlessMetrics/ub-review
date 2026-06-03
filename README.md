@@ -290,8 +290,8 @@ precondition guard, layout/alignment witness, aliasing/lifetime evidence, local
 test reach, and witness route needed for credible review. It is advisory by
 default and does not claim to prove soundness, UB-free status, or Miri
 cleanliness. See [docs/UNSAFE_REVIEW_POLICY.md](docs/UNSAFE_REVIEW_POLICY.md)
-and [docs/ci/unsafe-review.md](docs/ci/unsafe-review.md) for the reusable repo
-policy template.
+and [docs/ci/unsafe-review.md](docs/ci/unsafe-review.md) for reusable repo
+guidance.
 
 ## Review posting
 

@@ -52,6 +52,10 @@ cargo mutants
 Release jobs should fail only on explicit repository policy, such as unexplained
 new unsafe-review gaps on public or load-bearing crates.
 
+Keep retained suppressions in `policy/allow.toml` by default. Split them into a
+dedicated unsafe-review ledger only after the repo has enough real entries that
+the separate file makes review easier.
+
 ## ub-review orchestration
 
 `ub-review` routes unsafe-review output to the UB, tests, architecture,
