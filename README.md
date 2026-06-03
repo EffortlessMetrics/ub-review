@@ -315,8 +315,10 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `tool-bundle` | `core` | `none`, `core`, `bun-fast`, or `full`. |
 | `install-tools` | `true` | Best-effort sensor install. |
 | `setup-rust` | `true` | Select Rust 1.95 with rustup when available. |
-| `install-mode` | `auto` | `auto`, `source`, or `path`. |
+| `install-mode` | `auto` | `auto`, `release`, `source`, or `path`. |
 | `binary-path` | empty | Existing binary path for `install-mode=path`. |
+| `release-version` | empty | Release tag for release downloads; empty lets tagged action refs provide the tag. |
+| `release-asset` | `ub-review-x86_64-unknown-linux-gnu.tar.gz` | Linux x64 release archive asset. |
 | `allow-heavy` | `false` | Permit heavy witness classes. |
 | `posting` | `review` | `review` posts one Pull Request Review; `artifact-only` only writes files. |
 | `mode` | `review-direct` | Direct BYOK MiniMax fanout; agent modes are reserved for later. |
@@ -360,10 +362,12 @@ validates inline candidates, and submits one grouped PR review when configured.
 
 ## Bootstrap note
 
-Until this repo publishes release binaries, the action builds `ub-review` from
-source on the runner. That is slower than the final release-binary path, but it
-keeps first adoption token-free and mechanically simple. The consuming workflow
-can cache Cargo registry and target directories if needed.
+With `install-mode=auto`, tagged action refs first try the Linux x64 release
+archive and fall back to a source build when the asset is unavailable. Non-tag
+refs such as `@main` use the source build path. This keeps first adoption
+token-free and mechanically simple while leaving the faster release-binary path
+available for tagged rollouts. The consuming workflow can cache Cargo registry
+and target directories if needed.
 
 ## Codex lane notes
 
