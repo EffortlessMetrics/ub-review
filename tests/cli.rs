@@ -141,6 +141,7 @@ fn active_len_tracks_view_after_resize() {
         "review/orchestrator_plan.json",
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
+        "review/follow_up_evidence.json",
         "review/witnesses.json",
         "review/proof_requests.json",
         "review/proof_receipts.json",
