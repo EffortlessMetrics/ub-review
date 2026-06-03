@@ -6801,7 +6801,7 @@ fn write_proof_planner_artifacts(
         .into_iter()
         .map(|plan| proof_task_artifact(plan, budget, lease_budget))
         .collect::<Vec<_>>();
-    let skip = proof_planner_skips(diff, &proof_tasks);
+    let skip = proof_planner_skips(diff);
     let output = ProofPlannerOutput {
         schema: "ub-review.proof_planner_output.v1",
         lane: "proof-planner",
@@ -6885,18 +6885,15 @@ fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
     }
 }
 
-fn proof_planner_skips(
-    diff: &DiffContext,
-    proof_tasks: &[ProofTaskArtifact],
-) -> Vec<ProofPlannerSkip> {
+fn proof_planner_skips(diff: &DiffContext) -> Vec<ProofPlannerSkip> {
     let mut skip = Vec::new();
     if !diff.flags.unsafe_or_native_risk {
         skip.push(ProofPlannerSkip {
             kind: "miri".to_owned(),
-            reason: "No new unsafe/native aliasing seam was detected; cheaper focused proof is preferred when available.".to_owned(),
+            reason: "No new unsafe/native aliasing surface was detected; cheaper focused proof is preferred when available.".to_owned(),
         });
     }
-    if proof_tasks.is_empty() && !diff.flags.workflow_changed {
+    if !diff.flags.workflow_changed {
         skip.push(ProofPlannerSkip {
             kind: "actionlint".to_owned(),
             reason: "No workflow files changed.".to_owned(),
@@ -16086,6 +16083,29 @@ index 1111111..2222222 100644
         assert_eq!(proof_lease_budget(cx43)?.cpu, 4);
         assert_eq!(proof_lease_budget(cx43)?.disk_mb, 2_048);
         Ok(())
+    }
+
+    #[test]
+    fn proof_planner_skips_actionlint_when_workflows_are_unchanged() {
+        let mut diff = test_diff();
+        diff.flags.workflow_changed = false;
+
+        let skips = super::proof_planner_skips(&diff);
+
+        assert!(skips.iter().any(|skip| {
+            skip.kind == "actionlint" && skip.reason == "No workflow files changed."
+        }));
+    }
+
+    #[test]
+    fn proof_planner_keeps_actionlint_relevant_for_workflow_changes() {
+        let mut diff = test_diff();
+        diff.flags.workflow_changed = true;
+        diff.changed_files = vec![".github/workflows/ci.yml".to_owned()];
+
+        let skips = super::proof_planner_skips(&diff);
+
+        assert!(!skips.iter().any(|skip| skip.kind == "actionlint"));
     }
 
     #[test]
