@@ -6377,7 +6377,7 @@ fn candidate_evidence_need(candidate: &CandidateRecord) -> String {
 }
 
 fn observation_evidence_need(observation: &ObservationGroup) -> String {
-    if is_pr_body_refuted_observation(observation) {
+    if is_refutation_confirmation_observation(observation) {
         return "refutation-confirmation".to_owned();
     }
     if is_parked_observation(observation) {
@@ -12273,6 +12273,13 @@ fn is_refuted_observation(observation: &ObservationGroup) -> bool {
 }
 
 fn is_pr_body_refuted_observation(observation: &ObservationGroup) -> bool {
+    if observation.kind == "resolved-check" {
+        return false;
+    }
+    is_refuted_observation(observation) && !is_global_calibration_refutation(observation)
+}
+
+fn is_refutation_confirmation_observation(observation: &ObservationGroup) -> bool {
     is_refuted_observation(observation) && !is_global_calibration_refutation(observation)
 }
 
@@ -18971,6 +18978,45 @@ UB_REVIEW_HTTP_STATUS:429
                 .body
                 .contains("source-route concern was refuted")
         );
+        assert!(surface.github_review.comments.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_keeps_resolved_check_artifact_only() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let resolved_observation = test_observation(
+            "tests-oracle",
+            "Prior author reply already answered the test-proof question.",
+            "resolved-check",
+            "covered",
+            "low",
+            "high",
+            "prior-test-proof-resolved",
+        );
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &[resolved_observation],
+            proof_receipts: &[],
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
         Ok(())
     }

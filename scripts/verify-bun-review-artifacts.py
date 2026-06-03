@@ -666,7 +666,7 @@ def candidate_evidence_need(candidate: dict) -> str:
 
 
 def observation_evidence_need(observation: dict) -> str:
-    if is_pr_body_refuted_observation(observation):
+    if is_refutation_confirmation_observation(observation):
         return "refutation-confirmation"
     if is_parked_observation(observation):
         return "parked-follow-up-confirmation"
@@ -696,6 +696,14 @@ def is_refuted_observation(observation: dict) -> bool:
 
 
 def is_pr_body_refuted_observation(observation: dict) -> bool:
+    if observation["kind"] == "resolved-check":
+        return False
+    return is_refuted_observation(observation) and not is_global_calibration_refutation(
+        observation
+    )
+
+
+def is_refutation_confirmation_observation(observation: dict) -> bool:
     return is_refuted_observation(observation) and not is_global_calibration_refutation(
         observation
     )
