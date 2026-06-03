@@ -203,9 +203,12 @@ def require_summary(root: pathlib.Path) -> None:
         "## Provider preflights",
         "## Model lane status",
         "## Lane packets",
+        "## Review efficiency",
     ]:
         if heading not in summary:
             fail(f"{summary_path} missing {heading}")
+    if "Follow-up results:" not in summary:
+        fail(f"{summary_path} missing follow-up result efficiency line")
     no_standalone_approval_line(summary, summary_path)
 
 

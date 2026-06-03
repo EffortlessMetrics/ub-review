@@ -11634,6 +11634,19 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .get("provider_evidence_failures")
         .and_then(serde_json::Value::as_u64)
         .unwrap_or(0);
+    let follow_up_results = metrics
+        .pointer("/follow_up_results/total")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let follow_up_attempted = metrics
+        .pointer("/follow_up_results/calls_attempted")
+        .and_then(serde_json::Value::as_u64)
+        .unwrap_or(0);
+    let follow_up_statuses = metrics
+        .pointer("/follow_up_results/status_counts")
+        .and_then(serde_json::Value::as_object)
+        .map(format_json_status_counts)
+        .unwrap_or_else(|| "none".to_owned());
     let payload_status = metrics
         .get("review_payload_status")
         .and_then(serde_json::Value::as_str)
@@ -11663,8 +11676,23 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         "- Provider evidence failures: `{provider_failures}`\n"
     ));
     text.push_str(&format!(
+        "- Follow-up results: `{follow_up_results}` total, `{follow_up_attempted}` attempted ({follow_up_statuses})\n"
+    ));
+    text.push_str(&format!(
         "- Review payload: `{payload_status}`; post: `{post_status}`\n"
     ));
+}
+
+fn format_json_status_counts(counts: &serde_json::Map<String, serde_json::Value>) -> String {
+    let parts = counts
+        .iter()
+        .filter_map(|(status, count)| count.as_u64().map(|count| format!("{status}={count}")))
+        .collect::<Vec<_>>();
+    if parts.is_empty() {
+        "none".to_owned()
+    } else {
+        parts.join(", ")
+    }
 }
 
 fn read_review_metrics(out: &Path) -> Option<serde_json::Value> {
@@ -16714,6 +16742,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(summary.contains("## Review efficiency"));
         assert!(summary.contains("Runtime: `1m13s`"));
         assert!(summary.contains("Terminal state: `artifact-only`"));
+        assert!(summary.contains("Follow-up results:"));
+        assert!(summary.contains("attempted"));
         assert!(
             summary.contains("Review payload: `skipped_empty_smoke`; post: `not_attempted_by_run`")
         );
