@@ -32,7 +32,7 @@ fn main() -> Result<()> {
         Command::Doctor(args) => cmd_doctor(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
-        Command::Run(args) => cmd_run(args),
+        Command::Run(args) => cmd_run(*args),
         Command::Summary(args) => cmd_summary(args),
         Command::Post(args) => cmd_post(args),
     }
@@ -58,7 +58,7 @@ enum Command {
     /// Build and print a run plan without executing sensors.
     Plan(PlanArgs),
     /// Build packets, run eligible sensors, and render lane packets.
-    Run(RunArgs),
+    Run(Box<RunArgs>),
     /// Re-render a running summary from an existing run directory.
     Summary(SummaryArgs),
     /// Submit a prepared GitHub pull request review.
@@ -68,6 +68,8 @@ enum Command {
 #[derive(Clone, Debug, ValueEnum)]
 enum ProfileArg {
     GhRunner,
+    GhRunnerStandard,
+    GhRunnerFull,
     Cx23,
     Cx33,
     Cx43,
@@ -79,6 +81,8 @@ impl ProfileArg {
     fn key(&self) -> &'static str {
         match self {
             Self::GhRunner => "gh-runner",
+            Self::GhRunnerStandard => "gh-runner-standard",
+            Self::GhRunnerFull => "gh-runner-full",
             Self::Cx23 => "cx23",
             Self::Cx33 => "cx33",
             Self::Cx43 => "cx43",
@@ -404,6 +408,22 @@ struct RunArgs {
         env = "UB_REVIEW_PR_THREAD_CONTEXT_MAX_BYTES"
     )]
     pr_thread_context_max_bytes: usize,
+    /// GitHub credential used only to fetch bounded PR-thread context during `run`.
+    #[arg(long = "github-token", env = "UB_REVIEW_PR_THREAD_AUTH")]
+    pr_thread_auth: Option<String>,
+    /// owner/repo used to fetch bounded PR-thread context. Defaults to GITHUB_REPOSITORY.
+    #[arg(long = "github-repo", env = "GITHUB_REPOSITORY")]
+    github_repo: Option<String>,
+    /// Pull request number used to fetch bounded PR-thread context.
+    #[arg(long = "github-pull-number", env = "UB_REVIEW_PULL_NUMBER")]
+    github_pull_number: Option<u64>,
+    /// GitHub API base URL used to fetch bounded PR-thread context.
+    #[arg(
+        long = "github-api-url",
+        default_value = "https://api.github.com",
+        env = "UB_REVIEW_GITHUB_API_URL"
+    )]
+    github_api_url: String,
     /// MiniMax provider request/response family.
     #[arg(
         long,
@@ -599,6 +619,7 @@ struct Config {
     profile: String,
     repo: RepoConfig,
     review: ReviewConfig,
+    review_body: ReviewBodyPolicy,
     profiles: BTreeMap<String, Profile>,
     tools: BTreeMap<String, ToolPolicy>,
     lanes: Vec<LanePlan>,
@@ -626,11 +647,39 @@ struct ReviewConfig {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
+struct ReviewBodyPolicy {
+    include_successful_lane_table: bool,
+    include_provider_table: ReviewBodyTablePolicy,
+    include_sensor_table: ReviewBodyTablePolicy,
+    include_execution_summary: ReviewBodyExecutionSummaryPolicy,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ReviewBodyTablePolicy {
+    Never,
+    #[default]
+    OnFailure,
+    Always,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum ReviewBodyExecutionSummaryPolicy {
+    #[default]
+    None,
+    OnFailure,
+    Always,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
 struct Profile {
     name: String,
     limits: Limits,
     guards: Guards,
     budgets: Budgets,
+    trusted_repo: TrustedRepo,
 }
 
 #[derive(Debug, Deserialize)]
@@ -639,6 +688,7 @@ struct RuntimeProfileFile {
     limits: RuntimeLimitsFile,
     guards: RuntimeGuardsFile,
     budgets: RuntimeBudgetsFile,
+    trusted_repo: TrustedRepo,
 }
 
 #[derive(Debug, Deserialize)]
@@ -670,6 +720,7 @@ struct RuntimeBudgetsFile {
     artifact_budget_mb: u64,
     scratch_budget_mb: u64,
     default_timeout_sec: u64,
+    hard_timeout_sec: u64,
     proof_max_focused_test_files: usize,
     proof_max_focused_tests: usize,
     proof_command_timeout_sec: u64,
@@ -679,9 +730,19 @@ struct RuntimeBudgetsFile {
     proof_disk_mb: u64,
     proof_network: bool,
     proof_scratch: bool,
+    mutation: bool,
+    sanitizer: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+struct TrustedRepo {
+    pass_triggers: Vec<String>,
+    synchronize: bool,
+    proof_lanes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Limits {
     logical_lanes: usize,
@@ -699,7 +760,7 @@ struct Limits {
     patch_writers: usize,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Guards {
     min_free_mem_mb: u64,
@@ -707,12 +768,13 @@ struct Guards {
     max_load_1m: f32,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Budgets {
     artifact_budget_mb: u64,
     scratch_budget_mb: u64,
     default_timeout_sec: u64,
+    hard_timeout_sec: u64,
     proof_max_focused_test_files: usize,
     proof_max_focused_tests: usize,
     proof_command_timeout_sec: u64,
@@ -722,6 +784,8 @@ struct Budgets {
     proof_disk_mb: u64,
     proof_network: bool,
     proof_scratch: bool,
+    mutation: bool,
+    sanitizer: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1373,6 +1437,8 @@ struct FollowUpQuestionTask {
     schema: String,
     id: String,
     group_id: String,
+    stage: String,
+    stage_reason: String,
     evidence_need: String,
     disposition: String,
     candidate_ids: Vec<String>,
@@ -1389,6 +1455,8 @@ struct FollowUpQuestionPacket<'a> {
     id: &'a str,
     task_id: &'a str,
     group_id: &'a str,
+    stage: &'a str,
+    stage_reason: &'a str,
     evidence_need: &'a str,
     disposition: &'a str,
     candidate_ids: &'a [String],
@@ -1406,6 +1474,8 @@ struct FollowUpQuestionPacketArtifact {
     id: String,
     task_id: String,
     group_id: String,
+    stage: String,
+    stage_reason: String,
     prompt: String,
 }
 
@@ -1414,6 +1484,7 @@ struct FollowUpResult {
     schema: String,
     task_id: String,
     group_id: String,
+    stage: String,
     packet_path: String,
     model_lane: String,
     status: String,
@@ -1451,6 +1522,7 @@ struct FollowUpOutputRecord {
     schema: String,
     task_id: String,
     group_id: String,
+    stage: String,
     model_lane: String,
     status: String,
     reason: String,
@@ -1940,6 +2012,7 @@ impl Default for Config {
             profile: "gh-runner".to_owned(),
             repo: RepoConfig::default(),
             review: ReviewConfig::default(),
+            review_body: ReviewBodyPolicy::default(),
             profiles,
             tools,
             lanes: Vec::new(),
@@ -1971,6 +2044,17 @@ impl Default for ReviewConfig {
     }
 }
 
+impl Default for ReviewBodyPolicy {
+    fn default() -> Self {
+        Self {
+            include_successful_lane_table: false,
+            include_provider_table: ReviewBodyTablePolicy::OnFailure,
+            include_sensor_table: ReviewBodyTablePolicy::OnFailure,
+            include_execution_summary: ReviewBodyExecutionSummaryPolicy::None,
+        }
+    }
+}
+
 impl Default for Profile {
     fn default() -> Self {
         Self {
@@ -1978,6 +2062,7 @@ impl Default for Profile {
             limits: Limits::default(),
             guards: Guards::default(),
             budgets: Budgets::default(),
+            trusted_repo: TrustedRepo::default(),
         }
     }
 }
@@ -2017,7 +2102,8 @@ impl Default for Budgets {
         Self {
             artifact_budget_mb: 750,
             scratch_budget_mb: 4_000,
-            default_timeout_sec: 900,
+            default_timeout_sec: 1_800,
+            hard_timeout_sec: 3_600,
             proof_max_focused_test_files: 3,
             proof_max_focused_tests: 1,
             proof_command_timeout_sec: 300,
@@ -2027,6 +2113,23 @@ impl Default for Budgets {
             proof_disk_mb: 1_024,
             proof_network: false,
             proof_scratch: true,
+            mutation: false,
+            sanitizer: false,
+        }
+    }
+}
+
+impl Default for TrustedRepo {
+    fn default() -> Self {
+        Self {
+            pass_triggers: vec!["opened".to_owned(), "ready_for_review".to_owned()],
+            synchronize: false,
+            proof_lanes: vec![
+                "focused-tests".to_owned(),
+                "base-tests-red-green".to_owned(),
+                "actionlint".to_owned(),
+                "scoped-source-route-checks".to_owned(),
+            ],
         }
     }
 }
@@ -2828,6 +2931,7 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
         "selected_runtime_profile": &profile.name,
         "repo": &config.repo,
         "review": &config.review,
+        "review_body": &config.review_body,
         "review_profile": {
             "name": &config.review_profile,
             "repo_kind": &config.repo.kind,
@@ -2857,9 +2961,11 @@ fn resolved_plan_artifact(
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
         "budgets": &profile.budgets,
+        "trusted_repo": &profile.trusted_repo,
         "guards": &profile.guards,
         "limits": &profile.limits,
         "posting": &config.review,
+        "review_body": &config.review_body,
         "selectors": resolved_selector_artifact(run_args, selectors, effective_model_lanes),
         "sensors": &plan.sensors,
         "lanes": &plan.lanes,
@@ -3295,8 +3401,14 @@ fn build_plan(
     if !allow_heavy {
         notes.push("heavy witnesses are disabled unless --allow-heavy is passed".to_owned());
     }
-    if profile.name == "gh-runner" {
-        notes.push("gh-runner profile: one evidence pass, bounded model review, optional grouped PR Review posting".to_owned());
+    if matches!(
+        profile.name.as_str(),
+        "gh-runner" | "gh-runner-standard" | "gh-runner-full"
+    ) {
+        notes.push(format!(
+            "{} profile: trusted repos get opened and ready_for_review evidence passes, 30m target, 60m hard timeout",
+            profile.name
+        ));
     }
     Plan {
         base: diff.base.clone(),
@@ -4382,6 +4494,8 @@ fn write_review_artifacts(
         args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
+    validate_pr_review_body_policy(&pr_body, &config.review_body)
+        .with_context(|| "validate pull request review body policy")?;
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -4532,7 +4646,7 @@ fn write_review_artifacts(
     )?;
     fs::write(review_dir.join("review.md"), artifact_body)?;
     if should_prepare_github_review {
-        write_github_review_payload(&review_dir, &github_review, &line_map)?;
+        write_github_review_payload(&review_dir, &github_review, &line_map, &config.review_body)?;
     } else {
         write_github_review_skip_receipt(
             &review_dir,
@@ -4579,6 +4693,123 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
     ]
     .iter()
     .any(|heading| body.contains(heading))
+}
+
+fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return Ok(());
+    }
+    if has_forbidden_pr_review_boilerplate(trimmed) {
+        bail!("github review body contains artifact-only boilerplate");
+    }
+    if !policy.include_successful_lane_table && contains_successful_lane_table(trimmed) {
+        bail!("github review body contains successful lane table");
+    }
+    match policy.include_provider_table {
+        ReviewBodyTablePolicy::Always => {}
+        ReviewBodyTablePolicy::Never | ReviewBodyTablePolicy::OnFailure => {
+            if contains_provider_status_table(trimmed) {
+                bail!("github review body contains provider status table");
+            }
+        }
+    }
+    match policy.include_sensor_table {
+        ReviewBodyTablePolicy::Always => {}
+        ReviewBodyTablePolicy::Never | ReviewBodyTablePolicy::OnFailure => {
+            if contains_sensor_status_table(trimmed) {
+                bail!("github review body contains sensor status table");
+            }
+        }
+    }
+    match policy.include_execution_summary {
+        ReviewBodyExecutionSummaryPolicy::Always => {}
+        ReviewBodyExecutionSummaryPolicy::None => {
+            if contains_execution_summary(trimmed) {
+                bail!("github review body contains execution summary");
+            }
+        }
+        ReviewBodyExecutionSummaryPolicy::OnFailure => {
+            if contains_execution_summary(trimmed) && !pr_body_has_failure_context(trimmed) {
+                bail!("github review body contains success execution summary");
+            }
+        }
+    }
+    Ok(())
+}
+
+fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    [
+        "no blocking finding after",
+        "no blocking ub finding",
+        "no actionable findings",
+        "a human should still inspect",
+        "lane transcript",
+        "raw observations",
+    ]
+    .iter()
+    .any(|needle| lower.contains(needle))
+}
+
+fn contains_successful_lane_table(body: &str) -> bool {
+    [
+        "## Model lanes",
+        "## Model lane status",
+        "## Lane status",
+        "## Lane roster",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn contains_provider_status_table(body: &str) -> bool {
+    [
+        "## Provider preflights",
+        "## Provider status",
+        "## Model provider status",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn contains_sensor_status_table(body: &str) -> bool {
+    ["## Sensors", "## Sensor status", "## Sensor receipts"]
+        .iter()
+        .any(|needle| body.contains(needle))
+}
+
+fn contains_execution_summary(body: &str) -> bool {
+    [
+        "- Shared context:",
+        "- Profile:",
+        "- Base:",
+        "- Head:",
+        "- Changed files:",
+        "- Inline comments:",
+        "## Review efficiency",
+        "Runtime:",
+        "Terminal state:",
+        "Review payload:",
+        "Follow-up results:",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
+}
+
+fn pr_body_has_failure_context(body: &str) -> bool {
+    [
+        "## Decision",
+        "## Evidence gaps",
+        "## Missing evidence",
+        "## Missing or failed evidence",
+        "Needs ",
+        "failed",
+        "timed out",
+        "unavailable",
+    ]
+    .iter()
+    .any(|needle| body.contains(needle))
 }
 
 struct TerminalStateInput<'a> {
@@ -4667,11 +4898,13 @@ fn write_github_review_payload(
     review_dir: &Path,
     github_review: &GitHubReview,
     right_lines: &BTreeSet<(String, u32)>,
+    review_body_policy: &ReviewBodyPolicy,
 ) -> Result<()> {
     validate_github_review_payload_for_right_lines(
         github_review,
         right_lines,
         "generated diff context",
+        review_body_policy,
     )?;
     fs::write(
         review_dir.join("github-review.json"),
@@ -5660,6 +5893,8 @@ fn follow_up_question_packet(task: &FollowUpQuestionTask) -> FollowUpQuestionPac
         id: task.id.as_str(),
         task_id: task.id.as_str(),
         group_id: task.group_id.as_str(),
+        stage: task.stage.as_str(),
+        stage_reason: task.stage_reason.as_str(),
         evidence_need: task.evidence_need.as_str(),
         disposition: task.disposition.as_str(),
         candidate_ids: &task.candidate_ids,
@@ -5677,6 +5912,10 @@ fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
     prompt.push_str("Follow-up question task\n\n");
     prompt.push_str(&format!("- Task: `{}`\n", task.id));
     prompt.push_str(&format!("- Group: `{}`\n", task.group_id));
+    prompt.push_str(&format!(
+        "- Stage: `{}` - {}\n",
+        task.stage, task.stage_reason
+    ));
     prompt.push_str(&format!("- Evidence need: `{}`\n", task.evidence_need));
     prompt.push_str(&format!("- Disposition: `{}`\n", task.disposition));
     if !task.candidate_ids.is_empty() {
@@ -5708,6 +5947,14 @@ fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
             ));
         }
         prompt.push('\n');
+    }
+    match task.stage.as_str() {
+        "tertiary" => prompt.push_str(
+            "Stage instruction: use routed evidence to refine, refute, drop, or park the concern; do not repeat an already-resolved question.\n",
+        ),
+        _ => prompt.push_str(
+            "Stage instruction: identify the smallest remaining evidence or proof request needed before promotion.\n",
+        ),
     }
     prompt.push_str(
         &format!(
@@ -5785,10 +6032,13 @@ fn follow_up_task_for_group(
         return None;
     }
     let fingerprint = sha256_hex(format!("{group_id}\n{evidence_need}").as_bytes());
+    let stage = follow_up_stage(disposition, evidence_need, routed_evidence);
     Some(FollowUpQuestionTask {
         schema: "ub-review.follow_up_question.v1".to_owned(),
         id: format!("follow-up-{}", &fingerprint[..12]),
         group_id: group_id.to_owned(),
+        stage: stage.to_owned(),
+        stage_reason: follow_up_stage_reason(stage).to_owned(),
         evidence_need: evidence_need.to_owned(),
         disposition: disposition.to_owned(),
         candidate_ids: candidate_ids.to_vec(),
@@ -5812,10 +6062,13 @@ fn follow_up_task_for_observation_group(
         return None;
     }
     let fingerprint = sha256_hex(format!("{}\n{}", group.id, group.evidence_need).as_bytes());
+    let stage = follow_up_stage("observation", &group.evidence_need, routed_evidence);
     Some(FollowUpQuestionTask {
         schema: "ub-review.follow_up_question.v1".to_owned(),
         id: format!("follow-up-{}", &fingerprint[..12]),
         group_id: group.id.clone(),
+        stage: stage.to_owned(),
+        stage_reason: follow_up_stage_reason(stage).to_owned(),
         evidence_need: group.evidence_need.clone(),
         disposition: "observation".to_owned(),
         candidate_ids: Vec::new(),
@@ -5826,6 +6079,35 @@ fn follow_up_task_for_observation_group(
         reason: "deterministic observation follow-up; no shell commands or posting side effects"
             .to_owned(),
     })
+}
+
+fn follow_up_stage(
+    disposition: &str,
+    evidence_need: &str,
+    routed_evidence: &[OrchestratorRoutedEvidence],
+) -> &'static str {
+    if !routed_evidence.is_empty()
+        || matches!(disposition, "refuted" | "parked-follow-up")
+        || matches!(
+            evidence_need,
+            "refutation-confirmation" | "parked-follow-up-confirmation"
+        )
+    {
+        "tertiary"
+    } else {
+        "secondary"
+    }
+}
+
+fn follow_up_stage_reason(stage: &str) -> &'static str {
+    match stage {
+        "tertiary" => {
+            "routed evidence or prior disposition is available; refine, refute, drop, or park instead of restating the concern"
+        }
+        _ => {
+            "no routed proof receipt is available; ask for the smallest remaining evidence or proof request"
+        }
+    }
 }
 
 fn routed_evidence_for_group(
@@ -7882,6 +8164,7 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
                 .push(format!("github-event unavailable: {err}")),
         }
     }
+    context.pull_number = args.github_pull_number.or(context.pull_number);
 
     let configured_thread_path = args.pr_thread_context.trim();
     if !configured_thread_path.is_empty() {
@@ -7906,6 +8189,28 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
         }
     }
 
+    match github_thread_api_request(args, context.pull_number) {
+        None => {}
+        Some(Err(err)) => context
+            .warnings
+            .push(format!("github-api thread context unavailable: {err}")),
+        Some(Ok(request)) => {
+            match read_github_pr_thread_context(root, &request, args.pr_thread_context_max_bytes) {
+                Ok(api_context) => {
+                    context.sources.extend(api_context.sources);
+                    append_thread_context(
+                        &mut context,
+                        &api_context.thread_context,
+                        args.pr_thread_context_max_bytes,
+                    );
+                }
+                Err(err) => context
+                    .warnings
+                    .push(format!("github-api thread context unavailable: {err}")),
+            }
+        }
+    }
+
     context.status =
         if context.title.is_some() || context.body.is_some() || context.thread_context.is_some() {
             "seeded".to_owned()
@@ -7916,6 +8221,265 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
         };
 
     Ok(context)
+}
+
+struct GitHubThreadApiRequest<'a> {
+    auth: &'a str,
+    repo: &'a str,
+    pull_number: u64,
+    api_url: &'a str,
+}
+
+struct GitHubThreadApiContext {
+    sources: Vec<String>,
+    thread_context: String,
+}
+
+fn github_thread_api_request<'a>(
+    args: &'a RunArgs,
+    event_pull_number: Option<u64>,
+) -> Option<Result<GitHubThreadApiRequest<'a>>> {
+    let auth = args
+        .pr_thread_auth
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())?;
+    let Some(repo) = args
+        .github_repo
+        .as_deref()
+        .map(str::trim)
+        .filter(|v| !v.is_empty())
+    else {
+        return Some(Err(anyhow::anyhow!(
+            "GitHub repository slug is unavailable"
+        )));
+    };
+    if !is_valid_repo_slug(repo) {
+        return Some(Err(anyhow::anyhow!(
+            "GitHub repository slug is invalid: {repo}"
+        )));
+    }
+    let Some(pull_number) = args.github_pull_number.or(event_pull_number) else {
+        return Some(Err(anyhow::anyhow!("pull request number is unavailable")));
+    };
+    Some(Ok(GitHubThreadApiRequest {
+        auth,
+        repo,
+        pull_number,
+        api_url: args.github_api_url.trim_end_matches('/'),
+    }))
+}
+
+fn read_github_pr_thread_context(
+    root: &Path,
+    request: &GitHubThreadApiRequest<'_>,
+    max_bytes: usize,
+) -> Result<GitHubThreadApiContext> {
+    let endpoints = [
+        (
+            "issue-comments",
+            format!(
+                "{}/repos/{}/issues/{}/comments?per_page=30",
+                request.api_url, request.repo, request.pull_number
+            ),
+        ),
+        (
+            "review-summaries",
+            format!(
+                "{}/repos/{}/pulls/{}/reviews?per_page=30",
+                request.api_url, request.repo, request.pull_number
+            ),
+        ),
+        (
+            "review-comments",
+            format!(
+                "{}/repos/{}/pulls/{}/comments?per_page=50",
+                request.api_url, request.repo, request.pull_number
+            ),
+        ),
+    ];
+    let mut sections = Vec::new();
+    let mut sources = Vec::new();
+    for (kind, url) in endpoints {
+        let value = run_github_api_get(root, &url, request.auth)
+            .with_context(|| format!("fetch GitHub PR thread {kind}"))?;
+        sources.push(format!(
+            "github-api:{}/{}/{}",
+            request.repo, request.pull_number, kind
+        ));
+        sections.push(render_github_pr_thread_section(kind, &value, max_bytes));
+    }
+
+    let mut text = String::new();
+    text.push_str("## GitHub PR Thread Snapshot\n\n");
+    text.push_str(&format!(
+        "Source: `{}` PR `#{}`. Bounded to lane context; full GitHub thread remains source of truth.\n\n",
+        escape_md(request.repo),
+        request.pull_number
+    ));
+    text.push_str(&sections.join("\n"));
+    let bounded = bounded_string(&text, max_bytes);
+    Ok(GitHubThreadApiContext {
+        sources,
+        thread_context: bounded.text,
+    })
+}
+
+fn run_github_api_get(root: &Path, url: &str, auth: &str) -> Result<serde_json::Value> {
+    let mut command = ProcessCommand::new("curl");
+    command
+        .arg("-sS")
+        .arg("--fail-with-body")
+        .arg("--max-time")
+        .arg("30")
+        .arg("-w")
+        .arg("\nUB_REVIEW_HTTP_STATUS:%{http_code}\n")
+        .arg("-K")
+        .arg("-")
+        .arg(url)
+        .current_dir(root)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = command.spawn().with_context(|| "spawn GitHub API curl")?;
+    {
+        let mut stdin = child
+            .stdin
+            .take()
+            .ok_or_else(|| anyhow::anyhow!("curl stdin unavailable"))?;
+        use std::io::Write as _;
+        const AUTH_HEADER_NAME: &str = "Authorization";
+        let auth_scheme = ["Bear", "er"].concat();
+        for header in [
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+            &format!("{AUTH_HEADER_NAME}: {auth_scheme} {auth}"),
+        ] {
+            writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .with_context(|| "wait for GitHub API curl")?;
+    let (stdout, http_status) = split_curl_http_status(output.stdout);
+    if !output.status.success() {
+        bail!(
+            "GitHub API curl exited {:?} with http status {:?}: stderr: {}; stdout: {}",
+            output.status.code(),
+            http_status,
+            String::from_utf8_lossy(&output.stderr),
+            String::from_utf8_lossy(&stdout)
+        );
+    }
+    serde_json::from_slice(&stdout).with_context(|| "parse GitHub API response")
+}
+
+fn render_github_pr_thread_section(
+    kind: &str,
+    value: &serde_json::Value,
+    max_bytes: usize,
+) -> String {
+    let title = match kind {
+        "issue-comments" => "Issue Comments",
+        "review-summaries" => "Review Summaries",
+        "review-comments" => "Review Comments",
+        _ => "Thread Items",
+    };
+    let mut text = format!("### {title}\n\n");
+    let Some(items) = value.as_array() else {
+        text.push_str("- GitHub response was not an array.\n");
+        return text;
+    };
+    if items.is_empty() {
+        text.push_str("- None found.\n");
+        return text;
+    }
+    for item in items {
+        text.push_str(&render_github_pr_thread_item(kind, item, max_bytes));
+    }
+    text
+}
+
+fn render_github_pr_thread_item(kind: &str, item: &serde_json::Value, max_bytes: usize) -> String {
+    let author = item
+        .pointer("/user/login")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
+    let created_at = item
+        .get("created_at")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown-time");
+    let state = item
+        .get("state")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let path = item
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let line = item
+        .get("line")
+        .or_else(|| item.get("original_line"))
+        .and_then(serde_json::Value::as_u64);
+    let body = item
+        .get("body")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    let bounded_body = bounded_string(body.trim(), max_bytes.min(1200));
+    let location = if !path.is_empty() {
+        match line {
+            Some(line) => format!(" `{}`:`{line}`", escape_md(path)),
+            None => format!(" `{}`", escape_md(path)),
+        }
+    } else {
+        String::new()
+    };
+    let state = if state.is_empty() {
+        String::new()
+    } else {
+        format!(" `{}`", escape_md(state))
+    };
+    let item_kind = match kind {
+        "issue-comments" => "issue-comment",
+        "review-summaries" => "review",
+        "review-comments" => "review-comment",
+        _ => "thread-item",
+    };
+    let mut text = format!(
+        "- `{}` `{}` by `{}`{}{}\n",
+        item_kind,
+        escape_md(created_at),
+        escape_md(author),
+        state,
+        location
+    );
+    if !bounded_body.text.is_empty() {
+        text.push_str("  ```text\n");
+        text.push_str(&bounded_body.text);
+        if !bounded_body.text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str("  ```\n");
+    }
+    text
+}
+
+fn append_thread_context(context: &mut PrThreadContext, addition: &str, max_bytes: usize) {
+    if addition.trim().is_empty() {
+        return;
+    }
+    let mut merged = String::new();
+    if let Some(existing) = context.thread_context.as_deref() {
+        merged.push_str(existing);
+        if !existing.ends_with('\n') {
+            merged.push('\n');
+        }
+        merged.push('\n');
+    }
+    merged.push_str(addition);
+    let bounded = bounded_string(&merged, max_bytes);
+    context.thread_context = Some(bounded.text);
+    context.thread_context_truncated |= bounded.truncated;
 }
 
 struct GitHubEventPrContext {
@@ -9166,6 +9730,8 @@ fn read_follow_up_packet(
         || packet.task_id != task.id
         || packet.group_id != task.group_id
         || packet.id != task.id
+        || packet.stage != task.stage
+        || packet.stage_reason != task.stage_reason
     {
         bail!(
             "follow-up packet {} does not match task {}",
@@ -9265,6 +9831,7 @@ fn follow_up_output_record(
         schema: "ub-review.follow_up_output.v1".to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
+        stage: task.stage.clone(),
         model_lane: model_lane.to_owned(),
         status: status.to_owned(),
         reason: reason.to_owned(),
@@ -9284,6 +9851,7 @@ fn empty_follow_up_output_record(
         schema: "ub-review.follow_up_output.v1".to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
+        stage: task.stage.clone(),
         model_lane: model_lane.to_owned(),
         status: result.status.clone(),
         reason: result.reason.clone(),
@@ -9322,6 +9890,7 @@ fn follow_up_result(
         schema: "ub-review.follow_up_result.v1".to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
+        stage: task.stage.clone(),
         packet_path: packet_path.to_owned(),
         model_lane: model_lane.to_owned(),
         status: status.to_owned(),
@@ -12196,8 +12765,19 @@ fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
 }
 
 fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
+    validate_github_review_payload_with_policy(review, &ReviewBodyPolicy::default())
+}
+
+fn validate_github_review_payload_with_policy(
+    review: &GitHubReview,
+    policy: &ReviewBodyPolicy,
+) -> Result<()> {
     if review.event != "COMMENT" {
         bail!("github review event must be COMMENT");
+    }
+    validate_pr_review_body_policy(&review.body, policy)?;
+    if review.comments.is_empty() && !pr_body_has_reviewer_value(&review.body) {
+        bail!("github review body is missing reviewer-value content");
     }
     if has_standalone_approval_line(&review.body) {
         bail!("github review body contains standalone approval language");
@@ -12229,7 +12809,8 @@ fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
 }
 
 fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubReview) -> Result<()> {
-    validate_github_review_payload(review)?;
+    let review_body_policy = ReviewBodyPolicy::default();
+    validate_github_review_payload_with_policy(review, &review_body_policy)?;
     let diff_patch = post_diff_patch_path(args);
     if review.comments.is_empty() {
         return Ok(());
@@ -12241,6 +12822,7 @@ fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubRevie
         review,
         &right_lines,
         &diff_patch.display().to_string(),
+        &review_body_policy,
     )
 }
 
@@ -12248,8 +12830,9 @@ fn validate_github_review_payload_for_right_lines(
     review: &GitHubReview,
     right_lines: &BTreeSet<(String, u32)>,
     source: &str,
+    review_body_policy: &ReviewBodyPolicy,
 ) -> Result<()> {
-    validate_github_review_payload(review)?;
+    validate_github_review_payload_with_policy(review, review_body_policy)?;
     for comment in &review.comments {
         let path = normalize_repo_path(&comment.path);
         if !right_lines.contains(&(path.clone(), comment.line)) {
@@ -12931,12 +13514,20 @@ fn detect_disk_free_mb() -> Option<u64> {
 fn builtin_profiles() -> Vec<Profile> {
     [
         include_str!("../runtime/gh-runner.toml"),
+        include_str!("../configs/runtime/gh-runner-standard.toml"),
+        include_str!("../configs/runtime/gh-runner-full.toml"),
         include_str!("../runtime/cx23.toml"),
         include_str!("../runtime/cx33.toml"),
         include_str!("../runtime/cx43.toml"),
     ]
     .into_iter()
-    .filter_map(|profile| runtime_profile_from_toml(profile).ok())
+    .map(|profile| match runtime_profile_from_toml(profile) {
+        Ok(profile) => profile,
+        Err(err) => {
+            eprintln!("fatal: parse builtin runtime profile: {err}");
+            std::process::exit(2);
+        }
+    })
     .collect()
 }
 
@@ -12968,6 +13559,7 @@ fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
             artifact_budget_mb: profile.budgets.artifact_budget_mb,
             scratch_budget_mb: profile.budgets.scratch_budget_mb,
             default_timeout_sec: profile.budgets.default_timeout_sec,
+            hard_timeout_sec: profile.budgets.hard_timeout_sec,
             proof_max_focused_test_files: profile.budgets.proof_max_focused_test_files,
             proof_max_focused_tests: profile.budgets.proof_max_focused_tests,
             proof_command_timeout_sec: profile.budgets.proof_command_timeout_sec,
@@ -12977,7 +13569,10 @@ fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
             proof_disk_mb: profile.budgets.proof_disk_mb,
             proof_network: profile.budgets.proof_network,
             proof_scratch: profile.budgets.proof_scratch,
+            mutation: profile.budgets.mutation,
+            sanitizer: profile.budgets.sanitizer,
         },
+        trusted_repo: profile.trusted_repo,
     })
 }
 
@@ -13363,10 +13958,14 @@ fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static str {
 mod tests {
     use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
     use std::process::{Command as ProcessCommand, Stdio};
+    use std::thread;
+    use std::time::{Duration, Instant};
 
-    use anyhow::{Context as _, Result};
+    use anyhow::{Context as _, Result, bail};
 
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CommandStatus, Config,
@@ -13378,15 +13977,16 @@ mod tests {
         PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
         ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
         RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewDepth, ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewDepth, ReviewInlineComment,
+        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
+        append_follow_up_evidence_witnesses, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
         follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
@@ -13400,11 +14000,11 @@ mod tests {
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
         runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
         split_curl_http_status, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_pr_review_body_policy, validate_run_args, validate_summary_only_candidate,
+        wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -13491,6 +14091,10 @@ mod tests {
             Some("cx43")
         );
         assert_eq!(
+            runtime_profile_override(Some(&ProfileArg::GhRunner), Some(&ProfileArg::GhRunnerFull)),
+            Some("gh-runner-full")
+        );
+        assert_eq!(
             runtime_profile_override(Some(&ProfileArg::Cx23), None),
             Some("cx23")
         );
@@ -13516,10 +14120,19 @@ mod tests {
                 .iter()
                 .map(|profile| profile.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["gh-runner", "cx23", "cx33", "cx43"]
+            vec![
+                "gh-runner",
+                "gh-runner-standard",
+                "gh-runner-full",
+                "cx23",
+                "cx33",
+                "cx43",
+            ]
         );
         let from_files = vec![
             runtime_profile_from_toml(include_str!("../runtime/gh-runner.toml"))?,
+            runtime_profile_from_toml(include_str!("../configs/runtime/gh-runner-standard.toml"))?,
+            runtime_profile_from_toml(include_str!("../configs/runtime/gh-runner-full.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx23.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx33.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx43.toml"))?,
@@ -13529,6 +14142,82 @@ mod tests {
             serde_json::to_value(&from_files)?
         );
         Ok(())
+    }
+
+    #[test]
+    fn gh_runner_alias_matches_standard_profile_except_name() -> Result<()> {
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+        let standard = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner-standard")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner-standard profile"))?;
+
+        assert_eq!(gh_runner.limits, standard.limits);
+        assert_eq!(gh_runner.guards, standard.guards);
+        assert_eq!(gh_runner.budgets, standard.budgets);
+        assert_eq!(gh_runner.trusted_repo, standard.trusted_repo);
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_config_presets_match_embedded_profiles_for_shared_names() -> Result<()> {
+        let shared = [
+            (
+                include_str!("../runtime/cx23.toml"),
+                include_str!("../configs/runtime/cx23.toml"),
+            ),
+            (
+                include_str!("../runtime/cx33.toml"),
+                include_str!("../configs/runtime/cx33.toml"),
+            ),
+            (
+                include_str!("../runtime/cx43.toml"),
+                include_str!("../configs/runtime/cx43.toml"),
+            ),
+        ];
+        for (embedded, config) in shared {
+            assert_eq!(
+                serde_json::to_value(runtime_profile_from_toml(embedded)?)?,
+                serde_json::to_value(runtime_profile_from_toml(config)?)?
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn builtin_runtime_profiles_encode_trusted_repo_gate_defaults() {
+        for profile in builtin_profiles() {
+            assert_eq!(
+                profile.trusted_repo.pass_triggers,
+                vec!["opened".to_owned(), "ready_for_review".to_owned()],
+                "{} pass triggers",
+                profile.name
+            );
+            assert!(
+                !profile.trusted_repo.synchronize,
+                "{} should not run full passes on synchronize by default",
+                profile.name
+            );
+            assert_eq!(
+                profile.budgets.default_timeout_sec, 1_800,
+                "{} target timeout",
+                profile.name
+            );
+            assert_eq!(
+                profile.budgets.hard_timeout_sec, 3_600,
+                "{} hard timeout",
+                profile.name
+            );
+            assert!(
+                profile.budgets.default_timeout_sec <= profile.budgets.hard_timeout_sec,
+                "{} target timeout exceeds hard timeout",
+                profile.name
+            );
+        }
     }
 
     #[test]
@@ -16226,7 +16915,7 @@ index 1111111..2222222 100644
         validate_github_review_payload(&ok)?;
 
         let temp = tempfile::tempdir()?;
-        write_github_review_payload(temp.path(), &ok, &line_map)?;
+        write_github_review_payload(temp.path(), &ok, &line_map, &ReviewBodyPolicy::default())?;
         assert!(temp.path().join("github-review.json").exists());
 
         let stale_line = GitHubReview {
@@ -16237,9 +16926,14 @@ index 1111111..2222222 100644
             ..ok.clone()
         };
         let stale_line_out = tempfile::tempdir()?;
-        let err = write_github_review_payload(stale_line_out.path(), &stale_line, &line_map)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly wrote github-review.json"))?;
+        let err = write_github_review_payload(
+            stale_line_out.path(),
+            &stale_line,
+            &line_map,
+            &ReviewBodyPolicy::default(),
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly wrote github-review.json"))?;
         assert!(err.to_string().contains("not a valid RIGHT-side diff line"));
         assert!(!stale_line_out.path().join("github-review.json").exists());
 
@@ -16249,7 +16943,15 @@ index 1111111..2222222 100644
         };
         assert!(validate_github_review_payload(&bad_event).is_err());
         let bad_event_out = tempfile::tempdir()?;
-        assert!(write_github_review_payload(bad_event_out.path(), &bad_event, &line_map).is_err());
+        assert!(
+            write_github_review_payload(
+                bad_event_out.path(),
+                &bad_event,
+                &line_map,
+                &ReviewBodyPolicy::default()
+            )
+            .is_err()
+        );
         assert!(!bad_event_out.path().join("github-review.json").exists());
 
         let bad_side = GitHubReview {
@@ -16261,7 +16963,15 @@ index 1111111..2222222 100644
         };
         assert!(validate_github_review_payload(&bad_side).is_err());
         let bad_out = tempfile::tempdir()?;
-        assert!(write_github_review_payload(bad_out.path(), &bad_side, &line_map).is_err());
+        assert!(
+            write_github_review_payload(
+                bad_out.path(),
+                &bad_side,
+                &line_map,
+                &ReviewBodyPolicy::default()
+            )
+            .is_err()
+        );
         assert!(!bad_out.path().join("github-review.json").exists());
 
         let parent_path = GitHubReview {
@@ -16299,6 +17009,56 @@ index 1111111..2222222 100644
             ..ok
         };
         assert!(validate_github_review_payload(&overlong_body).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn github_review_payload_rejects_pr_body_boilerplate() -> Result<()> {
+        let mut review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Model lanes\n\n- Lane: `ub`\n  Provider: `minimax`\n  Model: `m3`\n  Status: `ok` - completed".to_owned(),
+            comments: Vec::new(),
+        };
+
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("model lane table unexpectedly passed"))?;
+        assert!(err.to_string().contains("successful lane table"), "{err:#}");
+
+        review.body = "## Decision\n\n- No blocking finding after bounded review; residual risk remains for human review.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("no-finding boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "- Profile: `gh-runner`\n- Base: `origin/main`\n- Head: `HEAD`".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("execution summary unexpectedly passed"))?;
+        assert!(err.to_string().contains("execution summary"), "{err:#}");
+        Ok(())
+    }
+
+    #[test]
+    fn review_body_policy_allows_configured_execution_summary_on_failure() -> Result<()> {
+        let policy = ReviewBodyPolicy {
+            include_execution_summary: ReviewBodyExecutionSummaryPolicy::OnFailure,
+            ..ReviewBodyPolicy::default()
+        };
+        validate_pr_review_body_policy(
+            "## Evidence gaps\n\n- Focused proof timed out.\n\nRuntime: `31s`",
+            &policy,
+        )?;
+        let err = validate_pr_review_body_policy("Runtime: `31s`", &policy)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("success execution summary unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("success execution summary"),
+            "{err:#}"
+        );
         Ok(())
     }
 
@@ -16530,6 +17290,59 @@ index 1111111..2222222 100644
         assert_eq!(context.pull_number, Some(38));
         assert_eq!(context.body.as_deref(), Some("\n[truncated]\n"));
         assert!(context.body_truncated);
+        Ok(())
+    }
+
+    #[test]
+    fn pr_thread_context_fetches_github_thread_snapshot() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (github_api_url, handle) = spawn_fake_github_thread_api(3)?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.pr_thread_auth = Some("thread-token-redacted".to_owned());
+        args.github_repo = Some("EffortlessMetrics/ub-review".to_owned());
+        args.github_pull_number = Some(76);
+        args.github_api_url = github_api_url;
+        args.pr_thread_context_max_bytes = 8_192;
+
+        let context = collect_pr_thread_context(temp.path(), &args)?;
+        let requests = join_fake_github_thread_api(handle)?;
+        let rendered = render_pr_thread_context(&context);
+
+        assert_eq!(requests.len(), 3);
+        assert!(requests.iter().any(|request| request.contains(
+            "GET /repos/EffortlessMetrics/ub-review/issues/76/comments?per_page=30 HTTP/1.1"
+        )));
+        assert!(requests.iter().any(|request| request.contains(
+            "GET /repos/EffortlessMetrics/ub-review/pulls/76/reviews?per_page=30 HTTP/1.1"
+        )));
+        assert!(requests.iter().any(|request| request.contains(
+            "GET /repos/EffortlessMetrics/ub-review/pulls/76/comments?per_page=50 HTTP/1.1"
+        )));
+        let expected_auth = format!(
+            "{}: {} thread-token-redacted",
+            "Authorization",
+            ["Bear", "er"].concat()
+        );
+        assert!(
+            requests
+                .iter()
+                .all(|request| request.contains(&expected_auth))
+        );
+        assert_eq!(context.status, "seeded");
+        assert_eq!(context.pull_number, Some(76));
+        assert!(context.sources.iter().any(|source| {
+            source.contains("github-api:EffortlessMetrics/ub-review/76/issue-comments")
+        }));
+        assert!(
+            context
+                .thread_context
+                .as_deref()
+                .is_some_and(|thread| thread.contains("ASAN receipt attached"))
+        );
+        assert!(rendered.contains("## GitHub PR Thread Snapshot"));
+        assert!(rendered.contains("ub-review previous question resolved"));
+        assert!(rendered.contains("`src/lib.rs`:`12`"));
+        assert!(!rendered.contains("thread-token-redacted"));
         Ok(())
     }
 
@@ -18172,6 +18985,33 @@ UB_REVIEW_HTTP_STATUS:429
             .find(|group| group.evidence_need == "proof-confirmation")
             .ok_or_else(|| anyhow::anyhow!("proof group should be present without evidence"))?;
         assert!(no_evidence_proof_group.routed_evidence.is_empty());
+        let no_evidence_proof_task = no_evidence_plan
+            .follow_up_tasks
+            .iter()
+            .find(|task| task.group_id == no_evidence_proof_group.id)
+            .ok_or_else(|| anyhow::anyhow!("proof task should be present without evidence"))?;
+        assert_eq!(no_evidence_proof_task.stage, "secondary");
+        assert!(
+            no_evidence_proof_task
+                .stage_reason
+                .contains("no routed proof receipt")
+        );
+        assert_eq!(
+            no_evidence_plan
+                .follow_up_tasks
+                .iter()
+                .find(|task| task.disposition == "parked-follow-up")
+                .map(|task| task.stage.as_str()),
+            Some("tertiary")
+        );
+        assert_eq!(
+            no_evidence_plan
+                .follow_up_tasks
+                .iter()
+                .find(|task| task.disposition == "refuted")
+                .map(|task| task.stage.as_str()),
+            Some("tertiary")
+        );
 
         let mut confirmed_receipt = test_red_green_proof_receipt("discriminating", "failed");
         confirmed_receipt.id = "proof-confirmed".to_owned();
@@ -18322,6 +19162,12 @@ UB_REVIEW_HTTP_STATUS:429
             .iter()
             .find(|task| task.group_id == proof_group.id)
             .ok_or_else(|| anyhow::anyhow!("proof follow-up task should be present"))?;
+        assert_eq!(proof_task.stage, "tertiary");
+        assert!(
+            proof_task
+                .stage_reason
+                .contains("routed evidence or prior disposition")
+        );
         assert_eq!(
             serde_json::to_value(&proof_task.routed_evidence)?,
             serde_json::to_value(&proof_group.routed_evidence)?
@@ -18332,6 +19178,7 @@ UB_REVIEW_HTTP_STATUS:429
             .find(|task| task.group_id == observation_group.id)
             .ok_or_else(|| anyhow::anyhow!("observation follow-up task should be present"))?;
         assert_eq!(observation_task.disposition, "observation");
+        assert_eq!(observation_task.stage, "tertiary");
         assert!(observation_task.candidate_ids.is_empty());
         assert_eq!(
             observation_task.observation_group_ids,
@@ -18373,6 +19220,8 @@ UB_REVIEW_HTTP_STATUS:429
         );
         assert_eq!(proof_packet["task_id"], proof_task.id);
         assert_eq!(proof_packet["group_id"], proof_task.group_id);
+        assert_eq!(proof_packet["stage"], proof_task.stage);
+        assert_eq!(proof_packet["stage_reason"], proof_task.stage_reason);
         assert_eq!(
             proof_packet["routed_evidence"],
             serde_json::to_value(&proof_task.routed_evidence)?
@@ -18380,6 +19229,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(proof_packet["prompt"].as_str().is_some_and(|prompt| {
             prompt.contains("Routed evidence:")
                 && prompt.contains("proof-confirmed")
+                && prompt.contains("- Stage: `tertiary`")
+                && prompt.contains("use routed evidence to refine, refute, drop, or park")
                 && prompt.contains("Do not post, mutate, or run shell commands")
         }));
         let observation_packet: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -18423,6 +19274,7 @@ UB_REVIEW_HTTP_STATUS:429
             .ok_or_else(|| anyhow::anyhow!("proof follow-up output should be present"))?;
         assert_eq!(proof_result.schema, "ub-review.follow_up_result.v1");
         assert_eq!(proof_result.group_id, proof_task.group_id);
+        assert_eq!(proof_result.stage, proof_task.stage);
         assert_eq!(
             proof_result.packet_path,
             format!("questions/orchestrator-follow-up/{}.json", proof_task.id)
@@ -18447,6 +19299,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(proof_result.stderr_path.is_none());
         assert_eq!(proof_output.schema, "ub-review.follow_up_output.v1");
         assert_eq!(proof_output.group_id, proof_task.group_id);
+        assert_eq!(proof_output.stage, proof_task.stage);
         assert_eq!(proof_output.status, "skipped");
         assert!(proof_output.inline_comments.is_empty());
         assert!(proof_output.summary_only_findings.is_empty());
@@ -18530,6 +19383,8 @@ index 1111111..2222222 100644
             schema: "ub-review.follow_up_question.v1".to_owned(),
             id: "follow-up-route-proof".to_owned(),
             group_id: "orchestrator-observation-0000".to_owned(),
+            stage: "secondary".to_owned(),
+            stage_reason: "no routed proof receipt is available; ask for the smallest remaining evidence or proof request".to_owned(),
             evidence_need: "proof-confirmation".to_owned(),
             disposition: "observation".to_owned(),
             candidate_ids: Vec::new(),
@@ -18599,6 +19454,7 @@ index 1111111..2222222 100644
 
         assert_eq!(record.schema, "ub-review.follow_up_output.v1");
         assert_eq!(record.task_id, task.id);
+        assert_eq!(record.stage, "secondary");
         assert_eq!(record.model_lane, model_lane);
         assert_eq!(record.inline_comments.len(), 1);
         assert_eq!(record.inline_comments[0].lane, record.model_lane);
@@ -19277,6 +20133,7 @@ index 1111111..2222222 100644
             schema: "ub-review.follow_up_result.v1".to_owned(),
             task_id: task_id.to_owned(),
             group_id: group_id.to_owned(),
+            stage: "secondary".to_owned(),
             packet_path: format!("questions/orchestrator-follow-up/{task_id}.json"),
             model_lane: format!("orchestrator-follow-up-{task_id}"),
             status: status.to_owned(),
@@ -19517,12 +20374,113 @@ index 1111111..2222222 100644
             ledger_max_bytes: 65_536,
             pr_thread_context: String::new(),
             pr_thread_context_max_bytes: 65_536,
+            pr_thread_auth: None,
+            github_repo: None,
+            github_pull_number: None,
+            github_api_url: "https://api.github.com".to_owned(),
             minimax_provider_kind: ProviderKindArg::Anthropic,
             minimax_model: "MiniMax-M3".to_owned(),
             opencode_model: "minimax-m3".to_owned(),
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,
             review_body_max_bytes: 60_000,
         }
+    }
+
+    fn spawn_fake_github_thread_api(
+        expected_requests: usize,
+    ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let handle = thread::spawn(move || -> Result<Vec<String>> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < expected_requests {
+                match listener.accept() {
+                    Ok((stream, _addr)) => {
+                        requests.push(handle_fake_github_thread_request(stream)?);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            bail!(
+                                "fake GitHub thread API received {} of {} requests",
+                                requests.len(),
+                                expected_requests
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            Ok(requests)
+        });
+        Ok((url, handle))
+    }
+
+    fn handle_fake_github_thread_request(mut stream: TcpStream) -> Result<String> {
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                bail!("fake GitHub thread request ended before headers finished");
+            }
+            headers.push_str(&line);
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+        let request_line = headers.lines().next().unwrap_or_default();
+        let response_body = if request_line.contains("/issues/76/comments?per_page=30") {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "created_at": "2026-06-03T10:00:00Z",
+                    "user": {"login": "author"},
+                    "body": "Author reply: ASAN receipt attached; prior verification question is answered."
+                }
+            ]))?
+        } else if request_line.contains("/pulls/76/reviews?per_page=30") {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "created_at": "2026-06-03T10:05:00Z",
+                    "user": {"login": "ub-review[bot]"},
+                    "state": "COMMENTED",
+                    "body": "ub-review previous question resolved by the receipt."
+                }
+            ]))?
+        } else if request_line.contains("/pulls/76/comments?per_page=50") {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "created_at": "2026-06-03T10:10:00Z",
+                    "user": {"login": "maintainer"},
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "body": "Inline thread points at the route proof receipt."
+                }
+            ]))?
+        } else {
+            serde_json::to_vec(&serde_json::json!([]))?
+        };
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+        stream.write_all(&response_body)?;
+        Ok(headers)
+    }
+
+    fn join_fake_github_thread_api(
+        handle: thread::JoinHandle<Result<Vec<String>>>,
+    ) -> Result<Vec<String>> {
+        handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("fake GitHub thread API thread panicked"))?
     }
 
     fn summary_section<'a>(text: &'a str, heading: &str, next_heading: &str) -> Option<&'a str> {

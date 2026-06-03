@@ -42,6 +42,11 @@ comma-separated IDs and are recorded in `resolved-plan.json`.
 Use `runtime-profile` for box budgets and local work limits; `profile` is kept
 as the backward-compatible action input.
 
+The default review-body policy keeps PR commentary free of lane rosters,
+successful provider/model status tables, execution summaries, and generic
+no-finding boilerplate. Those surfaces stay in artifacts; `github-review.json`
+is written only when reviewer-value content survives compilation.
+
 ## Permissions
 
 The workflow uses the built-in token with pull-request write scope to create one

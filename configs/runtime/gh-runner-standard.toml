@@ -1,4 +1,4 @@
-name = "gh-runner"
+name = "gh-runner-standard"
 
 [limits]
 logical_lanes = 20

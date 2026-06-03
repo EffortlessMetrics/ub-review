@@ -18,6 +18,12 @@ ban_standalone_approval = true
 require_zero_finding_audit = true
 enable_default_lanes = true
 
+[review_body]
+include_successful_lane_table = false
+include_provider_table = "on_failure"
+include_sensor_table = "on_failure"
+include_execution_summary = "none"
+
 [tools.tokmd]
 enabled = true
 class = "packet"

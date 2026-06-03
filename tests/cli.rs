@@ -218,6 +218,34 @@ fn active_len_tracks_view_after_resize() {
         resolved_profile["profile"]["budgets"]["proof_memory_mb"],
         serde_json::json!(2048)
     );
+    assert_eq!(
+        resolved_profile["profile"]["budgets"]["default_timeout_sec"],
+        serde_json::json!(1800)
+    );
+    assert_eq!(
+        resolved_profile["profile"]["budgets"]["hard_timeout_sec"],
+        serde_json::json!(3600)
+    );
+    assert_eq!(
+        resolved_profile["profile"]["trusted_repo"]["pass_triggers"],
+        serde_json::json!(["opened", "ready_for_review"])
+    );
+    assert_eq!(
+        resolved_profile["profile"]["trusted_repo"]["synchronize"],
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        resolved_profile["review_body"]["include_successful_lane_table"],
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        resolved_profile["review_body"]["include_provider_table"],
+        serde_json::json!("on_failure")
+    );
+    assert_eq!(
+        resolved_profile["review_body"]["include_execution_summary"],
+        serde_json::json!("none")
+    );
     assert_eq!(resolved_profile["review"]["posting_engine"], "artifact");
     assert!(resolved_profile["tools"]["tokmd"]["enabled"].as_bool() == Some(true));
     let resolved_plan: serde_json::Value =
@@ -227,10 +255,27 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["profile_name"], "gh-runner");
     assert_eq!(resolved_plan["runtime_profile"], "gh-runner");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
-    assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 900);
+    assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 1800);
+    assert_eq!(resolved_plan["budgets"]["hard_timeout_sec"], 3600);
     assert_eq!(resolved_plan["budgets"]["proof_max_focused_tests"], 1);
     assert_eq!(resolved_plan["budgets"]["proof_total_timeout_sec"], 600);
     assert_eq!(resolved_plan["budgets"]["proof_disk_mb"], 1024);
+    assert_eq!(
+        resolved_plan["trusted_repo"]["pass_triggers"],
+        serde_json::json!(["opened", "ready_for_review"])
+    );
+    assert_eq!(
+        resolved_plan["trusted_repo"]["synchronize"],
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        resolved_plan["review_body"]["include_successful_lane_table"],
+        serde_json::json!(false)
+    );
+    assert_eq!(
+        resolved_plan["review_body"]["include_sensor_table"],
+        serde_json::json!("on_failure")
+    );
     assert_eq!(resolved_plan["limits"]["sensor_jobs"], 4);
     assert_eq!(resolved_plan["selectors"]["depth"], "standard");
     assert_eq!(resolved_plan["selectors"]["lane_width"], 10);
@@ -293,7 +338,41 @@ fn active_len_tracks_view_after_resize() {
     );
     assert_eq!(capped_resolved_plan["budgets"]["proof_cpu"], 1);
     assert_eq!(capped_resolved_plan["budgets"]["proof_memory_mb"], 1024);
+    assert_eq!(capped_resolved_plan["budgets"]["hard_timeout_sec"], 3600);
     assert_eq!(capped_resolved_plan["selectors"]["model_concurrency"], 12);
+    let full_out = temp.path().join("packet-full-profile");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&full_out)?,
+            "--runtime-profile",
+            "gh-runner-full",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    let full_resolved_plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(full_out.join("resolved-plan.json"))?)?;
+    assert_eq!(full_resolved_plan["runtime_profile"], "gh-runner-full");
+    assert_eq!(full_resolved_plan["budgets"]["mutation"], true);
+    assert_eq!(full_resolved_plan["budgets"]["sanitizer"], true);
+    assert_eq!(
+        full_resolved_plan["trusted_repo"]["pass_triggers"],
+        serde_json::json!(["opened", "ready_for_review"])
+    );
     assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
         sensors
             .iter()
@@ -1249,6 +1328,57 @@ fn post_receipt_marks_semantically_invalid_review_json_invalid() -> Result<()> {
     assert!(!post_error_text.contains(token));
     assert!(!post_error_text.contains("Authorization"));
     assert!(!post_error_text.contains("Bearer"));
+    Ok(())
+}
+
+#[test]
+fn post_receipt_rejects_boilerplate_review_body_before_payload_write() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let out = temp.path().join("post");
+    let token = "test-token-redacted";
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Model lanes\n\n- Lane: `ub`\n  Provider: `minimax`\n  Model: `MiniMax-M3`\n  Status: `ok` - completed",
+            "comments": []
+        }))?,
+    )?;
+
+    run(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "1",
+            "--github-token",
+            token,
+        ],
+    )?;
+
+    let post_error_path = out.join("post-error.json");
+    assert!(post_error_path.exists());
+    let post_error_text = fs::read_to_string(post_error_path)?;
+    let post_error: serde_json::Value = serde_json::from_str(&post_error_text)?;
+    assert_eq!(post_error["status"], "failed");
+    assert_eq!(post_error["error_kind"], "invalid_review_payload");
+    assert_eq!(post_error["failure_stage"], "payload_validation");
+    assert_eq!(post_error["would_post"], false);
+    assert_eq!(post_error["payload_written"], false);
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("successful lane table"))
+    );
+    assert!(!post_error_text.contains(token));
     Ok(())
 }
 
