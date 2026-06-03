@@ -1146,6 +1146,7 @@ path = "src/lib.rs"
         bin,
         &[
             "run",
+            "--dry-run",
             "--config",
             path_str(&config)?,
             "--root",
