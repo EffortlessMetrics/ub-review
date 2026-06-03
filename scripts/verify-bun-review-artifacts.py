@@ -98,8 +98,11 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
+        "review/resource_leases.json",
+        "review/resource_plan.md",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
+        "resource_leases.ndjson",
     ]:
         require_file(root / path)
     if not (root / "review/github-review.json").exists() and not (
@@ -250,6 +253,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("metrics proof_requests is not an integer")
     if not isinstance(metrics.get("proof_receipts"), int):
         fail("metrics proof_receipts is not an integer")
+    if not isinstance(metrics.get("resource_leases"), int):
+        fail("metrics resource_leases is not an integer")
     observations = load_json(root / "review/observations.json")
     if not isinstance(observations, list):
         fail("review/observations.json is not an array")
@@ -272,6 +277,14 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if review.get("proof_receipts", []) != proof_receipts:
         fail("review proof_receipts does not match review/proof_receipts.json")
     require_proof_receipt_ndjson(root, proof_receipts)
+    resource_leases = load_json(root / "review/resource_leases.json")
+    if not isinstance(resource_leases, list):
+        fail("review/resource_leases.json is not an array")
+    if metrics.get("resource_leases") != len(resource_leases):
+        fail("metrics resource_leases does not match review/resource_leases.json")
+    if review.get("resource_leases", []) != resource_leases:
+        fail("review resource_leases does not match review/resource_leases.json")
+    require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     require_observation_files(root, observations)
     if (root / "review/github-review-skip.json").exists():
         if metrics.get("review_payload_status") != "skipped_empty_smoke":
@@ -335,6 +348,63 @@ def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict])
             fail(f"invalid proof_receipts.ndjson line {index + 1}: {error}")
         if parsed != proof_receipts[index]:
             fail(f"proof_receipts.ndjson line {index + 1} does not match JSON artifact")
+
+
+def require_resource_lease_artifacts(
+    root: pathlib.Path, proof_receipts: list[dict], resource_leases: list[dict]
+) -> None:
+    for lease in resource_leases:
+        require_resource_lease_schema(lease)
+    ndjson_path = root / "resource_leases.ndjson"
+    text = read_text(ndjson_path)
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) != len(resource_leases):
+        fail("resource_leases.ndjson line count does not match review/resource_leases.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid resource_leases.ndjson line {index + 1}: {error}")
+        if parsed != resource_leases[index]:
+            fail(f"resource_leases.ndjson line {index + 1} does not match JSON artifact")
+
+    resource_plan = read_text(root / "review/resource_plan.md")
+    if "# Resource lease plan" not in resource_plan:
+        fail("review/resource_plan.md missing heading")
+    if resource_leases and "## Focused proof leases" not in resource_plan:
+        fail("review/resource_plan.md missing focused proof lease section")
+
+    focused_leases = {
+        lease["consumer"]: lease for lease in resource_leases if lease.get("kind") == "focused-test"
+    }
+    focused_receipts = [
+        receipt
+        for receipt in proof_receipts
+        if receipt.get("kind") in {"focused-head", "focused-red-green"}
+    ]
+    for receipt in focused_receipts:
+        lease = focused_leases.get(receipt["id"])
+        if lease is None:
+            fail(f"focused proof receipt lacks resource lease: {receipt!r}")
+        expected = expected_lease_statuses_for_proof_result(receipt["result"])
+        if lease["status"] not in expected:
+            fail(
+                "focused proof lease status does not match receipt result: "
+                f"lease={lease!r} receipt={receipt!r}"
+            )
+
+    receipt_ids = {receipt["id"] for receipt in focused_receipts}
+    for consumer in focused_leases:
+        if consumer not in receipt_ids:
+            fail(f"focused proof lease has no matching proof receipt: {consumer}")
+
+
+def expected_lease_statuses_for_proof_result(result: str) -> set[str]:
+    if result == "skipped_budget":
+        return {"exhausted"}
+    if result == "skipped_profile":
+        return {"granted", "skipped_profile"}
+    return {"granted"}
 
 
 def require_proof_request_groups(root: pathlib.Path, proof_requests: list[dict]) -> None:
@@ -801,6 +871,29 @@ def require_proof_command_receipt_schema(command: dict) -> None:
         fail(f"proof command receipt duration_ms is invalid: {command!r}")
 
 
+def require_resource_lease_schema(lease: dict) -> None:
+    if lease.get("schema") != "ub-review.resource_lease.v1":
+        fail(f"resource lease has wrong schema: {lease!r}")
+    for field in ["id", "kind", "consumer", "status", "reason"]:
+        if not isinstance(lease.get(field), str) or not lease[field]:
+            fail(f"resource lease missing string field {field}: {lease!r}")
+    if lease["kind"] != "focused-test":
+        fail(f"resource lease has unsupported kind: {lease!r}")
+    if lease["status"] not in {"granted", "exhausted", "skipped_profile"}:
+        fail(f"resource lease has unsupported status: {lease!r}")
+    for field in ["cpu", "memory_mb", "disk_mb", "timeout_sec"]:
+        value = lease.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"resource lease {field} is not a non-negative integer: {lease!r}")
+    for field in ["network", "scratch"]:
+        if lease.get(field) not in {True, False}:
+            fail(f"resource lease {field} is not bool: {lease!r}")
+    if lease.get("worktree") is not None and not isinstance(lease.get("worktree"), str):
+        fail(f"resource lease worktree is not string/null: {lease!r}")
+    if lease.get("command") is not None and not isinstance(lease.get("command"), str):
+        fail(f"resource lease command is not string/null: {lease!r}")
+
+
 def require_proof_request_group_schema(group: dict) -> None:
     if group.get("schema") != "ub-review.proof_request_group.v1":
         fail(f"proof request group has wrong schema: {group!r}")
@@ -921,6 +1014,9 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/post-error.json",
         root / "review/post-stdout.json",
         root / "review/post-stderr.txt",
+        root / "review/resource_leases.json",
+        root / "review/resource_plan.md",
+        root / "resource_leases.ndjson",
     ]
     paths.extend((root / "lanes").glob("*.md"))
     paths.extend((root / "sensors").glob("*/ub-review-sensor-status.json"))
