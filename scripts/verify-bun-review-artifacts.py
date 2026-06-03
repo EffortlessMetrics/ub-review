@@ -12,7 +12,6 @@ import sys
 from typing import Any
 
 
-LANES = ["ub", "source-route", "tests", "arch", "opposition", "security"]
 SENSORS = ["tokmd", "ripr", "unsafe-review", "ast-grep"]
 APPROVAL_LINES = {
     "lgtm",
@@ -84,6 +83,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "input/diff.patch",
         "input/diff-context.json",
         "events.ndjson",
+        "plan.json",
         "running-summary.md",
         "review/shared_context.md",
         "review/provider-preflight-status.json",
@@ -112,8 +112,17 @@ def require_common_tree(root: pathlib.Path) -> None:
     for sensor in SENSORS:
         require_file(root / "sensors" / sensor / "ub-review-sensor-status.json")
 
-    for lane in LANES:
-        lane_path = require_file(root / "lanes" / f"{lane}.md")
+    plan = load_json(root / "plan.json")
+    lanes = plan.get("lanes")
+    if not isinstance(lanes, list):
+        fail("plan.json lanes is not an array")
+    for lane_item in lanes:
+        if not isinstance(lane_item, dict):
+            fail(f"plan.json lane is not an object: {lane_item!r}")
+        lane = lane_item.get("id")
+        if not isinstance(lane, str) or not lane:
+            fail(f"plan.json lane missing id: {lane_item!r}")
+        lane_path = require_file(root / "lanes" / f"{sanitize_artifact_name(lane)}.md")
         lane_text = read_text(lane_path)
         if f"[{lane}]" not in lane_text:
             fail(f"lane packet {lane_path} does not include [{lane}] prefix")
