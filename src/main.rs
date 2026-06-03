@@ -6804,7 +6804,10 @@ fn render_review_body(
     text.push_str("- Missing evidence is not a failed objection; it is listed separately below.\n");
 
     text.push_str("\n## Residual risk\n\n");
-    text.push_str("- A human should inspect unsafe/native seams, test-oracle strength, and any unavailable sensor/model evidence before relying on this review.\n");
+    text.push_str(&format!(
+        "- {}\n",
+        residual_risk_for_diff_class(plan.diff_class)
+    ));
 
     text.push_str("\n## Parked follow-ups\n\n");
     let parked = summary_only_findings

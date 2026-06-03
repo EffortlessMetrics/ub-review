@@ -113,6 +113,8 @@ def require_common_tree(root: pathlib.Path) -> None:
         require_file(root / "sensors" / sensor / "ub-review-sensor-status.json")
 
     plan = load_json(root / "plan.json")
+    if not isinstance(plan, dict):
+        fail("plan.json is not an object")
     lanes = plan.get("lanes")
     if not isinstance(lanes, list):
         fail("plan.json lanes is not an array")
