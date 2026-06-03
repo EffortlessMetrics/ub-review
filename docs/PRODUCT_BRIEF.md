@@ -57,62 +57,67 @@ reviewer's time.
 
 ub-review is proof-backed PR review. It uses the CI runner as an investigation bench: prepare evidence once, run focused model lanes, execute relevant proof centrally, and post only the result a reviewer needs.
 
-## Product category
+## Gate category
 
-`ub-review` is an evidence-first CI review gate. It replaces the usual split
-between generic review bot, ad hoc proof job, and manual first-pass triage with
-one runner-owned review pass:
+`ub-review` is not a generic LLM comment bot. It is an evidence-first CI review
+gate:
 
 ```text
-published sensors -> evidence planner -> proof broker -> model lanes -> review compiler
+diff packet -> sensors -> model lanes + proof planner/proof broker -> review compiler
 ```
 
-The category is not "LLM review comments." The category is proof-backed review
-inside CI. The runner prepares evidence once, leases local proof work while
-remote model calls wait on network I/O, and compiles one review artifact that a
-maintainer can act on.
+The runner prepares evidence once, leases local proof work while remote model
+calls wait on network I/O, and compiles one review artifact. A useful pass is
+not measured by how much text it posts; it is measured by whether it changes a
+reviewer's decision with grounded evidence.
 
-## Sensor moat
+## Evidence stack
 
-The defensible layer is the sensor stack:
+The Rust-first stack is deliberately layered:
 
-- `tokmd` prepares deterministic repository and diff packets.
-- `ripr` exposes changed-behavior test-oracle weakness before slower mutation
-  runs.
-- `unsafe-review` makes unsafe/native seams reviewable through safety-contract,
-  guard, reach, and witness evidence.
-- `cargo-allow` keeps controlled exceptions owned and auditable.
-- MergeCode can become the semantic context sensor for non-Rust code once it is
-  wired into the packet path.
+- `tokmd` prepares deterministic repository, diff, cockpit, and bounded-context
+  packets.
+- `cargo-allow` owns retained source-tree exceptions.
+- `ripr` owns static mutation-exposure and weak-oracle signal.
+- `unsafe-review` owns unsafe/native reviewability.
+- `ast-grep` and actionlint own structural sibling and workflow checks.
+- Codecov, cargo-mutants, Miri, and sanitizers are scoped runtime backstops.
 
-The orchestration layer is intentionally ordinary: route context, ask bounded
-questions, schedule proof once, and compile a concise review. The sensors make
-that orchestration useful because they turn a raw diff into evidence that can be
-routed, checked, refuted, and receipted.
+`ub-review` calls those tools, normalizes receipts, routes evidence, and files
+grounded defects in the matching tool repo. It does not reimplement specialized
+tool logic, and it does not turn missing evidence into a pass.
 
-## Economic model
+## Intelligent PR gate
 
-The budget rule is simple: the runner is the scarce resource, not model tokens.
-A standard pass should spend one GitHub runner lease on evidence preparation,
-model fanout, focused proof, and one grouped review. Remote model calls are
-network I/O; they run concurrently with local proof and should not cause the
-CPU, disk, or checkout to sit idle.
+The review compiler is the product boundary. It should post only evidence that
+changes reviewer action:
 
-Target operating envelope:
+- confirmed findings;
+- verification questions;
+- proof results and refutations;
+- residual risk;
+- trust-affecting missing evidence.
 
-| Deployment | Target cost posture |
-|---|---|
-| GitHub-hosted runner | Two useful review passes per PR under the small-runner budget. |
-| Self-hosted runner | Same evidence contract with lower per-PR runner cost. |
-| Trusted repo default | `opened` and `ready_for_review`, no default `synchronize` spend. |
+Successful setup tables, lane rosters, provider status, raw command logs,
+generic no-finding prose, and scratch observations stay in artifacts. A clean
+run can produce no PR review payload; a degraded run should name the missing or
+failed evidence that changes trust.
 
-The proof broker and evidence planner exist to keep this economics true: only
-proof likely to change the review decision should consume the local lease.
+## Economics
 
-## Dogfood proof
+The scarce resource is the runner lease. Trusted repos default to two useful
+passes, `opened` and `ready_for_review`, with no full `synchronize` spend unless
+the repo opts in. Each standard pass targets 30 minutes of local proof work and
+has a 60-minute hard timeout.
 
-The first proof wedge is the Bun UB work. The Bun profile forces the system to
-review hard native-boundary changes where generic diff chat is weakest:
+The proof planner and proof broker keep that economics honest: lanes request
+proof, the runner executes each useful command once, and proof runs only when it
+is likely to change the review decision.
+
+## Dogfood boundary
+
+The Bun UB profile is the first hard calibration target, not the default shape
+of every repository. It stresses the system on native-boundary review problems:
 
 - resizable ArrayBuffer active-view and backing-store mistakes;
 - stale pointer/length hazards;
@@ -120,27 +125,17 @@ review hard native-boundary changes where generic diff chat is weakest:
 - tests that execute code but fail to prove the changed behavior;
 - unsafe/native contracts that need explicit review evidence.
 
-The product story and the audit story are the same story: UB findings are sensor
-receipts that demonstrate why evidence-first review is materially different from
-model-only diff navigation.
+Bun findings should be recorded as calibration evidence only at the strength the
+receipts support. Draft or unmerged findings are useful signal, not stronger
+product proof.
 
-## Honest risks
+## Proof obligations
 
-- The product is not complete until the proof broker, resource broker, coverage
-  sensor, ready-pass context ingestion, evidence planner lane, and MergeCode
-  sensor path are implemented and proven together.
-- The Bun evidence is strongest when fixes merge upstream; unmerged findings are
-  still useful calibration but weaker external proof.
-- The sensor moat is currently Rust-deep. MergeCode integration is the path from
-  Rust-first strength to broader language coverage.
-- The review compiler must stay strict. Missing evidence, provider failures, and
-  skipped sensors must remain explicit gaps, never positive safety claims.
-
-## Next proof obligations
-
-1. Ship and calibrate the remaining Bun UB findings.
-2. Build the proof broker so lanes request proof and the runner executes it once.
-3. Wire MergeCode as a semantic context sensor.
-4. Add the evidence planner lane that selects PR-specific proof work.
-5. Keep the artifact contract auditable enough that every review claim has a
-   route back to diff, sensor, model lane, or proof receipt.
+1. Keep PR review bodies free of boilerplate in clean and degraded runs.
+2. Expand proof-broker and resource-broker coverage from focused v0 proof to
+   risk-routed runtime backstops.
+3. Keep runner images aligned with the documented sensor stack.
+4. Calibrate Bun UB findings through the ledger without overstating unmerged
+   evidence.
+5. Preserve claim traceability from every review statement back to diff, sensor,
+   model lane, or proof receipt.
