@@ -896,6 +896,21 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert_eq!(commands[0]["status"], "passed");
     assert_eq!(commands[1]["side"], "base-plus-tests");
     assert_eq!(commands[1]["status"], "failed");
+    assert_eq!(commands[0]["env"], serde_json::json!({}));
+    assert_eq!(
+        commands[1]["env"],
+        serde_json::json!({"USE_SYSTEM_BUN": "1"})
+    );
+    assert!(
+        commands[0]["command"]
+            .as_str()
+            .is_some_and(|command| command.starts_with("bun bd test "))
+    );
+    assert!(
+        commands[1]["command"]
+            .as_str()
+            .is_some_and(|command| command.starts_with("USE_SYSTEM_BUN=1 bun test "))
+    );
     assert!(
         commands[0]["command"]
             .as_str()
