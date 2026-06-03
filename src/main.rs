@@ -7747,7 +7747,7 @@ fn render_review_body(
 #[allow(clippy::too_many_arguments)]
 fn render_pull_request_review_body(
     _shared_context_id: &str,
-    plan: &Plan,
+    _plan: &Plan,
     _diff: &DiffContext,
     _missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     _missing_or_failed_model_evidence: &[ModelEvidenceIssue],
@@ -7844,12 +7844,21 @@ fn render_pull_request_review_body(
     let current_proof_failure = proof_receipts
         .iter()
         .any(|receipt| receipt.result == "head_failed");
-    let has_decision_item = !inline_comments.is_empty()
-        || !summary_concerns.is_empty()
-        || !concern_observations.is_empty()
-        || !verification_questions.is_empty()
-        || !verification_observations.is_empty()
-        || current_proof_failure;
+    let finding_count = inline_comments.len() + summary_concerns.len() + concern_observations.len();
+    let verification_count = verification_questions.len() + verification_observations.len();
+    let has_test_proof_verification = verification_questions
+        .iter()
+        .any(|finding| text_is_test_proof_review_question(&finding.reason))
+        || verification_observations
+            .iter()
+            .any(|observation| text_is_test_proof_review_question(&observation.claim));
+    let decision_sentence = pr_decision_sentence(PrDecisionContext {
+        finding_count,
+        verification_count,
+        has_test_proof_verification,
+        current_proof_failure,
+    });
+    let has_decision_item = decision_sentence.is_some();
     let has_reviewer_value_item = has_decision_item
         || !refuted_observations.is_empty()
         || !proof_result_receipts.is_empty()
@@ -7862,23 +7871,10 @@ fn render_pull_request_review_body(
         return String::new();
     }
 
-    if has_decision_item {
+    if let Some(decision_sentence) = decision_sentence {
         text.push_str("## Decision\n\n");
         text.push_str("- ");
-        text.push_str(&pr_decision_sentence(PrDecisionContext {
-            diff_class: plan.diff_class,
-            finding_count: inline_comments.len()
-                + summary_concerns.len()
-                + concern_observations.len(),
-            verification_count: verification_questions.len() + verification_observations.len(),
-            has_test_proof_verification: verification_questions
-                .iter()
-                .any(|finding| text_is_test_proof_review_question(&finding.reason))
-                || verification_observations
-                    .iter()
-                    .any(|observation| text_is_test_proof_review_question(&observation.claim)),
-            current_proof_failure,
-        }));
+        text.push_str(decision_sentence);
         text.push('\n');
     }
 
@@ -7968,42 +7964,30 @@ fn render_pull_request_review_body(
     cap_review_body(text, review_body_max_bytes)
 }
 
-fn no_blocking_decision_for_diff_class(diff_class: DiffClass) -> &'static str {
-    match diff_class {
-        DiffClass::SourceUb => "No blocking UB finding from this pass.",
-        DiffClass::SourceGeneral => "No blocking source finding from this pass.",
-        DiffClass::TestsOnly => "No blocking test finding from this pass.",
-        DiffClass::WorkflowTooling => "No blocking workflow finding from this pass.",
-        DiffClass::DocsOnly => "No blocking docs finding from this pass.",
-        DiffClass::ArtifactOnlySmoke => "No blocking review-packet finding from this pass.",
-    }
-}
-
 struct PrDecisionContext {
-    diff_class: DiffClass,
     finding_count: usize,
     verification_count: usize,
     has_test_proof_verification: bool,
     current_proof_failure: bool,
 }
 
-fn pr_decision_sentence(context: PrDecisionContext) -> String {
+fn pr_decision_sentence(context: PrDecisionContext) -> Option<&'static str> {
     if context.finding_count > 0 {
-        return "Needs reviewer attention before upstream: findings remain.".to_owned();
+        return Some("Needs reviewer attention before upstream: findings remain.");
     }
     if context.current_proof_failure {
-        return "Needs focused proof failure resolved before upstream.".to_owned();
+        return Some("Needs focused proof failure resolved before upstream.");
     }
     if context.verification_count == 1 {
         if context.has_test_proof_verification {
-            return "Needs one test-proof clarification before upstream.".to_owned();
+            return Some("Needs one test-proof clarification before upstream.");
         }
-        return "Needs one verification check before upstream.".to_owned();
+        return Some("Needs one verification check before upstream.");
     }
     if context.verification_count > 1 {
-        return "Needs verification checks before upstream.".to_owned();
+        return Some("Needs verification checks before upstream.");
     }
-    no_blocking_decision_for_diff_class(context.diff_class).to_owned()
+    None
 }
 
 fn proof_receipt_changes_review_value(receipt: &ProofReceipt) -> bool {
@@ -10236,10 +10220,10 @@ mod tests {
         LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider,
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, Profile, ProofBudget,
-        ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg,
-        RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
+        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, Profile,
+        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
+        ReviewArgs, ReviewBodyAudience, ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode,
         SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, ToolClass,
         apply_model_output, apply_refuter_output, build_review_metrics,
         build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
@@ -10248,14 +10232,14 @@ mod tests {
         direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
         github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
         model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, opencode_canary_spec, proof_budget,
-        provider_spec_for_lane_with_key_state, render_ledger_context, render_review_body,
-        render_summary, review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, sha256_hex, split_curl_http_status,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        model_request_payload, model_response_shape, opencode_canary_spec, pr_decision_sentence,
+        proof_budget, provider_spec_for_lane_with_key_state, render_ledger_context,
+        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor, sha256_hex,
+        split_curl_http_status, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
     };
 
@@ -12313,7 +12297,7 @@ index 1111111..2222222 100644
         let line_map = right_side_diff_lines(patch);
         let ok = GitHubReview {
             event: "COMMENT".to_owned(),
-            body: "## Decision\n\n- No blocking finding after bounded review; evidence is incomplete.\n\n## No blocking finding after checking\n\n- packet\n\n## Failed objections\n\n- missing evidence is listed separately\n\n## Residual risk\n\n- human review".to_owned(),
+            body: "## Verification questions\n\n- Confirm the added regression test fails on base+tests, not only that it passes on HEAD.".to_owned(),
             comments: vec![GitHubReviewComment {
                 path: "src/lib.rs".to_owned(),
                 line: 2,
@@ -13017,6 +13001,18 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("## Residual risk"));
         assert!(!body.contains("A human should still inspect"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_decision_has_no_default_no_finding_sentence() {
+        let decision = pr_decision_sentence(PrDecisionContext {
+            finding_count: 0,
+            verification_count: 0,
+            has_test_proof_verification: false,
+            current_proof_failure: false,
+        });
+
+        assert!(decision.is_none());
     }
 
     #[test]
