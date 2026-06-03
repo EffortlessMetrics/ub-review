@@ -236,7 +236,7 @@ target/ub-review/input/diff.patch
 
 The `bun-ub` preset loads `profiles/bun-ub-v0.toml` as the Bun review profile.
 The runtime profile (`gh-runner`, `cx23`, `cx33`, or `cx43`) supplies box
-budgets separately.
+budgets separately from `runtime/*.toml`.
 
 The profile creates six lane packets:
 

@@ -633,6 +633,54 @@ struct Profile {
     budgets: Budgets,
 }
 
+#[derive(Debug, Deserialize)]
+struct RuntimeProfileFile {
+    name: String,
+    limits: RuntimeLimitsFile,
+    guards: RuntimeGuardsFile,
+    budgets: RuntimeBudgetsFile,
+}
+
+#[derive(Debug, Deserialize)]
+struct RuntimeLimitsFile {
+    logical_lanes: usize,
+    llm_in_flight: usize,
+    sensor_jobs: usize,
+    repo_read: usize,
+    raw_file_reads: usize,
+    grep: usize,
+    ast_grep: usize,
+    git: usize,
+    tests: usize,
+    builds: usize,
+    rust_analyzer: usize,
+    summary_writers: usize,
+    patch_writers: usize,
+}
+
+#[derive(Debug, Deserialize)]
+struct RuntimeGuardsFile {
+    min_free_mem_mb: u64,
+    min_free_disk_mb: u64,
+    max_load_1m: f32,
+}
+
+#[derive(Debug, Deserialize)]
+struct RuntimeBudgetsFile {
+    artifact_budget_mb: u64,
+    scratch_budget_mb: u64,
+    default_timeout_sec: u64,
+    proof_max_focused_test_files: usize,
+    proof_max_focused_tests: usize,
+    proof_command_timeout_sec: u64,
+    proof_total_timeout_sec: u64,
+    proof_cpu: u32,
+    proof_memory_mb: u64,
+    proof_disk_mb: u64,
+    proof_network: bool,
+    proof_scratch: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 struct Limits {
@@ -1899,55 +1947,61 @@ impl Default for ReviewConfig {
 
 impl Default for Profile {
     fn default() -> Self {
-        profile(
-            "gh-runner",
-            20,
-            16,
-            4,
-            6,
-            3,
-            2,
-            2,
-            2,
-            0,
-            1_500,
-            4_000,
-            6.0,
-            750,
-            4_000,
-            900,
-            ProofBudget {
-                max_focused_test_files: 3,
-                max_focused_tests: 1,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 600,
-            },
-            ProofLeaseBudget {
-                cpu: 2,
-                memory_mb: 2_048,
-                disk_mb: 1_024,
-                network: false,
-                scratch: true,
-            },
-        )
+        Self {
+            name: "gh-runner".to_owned(),
+            limits: Limits::default(),
+            guards: Guards::default(),
+            budgets: Budgets::default(),
+        }
     }
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        Profile::default().limits
+        Self {
+            logical_lanes: 20,
+            llm_in_flight: 16,
+            sensor_jobs: 4,
+            repo_read: 6,
+            raw_file_reads: 6,
+            grep: 3,
+            ast_grep: 2,
+            git: 2,
+            tests: 2,
+            builds: 0,
+            rust_analyzer: 0,
+            summary_writers: 1,
+            patch_writers: 0,
+        }
     }
 }
 
 impl Default for Guards {
     fn default() -> Self {
-        Profile::default().guards
+        Self {
+            min_free_mem_mb: 1_500,
+            min_free_disk_mb: 4_000,
+            max_load_1m: 6.0,
+        }
     }
 }
 
 impl Default for Budgets {
     fn default() -> Self {
-        Profile::default().budgets
+        Self {
+            artifact_budget_mb: 750,
+            scratch_budget_mb: 4_000,
+            default_timeout_sec: 900,
+            proof_max_focused_test_files: 3,
+            proof_max_focused_tests: 1,
+            proof_command_timeout_sec: 300,
+            proof_total_timeout_sec: 600,
+            proof_cpu: 2,
+            proof_memory_mb: 2_048,
+            proof_disk_mb: 1_024,
+            proof_network: false,
+            proof_scratch: true,
+        }
     }
 }
 
@@ -12443,192 +12497,56 @@ fn detect_disk_free_mb() -> Option<u64> {
 }
 
 fn builtin_profiles() -> Vec<Profile> {
-    vec![
-        profile(
-            "gh-runner",
-            20,
-            16,
-            4,
-            6,
-            3,
-            2,
-            2,
-            2,
-            0,
-            1_500,
-            4_000,
-            6.0,
-            750,
-            4_000,
-            900,
-            ProofBudget {
-                max_focused_test_files: 3,
-                max_focused_tests: 1,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 600,
-            },
-            ProofLeaseBudget {
-                cpu: 2,
-                memory_mb: 2_048,
-                disk_mb: 1_024,
-                network: false,
-                scratch: true,
-            },
-        ),
-        profile(
-            "cx23",
-            20,
-            12,
-            2,
-            4,
-            2,
-            1,
-            1,
-            0,
-            0,
-            900,
-            8_000,
-            3.0,
-            500,
-            8_000,
-            900,
-            ProofBudget {
-                max_focused_test_files: 4,
-                max_focused_tests: 2,
-                per_command_timeout_sec: 300,
-                max_total_seconds: 900,
-            },
-            ProofLeaseBudget {
-                cpu: 1,
-                memory_mb: 1_024,
-                disk_mb: 512,
-                network: false,
-                scratch: true,
-            },
-        ),
-        profile(
-            "cx33",
-            24,
-            16,
-            3,
-            6,
-            3,
-            2,
-            2,
-            1,
-            0,
-            1_400,
-            12_000,
-            5.0,
-            1_000,
-            16_000,
-            1_200,
-            ProofBudget {
-                max_focused_test_files: 6,
-                max_focused_tests: 4,
-                per_command_timeout_sec: 450,
-                max_total_seconds: 1_200,
-            },
-            ProofLeaseBudget {
-                cpu: 2,
-                memory_mb: 2_048,
-                disk_mb: 1_024,
-                network: false,
-                scratch: true,
-            },
-        ),
-        profile(
-            "cx43",
-            32,
-            24,
-            6,
-            10,
-            6,
-            4,
-            3,
-            2,
-            1,
-            2_500,
-            20_000,
-            9.0,
-            2_000,
-            40_000,
-            1_800,
-            ProofBudget {
-                max_focused_test_files: 8,
-                max_focused_tests: 6,
-                per_command_timeout_sec: 600,
-                max_total_seconds: 1_800,
-            },
-            ProofLeaseBudget {
-                cpu: 4,
-                memory_mb: 4_096,
-                disk_mb: 2_048,
-                network: false,
-                scratch: true,
-            },
-        ),
+    [
+        include_str!("../runtime/gh-runner.toml"),
+        include_str!("../runtime/cx23.toml"),
+        include_str!("../runtime/cx33.toml"),
+        include_str!("../runtime/cx43.toml"),
     ]
+    .into_iter()
+    .filter_map(|profile| runtime_profile_from_toml(profile).ok())
+    .collect()
 }
 
-#[allow(clippy::too_many_arguments)]
-fn profile(
-    name: &str,
-    logical_lanes: usize,
-    llm: usize,
-    sensor_jobs: usize,
-    repo_read: usize,
-    grep: usize,
-    ast_grep: usize,
-    git: usize,
-    tests: usize,
-    builds: usize,
-    min_mem: u64,
-    min_disk: u64,
-    max_load: f32,
-    artifact_budget: u64,
-    scratch_budget: u64,
-    timeout: u64,
-    proof_budget: ProofBudget,
-    proof_lease_budget: ProofLeaseBudget,
-) -> Profile {
-    Profile {
-        name: name.to_owned(),
+fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
+    let profile: RuntimeProfileFile = toml::from_str(text)?;
+    Ok(Profile {
+        name: profile.name,
         limits: Limits {
-            logical_lanes,
-            llm_in_flight: llm,
-            sensor_jobs,
-            repo_read,
-            raw_file_reads: repo_read,
-            grep,
-            ast_grep,
-            git,
-            tests,
-            builds,
-            rust_analyzer: usize::from(builds > 0),
-            summary_writers: 1,
-            patch_writers: usize::from(name != "gh-runner"),
+            logical_lanes: profile.limits.logical_lanes,
+            llm_in_flight: profile.limits.llm_in_flight,
+            sensor_jobs: profile.limits.sensor_jobs,
+            repo_read: profile.limits.repo_read,
+            raw_file_reads: profile.limits.raw_file_reads,
+            grep: profile.limits.grep,
+            ast_grep: profile.limits.ast_grep,
+            git: profile.limits.git,
+            tests: profile.limits.tests,
+            builds: profile.limits.builds,
+            rust_analyzer: profile.limits.rust_analyzer,
+            summary_writers: profile.limits.summary_writers,
+            patch_writers: profile.limits.patch_writers,
         },
         guards: Guards {
-            min_free_mem_mb: min_mem,
-            min_free_disk_mb: min_disk,
-            max_load_1m: max_load,
+            min_free_mem_mb: profile.guards.min_free_mem_mb,
+            min_free_disk_mb: profile.guards.min_free_disk_mb,
+            max_load_1m: profile.guards.max_load_1m,
         },
         budgets: Budgets {
-            artifact_budget_mb: artifact_budget,
-            scratch_budget_mb: scratch_budget,
-            default_timeout_sec: timeout,
-            proof_max_focused_test_files: proof_budget.max_focused_test_files,
-            proof_max_focused_tests: proof_budget.max_focused_tests,
-            proof_command_timeout_sec: proof_budget.per_command_timeout_sec,
-            proof_total_timeout_sec: proof_budget.max_total_seconds,
-            proof_cpu: proof_lease_budget.cpu,
-            proof_memory_mb: proof_lease_budget.memory_mb,
-            proof_disk_mb: proof_lease_budget.disk_mb,
-            proof_network: proof_lease_budget.network,
-            proof_scratch: proof_lease_budget.scratch,
+            artifact_budget_mb: profile.budgets.artifact_budget_mb,
+            scratch_budget_mb: profile.budgets.scratch_budget_mb,
+            default_timeout_sec: profile.budgets.default_timeout_sec,
+            proof_max_focused_test_files: profile.budgets.proof_max_focused_test_files,
+            proof_max_focused_tests: profile.budgets.proof_max_focused_tests,
+            proof_command_timeout_sec: profile.budgets.proof_command_timeout_sec,
+            proof_total_timeout_sec: profile.budgets.proof_total_timeout_sec,
+            proof_cpu: profile.budgets.proof_cpu,
+            proof_memory_mb: profile.budgets.proof_memory_mb,
+            proof_disk_mb: profile.budgets.proof_disk_mb,
+            proof_network: profile.budgets.proof_network,
+            proof_scratch: profile.budgets.proof_scratch,
         },
-    }
+    })
 }
 
 fn builtin_tools() -> Vec<ToolPolicy> {
@@ -13045,12 +12963,13 @@ mod tests {
         read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
         render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
+        split_curl_http_status, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -13152,6 +13071,29 @@ mod tests {
             assert_eq!(builtin.limits.tests, Profile::default().limits.tests);
             assert_eq!(builtin.limits.tests, 2);
         }
+    }
+
+    #[test]
+    fn builtin_runtime_profiles_match_runtime_files() -> Result<()> {
+        let profiles = builtin_profiles();
+        assert_eq!(
+            profiles
+                .iter()
+                .map(|profile| profile.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["gh-runner", "cx23", "cx33", "cx43"]
+        );
+        let from_files = vec![
+            runtime_profile_from_toml(include_str!("../runtime/gh-runner.toml"))?,
+            runtime_profile_from_toml(include_str!("../runtime/cx23.toml"))?,
+            runtime_profile_from_toml(include_str!("../runtime/cx33.toml"))?,
+            runtime_profile_from_toml(include_str!("../runtime/cx43.toml"))?,
+        ];
+        assert_eq!(
+            serde_json::to_value(&profiles)?,
+            serde_json::to_value(&from_files)?
+        );
+        Ok(())
     }
 
     #[test]
