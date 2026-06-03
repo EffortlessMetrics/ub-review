@@ -135,6 +135,7 @@ fn active_len_tracks_view_after_resize() {
         "review/unique_observations.json",
         "review/merged_observations.json",
         "review/dropped_observations.json",
+        "review/witnesses.json",
         "review/proof_requests.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
@@ -142,6 +143,7 @@ fn active_len_tracks_view_after_resize() {
         "review/resource_plan.md",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
+        "witnesses.ndjson",
         "resource_leases.ndjson",
         "review/github-review-skip.json",
     ] {

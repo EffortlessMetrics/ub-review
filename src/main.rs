@@ -928,6 +928,28 @@ struct ResourceLease {
     command: Option<String>,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct WitnessRecord {
+    schema: String,
+    id: String,
+    status: String,
+    kind: String,
+    source: String,
+    claim: String,
+    dedupe_key: String,
+    evidence: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    lane: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    observation_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proof_receipt_id: Option<String>,
+}
+
 #[derive(Clone, Debug)]
 struct FocusedTestTask {
     id: String,
@@ -3619,7 +3641,14 @@ fn write_review_artifacts(
         body: artifact_body.clone(),
     };
     let observations = combined_observations(&review);
+    let witnesses = build_witness_records(
+        &review.inline_comments,
+        &review.summary_only_findings,
+        &observations,
+        &review.proof_receipts,
+    );
     write_observation_artifacts(out, &observations)?;
+    write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
     write_proof_request_artifacts(
@@ -4159,6 +4188,193 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
         }
         fs::write(path, text)?;
     }
+    Ok(())
+}
+
+fn build_witness_records(
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+    observations: &[Observation],
+    proof_receipts: &[ProofReceipt],
+) -> Vec<WitnessRecord> {
+    let mut witnesses = Vec::new();
+    for comment in inline_comments {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: "needs-witness",
+            kind: "inline-finding",
+            source: "inline-comment",
+            claim: &comment.body,
+            dedupe_key: &format!(
+                "inline:{}:{}:{}",
+                comment.path,
+                comment.line,
+                sha256_hex(comment.body.as_bytes())
+            ),
+            evidence: vec![comment.evidence.clone()],
+            lane: Some(comment.lane.clone()),
+            path: Some(comment.path.clone()),
+            line: Some(comment.line),
+            observation_id: None,
+            proof_receipt_id: None,
+        }));
+    }
+    for finding in summary_only_findings {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: witness_status_for_summary_finding(finding),
+            kind: "summary-finding",
+            source: "summary-only-finding",
+            claim: &finding.reason,
+            dedupe_key: &format!(
+                "summary:{}:{}",
+                finding.lane,
+                sha256_hex(format!("{}\n{}", finding.reason, finding.evidence).as_bytes())
+            ),
+            evidence: vec![finding.evidence.clone()],
+            lane: Some(finding.lane.clone()),
+            path: None,
+            line: None,
+            observation_id: None,
+            proof_receipt_id: None,
+        }));
+    }
+    for observation in observations {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: witness_status_for_observation(observation),
+            kind: &observation.kind,
+            source: &observation.source,
+            claim: &observation.claim,
+            dedupe_key: &observation.dedupe_key,
+            evidence: observation.evidence.clone(),
+            lane: Some(observation.lane.clone()),
+            path: observation.path.clone(),
+            line: observation.line,
+            observation_id: Some(observation.id.clone()),
+            proof_receipt_id: None,
+        }));
+    }
+    for receipt in proof_receipts {
+        witnesses.push(witness_record(WitnessRecordInput {
+            status: witness_status_for_proof_receipt(receipt),
+            kind: &receipt.kind,
+            source: "proof-receipt",
+            claim: &receipt.reason,
+            dedupe_key: &receipt.id,
+            evidence: proof_receipt_witness_evidence(receipt),
+            lane: None,
+            path: None,
+            line: None,
+            observation_id: None,
+            proof_receipt_id: Some(receipt.id.clone()),
+        }));
+    }
+    witnesses
+}
+
+struct WitnessRecordInput<'a> {
+    status: &'a str,
+    kind: &'a str,
+    source: &'a str,
+    claim: &'a str,
+    dedupe_key: &'a str,
+    evidence: Vec<String>,
+    lane: Option<String>,
+    path: Option<String>,
+    line: Option<u32>,
+    observation_id: Option<String>,
+    proof_receipt_id: Option<String>,
+}
+
+fn witness_record(input: WitnessRecordInput<'_>) -> WitnessRecord {
+    let fingerprint = sha256_hex(
+        format!(
+            "{}\n{}\n{}\n{}",
+            input.status, input.kind, input.source, input.dedupe_key
+        )
+        .as_bytes(),
+    );
+    WitnessRecord {
+        schema: "ub-review.witness.v1".to_owned(),
+        id: format!("witness-{}", &fingerprint[..12]),
+        status: input.status.to_owned(),
+        kind: input.kind.to_owned(),
+        source: input.source.to_owned(),
+        claim: input.claim.to_owned(),
+        dedupe_key: input.dedupe_key.to_owned(),
+        evidence: non_empty_evidence(input.evidence, "witness registry source artifact"),
+        lane: input.lane,
+        path: input.path,
+        line: input.line,
+        observation_id: input.observation_id,
+        proof_receipt_id: input.proof_receipt_id,
+    }
+}
+
+fn witness_status_for_summary_finding(finding: &SummaryOnlyFinding) -> &'static str {
+    if is_parked_follow_up(finding) {
+        "parked"
+    } else {
+        "needs-witness"
+    }
+}
+
+fn witness_status_for_observation(observation: &Observation) -> &'static str {
+    if observation.status == "refuted"
+        || matches!(
+            observation.kind.as_str(),
+            "false-premise" | "resolved-check"
+        )
+    {
+        "refuted"
+    } else if observation.status == "parked" || observation.kind == "parked-follow-up" {
+        "parked"
+    } else if observation.status == "confirmed"
+        || matches!(observation.kind.as_str(), "bug" | "security-risk")
+    {
+        "tool-confirmed"
+    } else {
+        "needs-witness"
+    }
+}
+
+fn witness_status_for_proof_receipt(receipt: &ProofReceipt) -> &'static str {
+    match receipt.result.as_str() {
+        "discriminating" | "head_passed" | "head_failed" => "tool-confirmed",
+        _ => "needs-witness",
+    }
+}
+
+fn proof_receipt_witness_evidence(receipt: &ProofReceipt) -> Vec<String> {
+    let mut evidence = Vec::new();
+    for command in &receipt.commands {
+        evidence.push(format!(
+            "{} `{}` status=`{}` reason=`{}` stdout=`{}` stderr=`{}`",
+            command.side,
+            command.command,
+            command.status,
+            command.reason,
+            command.stdout,
+            command.stderr
+        ));
+    }
+    if evidence.is_empty() {
+        evidence.push(receipt.reason.clone());
+    }
+    evidence
+}
+
+fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("witnesses.json"),
+        serde_json::to_vec_pretty(witnesses)?,
+    )?;
+    let mut ndjson = String::new();
+    for witness in witnesses {
+        ndjson.push_str(&serde_json::to_string(witness)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("witnesses.ndjson"), ndjson)?;
     Ok(())
 }
 
@@ -10601,14 +10817,14 @@ mod tests {
         ReviewTerminalState, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
         SummaryOnlyFinding, TerminalStateInput, ToolClass, apply_model_output,
         apply_refuter_output, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
-        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
-        model_json_payload, model_lane, model_request_payload, model_response_shape,
-        opencode_canary_spec, pr_decision_sentence, proof_budget,
+        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
+        extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
+        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, opencode_canary_spec, pr_decision_sentence, proof_budget,
         provider_spec_for_lane_with_key_state, read_github_event_pr_context, render_ledger_context,
         render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
@@ -10617,6 +10833,7 @@ mod tests {
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
         write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
+        write_witness_artifacts,
     };
 
     #[test]
@@ -14200,6 +14417,112 @@ UB_REVIEW_HTTP_STATUS:429
             observation.lane == "opposition"
                 && observation.kind == "missing-evidence"
                 && observation.question == "missing-model-evidence"
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn witness_artifacts_track_review_statuses() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "test/js/bun/ffi/ffi.test.js".to_owned(),
+            line: 42,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] The no-finalizer regression still needs a red witness."
+                .to_owned(),
+            evidence: "diff hunk".to_owned(),
+        }];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "source-route".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "PBKDF2 sibling path is parked as follow-up, not current PR scope.".to_owned(),
+            evidence: "UB ledger excerpt".to_owned(),
+        }];
+        let observations = vec![
+            test_observation(
+                "tests-oracle",
+                "The focused test reaches the patched helper.",
+                "test-gap",
+                "confirmed",
+                "medium",
+                "high",
+                "test-helper-route",
+            ),
+            test_observation(
+                "tests-red-green",
+                "The new test still needs a base+tests witness.",
+                "missing-evidence",
+                "open",
+                "medium",
+                "high",
+                "base-tests-witness",
+            ),
+            test_observation(
+                "ub-active-view",
+                "Box::from(slice) allocation failure concern is false.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "box-from-refuted",
+            ),
+        ];
+        let receipts = vec![
+            test_red_green_proof_receipt("discriminating", "failed"),
+            test_proof_receipt("timed_out", "timed_out"),
+        ];
+
+        let witnesses = build_witness_records(
+            &inline_comments,
+            &summary_only_findings,
+            &observations,
+            &receipts,
+        );
+        write_witness_artifacts(temp.path(), &witnesses)?;
+
+        let witness_json: Vec<super::WitnessRecord> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
+        let ndjson = fs::read_to_string(temp.path().join("witnesses.ndjson"))?;
+        assert_eq!(witness_json.len(), witnesses.len());
+        assert_eq!(ndjson.lines().count(), witness_json.len());
+        assert!(
+            witness_json.iter().all(|witness| {
+                witness.schema == "ub-review.witness.v1" && !witness.id.is_empty()
+            })
+        );
+        assert!(witness_json.iter().any(|witness| {
+            witness.kind == "inline-finding" && witness.status == "needs-witness"
+        }));
+        assert!(
+            witness_json
+                .iter()
+                .any(|witness| { witness.kind == "summary-finding" && witness.status == "parked" })
+        );
+        assert!(witness_json.iter().any(|witness| {
+            witness.dedupe_key == "test-helper-route" && witness.status == "tool-confirmed"
+        }));
+        assert!(witness_json.iter().any(|witness| {
+            witness.dedupe_key == "base-tests-witness" && witness.status == "needs-witness"
+        }));
+        assert!(witness_json.iter().any(|witness| {
+            witness.dedupe_key == "box-from-refuted" && witness.status == "refuted"
+        }));
+        assert!(witness_json.iter().any(|witness| {
+            witness.source == "proof-receipt"
+                && witness.status == "tool-confirmed"
+                && witness.proof_receipt_id.is_some()
+        }));
+        assert!(witness_json.iter().any(|witness| {
+            witness.source == "proof-receipt"
+                && witness.status == "needs-witness"
+                && witness
+                    .evidence
+                    .iter()
+                    .any(|item| item.contains("stdout.txt"))
         }));
         Ok(())
     }
