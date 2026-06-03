@@ -11362,22 +11362,24 @@ fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
         .first()
         .map(|command| command.command.as_str())
         .unwrap_or("focused test");
+    let head_status =
+        proof_command_outcome(receipt, "head").unwrap_or_else(|| "HEAD status unknown".to_owned());
+    let head_only_status = proof_command_status_for_side(receipt, "head")
+        .unwrap_or_else(|| "status unknown".to_owned());
+    let base_plus_tests_status = proof_command_outcome(receipt, "base-plus-tests")
+        .unwrap_or_else(|| "base+tests status unknown".to_owned());
     let summary = match receipt.result.as_str() {
         "discriminating" => format!(
-            "Focused red/green proof discriminates the patch: HEAD passed and base+tests failed for `{}`.",
-            command
+            "Focused red/green proof discriminates the patch: {head_status} and {base_plus_tests_status} for `{command}`."
         ),
         "non_discriminating" => format!(
-            "Focused red/green proof did not discriminate the patch: HEAD and base+tests both passed for `{}`.",
-            command
+            "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
         ),
         "head_passed" => format!(
-            "Focused HEAD proof passed: `{}`. Base+tests red/green was not run in this v0 proof.",
-            command
+            "Focused HEAD proof {head_only_status}: `{command}`. Base+tests red/green was not run in this v0 proof."
         ),
         "head_failed" => format!(
-            "Focused HEAD proof failed: `{}`. This is a current failure, not a red/green witness.",
-            command
+            "Focused HEAD proof {head_only_status}: `{command}`. This is a current failure, not a red/green witness."
         ),
         _ => format!(
             "Focused proof result `{}` for `{}` is recorded in artifacts.",
@@ -11393,10 +11395,13 @@ fn render_residual_risk_proof_receipt_summary(text: &mut String, receipt: &Proof
         .first()
         .map(|command| command.command.as_str())
         .unwrap_or("focused test");
+    let head_status =
+        proof_command_outcome(receipt, "head").unwrap_or_else(|| "HEAD status unknown".to_owned());
+    let base_plus_tests_status = proof_command_outcome(receipt, "base-plus-tests")
+        .unwrap_or_else(|| "base+tests status unknown".to_owned());
     let summary = match receipt.result.as_str() {
         "non_discriminating" => format!(
-            "Focused red/green proof did not discriminate the patch: HEAD and base+tests both passed for `{}`.",
-            command
+            "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
         ),
         _ => format!(
             "Focused proof result `{}` leaves residual risk for `{}`.",
@@ -11404,6 +11409,39 @@ fn render_residual_risk_proof_receipt_summary(text: &mut String, receipt: &Proof
         ),
     };
     render_pr_signal(text, &summary);
+}
+
+fn proof_command_outcome(receipt: &ProofReceipt, side: &str) -> Option<String> {
+    let command = receipt
+        .commands
+        .iter()
+        .find(|command| command.side == side)?;
+    let side_label = match side {
+        "head" => "HEAD",
+        "base-plus-tests" => "base+tests",
+        other => other,
+    };
+    let outcome = format!("{side_label} {}", proof_command_status(command));
+    Some(outcome)
+}
+
+fn proof_command_status_for_side(receipt: &ProofReceipt, side: &str) -> Option<String> {
+    receipt
+        .commands
+        .iter()
+        .find(|command| command.side == side)
+        .map(proof_command_status)
+}
+
+fn proof_command_status(command: &ProofCommandReceipt) -> String {
+    let mut outcome = command.status.clone();
+    if let Some(exit_code) = command.exit_code {
+        outcome.push_str(&format!(" (exit {exit_code})"));
+    }
+    if command.timed_out && !outcome.contains("timed_out") {
+        outcome.push_str(" (timed out)");
+    }
+    outcome
 }
 
 fn render_missing_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
@@ -17516,7 +17554,8 @@ UB_REVIEW_HTTP_STATUS:429
 
     #[test]
     fn pr_review_body_renders_discriminating_proof_receipt_once() {
-        let receipt = test_red_green_proof_receipt("discriminating", "failed");
+        let mut receipt = test_red_green_proof_receipt("discriminating", "failed");
+        receipt.commands[1].exit_code = Some(132);
         let body = render_review_body(
             "abc123",
             &test_plan(Vec::new()),
@@ -17536,7 +17575,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("## Decision"));
         assert!(!body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("Focused red/green proof discriminates the patch"));
-        assert!(body.contains("HEAD passed and base+tests failed"));
+        assert!(body.contains("HEAD passed (exit 0) and base+tests failed (exit 132)"));
         assert!(!body.contains("Needs reviewer attention"));
         assert!(!body.contains("## Residual risk"));
         assert!(!body.contains("stdout.txt"));
@@ -17567,10 +17606,38 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("## Decision"));
         assert!(!body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("## Residual risk"));
-        assert!(body.contains("HEAD and base+tests both passed"));
+        assert!(body.contains("HEAD passed (exit 0) and base+tests passed (exit 0)"));
         assert!(!body.contains("## Test proof"));
         assert!(!body.contains("Needs one residual-risk check"));
         assert!(!body.contains("A human should still inspect"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_renders_head_failed_proof_exit_code() {
+        let mut receipt = test_proof_receipt("head_failed", "failed");
+        receipt.commands[0].exit_code = Some(132);
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[] as &[Observation],
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Decision"));
+        assert!(body.contains("Needs focused proof failure resolved"));
+        assert!(body.contains("## Test proof"));
+        assert!(body.contains("Focused HEAD proof failed (exit 132)"));
+        assert!(!body.contains("stdout.txt"));
+        assert!(!body.contains("stderr.txt"));
         assert!(!has_standalone_approval_line(&body));
     }
 
