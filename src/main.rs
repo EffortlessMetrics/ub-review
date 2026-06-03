@@ -919,8 +919,19 @@ struct GitHubReviewComment {
     body: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct LaneModelOutput {
+    summary: Option<String>,
+    inline_comments: Vec<ModelCandidateComment>,
+    candidate_findings: Vec<ModelCandidateComment>,
+    summary_only_findings: Vec<ModelCandidateFinding>,
+    observations: Vec<ModelCandidateObservation>,
+    failed_objections: Vec<ModelFailedObjection>,
+    proof_requests: Vec<ModelProofRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+struct LaneModelOutputWire {
     summary: Option<String>,
     #[serde(default)]
     inline_comments: Vec<ModelCandidateComment>,
@@ -934,6 +945,29 @@ struct LaneModelOutput {
     failed_objections: Vec<ModelFailedObjection>,
     #[serde(default)]
     proof_requests: Vec<ModelProofRequest>,
+}
+
+impl<'de> Deserialize<'de> for LaneModelOutput {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+        let degraded_observations = normalize_lane_model_output_value(&mut value);
+        let wire: LaneModelOutputWire =
+            serde_json::from_value(value).map_err(serde::de::Error::custom)?;
+        let mut observations = wire.observations;
+        observations.extend(degraded_observations);
+        Ok(Self {
+            summary: wire.summary,
+            inline_comments: wire.inline_comments,
+            candidate_findings: wire.candidate_findings,
+            summary_only_findings: wire.summary_only_findings,
+            observations,
+            failed_objections: wire.failed_objections,
+            proof_requests: wire.proof_requests,
+        })
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -999,6 +1033,126 @@ struct ModelProofRequest {
     timeout_sec: Option<u64>,
     #[serde(default)]
     required: Option<bool>,
+}
+
+const LANE_MODEL_ARRAY_FIELDS: &[&str] = &[
+    "inline_comments",
+    "candidate_findings",
+    "summary_only_findings",
+    "observations",
+    "failed_objections",
+    "proof_requests",
+];
+
+fn normalize_lane_model_output_value(
+    value: &mut serde_json::Value,
+) -> Vec<ModelCandidateObservation> {
+    let Some(object) = value.as_object_mut() else {
+        return Vec::new();
+    };
+    let mut degraded_observations = Vec::new();
+    for field in LANE_MODEL_ARRAY_FIELDS {
+        if let Some(field_value) = object.get_mut(*field) {
+            normalize_lane_model_array_field(field, field_value, &mut degraded_observations);
+        }
+    }
+    degraded_observations
+}
+
+fn normalize_lane_model_array_field(
+    field: &str,
+    value: &mut serde_json::Value,
+    degraded_observations: &mut Vec<ModelCandidateObservation>,
+) {
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                normalize_lane_model_array_item(field, item);
+            }
+        }
+        serde_json::Value::Object(_) => {
+            let mut item = std::mem::replace(value, serde_json::Value::Null);
+            normalize_lane_model_array_item(field, &mut item);
+            *value = serde_json::Value::Array(vec![item]);
+        }
+        serde_json::Value::String(raw) => {
+            if let Some(observation) = lane_output_scalar_field_observation(field, raw) {
+                degraded_observations.push(observation);
+            }
+            *value = serde_json::Value::Array(Vec::new());
+        }
+        serde_json::Value::Null => {
+            *value = serde_json::Value::Array(Vec::new());
+        }
+        other => {
+            let raw = other.to_string();
+            if let Some(observation) = lane_output_scalar_field_observation(field, &raw) {
+                degraded_observations.push(observation);
+            }
+            *other = serde_json::Value::Array(Vec::new());
+        }
+    }
+}
+
+fn normalize_lane_model_array_item(field: &str, value: &mut serde_json::Value) {
+    if !matches!(field, "observations" | "failed_objections") {
+        return;
+    }
+    let Some(object) = value.as_object_mut() else {
+        return;
+    };
+    if let Some(evidence) = object.get_mut("evidence") {
+        normalize_string_array_field(evidence);
+    }
+}
+
+fn normalize_string_array_field(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(raw) => {
+            let raw = raw.trim();
+            *value = if raw.is_empty() {
+                serde_json::Value::Array(Vec::new())
+            } else {
+                serde_json::Value::Array(vec![serde_json::Value::String(raw.to_owned())])
+            };
+        }
+        serde_json::Value::Null => {
+            *value = serde_json::Value::Array(Vec::new());
+        }
+        _ => {}
+    }
+}
+
+fn lane_output_scalar_field_observation(
+    field: &str,
+    raw: &str,
+) -> Option<ModelCandidateObservation> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    let raw_claim = truncate_chars(raw, 180);
+    let claim = truncate_chars(
+        &format!(
+            "Lane output field `{field}` used scalar text where an array was expected: {raw_claim}"
+        ),
+        300,
+    );
+    Some(ModelCandidateObservation {
+        claim,
+        question: Some("lane-output-shape".to_owned()),
+        kind: Some("missing-evidence".to_owned()),
+        status: Some("open".to_owned()),
+        severity: Some("low".to_owned()),
+        confidence: Some("high".to_owned()),
+        path: None,
+        line: None,
+        evidence: vec![format!(
+            "Schema expected `{field}` as an array; raw scalar: {}",
+            truncate_chars(raw, 220)
+        )],
+        dedupe_key: Some(format!("lane-output-shape-{field}")),
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -9375,6 +9529,125 @@ index 1111111..2222222 100644
             proof_plan.contains("No focused red/green test targets were planned from the diff.")
         );
         assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
+        Ok(())
+    }
+
+    #[test]
+    fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {
+        let lane = model_lane(
+            "source-route",
+            "Source route review",
+            &["tokmd", "ast-grep"],
+            "Check public API route proof.",
+        );
+        let json = r#"{
+  "observations": [
+    {
+      "claim": "FileHandle.write route still needs proof.",
+      "kind": "source-route-gap",
+      "status": "open",
+      "evidence": "route excerpt was scalar text"
+    }
+  ],
+  "failed_objections": [
+    {
+      "claim": "writev uses the patched scalar branch",
+      "reason": "sibling route still calls a separate helper",
+      "evidence": "sibling-path scan was scalar text"
+    }
+  ]
+}"#;
+        let output: LaneModelOutput = serde_json::from_str(json)?;
+        assert_eq!(
+            output.observations[0].evidence,
+            vec!["route excerpt was scalar text".to_owned()]
+        );
+        assert_eq!(
+            output.failed_objections[0].evidence,
+            vec!["sibling-path scan was scalar text".to_owned()]
+        );
+
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        apply_model_output(
+            &lane,
+            output,
+            &BTreeSet::new(),
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+            },
+        );
+
+        assert_eq!(observations.len(), 2);
+        assert!(observations.iter().any(|observation| {
+            observation.source == "model-observation"
+                && observation.evidence == vec!["route excerpt was scalar text".to_owned()]
+        }));
+        assert!(observations.iter().any(|observation| {
+            observation.source == "model-failed-objection"
+                && observation.evidence == vec!["sibling-path scan was scalar text".to_owned()]
+        }));
+        Ok(())
+    }
+
+    #[test]
+    fn lane_output_split_degrades_scalar_sequence_fields() -> Result<()> {
+        let lane = model_lane(
+            "tests-oracle",
+            "Test oracle review",
+            &["tokmd", "ripr"],
+            "Check test proof.",
+        );
+        let json = r#"{
+  "observations": "The added regression test still needs base+tests red/green proof.",
+  "candidate_findings": "Malformed inline finding text should not erase the whole lane."
+}"#;
+        let output: LaneModelOutput = serde_json::from_str(json)?;
+        assert!(output.candidate_findings.is_empty());
+        assert_eq!(output.observations.len(), 2);
+
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        apply_model_output(
+            &lane,
+            output,
+            &BTreeSet::new(),
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+            },
+        );
+
+        assert!(inline_comments.is_empty());
+        assert!(summary_only_findings.is_empty());
+        assert_eq!(observations.len(), 2);
+        assert!(observations.iter().any(|observation| {
+            observation.source == "model-observation"
+                && observation.kind == "missing-evidence"
+                && observation.question == "lane-output-shape"
+                && observation.dedupe_key == "lane-output-shape-observations"
+                && observation.claim.contains("base+tests red/green proof")
+        }));
+        assert!(observations.iter().any(|observation| {
+            observation.source == "model-observation"
+                && observation.kind == "missing-evidence"
+                && observation.dedupe_key == "lane-output-shape-candidate_findings"
+                && observation
+                    .evidence
+                    .iter()
+                    .any(|item| item.contains("Malformed inline finding text"))
+        }));
         Ok(())
     }
 
