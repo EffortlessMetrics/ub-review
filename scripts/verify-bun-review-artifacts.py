@@ -13,6 +13,7 @@ from typing import Any
 
 
 SENSORS = ["tokmd", "ripr", "unsafe-review", "ast-grep"]
+BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 APPROVAL_LINES = {
     "lgtm",
     "looks good",
@@ -410,12 +411,13 @@ def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
 
 def require_orchestrator_plan(root: pathlib.Path) -> None:
     candidates = load_json(root / "review/candidates.json")
+    observations = load_json(root / "review/unique_observations.json")
     proof_receipts = load_json(root / "review/proof_receipts.json")
     resource_leases = load_json(root / "review/resource_leases.json")
     plan = load_json(root / "review/orchestrator_plan.json")
-    expected = expected_orchestrator_plan(candidates, proof_receipts, resource_leases)
+    expected = expected_orchestrator_plan(candidates, observations, proof_receipts, resource_leases)
     if plan != expected:
-        fail("review/orchestrator_plan.json does not match candidate evidence routing")
+        fail("review/orchestrator_plan.json does not match candidate/observation evidence routing")
 
     lines = [line for line in read_text(root / "follow_up_questions.ndjson").splitlines() if line.strip()]
     tasks = plan["follow_up_tasks"]
@@ -432,7 +434,10 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
 
 
 def expected_orchestrator_plan(
-    candidates: list[dict], proof_receipts: list[dict], resource_leases: list[dict]
+    candidates: list[dict],
+    observations: list[dict],
+    proof_receipts: list[dict],
+    resource_leases: list[dict],
 ) -> dict:
     grouped: dict[tuple[str, str], list[dict]] = {}
     for candidate in candidates:
@@ -469,10 +474,40 @@ def expected_orchestrator_plan(
             follow_up_tasks.append(task)
         evidence_groups.append(group)
 
+    observation_groups = []
+    for observation in observations:
+        evidence_need = observation_evidence_need(observation)
+        routed_evidence = routed_evidence_for_group(
+            evidence_need, observation["lanes"], proof_receipts, resource_leases
+        )
+        group_id = f"orchestrator-{observation['id']}"
+        group = {
+            "schema": "ub-review.orchestrator_observation_group.v1",
+            "id": group_id,
+            "observation_group_id": observation["id"],
+            "dedupe_key": observation["dedupe_key"],
+            "evidence_need": evidence_need,
+            "claim": observation["claim"],
+            "kind": observation["kind"],
+            "status": observation["status"],
+            "lanes": observation["lanes"],
+            "sources": observation["sources"],
+            "observation_ids": observation["observation_ids"],
+            "duplicate_count": observation["duplicate_count"],
+            "routed_evidence": routed_evidence,
+            "reason": f"routed unique observation group `{observation['id']}` under evidence need `{evidence_need}`",
+        }
+        task = follow_up_task_for_observation_group(observation, group, routed_evidence)
+        if task is not None:
+            follow_up_tasks.append(task)
+        observation_groups.append(group)
+
     return {
         "schema": "ub-review.orchestrator_plan.v1",
         "candidates": len(candidates),
+        "observations": len(observations),
         "evidence_groups": evidence_groups,
+        "observation_groups": observation_groups,
         "follow_up_tasks": follow_up_tasks,
     }
 
@@ -497,6 +532,68 @@ def candidate_evidence_need(candidate: dict) -> str:
     return "summary-confirmation"
 
 
+def observation_evidence_need(observation: dict) -> str:
+    if is_pr_body_refuted_observation(observation):
+        return "refutation-confirmation"
+    if is_parked_observation(observation):
+        return "parked-follow-up-confirmation"
+    if observation["kind"] == "test-gap":
+        return "test-oracle-confirmation"
+    if observation["kind"] == "source-route-gap":
+        return "source-route-confirmation"
+    text = f"{observation['claim']}\n{chr(10).join(observation.get('evidence', []))}".lower()
+    if "proof" in text or "red" in text or "green" in text or "base+tests" in text:
+        return "proof-confirmation"
+    if "route" in text or "sibling" in text:
+        return "source-route-confirmation"
+    if "test" in text or "oracle" in text:
+        return "test-oracle-confirmation"
+    if is_missing_evidence_observation(observation):
+        return "evidence-gap-confirmation"
+    if is_residual_risk_observation(observation):
+        return "residual-risk-confirmation"
+    return "observation-confirmation"
+
+
+def is_refuted_observation(observation: dict) -> bool:
+    return observation["status"] == "refuted" or observation["kind"] in {
+        "false-premise",
+        "resolved-check",
+    }
+
+
+def is_pr_body_refuted_observation(observation: dict) -> bool:
+    return is_refuted_observation(observation) and not is_global_calibration_refutation(
+        observation
+    )
+
+
+def is_global_calibration_refutation(observation: dict) -> bool:
+    return (
+        observation["dedupe_key"] == BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY
+        and observation.get("path") is None
+        and "model-false-premise-guard" in observation["sources"]
+    )
+
+
+def is_pr_body_artifact_only_observation(observation: dict) -> bool:
+    return observation["dedupe_key"].startswith("lane-output-shape") or observation[
+        "dedupe_key"
+    ].startswith("lane-output-malformed-content")
+
+
+def is_missing_evidence_observation(observation: dict) -> bool:
+    return observation["kind"] == "missing-evidence"
+
+
+def is_residual_risk_observation(observation: dict) -> bool:
+    return observation["kind"] == "residual-risk"
+
+
+def is_parked_observation(observation: dict) -> bool:
+    return observation["status"] == "parked" or observation["kind"] == "parked-follow-up"
+
+
 def follow_up_task_for_group(
     group_id: str,
     disposition: str,
@@ -516,10 +613,37 @@ def follow_up_task_for_group(
         "evidence_need": evidence_need,
         "disposition": disposition,
         "candidate_ids": candidate_ids,
+        "observation_group_ids": [],
         "routed_evidence": routed_evidence,
         "question": follow_up_question_text(disposition, evidence_need),
         "status": "planned",
         "reason": "deterministic orchestrator skeleton; no shell commands or posting side effects",
+    }
+
+
+def follow_up_task_for_observation_group(
+    observation: dict, group: dict, routed_evidence: list[dict]
+) -> dict | None:
+    if is_pr_body_artifact_only_observation(observation) or observation["status"] in {
+        "covered",
+        "duplicate",
+    }:
+        return None
+    task_id = "follow-up-" + hashlib.sha256(
+        f"{group['id']}\n{group['evidence_need']}".encode("utf-8")
+    ).hexdigest()[:12]
+    return {
+        "schema": "ub-review.follow_up_question.v1",
+        "id": task_id,
+        "group_id": group["id"],
+        "evidence_need": group["evidence_need"],
+        "disposition": "observation",
+        "candidate_ids": [],
+        "observation_group_ids": [observation["id"]],
+        "routed_evidence": routed_evidence,
+        "question": observation_follow_up_question_text(group["evidence_need"]),
+        "status": "planned",
+        "reason": "deterministic observation follow-up; no shell commands or posting side effects",
     }
 
 
@@ -580,6 +704,24 @@ def routed_status_for_proof_receipt(receipt: dict) -> str:
     if result in {"base_patch_failed", "timed_out", "skipped_budget", "skipped_profile"}:
         return "missing-evidence"
     return "recorded"
+
+
+def observation_follow_up_question_text(evidence_need: str) -> str:
+    if evidence_need == "proof-confirmation":
+        return "Confirm whether routed proof evidence resolves this observation."
+    if evidence_need == "source-route-confirmation":
+        return "Confirm the changed source route or sibling path before promoting this observation."
+    if evidence_need == "test-oracle-confirmation":
+        return "Confirm the test oracle strength before promoting this observation."
+    if evidence_need == "refutation-confirmation":
+        return "Confirm the observation refutation still matches current PR evidence."
+    if evidence_need == "parked-follow-up-confirmation":
+        return "Confirm whether this observation remains parked outside current PR scope."
+    if evidence_need == "evidence-gap-confirmation":
+        return "Confirm whether this observation is still trust-affecting missing evidence."
+    if evidence_need == "residual-risk-confirmation":
+        return "Confirm whether this observation remains specific residual risk."
+    return "Confirm whether this observation needs promotion, refutation, or parking."
 
 
 def follow_up_question_text(disposition: str, evidence_need: str) -> str:
@@ -1308,10 +1450,15 @@ def require_orchestrator_plan_schema(plan: dict) -> None:
         fail(f"orchestrator plan has wrong schema: {plan!r}")
     if not isinstance(plan.get("candidates"), int) or plan["candidates"] < 0:
         fail(f"orchestrator plan candidates is invalid: {plan!r}")
+    if not isinstance(plan.get("observations"), int) or plan["observations"] < 0:
+        fail(f"orchestrator plan observations is invalid: {plan!r}")
     groups = plan.get("evidence_groups")
+    observation_groups = plan.get("observation_groups")
     tasks = plan.get("follow_up_tasks")
     if not isinstance(groups, list):
         fail("orchestrator plan evidence_groups is not an array")
+    if not isinstance(observation_groups, list):
+        fail("orchestrator plan observation_groups is not an array")
     if not isinstance(tasks, list):
         fail("orchestrator plan follow_up_tasks is not an array")
     group_ids = set()
@@ -1319,6 +1466,11 @@ def require_orchestrator_plan_schema(plan: dict) -> None:
         require_orchestrator_group_schema(group)
         if group["id"] in group_ids:
             fail(f"orchestrator group id is duplicated: {group!r}")
+        group_ids.add(group["id"])
+    for group in observation_groups:
+        require_orchestrator_observation_group_schema(group)
+        if group["id"] in group_ids:
+            fail(f"orchestrator observation group id is duplicated: {group!r}")
         group_ids.add(group["id"])
     for task in tasks:
         require_follow_up_task_schema(task, group_ids)
@@ -1341,6 +1493,36 @@ def require_orchestrator_group_schema(group: dict) -> None:
         require_orchestrator_routed_evidence_schema(evidence)
     if not isinstance(group.get("duplicate_count"), int) or group["duplicate_count"] < 0:
         fail(f"orchestrator group duplicate_count is invalid: {group!r}")
+
+
+def require_orchestrator_observation_group_schema(group: dict) -> None:
+    if group.get("schema") != "ub-review.orchestrator_observation_group.v1":
+        fail(f"orchestrator observation group has wrong schema: {group!r}")
+    for field in [
+        "id",
+        "observation_group_id",
+        "dedupe_key",
+        "evidence_need",
+        "claim",
+        "kind",
+        "status",
+        "reason",
+    ]:
+        if not isinstance(group.get(field), str) or not group[field]:
+            fail(f"orchestrator observation group missing string field {field}: {group!r}")
+    for field in ["lanes", "sources", "observation_ids"]:
+        values = group.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item for item in values
+        ):
+            fail(f"orchestrator observation group {field} is not a string array: {group!r}")
+    routed_evidence = group.get("routed_evidence")
+    if not isinstance(routed_evidence, list):
+        fail(f"orchestrator observation group routed_evidence is not an array: {group!r}")
+    for evidence in routed_evidence:
+        require_orchestrator_routed_evidence_schema(evidence)
+    if not isinstance(group.get("duplicate_count"), int) or group["duplicate_count"] < 0:
+        fail(f"orchestrator observation group duplicate_count is invalid: {group!r}")
 
 
 def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
@@ -1366,6 +1548,11 @@ def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
         isinstance(item, str) and item for item in candidate_ids
     ):
         fail(f"follow-up task candidate_ids is not a string array: {task!r}")
+    observation_group_ids = task.get("observation_group_ids")
+    if not isinstance(observation_group_ids, list) or not all(
+        isinstance(item, str) and item for item in observation_group_ids
+    ):
+        fail(f"follow-up task observation_group_ids is not a string array: {task!r}")
     routed_evidence = task.get("routed_evidence")
     if not isinstance(routed_evidence, list):
         fail(f"follow-up task routed_evidence is not an array: {task!r}")

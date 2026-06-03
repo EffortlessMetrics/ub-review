@@ -1221,7 +1221,9 @@ struct CandidateRecord {
 struct OrchestratorPlanArtifact {
     schema: String,
     candidates: usize,
+    observations: usize,
     evidence_groups: Vec<OrchestratorEvidenceGroup>,
+    observation_groups: Vec<OrchestratorObservationGroup>,
     follow_up_tasks: Vec<FollowUpQuestionTask>,
 }
 
@@ -1250,6 +1252,24 @@ struct OrchestratorRoutedEvidence {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+struct OrchestratorObservationGroup {
+    schema: String,
+    id: String,
+    observation_group_id: String,
+    dedupe_key: String,
+    evidence_need: String,
+    claim: String,
+    kind: String,
+    status: String,
+    lanes: Vec<String>,
+    sources: Vec<String>,
+    observation_ids: Vec<String>,
+    duplicate_count: usize,
+    routed_evidence: Vec<OrchestratorRoutedEvidence>,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct FollowUpQuestionTask {
     schema: String,
     id: String,
@@ -1257,6 +1277,7 @@ struct FollowUpQuestionTask {
     evidence_need: String,
     disposition: String,
     candidate_ids: Vec<String>,
+    observation_group_ids: Vec<String>,
     routed_evidence: Vec<OrchestratorRoutedEvidence>,
     question: String,
     status: String,
@@ -4105,8 +4126,6 @@ fn write_review_artifacts(
     let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
     write_candidate_artifacts(out, &candidates)?;
     let candidates = read_candidate_records(out)?;
-    let orchestrator_plan = build_orchestrator_plan(&candidates, &proof_receipts, &resource_leases);
-    write_orchestrator_artifacts(out, &orchestrator_plan)?;
     let (inline_comments, summary_only_findings) = read_candidate_review_surfaces(out)?;
 
     let artifact_body = render_review_body(
@@ -4206,6 +4225,14 @@ fn write_review_artifacts(
         body: artifact_body.clone(),
     };
     let observations = combined_observations(&review);
+    let observation_summary = observation_summary_artifacts(&observations);
+    let orchestrator_plan = build_orchestrator_plan(
+        &candidates,
+        &observation_summary.unique,
+        &review.proof_receipts,
+        &review.resource_leases,
+    );
+    write_orchestrator_artifacts(out, &orchestrator_plan)?;
     let witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
@@ -5083,6 +5110,7 @@ fn candidate_review_surfaces(
 
 fn build_orchestrator_plan(
     candidates: &[CandidateRecord],
+    observations: &[ObservationGroup],
     proof_receipts: &[ProofReceipt],
     resource_leases: &[ResourceLease],
 ) -> OrchestratorPlanArtifact {
@@ -5135,10 +5163,49 @@ fn build_orchestrator_plan(
         evidence_groups.push(group);
     }
 
+    let mut observation_groups = Vec::new();
+    for observation in observations {
+        let evidence_need = observation_evidence_need(observation);
+        let routed_evidence = routed_evidence_for_group(
+            &evidence_need,
+            &observation.lanes,
+            proof_receipts,
+            resource_leases,
+        );
+        let group_id = format!("orchestrator-{}", observation.id);
+        let group = OrchestratorObservationGroup {
+            schema: "ub-review.orchestrator_observation_group.v1".to_owned(),
+            id: group_id.clone(),
+            observation_group_id: observation.id.clone(),
+            dedupe_key: observation.dedupe_key.clone(),
+            evidence_need: evidence_need.clone(),
+            claim: observation.claim.clone(),
+            kind: observation.kind.clone(),
+            status: observation.status.clone(),
+            lanes: observation.lanes.clone(),
+            sources: observation.sources.clone(),
+            observation_ids: observation.observation_ids.clone(),
+            duplicate_count: observation.duplicate_count,
+            routed_evidence: routed_evidence.clone(),
+            reason: format!(
+                "routed unique observation group `{}` under evidence need `{evidence_need}`",
+                observation.id
+            ),
+        };
+        if let Some(task) =
+            follow_up_task_for_observation_group(observation, &group, &routed_evidence)
+        {
+            follow_up_tasks.push(task);
+        }
+        observation_groups.push(group);
+    }
+
     OrchestratorPlanArtifact {
         schema: "ub-review.orchestrator_plan.v1".to_owned(),
         candidates: candidates.len(),
+        observations: observations.len(),
         evidence_groups,
+        observation_groups,
         follow_up_tasks,
     }
 }
@@ -5181,6 +5248,41 @@ fn candidate_evidence_need(candidate: &CandidateRecord) -> String {
     }
 }
 
+fn observation_evidence_need(observation: &ObservationGroup) -> String {
+    if is_pr_body_refuted_observation(observation) {
+        return "refutation-confirmation".to_owned();
+    }
+    if is_parked_observation(observation) {
+        return "parked-follow-up-confirmation".to_owned();
+    }
+    if observation.kind == "test-gap" {
+        return "test-oracle-confirmation".to_owned();
+    }
+    if observation.kind == "source-route-gap" {
+        return "source-route-confirmation".to_owned();
+    }
+
+    let text =
+        format!("{}\n{}", observation.claim, observation.evidence.join("\n")).to_ascii_lowercase();
+    if text.contains("proof")
+        || text.contains("red")
+        || text.contains("green")
+        || text.contains("base+tests")
+    {
+        "proof-confirmation".to_owned()
+    } else if text.contains("route") || text.contains("sibling") {
+        "source-route-confirmation".to_owned()
+    } else if text.contains("test") || text.contains("oracle") {
+        "test-oracle-confirmation".to_owned()
+    } else if is_missing_evidence_observation(observation) {
+        "evidence-gap-confirmation".to_owned()
+    } else if is_residual_risk_observation(observation) {
+        "residual-risk-confirmation".to_owned()
+    } else {
+        "observation-confirmation".to_owned()
+    }
+}
+
 fn follow_up_task_for_group(
     group_id: &str,
     disposition: &str,
@@ -5199,10 +5301,38 @@ fn follow_up_task_for_group(
         evidence_need: evidence_need.to_owned(),
         disposition: disposition.to_owned(),
         candidate_ids: candidate_ids.to_vec(),
+        observation_group_ids: Vec::new(),
         routed_evidence: routed_evidence.to_vec(),
         question: follow_up_question_text(disposition, evidence_need),
         status: "planned".to_owned(),
         reason: "deterministic orchestrator skeleton; no shell commands or posting side effects"
+            .to_owned(),
+    })
+}
+
+fn follow_up_task_for_observation_group(
+    observation: &ObservationGroup,
+    group: &OrchestratorObservationGroup,
+    routed_evidence: &[OrchestratorRoutedEvidence],
+) -> Option<FollowUpQuestionTask> {
+    if is_pr_body_artifact_only_observation(observation)
+        || matches!(observation.status.as_str(), "covered" | "duplicate")
+    {
+        return None;
+    }
+    let fingerprint = sha256_hex(format!("{}\n{}", group.id, group.evidence_need).as_bytes());
+    Some(FollowUpQuestionTask {
+        schema: "ub-review.follow_up_question.v1".to_owned(),
+        id: format!("follow-up-{}", &fingerprint[..12]),
+        group_id: group.id.clone(),
+        evidence_need: group.evidence_need.clone(),
+        disposition: "observation".to_owned(),
+        candidate_ids: Vec::new(),
+        observation_group_ids: vec![observation.id.clone()],
+        routed_evidence: routed_evidence.to_vec(),
+        question: observation_follow_up_question_text(&group.evidence_need),
+        status: "planned".to_owned(),
+        reason: "deterministic observation follow-up; no shell commands or posting side effects"
             .to_owned(),
     })
 }
@@ -5279,6 +5409,34 @@ fn routed_status_for_proof_receipt(receipt: &ProofReceipt) -> &'static str {
         "missing-evidence"
     } else {
         "recorded"
+    }
+}
+
+fn observation_follow_up_question_text(evidence_need: &str) -> String {
+    match evidence_need {
+        "proof-confirmation" => {
+            "Confirm whether routed proof evidence resolves this observation.".to_owned()
+        }
+        "source-route-confirmation" => {
+            "Confirm the changed source route or sibling path before promoting this observation."
+                .to_owned()
+        }
+        "test-oracle-confirmation" => {
+            "Confirm the test oracle strength before promoting this observation.".to_owned()
+        }
+        "refutation-confirmation" => {
+            "Confirm the observation refutation still matches current PR evidence.".to_owned()
+        }
+        "parked-follow-up-confirmation" => {
+            "Confirm whether this observation remains parked outside current PR scope.".to_owned()
+        }
+        "evidence-gap-confirmation" => {
+            "Confirm whether this observation is still trust-affecting missing evidence.".to_owned()
+        }
+        "residual-risk-confirmation" => {
+            "Confirm whether this observation remains specific residual risk.".to_owned()
+        }
+        _ => "Confirm whether this observation needs promotion, refutation, or parking.".to_owned(),
     }
 }
 
@@ -12079,8 +12237,9 @@ mod tests {
         focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
         model_json_payload, model_lane, model_request_payload, model_response_shape,
-        normalize_run_args, opencode_canary_spec, pr_decision_sentence, proof_budget,
-        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        normalize_run_args, observation_summary_artifacts, opencode_canary_spec,
+        pr_decision_sentence, proof_budget, proof_lease_budget,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
         render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
@@ -16471,7 +16630,30 @@ UB_REVIEW_HTTP_STATUS:429
             },
         ];
 
-        let no_evidence_plan = build_orchestrator_plan(&candidates, &[], &[]);
+        let observations = vec![
+            test_observation(
+                "tests-oracle",
+                "The new test needs a witnessed old-main red run.",
+                "missing-evidence",
+                "open",
+                "medium",
+                "high",
+                "markdown-red-green-witness",
+            ),
+            test_observation(
+                "opposition",
+                "The new test needs a witnessed old-main red run.",
+                "missing-evidence",
+                "open",
+                "medium",
+                "medium-high",
+                "markdown-red-green-witness",
+            ),
+        ];
+        let observation_summary = observation_summary_artifacts(&observations);
+
+        let no_evidence_plan =
+            build_orchestrator_plan(&candidates, &observation_summary.unique, &[], &[]);
         let no_evidence_proof_group = no_evidence_plan
             .evidence_groups
             .iter()
@@ -16522,7 +16704,12 @@ UB_REVIEW_HTTP_STATUS:429
             },
         ];
 
-        let plan = build_orchestrator_plan(&candidates, &proof_receipts, &resource_leases);
+        let plan = build_orchestrator_plan(
+            &candidates,
+            &observation_summary.unique,
+            &proof_receipts,
+            &resource_leases,
+        );
         write_orchestrator_artifacts(temp.path(), &plan)?;
 
         let aggregate: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -16544,10 +16731,16 @@ UB_REVIEW_HTTP_STATUS:429
             .iter()
             .find(|group| group.disposition == "dropped")
             .ok_or_else(|| anyhow::anyhow!("dropped group should be present"))?;
+        let observation_group = plan
+            .observation_groups
+            .iter()
+            .find(|group| group.observation_group_id == observation_summary.unique[0].id)
+            .ok_or_else(|| anyhow::anyhow!("observation group should be present"))?;
 
         assert_eq!(aggregate, serde_json::to_value(&plan)?);
         assert_eq!(plan.schema, "ub-review.orchestrator_plan.v1");
         assert_eq!(plan.candidates, 6);
+        assert_eq!(plan.observations, 1);
         assert_eq!(
             proof_group.candidate_ids,
             vec!["candidate-proof-a", "candidate-proof-b"]
@@ -16583,6 +16776,20 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(inline_group.routed_evidence.is_empty());
         assert_eq!(dropped_group.duplicate_count, 0);
         assert!(dropped_group.routed_evidence.is_empty());
+        assert_eq!(plan.observation_groups.len(), 1);
+        assert_eq!(
+            observation_group.schema,
+            "ub-review.orchestrator_observation_group.v1"
+        );
+        assert_eq!(observation_group.evidence_need, "proof-confirmation");
+        assert_eq!(observation_group.duplicate_count, 1);
+        assert_eq!(observation_group.lanes, vec!["tests-oracle", "opposition"]);
+        assert_eq!(observation_group.sources, vec!["model-observation"]);
+        assert_eq!(observation_group.routed_evidence.len(), 4);
+        assert_eq!(
+            serde_json::to_value(&observation_group.routed_evidence)?,
+            serde_json::to_value(&proof_group.routed_evidence)?
+        );
         assert!(
             !plan
                 .follow_up_tasks
@@ -16595,8 +16802,9 @@ UB_REVIEW_HTTP_STATUS:429
             .iter()
             .map(|task| task.group_id.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(plan.follow_up_tasks.len(), 3);
+        assert_eq!(plan.follow_up_tasks.len(), 4);
         assert!(task_group_ids.contains(&proof_group.id.as_str()));
+        assert!(task_group_ids.contains(&observation_group.id.as_str()));
         let proof_task = plan
             .follow_up_tasks
             .iter()
@@ -16605,6 +16813,21 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(
             serde_json::to_value(&proof_task.routed_evidence)?,
             serde_json::to_value(&proof_group.routed_evidence)?
+        );
+        let observation_task = plan
+            .follow_up_tasks
+            .iter()
+            .find(|task| task.group_id == observation_group.id)
+            .ok_or_else(|| anyhow::anyhow!("observation follow-up task should be present"))?;
+        assert_eq!(observation_task.disposition, "observation");
+        assert!(observation_task.candidate_ids.is_empty());
+        assert_eq!(
+            observation_task.observation_group_ids,
+            vec![observation_group.observation_group_id.clone()]
+        );
+        assert_eq!(
+            serde_json::to_value(&observation_task.routed_evidence)?,
+            serde_json::to_value(&observation_group.routed_evidence)?
         );
         assert!(
             plan.follow_up_tasks
