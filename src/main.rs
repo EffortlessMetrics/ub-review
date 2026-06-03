@@ -1409,6 +1409,8 @@ struct FollowUpQuestionTask {
     schema: String,
     id: String,
     group_id: String,
+    stage: String,
+    stage_reason: String,
     evidence_need: String,
     disposition: String,
     candidate_ids: Vec<String>,
@@ -1425,6 +1427,8 @@ struct FollowUpQuestionPacket<'a> {
     id: &'a str,
     task_id: &'a str,
     group_id: &'a str,
+    stage: &'a str,
+    stage_reason: &'a str,
     evidence_need: &'a str,
     disposition: &'a str,
     candidate_ids: &'a [String],
@@ -1442,6 +1446,8 @@ struct FollowUpQuestionPacketArtifact {
     id: String,
     task_id: String,
     group_id: String,
+    stage: String,
+    stage_reason: String,
     prompt: String,
 }
 
@@ -1450,6 +1456,7 @@ struct FollowUpResult {
     schema: String,
     task_id: String,
     group_id: String,
+    stage: String,
     packet_path: String,
     model_lane: String,
     status: String,
@@ -1487,6 +1494,7 @@ struct FollowUpOutputRecord {
     schema: String,
     task_id: String,
     group_id: String,
+    stage: String,
     model_lane: String,
     status: String,
     reason: String,
@@ -5722,6 +5730,8 @@ fn follow_up_question_packet(task: &FollowUpQuestionTask) -> FollowUpQuestionPac
         id: task.id.as_str(),
         task_id: task.id.as_str(),
         group_id: task.group_id.as_str(),
+        stage: task.stage.as_str(),
+        stage_reason: task.stage_reason.as_str(),
         evidence_need: task.evidence_need.as_str(),
         disposition: task.disposition.as_str(),
         candidate_ids: &task.candidate_ids,
@@ -5739,6 +5749,10 @@ fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
     prompt.push_str("Follow-up question task\n\n");
     prompt.push_str(&format!("- Task: `{}`\n", task.id));
     prompt.push_str(&format!("- Group: `{}`\n", task.group_id));
+    prompt.push_str(&format!(
+        "- Stage: `{}` - {}\n",
+        task.stage, task.stage_reason
+    ));
     prompt.push_str(&format!("- Evidence need: `{}`\n", task.evidence_need));
     prompt.push_str(&format!("- Disposition: `{}`\n", task.disposition));
     if !task.candidate_ids.is_empty() {
@@ -5770,6 +5784,14 @@ fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
             ));
         }
         prompt.push('\n');
+    }
+    match task.stage.as_str() {
+        "tertiary" => prompt.push_str(
+            "Stage instruction: use routed evidence to refine, refute, drop, or park the concern; do not repeat an already-resolved question.\n",
+        ),
+        _ => prompt.push_str(
+            "Stage instruction: identify the smallest remaining evidence or proof request needed before promotion.\n",
+        ),
     }
     prompt.push_str(
         &format!(
@@ -5847,10 +5869,13 @@ fn follow_up_task_for_group(
         return None;
     }
     let fingerprint = sha256_hex(format!("{group_id}\n{evidence_need}").as_bytes());
+    let stage = follow_up_stage(disposition, evidence_need, routed_evidence);
     Some(FollowUpQuestionTask {
         schema: "ub-review.follow_up_question.v1".to_owned(),
         id: format!("follow-up-{}", &fingerprint[..12]),
         group_id: group_id.to_owned(),
+        stage: stage.to_owned(),
+        stage_reason: follow_up_stage_reason(stage).to_owned(),
         evidence_need: evidence_need.to_owned(),
         disposition: disposition.to_owned(),
         candidate_ids: candidate_ids.to_vec(),
@@ -5874,10 +5899,13 @@ fn follow_up_task_for_observation_group(
         return None;
     }
     let fingerprint = sha256_hex(format!("{}\n{}", group.id, group.evidence_need).as_bytes());
+    let stage = follow_up_stage("observation", &group.evidence_need, routed_evidence);
     Some(FollowUpQuestionTask {
         schema: "ub-review.follow_up_question.v1".to_owned(),
         id: format!("follow-up-{}", &fingerprint[..12]),
         group_id: group.id.clone(),
+        stage: stage.to_owned(),
+        stage_reason: follow_up_stage_reason(stage).to_owned(),
         evidence_need: group.evidence_need.clone(),
         disposition: "observation".to_owned(),
         candidate_ids: Vec::new(),
@@ -5888,6 +5916,35 @@ fn follow_up_task_for_observation_group(
         reason: "deterministic observation follow-up; no shell commands or posting side effects"
             .to_owned(),
     })
+}
+
+fn follow_up_stage(
+    disposition: &str,
+    evidence_need: &str,
+    routed_evidence: &[OrchestratorRoutedEvidence],
+) -> &'static str {
+    if !routed_evidence.is_empty()
+        || matches!(disposition, "refuted" | "parked-follow-up")
+        || matches!(
+            evidence_need,
+            "refutation-confirmation" | "parked-follow-up-confirmation"
+        )
+    {
+        "tertiary"
+    } else {
+        "secondary"
+    }
+}
+
+fn follow_up_stage_reason(stage: &str) -> &'static str {
+    match stage {
+        "tertiary" => {
+            "routed evidence or prior disposition is available; refine, refute, drop, or park instead of restating the concern"
+        }
+        _ => {
+            "no routed proof receipt is available; ask for the smallest remaining evidence or proof request"
+        }
+    }
 }
 
 fn routed_evidence_for_group(
@@ -9510,6 +9567,8 @@ fn read_follow_up_packet(
         || packet.task_id != task.id
         || packet.group_id != task.group_id
         || packet.id != task.id
+        || packet.stage != task.stage
+        || packet.stage_reason != task.stage_reason
     {
         bail!(
             "follow-up packet {} does not match task {}",
@@ -9609,6 +9668,7 @@ fn follow_up_output_record(
         schema: "ub-review.follow_up_output.v1".to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
+        stage: task.stage.clone(),
         model_lane: model_lane.to_owned(),
         status: status.to_owned(),
         reason: reason.to_owned(),
@@ -9628,6 +9688,7 @@ fn empty_follow_up_output_record(
         schema: "ub-review.follow_up_output.v1".to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
+        stage: task.stage.clone(),
         model_lane: model_lane.to_owned(),
         status: result.status.clone(),
         reason: result.reason.clone(),
@@ -9666,6 +9727,7 @@ fn follow_up_result(
         schema: "ub-review.follow_up_result.v1".to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
+        stage: task.stage.clone(),
         packet_path: packet_path.to_owned(),
         model_lane: model_lane.to_owned(),
         status: status.to_owned(),
@@ -18674,6 +18736,33 @@ UB_REVIEW_HTTP_STATUS:429
             .find(|group| group.evidence_need == "proof-confirmation")
             .ok_or_else(|| anyhow::anyhow!("proof group should be present without evidence"))?;
         assert!(no_evidence_proof_group.routed_evidence.is_empty());
+        let no_evidence_proof_task = no_evidence_plan
+            .follow_up_tasks
+            .iter()
+            .find(|task| task.group_id == no_evidence_proof_group.id)
+            .ok_or_else(|| anyhow::anyhow!("proof task should be present without evidence"))?;
+        assert_eq!(no_evidence_proof_task.stage, "secondary");
+        assert!(
+            no_evidence_proof_task
+                .stage_reason
+                .contains("no routed proof receipt")
+        );
+        assert_eq!(
+            no_evidence_plan
+                .follow_up_tasks
+                .iter()
+                .find(|task| task.disposition == "parked-follow-up")
+                .map(|task| task.stage.as_str()),
+            Some("tertiary")
+        );
+        assert_eq!(
+            no_evidence_plan
+                .follow_up_tasks
+                .iter()
+                .find(|task| task.disposition == "refuted")
+                .map(|task| task.stage.as_str()),
+            Some("tertiary")
+        );
 
         let mut confirmed_receipt = test_red_green_proof_receipt("discriminating", "failed");
         confirmed_receipt.id = "proof-confirmed".to_owned();
@@ -18824,6 +18913,12 @@ UB_REVIEW_HTTP_STATUS:429
             .iter()
             .find(|task| task.group_id == proof_group.id)
             .ok_or_else(|| anyhow::anyhow!("proof follow-up task should be present"))?;
+        assert_eq!(proof_task.stage, "tertiary");
+        assert!(
+            proof_task
+                .stage_reason
+                .contains("routed evidence or prior disposition")
+        );
         assert_eq!(
             serde_json::to_value(&proof_task.routed_evidence)?,
             serde_json::to_value(&proof_group.routed_evidence)?
@@ -18834,6 +18929,7 @@ UB_REVIEW_HTTP_STATUS:429
             .find(|task| task.group_id == observation_group.id)
             .ok_or_else(|| anyhow::anyhow!("observation follow-up task should be present"))?;
         assert_eq!(observation_task.disposition, "observation");
+        assert_eq!(observation_task.stage, "tertiary");
         assert!(observation_task.candidate_ids.is_empty());
         assert_eq!(
             observation_task.observation_group_ids,
@@ -18875,6 +18971,8 @@ UB_REVIEW_HTTP_STATUS:429
         );
         assert_eq!(proof_packet["task_id"], proof_task.id);
         assert_eq!(proof_packet["group_id"], proof_task.group_id);
+        assert_eq!(proof_packet["stage"], proof_task.stage);
+        assert_eq!(proof_packet["stage_reason"], proof_task.stage_reason);
         assert_eq!(
             proof_packet["routed_evidence"],
             serde_json::to_value(&proof_task.routed_evidence)?
@@ -18882,6 +18980,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(proof_packet["prompt"].as_str().is_some_and(|prompt| {
             prompt.contains("Routed evidence:")
                 && prompt.contains("proof-confirmed")
+                && prompt.contains("- Stage: `tertiary`")
+                && prompt.contains("use routed evidence to refine, refute, drop, or park")
                 && prompt.contains("Do not post, mutate, or run shell commands")
         }));
         let observation_packet: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -18925,6 +19025,7 @@ UB_REVIEW_HTTP_STATUS:429
             .ok_or_else(|| anyhow::anyhow!("proof follow-up output should be present"))?;
         assert_eq!(proof_result.schema, "ub-review.follow_up_result.v1");
         assert_eq!(proof_result.group_id, proof_task.group_id);
+        assert_eq!(proof_result.stage, proof_task.stage);
         assert_eq!(
             proof_result.packet_path,
             format!("questions/orchestrator-follow-up/{}.json", proof_task.id)
@@ -18949,6 +19050,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(proof_result.stderr_path.is_none());
         assert_eq!(proof_output.schema, "ub-review.follow_up_output.v1");
         assert_eq!(proof_output.group_id, proof_task.group_id);
+        assert_eq!(proof_output.stage, proof_task.stage);
         assert_eq!(proof_output.status, "skipped");
         assert!(proof_output.inline_comments.is_empty());
         assert!(proof_output.summary_only_findings.is_empty());
@@ -19032,6 +19134,8 @@ index 1111111..2222222 100644
             schema: "ub-review.follow_up_question.v1".to_owned(),
             id: "follow-up-route-proof".to_owned(),
             group_id: "orchestrator-observation-0000".to_owned(),
+            stage: "secondary".to_owned(),
+            stage_reason: "no routed proof receipt is available; ask for the smallest remaining evidence or proof request".to_owned(),
             evidence_need: "proof-confirmation".to_owned(),
             disposition: "observation".to_owned(),
             candidate_ids: Vec::new(),
@@ -19101,6 +19205,7 @@ index 1111111..2222222 100644
 
         assert_eq!(record.schema, "ub-review.follow_up_output.v1");
         assert_eq!(record.task_id, task.id);
+        assert_eq!(record.stage, "secondary");
         assert_eq!(record.model_lane, model_lane);
         assert_eq!(record.inline_comments.len(), 1);
         assert_eq!(record.inline_comments[0].lane, record.model_lane);
@@ -19779,6 +19884,7 @@ index 1111111..2222222 100644
             schema: "ub-review.follow_up_result.v1".to_owned(),
             task_id: task_id.to_owned(),
             group_id: group_id.to_owned(),
+            stage: "secondary".to_owned(),
             packet_path: format!("questions/orchestrator-follow-up/{task_id}.json"),
             model_lane: format!("orchestrator-follow-up-{task_id}"),
             status: status.to_owned(),
