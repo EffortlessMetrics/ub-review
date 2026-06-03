@@ -1076,6 +1076,8 @@ struct ProofReceipt {
 struct ProofCommandReceipt {
     side: String,
     command: String,
+    #[serde(default)]
+    env: BTreeMap<String, String>,
     status: String,
     exit_code: Option<i32>,
     timed_out: bool,
@@ -3580,7 +3582,14 @@ fn run_sensor(
     }
     let stdout_path = dir.join("stdout.txt");
     let stderr_path = dir.join("stderr.txt");
-    let result = run_command_to_files(root, &argv, sensor.timeout_sec, &stdout_path, &stderr_path);
+    let result = run_command_to_files(
+        root,
+        &argv,
+        &BTreeMap::new(),
+        sensor.timeout_sec,
+        &stdout_path,
+        &stderr_path,
+    );
     match result {
         Ok(result) => {
             let status = if result.timed_out {
@@ -3665,6 +3674,7 @@ fn run_tokmd_sensor(
         let result = run_command_to_files(
             root,
             &command.argv,
+            &BTreeMap::new(),
             sensor.timeout_sec,
             &command.stdout_path,
             &command.stderr_path,
@@ -4025,6 +4035,7 @@ fn append_existing_file(target: &Path, source: &Path) -> Result<()> {
 fn run_command_to_files(
     root: &Path,
     argv: &[String],
+    env: &BTreeMap<String, String>,
     timeout_sec: u64,
     stdout_path: &Path,
     stderr_path: &Path,
@@ -4039,6 +4050,7 @@ fn run_command_to_files(
     let started = Instant::now();
     let mut child = ProcessCommand::new(program)
         .args(args)
+        .envs(env)
         .current_dir(root)
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
@@ -6375,8 +6387,9 @@ fn focused_proof_plans_from_diff(
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
-            let head_command = proof_task_plan_command(&task, "head");
-            let base_plus_tests_command = proof_task_plan_command(&task, "base-plus-tests");
+            let head_command = proof_task_plan_command(&task, "head", "head");
+            let base_plus_tests_command =
+                proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests");
             FocusedProofPlan {
                 id: task.id,
                 test_file: task.file,
@@ -6434,7 +6447,14 @@ fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     mut prepare_base_plus_tests: G,
 ) -> Result<ProofBrokerResult>
 where
-    F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
     let mut receipts = Vec::new();
@@ -6537,11 +6557,18 @@ fn run_focused_red_green_proof_task<F, G>(
     prepare_base_plus_tests: &mut G,
 ) -> Result<ProofReceipt>
 where
-    F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
-    let argv = proof_task_argv(task);
-    let head = run_proof_command_receipt(root, out, task, "head", &argv, timeout_sec, runner)?;
+    let head_spec = proof_task_command_spec(task, "head");
+    let head = run_proof_command_receipt(root, out, task, "head", &head_spec, timeout_sec, runner)?;
     let head_status = head.status.clone();
     if head_status != "passed" {
         let result = match head_status.as_str() {
@@ -6563,11 +6590,12 @@ where
         Ok(path) => path,
         Err(error) => {
             let mut commands = vec![head];
+            let base_spec = proof_task_command_spec(task, "base-plus-tests");
             commands.push(skipped_proof_command_receipt(
                 out,
                 task,
                 "base-plus-tests",
-                &argv,
+                &base_spec,
                 "skipped",
                 format!("base+tests patch failed: {error:#}"),
             )?);
@@ -6580,12 +6608,13 @@ where
             ));
         }
     };
+    let base_spec = proof_task_command_spec(task, "base-plus-tests");
     let base = run_proof_command_receipt(
         &base_root,
         out,
         task,
         "base-plus-tests",
-        &argv,
+        &base_spec,
         timeout_sec,
         runner,
     )?;
@@ -6622,18 +6651,26 @@ fn run_proof_command_receipt<F>(
     out: &Path,
     task: &FocusedTestTask,
     side: &str,
-    argv: &[String],
+    spec: &ProofCommandSpec,
     timeout_sec: u64,
     runner: &mut F,
 ) -> Result<ProofCommandReceipt>
 where
-    F: FnMut(&Path, &[String], u64, &Path, &Path) -> Result<CommandStatus>,
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
 {
     let paths = proof_command_paths(out, &task.id, side)?;
-    let command = command_display(argv);
+    let command = command_display_with_env(&spec.env, &spec.argv);
     let status = runner(
         command_root,
-        argv,
+        &spec.argv,
+        &spec.env,
         timeout_sec,
         &paths.stdout_path,
         &paths.stderr_path,
@@ -6671,6 +6708,7 @@ where
     Ok(ProofCommandReceipt {
         side: side.to_owned(),
         command,
+        env: spec.env.clone(),
         status: command_status,
         exit_code,
         timed_out,
@@ -6686,14 +6724,15 @@ fn skipped_proof_command_receipt(
     out: &Path,
     task: &FocusedTestTask,
     side: &str,
-    argv: &[String],
+    spec: &ProofCommandSpec,
     status: &str,
     reason: String,
 ) -> Result<ProofCommandReceipt> {
     let paths = proof_command_paths(out, &task.id, side)?;
     Ok(ProofCommandReceipt {
         side: side.to_owned(),
-        command: command_display(argv),
+        command: command_display_with_env(&spec.env, &spec.argv),
+        env: spec.env.clone(),
         status: status.to_owned(),
         exit_code: None,
         timed_out: false,
@@ -6712,7 +6751,7 @@ fn skipped_focused_proof_receipt(
     result: &str,
     reason: &str,
 ) -> Result<ProofReceipt> {
-    let argv = proof_task_argv(task);
+    let spec = proof_task_command_spec(task, "head");
     Ok(focused_red_green_receipt(
         diff,
         task,
@@ -6720,7 +6759,7 @@ fn skipped_focused_proof_receipt(
             out,
             task,
             "head",
-            &argv,
+            &spec,
             "skipped",
             reason.to_owned(),
         )?],
@@ -6756,6 +6795,11 @@ struct ProofCommandPaths {
     stderr_path: PathBuf,
     stdout_rel: String,
     stderr_rel: String,
+}
+
+struct ProofCommandSpec {
+    argv: Vec<String>,
+    env: BTreeMap<String, String>,
 }
 
 struct ProofBrokerResult {
@@ -6906,7 +6950,11 @@ fn focused_test_resource_lease(
         network: lease_budget.network,
         scratch: lease_budget.scratch,
         worktree: Some("base-plus-tests".to_owned()),
-        command: Some(command_display(&proof_task_argv(task))),
+        command: Some(format!(
+            "head: {}; base+tests: {}",
+            proof_task_plan_command(task, "head", "head"),
+            proof_task_plan_command(task, "base-plus-tests", "base-plus-tests")
+        )),
     }
 }
 
@@ -6982,19 +7030,31 @@ fn is_bun_focused_test_file(path: &str) -> bool {
         .any(|suffix| lower.ends_with(suffix))
 }
 
-fn proof_task_argv(task: &FocusedTestTask) -> Vec<String> {
-    let mut argv = vec!["bun".to_owned(), "test".to_owned(), task.file.clone()];
+fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSpec {
+    let mut env = BTreeMap::new();
+    let mut argv = if side == "head" {
+        vec![
+            "bun".to_owned(),
+            "bd".to_owned(),
+            "test".to_owned(),
+            task.file.clone(),
+        ]
+    } else {
+        env.insert("USE_SYSTEM_BUN".to_owned(), "1".to_owned());
+        vec!["bun".to_owned(), "test".to_owned(), task.file.clone()]
+    };
     if let Some(name) = &task.test_name {
         argv.push("-t".to_owned());
         argv.push(name.clone());
     }
-    argv
+    ProofCommandSpec { argv, env }
 }
 
-fn proof_task_plan_command(task: &FocusedTestTask, worktree: &str) -> String {
+fn proof_task_plan_command(task: &FocusedTestTask, side: &str, worktree: &str) -> String {
+    let spec = proof_task_command_spec(task, side);
     format!(
         "cwd=target/ub-review/proof-worktrees/{worktree} {}",
-        command_display(&proof_task_argv(task))
+        command_display_with_env(&spec.env, &spec.argv)
     )
 }
 
@@ -7158,6 +7218,18 @@ fn command_display(argv: &[String]) -> String {
         })
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn command_display_with_env(env: &BTreeMap<String, String>, argv: &[String]) -> String {
+    if env.is_empty() {
+        return command_display(argv);
+    }
+    let mut parts = env
+        .iter()
+        .map(|(key, value)| format!("{key}={value}"))
+        .collect::<Vec<_>>();
+    parts.push(command_display(argv));
+    parts.join(" ")
 }
 
 fn push_unique(values: &mut Vec<String>, value: &str) {
@@ -10018,10 +10090,11 @@ fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
         return false;
     }
     let parts = command.split_whitespace().collect::<Vec<_>>();
-    if parts.len() < 3 || parts[0] != "bun" || parts[1] != "test" {
-        return false;
+    match parts.as_slice() {
+        ["bun", "test", file, ..] => is_bun_focused_test_file(file),
+        ["bun", "bd", "test", file, ..] => is_bun_focused_test_file(file),
+        _ => false,
     }
-    is_bun_focused_test_file(parts[2])
 }
 
 fn has_shell_control_token(command: &str) -> bool {
@@ -12965,7 +13038,7 @@ fn review_posture_for_diff_class(diff_class: DiffClass) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::{Command as ProcessCommand, Stdio};
@@ -13243,7 +13316,14 @@ mod tests {
         let stderr_path = temp.path().join("stderr.txt");
         let argv = sleeper_argv();
 
-        let status = run_command_to_files(temp.path(), &argv, 1, &stdout_path, &stderr_path)?;
+        let status = run_command_to_files(
+            temp.path(),
+            &argv,
+            &BTreeMap::new(),
+            1,
+            &stdout_path,
+            &stderr_path,
+        )?;
 
         assert!(status.timed_out);
         assert!(!status.success);
@@ -14329,13 +14409,26 @@ index 1111111..2222222 100644
             super::validate_proof_request(
                 &lane,
                 super::ModelProofRequest {
+                    command:
+                        "bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                            .to_owned(),
+                    reason: "Confirm the patched Bun development binary.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                1,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
                     command: "cargo build --workspace".to_owned(),
                     reason: "Compile the workspace.".to_owned(),
                     cost: Some("focused-build".to_owned()),
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                1,
+                2,
             ),
             super::validate_proof_request(
                 &lane,
@@ -14347,7 +14440,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                2,
+                3,
             ),
             super::validate_proof_request(
                 &lane,
@@ -14358,20 +14451,22 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                3,
+                4,
             ),
         ];
 
         assert_eq!(requests[0].status, "requested");
         assert_eq!(requests[0].cost, "focused-test");
-        assert_eq!(requests[1].status, "unsupported");
-        assert_eq!(requests[1].cost, "focused-build");
+        assert_eq!(requests[1].status, "requested");
+        assert_eq!(requests[1].cost, "focused-test");
         assert_eq!(requests[2].status, "unsupported");
-        assert_eq!(requests[3].status, "invalid");
-        assert_eq!(requests[3].command, "<missing command>");
+        assert_eq!(requests[2].cost, "focused-build");
+        assert_eq!(requests[3].status, "unsupported");
+        assert_eq!(requests[4].status, "invalid");
+        assert_eq!(requests[4].command, "<missing command>");
 
         let groups = super::proof_request_groups(&requests);
-        assert_eq!(groups.len(), 4);
+        assert_eq!(groups.len(), 5);
         assert!(groups.iter().any(|group| group.status == "requested"));
         assert!(groups.iter().any(|group| group.status == "unsupported"));
         assert!(groups.iter().any(|group| group.status == "invalid"));
@@ -14382,7 +14477,9 @@ index 1111111..2222222 100644
             &groups,
         );
         assert_eq!(task.requested_by, vec!["tests-oracle".to_owned()]);
-        assert_eq!(task.request_ids, vec![requests[0].id.clone()]);
+        assert_eq!(task.request_ids.len(), 2);
+        assert!(task.request_ids.contains(&requests[0].id));
+        assert!(task.request_ids.contains(&requests[1].id));
     }
 
     #[test]
@@ -14454,11 +14551,11 @@ index 1111111..2222222 100644
                 .any(|group| group.status == "unsupported")
         );
         assert!(proof_plan.contains(
-            "head=`cwd=target/ub-review/proof-worktrees/head bun test test/js/bun/md/md-edge-cases.test.ts -t"
+            "head=`cwd=target/ub-review/proof-worktrees/head bun bd test test/js/bun/md/md-edge-cases.test.ts -t"
         ));
         assert!(
             proof_plan.contains(
-                "base+tests=`cwd=target/ub-review/proof-worktrees/base-plus-tests bun test test/js/bun/md/md-edge-cases.test.ts -t"
+                "base+tests=`cwd=target/ub-review/proof-worktrees/base-plus-tests USE_SYSTEM_BUN=1 bun test test/js/bun/md/md-edge-cases.test.ts -t"
             )
         );
         assert!(!temp.path().join("review/proof_receipts.json").exists());
@@ -14543,9 +14640,10 @@ index 1111111..2222222 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, timeout, stdout, stderr| {
+            |_root, argv, env, timeout, stdout, stderr| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 fs::write(
                     stdout,
                     if is_base {
@@ -14670,9 +14768,10 @@ index 1111111..2222222 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, _timeout, stdout, stderr| {
+            |_root, argv, env, _timeout, stdout, stderr| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 fs::write(
                     stdout,
                     if is_base {
@@ -14786,9 +14885,10 @@ index 3333333..4444444 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, argv, _timeout, stdout, stderr| {
+            |_root, argv, env, _timeout, stdout, stderr| {
                 commands.push(command_display(argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 fs::write(
                     stdout,
                     if is_base {
@@ -14859,6 +14959,7 @@ index 3333333..4444444 100644
         let mut prepare_calls = 0;
         let mut runner = |_root: &Path,
                           _argv: &[String],
+                          _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
                           stderr: &Path|
@@ -14913,6 +15014,7 @@ index 3333333..4444444 100644
         let mut prepare_calls = 0;
         let mut runner = |_root: &Path,
                           _argv: &[String],
+                          _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
                           stderr: &Path|
@@ -14961,6 +15063,7 @@ index 3333333..4444444 100644
         );
         let mut runner = |_root: &Path,
                           _argv: &[String],
+                          _env: &BTreeMap<String, String>,
                           _timeout: u64,
                           stdout: &Path,
                           stderr: &Path|
@@ -15025,7 +15128,7 @@ index 3333333..4444444 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, _argv, _timeout, _stdout, _stderr| {
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
                 unreachable!("proof command should not run without a lease")
             },
             |_root, _out, _diff| {
@@ -15069,7 +15172,7 @@ index 3333333..4444444 100644
                 max_total_seconds: 600,
             },
             tasks,
-            |_root, _argv, _timeout, _stdout, _stderr| {
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
                 unreachable!("proof command should not run when proof budget is zero")
             },
             |_root, _out, _diff| {
@@ -18631,8 +18734,9 @@ index 1111111..2222222 100644
             request_ids: vec!["proof-tests-001".to_owned()],
             commands: vec![ProofCommandReceipt {
                 side: "head".to_owned(),
-                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                command: "bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
                     .to_owned(),
+                env: BTreeMap::new(),
                 status: command_status.to_owned(),
                 exit_code: Some(0),
                 timed_out: result == "timed_out",
@@ -18660,8 +18764,10 @@ index 1111111..2222222 100644
             commands: vec![
                 ProofCommandReceipt {
                     side: "head".to_owned(),
-                    command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
-                        .to_owned(),
+                    command:
+                        "bun bd test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                            .to_owned(),
+                    env: BTreeMap::new(),
                     status: "passed".to_owned(),
                     exit_code: Some(0),
                     timed_out: false,
@@ -18673,8 +18779,9 @@ index 1111111..2222222 100644
                 },
                 ProofCommandReceipt {
                     side: "base-plus-tests".to_owned(),
-                    command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                    command: "USE_SYSTEM_BUN=1 bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
                         .to_owned(),
+                    env: BTreeMap::from([("USE_SYSTEM_BUN".to_owned(), "1".to_owned())]),
                     status: base_status.to_owned(),
                     exit_code: Some(if base_status == "passed" { 0 } else { 1 }),
                     timed_out: false,
