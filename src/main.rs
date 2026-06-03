@@ -7841,24 +7841,46 @@ fn render_pull_request_review_body(
         .iter()
         .filter(|receipt| proof_receipt_is_test_proof_result(receipt))
         .collect::<Vec<_>>();
+    let current_proof_failure = proof_receipts
+        .iter()
+        .any(|receipt| receipt.result == "head_failed");
+    let has_decision_item = !inline_comments.is_empty()
+        || !summary_concerns.is_empty()
+        || !concern_observations.is_empty()
+        || !verification_questions.is_empty()
+        || !verification_observations.is_empty()
+        || current_proof_failure;
+    let has_reviewer_value_item = has_decision_item
+        || !refuted_observations.is_empty()
+        || !proof_result_receipts.is_empty()
+        || !parked.is_empty()
+        || !parked_observations.is_empty()
+        || !residual_risk_observations.is_empty()
+        || !residual_risk_receipts.is_empty()
+        || has_specific_missing_evidence;
+    if !has_reviewer_value_item {
+        return String::new();
+    }
 
-    text.push_str("## Decision\n\n");
-    text.push_str("- ");
-    text.push_str(&pr_decision_sentence(PrDecisionContext {
-        diff_class: plan.diff_class,
-        finding_count: inline_comments.len() + summary_concerns.len() + concern_observations.len(),
-        verification_count: verification_questions.len() + verification_observations.len(),
-        has_test_proof_verification: verification_questions
-            .iter()
-            .any(|finding| text_is_test_proof_review_question(&finding.reason))
-            || verification_observations
+    if has_decision_item {
+        text.push_str("## Decision\n\n");
+        text.push_str("- ");
+        text.push_str(&pr_decision_sentence(PrDecisionContext {
+            diff_class: plan.diff_class,
+            finding_count: inline_comments.len()
+                + summary_concerns.len()
+                + concern_observations.len(),
+            verification_count: verification_questions.len() + verification_observations.len(),
+            has_test_proof_verification: verification_questions
                 .iter()
-                .any(|observation| text_is_test_proof_review_question(&observation.claim)),
-        current_proof_failure: proof_receipts
-            .iter()
-            .any(|receipt| receipt.result == "head_failed"),
-    }));
-    text.push('\n');
+                .any(|finding| text_is_test_proof_review_question(&finding.reason))
+                || verification_observations
+                    .iter()
+                    .any(|observation| text_is_test_proof_review_question(&observation.claim)),
+            current_proof_failure,
+        }));
+        text.push('\n');
+    }
 
     if !inline_comments.is_empty()
         || !summary_concerns.is_empty()
@@ -12915,8 +12937,7 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Decision"));
-        assert!(body.contains("No blocking UB finding from this pass."));
+        assert!(body.is_empty());
         assert!(!body.contains("## Review result"));
         assert!(!body.contains("## Residual risk"));
         assert!(!body.contains("## Missing evidence"));
@@ -12968,7 +12989,7 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn pr_review_body_omits_successful_model_lane_roster() {
+    fn pr_review_body_omits_successful_model_lane_roster_and_default_decision() {
         let body = render_review_body(
             "abc123",
             &test_plan(Vec::new()),
@@ -12984,7 +13005,7 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Decision"));
+        assert!(body.is_empty());
         assert!(!body.contains("Shared context"));
         assert!(!body.contains("Profile:"));
         assert!(!body.contains("Changed files:"));
@@ -13017,6 +13038,7 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
+        assert!(body.is_empty());
         assert!(!super::should_prepare_github_review_payload(
             &args,
             &[] as &[ReviewInlineComment],
@@ -13082,8 +13104,7 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.starts_with("## Decision"));
-        assert!(body.contains("No blocking workflow finding from this pass."));
+        assert!(body.is_empty());
         assert!(!body.contains("ArrayBuffer"));
         assert!(!body.contains("worker handoff"));
         assert!(!body.contains("unsafe/native seams"));
@@ -13156,7 +13177,7 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Decision"));
+        assert!(body.is_empty());
         assert!(!body.contains("inline guard rejected"));
         assert!(!body.contains("severity_allowed"));
         assert!(!body.contains("compiler guard metadata"));
@@ -13249,7 +13270,8 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("## Test proof"));
-        assert!(body.contains("No blocking UB finding from this pass."));
+        assert!(!body.contains("## Decision"));
+        assert!(!body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("Focused red/green proof discriminates the patch"));
         assert!(body.contains("HEAD passed and base+tests failed"));
         assert!(!body.contains("Needs reviewer attention"));
@@ -13279,7 +13301,8 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("No blocking UB finding from this pass."));
+        assert!(!body.contains("## Decision"));
+        assert!(!body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("## Residual risk"));
         assert!(body.contains("HEAD and base+tests both passed"));
         assert!(!body.contains("## Test proof"));
@@ -13306,7 +13329,8 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("No blocking UB finding from this pass."));
+        assert!(!body.contains("## Decision"));
+        assert!(!body.contains("No blocking UB finding from this pass."));
         assert!(body.contains("## Evidence gaps"));
         assert!(body.contains("Focused proof timed out"));
         assert!(!body.contains("## Test proof"));
@@ -13726,7 +13750,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("## Missing evidence"));
         assert!(!body.contains("Lane output was contentful"));
         assert!(!body.contains("EncodedSlice route excerpt"));
-        assert!(body.contains("No blocking UB finding from this pass."));
+        assert!(body.is_empty());
     }
 
     #[test]
