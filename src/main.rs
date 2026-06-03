@@ -791,6 +791,36 @@ struct ProofRequestGroup {
     duplicate_count: usize,
 }
 
+#[derive(Clone, Debug)]
+struct FocusedTestTask {
+    id: String,
+    file: String,
+    test_name: Option<String>,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+struct FocusedProofPlan {
+    id: String,
+    test_file: String,
+    test_name: Option<String>,
+    head_command: String,
+    base_plus_tests_command: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+    status: String,
+    reason: String,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ProofBudget {
+    max_focused_test_files: usize,
+    max_focused_tests: usize,
+    per_command_timeout_sec: u64,
+    max_total_seconds: u64,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct SensorMetrics {
     total: usize,
@@ -1201,7 +1231,7 @@ impl Default for Profile {
             3,
             2,
             2,
-            0,
+            2,
             0,
             1_500,
             4_000,
@@ -3166,7 +3196,8 @@ fn write_review_artifacts(
     };
     let observations = combined_observations(&review);
     write_observation_artifacts(out, &observations)?;
-    write_proof_request_artifacts(out, &review.proof_requests)?;
+    let profile = config.selected_profile()?;
+    write_proof_request_artifacts(out, diff, profile, &review.proof_requests)?;
     let metrics = build_review_metrics(ReviewMetricsInput {
         out,
         diff,
@@ -3587,10 +3618,16 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
     Ok(())
 }
 
-fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) -> Result<()> {
+fn write_proof_request_artifacts(
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     let proof_groups = proof_request_groups(proof_requests);
+    let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile));
     fs::write(
         review_dir.join("proof_requests.json"),
         serde_json::to_vec_pretty(proof_requests)?,
@@ -3609,29 +3646,62 @@ fn write_proof_request_artifacts(out: &Path, proof_requests: &[ProofRequest]) ->
 
     let mut plan = String::new();
     plan.push_str("# Proof request plan\n\n");
-    if proof_requests.is_empty() {
+    if proof_requests.is_empty() && focused_plans.is_empty() {
         plan.push_str("No proof requests were emitted by model lanes.\n");
     } else {
-        plan.push_str("Proof requests are passive in this runner version. The proof broker has not executed these commands.\n\n");
-        plan.push_str(&format!(
-            "Grouped proof broker tasks: {} unique from {} request(s).\n\n",
-            proof_groups.len(),
-            proof_requests.len()
-        ));
-        for group in &proof_groups {
+        if proof_requests.is_empty() {
+            plan.push_str("No model-lane proof requests were emitted.\n\n");
+        } else {
             plan.push_str(&format!(
-                "- `{}` requested by `{}`: `{}` ({}, timeout {}s, required={}, status={}, merged_requests={})\n",
-                group.id,
-                group.requested_by.join(", "),
-                group.command,
-                group.cost,
-                group.timeout_sec,
-                group.required,
-                group.status,
-                group.duplicate_count
+                "Grouped proof broker tasks: {} unique from {} request(s).\n\n",
+                proof_groups.len(),
+                proof_requests.len()
             ));
-            for reason in &group.reasons {
-                plan.push_str(&format!("  - Reason: {}\n", escape_md(reason)));
+            for group in &proof_groups {
+                plan.push_str(&format!(
+                    "- `{}` requested by `{}`: `{}` ({}, timeout {}s, required={}, status={}, merged_requests={})\n",
+                    group.id,
+                    group.requested_by.join(", "),
+                    group.command,
+                    group.cost,
+                    group.timeout_sec,
+                    group.required,
+                    group.status,
+                    group.duplicate_count
+                ));
+                for reason in &group.reasons {
+                    plan.push_str(&format!("  - Reason: {}\n", escape_md(reason)));
+                }
+            }
+            plan.push('\n');
+        }
+        if focused_plans.is_empty() {
+            plan.push_str("No focused red/green test targets were planned from the diff.\n");
+        } else {
+            plan.push_str("## Focused red/green proof plan\n\n");
+            plan.push_str("No proof broker commands were executed in this planner-only pass.\n\n");
+            for plan_item in focused_plans {
+                plan.push_str(&format!(
+                    "- `{}` `{}`{} requested by `{}`: status=`{}`, cost=`focused-test`, head=`{}`, base+tests=`{}`. {}\n",
+                    plan_item.id,
+                    plan_item.test_file,
+                    plan_item
+                        .test_name
+                        .as_ref()
+                        .map(|name| format!(" - `{}`", escape_md(name)))
+                        .unwrap_or_default(),
+                    plan_item.requested_by.join(", "),
+                    plan_item.status,
+                    escape_md(&plan_item.head_command),
+                    escape_md(&plan_item.base_plus_tests_command),
+                    escape_md(&plan_item.reason)
+                ));
+                if !plan_item.request_ids.is_empty() {
+                    plan.push_str(&format!(
+                        "  - Merged requests: `{}`\n",
+                        plan_item.request_ids.join("`, `")
+                    ));
+                }
             }
         }
     }
@@ -3680,6 +3750,228 @@ fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGrou
         group.duplicate_count += 1;
     }
     groups.into_values().collect()
+}
+
+fn proof_budget(profile: &Profile) -> ProofBudget {
+    match profile.name.as_str() {
+        "gh-runner" => ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 1,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        },
+        "cx23" => ProofBudget {
+            max_focused_test_files: 4,
+            max_focused_tests: 2,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 900,
+        },
+        "cx33" => ProofBudget {
+            max_focused_test_files: 6,
+            max_focused_tests: 4,
+            per_command_timeout_sec: 450,
+            max_total_seconds: 1_200,
+        },
+        _ => ProofBudget {
+            max_focused_test_files: 8,
+            max_focused_tests: 6,
+            per_command_timeout_sec: 600,
+            max_total_seconds: 1_800,
+        },
+    }
+}
+
+fn focused_proof_plans_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedProofPlan> {
+    focused_test_tasks_from_diff(diff, proof_requests, budget)
+        .into_iter()
+        .map(|task| {
+            let command = command_display(&proof_task_argv(&task));
+            FocusedProofPlan {
+                id: task.id,
+                test_file: task.file,
+                test_name: task.test_name,
+                head_command: command.clone(),
+                base_plus_tests_command: command,
+                requested_by: task.requested_by,
+                request_ids: task.request_ids,
+                status: "planned".to_owned(),
+                reason: format!(
+                    "planner-only focused test target under budget: max {} file(s), {} test(s), {}s per command, {}s total",
+                    budget.max_focused_test_files,
+                    budget.max_focused_tests,
+                    budget.per_command_timeout_sec,
+                    budget.max_total_seconds
+                ),
+            }
+        })
+        .collect()
+}
+
+fn focused_test_tasks_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedTestTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
+    for file in diff
+        .changed_files
+        .iter()
+        .filter(|path| is_bun_focused_test_file(path))
+        .take(budget.max_focused_test_files)
+    {
+        let names = focused_test_names_for_file(&diff.patch, file);
+        if names.is_empty() {
+            tasks.push(focused_test_task(file, None, &request_groups));
+        } else {
+            for name in names {
+                tasks.push(focused_test_task(file, Some(name), &request_groups));
+                if tasks.len() >= budget.max_focused_tests {
+                    return tasks;
+                }
+            }
+        }
+        if tasks.len() >= budget.max_focused_tests {
+            break;
+        }
+    }
+    tasks
+}
+
+fn focused_test_task(
+    file: &str,
+    test_name: Option<String>,
+    request_groups: &[ProofRequestGroup],
+) -> FocusedTestTask {
+    let mut requested_by = Vec::new();
+    let mut request_ids = Vec::new();
+    for group in request_groups {
+        if group.command.contains(file)
+            && test_name
+                .as_ref()
+                .is_none_or(|name| group.command.contains(name))
+        {
+            for lane in &group.requested_by {
+                push_unique(&mut requested_by, lane);
+            }
+            for id in &group.request_ids {
+                push_unique(&mut request_ids, id);
+            }
+        }
+    }
+    if requested_by.is_empty() {
+        requested_by.push("proof-broker".to_owned());
+    }
+    let fingerprint =
+        sha256_hex(format!("{file}\n{}", test_name.as_deref().unwrap_or("")).as_bytes());
+    FocusedTestTask {
+        id: format!("proof-red-green-{}", &fingerprint[..12]),
+        file: file.to_owned(),
+        test_name,
+        requested_by,
+        request_ids,
+    }
+}
+
+fn focused_test_names_for_file(patch: &str, file: &str) -> Vec<String> {
+    let mut names = Vec::new();
+    let mut current_path = String::new();
+    for line in patch.lines() {
+        if let Some(path) = line.strip_prefix("+++ b/") {
+            current_path = normalize_repo_path(path);
+            continue;
+        }
+        if current_path != file || !line.starts_with('+') || line.starts_with("+++") {
+            continue;
+        }
+        if let Some(name) = extract_focused_test_name(&line[1..]) {
+            push_unique(&mut names, &name);
+        }
+    }
+    names
+}
+
+fn extract_focused_test_name(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    for prefix in ["test(", "it(", "describe("] {
+        if let Some(rest) = trimmed.strip_prefix(prefix)
+            && let Some(name) = parse_js_string_literal(rest.trim_start())
+        {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn parse_js_string_literal(text: &str) -> Option<String> {
+    let mut chars = text.chars();
+    let quote = chars.next()?;
+    if !matches!(quote, '"' | '\'') {
+        return None;
+    }
+    let mut escaped = false;
+    let mut out = String::new();
+    for ch in chars {
+        if escaped {
+            out.push(ch);
+            escaped = false;
+        } else if ch == '\\' {
+            escaped = true;
+        } else if ch == quote {
+            return Some(out.trim().to_owned()).filter(|value| !value.is_empty());
+        } else {
+            out.push(ch);
+        }
+    }
+    None
+}
+
+fn is_bun_focused_test_file(path: &str) -> bool {
+    let path = normalize_repo_path(path);
+    if !is_repo_relative_path(&path) {
+        return false;
+    }
+    let lower = path.to_ascii_lowercase();
+    (lower.starts_with("test/") || lower.starts_with("tests/"))
+        && [
+            ".test.ts",
+            ".test.tsx",
+            ".test.js",
+            ".test.jsx",
+            ".test.mjs",
+            ".test.cjs",
+        ]
+        .iter()
+        .any(|suffix| lower.ends_with(suffix))
+}
+
+fn proof_task_argv(task: &FocusedTestTask) -> Vec<String> {
+    let mut argv = vec!["bun".to_owned(), "test".to_owned(), task.file.clone()];
+    if let Some(name) = &task.test_name {
+        argv.push("-t".to_owned());
+        argv.push(name.clone());
+    }
+    argv
+}
+
+fn command_display(argv: &[String]) -> String {
+    argv.iter()
+        .map(|part| {
+            if part
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '.' | '_' | '-' | ':'))
+            {
+                part.clone()
+            } else {
+                format!("'{}'", part.replace('\'', "'\\''"))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn push_unique(values: &mut Vec<String>, value: &str) {
@@ -5732,13 +6024,7 @@ fn validate_proof_request(
         "requested"
     };
     let command = non_empty_or(&command, "<missing command>");
-    let cost = request
-        .cost
-        .as_deref()
-        .map(str::trim)
-        .filter(|cost| !cost.is_empty())
-        .unwrap_or("focused-test")
-        .to_owned();
+    let cost = classify_proof_cost(request.cost.as_deref(), &command);
     let timeout_sec = request.timeout_sec.unwrap_or(300).clamp(1, 900);
     let fingerprint = sha256_hex(
         format!(
@@ -5760,6 +6046,35 @@ fn validate_proof_request(
         required: request.required.unwrap_or(false),
         status: status.to_owned(),
     }
+}
+
+fn classify_proof_cost(cost: Option<&str>, command: &str) -> String {
+    let supplied = cost.unwrap_or("").trim().to_ascii_lowercase();
+    if matches!(
+        supplied.as_str(),
+        "focused-test" | "focused-build" | "manual"
+    ) {
+        return supplied;
+    }
+    let command = command.to_ascii_lowercase();
+    if supplied.contains("test")
+        || command.contains(" test ")
+        || command.starts_with("bun test")
+        || command.starts_with("cargo test")
+        || command.starts_with("npm test")
+    {
+        return "focused-test".to_owned();
+    }
+    if supplied.contains("build")
+        || command.contains(" build")
+        || command.starts_with("cargo build")
+        || command.starts_with("bun build")
+        || command.starts_with("ninja")
+        || command.starts_with("cmake")
+    {
+        return "focused-build".to_owned();
+    }
+    "manual".to_owned()
 }
 
 fn non_empty_or(value: &str, fallback: &str) -> String {
@@ -8304,16 +8619,17 @@ mod tests {
         LaneModelOutput, LanePlan, ModelAssignment, ModelCandidateComment, ModelCandidateFinding,
         ModelEvidenceIssue, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
         ModelRunContext, NO_LGTM_POSTURE, Observation, OpenCodeEndpointKindArg, Plan, PostArgs,
-        PostingMode, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience, ReviewInlineComment,
-        ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
-        SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
+        PostingMode, Profile, ProofBudget, ProofRequest, ProofRequestGroup, ProviderKindArg,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ReviewArgs, ReviewBodyAudience,
+        ReviewInlineComment, ReviewMetricsInput, RunArgs, RunMode, SensorEvidenceIssue, SensorPlan,
+        SensorStatusWrite, SummaryOnlyFinding, ToolClass, apply_model_output, apply_refuter_output,
         build_review_metrics, build_tokmd_sensor_commands, cap_review_body, classify_diff,
-        cmd_post, collect_sensor_evidence_issues, combined_observations, dedupe_inline_comments,
-        default_lanes, direct_minimax_spec, extract_model_content, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, opencode_canary_spec, provider_spec_for_lane_with_key_state,
+        classify_proof_cost, cmd_post, collect_sensor_evidence_issues, combined_observations,
+        dedupe_inline_comments, default_lanes, direct_minimax_spec, extract_model_content,
+        focused_test_tasks_from_diff, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, model_api_url, model_assignments, model_auth_header,
+        model_json_payload, model_lane, model_request_payload, model_response_shape,
+        opencode_canary_spec, proof_budget, provider_spec_for_lane_with_key_state,
         render_ledger_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
         run_sensor, sha256_hex, split_curl_http_status, validate_github_review_payload,
@@ -9005,7 +9321,12 @@ index 1111111..2222222 100644
         );
 
         let temp = tempfile::tempdir()?;
-        write_proof_request_artifacts(temp.path(), &proof_requests)?;
+        write_proof_request_artifacts(
+            temp.path(),
+            &test_diff(),
+            &Profile::default(),
+            &proof_requests,
+        )?;
         let proof_json: Vec<super::ProofRequest> =
             serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
         let proof_groups: Vec<ProofRequestGroup> = serde_json::from_slice(&fs::read(
@@ -9016,7 +9337,9 @@ index 1111111..2222222 100644
         assert_eq!(proof_json.len(), 1);
         assert_eq!(proof_groups.len(), 1);
         assert_eq!(proof_groups[0].duplicate_count, 1);
-        assert!(proof_plan.contains("Proof requests are passive"));
+        assert!(
+            proof_plan.contains("No focused red/green test targets were planned from the diff.")
+        );
         assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
         Ok(())
     }
@@ -9051,7 +9374,12 @@ index 1111111..2222222 100644
         ];
 
         let temp = tempfile::tempdir()?;
-        write_proof_request_artifacts(temp.path(), &proof_requests)?;
+        write_proof_request_artifacts(
+            temp.path(),
+            &test_diff(),
+            &Profile::default(),
+            &proof_requests,
+        )?;
 
         let proof_json: Vec<super::ProofRequest> =
             serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
@@ -9087,6 +9415,157 @@ index 1111111..2222222 100644
         assert_eq!(group.status, "requested");
         assert!(proof_plan.contains("Grouped proof broker tasks: 1 unique from 2 request(s)."));
         assert!(proof_plan.contains("merged_requests=2"));
+        Ok(())
+    }
+
+    #[test]
+    fn focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests() {
+        let patch = "\
+diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
+index 1111111..2222222 100644
+--- a/test/js/bun/md/md-edge-cases.test.ts
++++ b/test/js/bun/md/md-edge-cases.test.ts
+@@ -1,2 +1,4 @@
+ import { test } from 'bun:test';
++test(\"snapshots resizable ArrayBuffer input\", () => {});
++it('keeps stable bytes after getter reentry', () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+        };
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-tests-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+                reason: "Need green witness.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-opposition-001".to_owned(),
+                lane: "opposition".to_owned(),
+                requested_by: vec!["opposition".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+                reason: "Confirm the same focused test.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            },
+        ];
+
+        let tasks = focused_test_tasks_from_diff(
+            &diff,
+            &proof_requests,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 6,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+        );
+
+        assert_eq!(tasks.len(), 2);
+        assert_eq!(tasks[0].file, "test/js/bun/md/md-edge-cases.test.ts");
+        assert_eq!(
+            tasks[0].test_name.as_deref(),
+            Some("snapshots resizable ArrayBuffer input")
+        );
+        assert_eq!(
+            tasks[0].requested_by,
+            vec!["tests-oracle".to_owned(), "opposition".to_owned()]
+        );
+        assert_eq!(
+            tasks[0].request_ids,
+            vec![
+                "proof-tests-001".to_owned(),
+                "proof-opposition-001".to_owned()
+            ]
+        );
+        assert_eq!(
+            tasks[1].test_name.as_deref(),
+            Some("keeps stable bytes after getter reentry")
+        );
+        assert_eq!(proof_budget(&Profile::default()).max_focused_tests, 1);
+    }
+
+    #[test]
+    fn proof_cost_is_normalized_to_known_broker_classes() {
+        assert_eq!(
+            classify_proof_cost(Some("focused-test"), "bun test test/js/node/fs/fs.test.ts"),
+            "focused-test"
+        );
+        assert_eq!(
+            classify_proof_cost(
+                Some("slow integration test"),
+                "bun test test/js/node/fs/fs.test.ts"
+            ),
+            "focused-test"
+        );
+        assert_eq!(
+            classify_proof_cost(Some("compile"), "cargo build --workspace"),
+            "focused-build"
+        );
+        assert_eq!(
+            classify_proof_cost(Some("expensive mutation"), "cargo mutants"),
+            "manual"
+        );
+    }
+
+    #[test]
+    fn proof_request_artifacts_write_focused_planner_without_execution() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let patch = "\
+diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
+index 1111111..2222222 100644
+--- a/test/js/bun/md/md-edge-cases.test.ts
++++ b/test/js/bun/md/md-edge-cases.test.ts
+@@ -1,2 +1,3 @@
+ import { test } from 'bun:test';
++test(\"snapshots resizable ArrayBuffer input\", () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+        };
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-tests-001".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+            reason: "Need focused red/green witness.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+
+        write_proof_request_artifacts(temp.path(), &diff, &Profile::default(), &proof_requests)?;
+
+        let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
+
+        assert!(proof_plan.contains("## Focused red/green proof plan"));
+        assert!(proof_plan.contains("No proof broker commands were executed"));
+        assert!(proof_plan.contains("head=`bun test test/js/bun/md/md-edge-cases.test.ts -t"));
+        assert!(
+            proof_plan.contains("base+tests=`bun test test/js/bun/md/md-edge-cases.test.ts -t")
+        );
+        assert!(!temp.path().join("review/proof_receipts.json").exists());
+        assert!(!temp.path().join("proof_receipts.ndjson").exists());
         Ok(())
     }
 
