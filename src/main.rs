@@ -4685,75 +4685,21 @@ fn write_review_artifacts(
     let candidates = read_candidate_records(out)?;
     let (inline_comments, summary_only_findings) = read_candidate_review_surfaces(out)?;
 
-    let artifact_body = render_review_body(
-        &shared_context_id,
-        plan,
-        diff,
-        &model_lanes,
-        &missing_or_failed_sensor_evidence,
-        &missing_or_failed_model_evidence,
-        &inline_comments,
-        &summary_only_findings,
-        &model_observations,
-        &proof_receipts,
-        args.review_body_max_bytes,
-        ReviewBodyAudience::Artifact,
-    );
-    let pr_body = render_review_body(
-        &shared_context_id,
-        plan,
-        diff,
-        &model_lanes,
-        &missing_or_failed_sensor_evidence,
-        &missing_or_failed_model_evidence,
-        &inline_comments,
-        &summary_only_findings,
-        &model_observations,
-        &proof_receipts,
-        args.review_body_max_bytes,
-        ReviewBodyAudience::PullRequest,
-    );
-    validate_pr_review_body_policy(&pr_body, &config.review_body)
-        .with_context(|| "validate pull request review body policy")?;
-    let github_review = GitHubReview {
-        event: "COMMENT".to_owned(),
-        body: pr_body.clone(),
-        comments: inline_comments
-            .iter()
-            .map(|comment| GitHubReviewComment {
-                path: comment.path.clone(),
-                line: comment.line,
-                side: comment.side.clone(),
-                body: comment.body.clone(),
-            })
-            .collect(),
-    };
-    let should_prepare_github_review = should_prepare_github_review_payload(
-        args,
-        &inline_comments,
-        &summary_only_findings,
-        &proof_receipts,
-        &pr_body,
-    );
-    let review_payload_status = if should_prepare_github_review {
-        "prepared"
-    } else {
-        "skipped_empty_smoke"
-    };
-    let terminal_state = build_review_terminal_state(TerminalStateInput {
+    let preliminary_surface = compile_review_surface(ReviewCompilerInput {
+        shared_context_id: &shared_context_id,
+        review_body_policy: &config.review_body,
         args,
         plan,
-        review_payload_status,
-        should_prepare_github_review,
-        pr_body: &pr_body,
-        inline_comments: &inline_comments,
-        summary_only_findings: &summary_only_findings,
+        diff,
         model_lanes: &model_lanes,
         missing_or_failed_sensor_evidence: &missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &missing_or_failed_model_evidence,
+        inline_comments: &inline_comments,
+        summary_only_findings: &summary_only_findings,
+        observations: &model_observations,
         proof_receipts: &proof_receipts,
-    });
-    let review = ReviewArtifacts {
+    })?;
+    let mut review = ReviewArtifacts {
         shared_context_id,
         review_profile: config.review_profile.clone(),
         mode: args.mode.key().to_owned(),
@@ -4771,7 +4717,7 @@ fn write_review_artifacts(
         ledger_path: effective_ledger_path(config, args),
         ledger_max_bytes: args.ledger_max_bytes,
         pr_thread_context,
-        terminal_state,
+        terminal_state: preliminary_surface.terminal_state,
         provider_preflights,
         model_lanes,
         missing_or_failed_sensor_evidence,
@@ -4782,7 +4728,7 @@ fn write_review_artifacts(
         proof_requests,
         proof_receipts,
         resource_leases,
-        body: artifact_body.clone(),
+        body: preliminary_surface.artifact_body,
     };
     let observations = combined_observations(&review);
     let observation_summary = observation_summary_artifacts(&observations);
@@ -4814,6 +4760,31 @@ fn write_review_artifacts(
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
     write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
+    let mut compiler_summary_only_findings = review.summary_only_findings.clone();
+    compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
+    let mut compiler_observations = review.observations.clone();
+    compiler_observations.extend(follow_up_evidence.observations.clone());
+    let final_surface = compile_review_surface(ReviewCompilerInput {
+        shared_context_id: &review.shared_context_id,
+        review_body_policy: &config.review_body,
+        args,
+        plan,
+        diff,
+        model_lanes: &review.model_lanes,
+        missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
+        missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
+        inline_comments: &review.inline_comments,
+        summary_only_findings: &compiler_summary_only_findings,
+        observations: &compiler_observations,
+        proof_receipts: &review.proof_receipts,
+    })?;
+    let review_payload_status = final_surface.review_payload_status;
+    let should_prepare_github_review = final_surface.should_prepare_github_review;
+    let github_review = final_surface.github_review;
+    let artifact_body = final_surface.artifact_body;
+    let terminal_state = final_surface.terminal_state;
+    review.terminal_state = terminal_state.clone();
+    review.body = artifact_body.clone();
     let mut witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
@@ -4912,6 +4883,108 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
     ]
     .iter()
     .any(|heading| body.contains(heading))
+}
+
+struct ReviewCompilerInput<'a> {
+    shared_context_id: &'a str,
+    review_body_policy: &'a ReviewBodyPolicy,
+    args: &'a RunArgs,
+    plan: &'a Plan,
+    diff: &'a DiffContext,
+    model_lanes: &'a [ModelLaneReceipt],
+    missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
+    missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
+    inline_comments: &'a [ReviewInlineComment],
+    summary_only_findings: &'a [SummaryOnlyFinding],
+    observations: &'a [Observation],
+    proof_receipts: &'a [ProofReceipt],
+}
+
+struct CompiledReviewSurface {
+    artifact_body: String,
+    github_review: GitHubReview,
+    should_prepare_github_review: bool,
+    review_payload_status: &'static str,
+    terminal_state: ReviewTerminalState,
+}
+
+fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledReviewSurface> {
+    let artifact_body = render_review_body(
+        input.shared_context_id,
+        input.plan,
+        input.diff,
+        input.model_lanes,
+        input.missing_or_failed_sensor_evidence,
+        input.missing_or_failed_model_evidence,
+        input.inline_comments,
+        input.summary_only_findings,
+        input.observations,
+        input.proof_receipts,
+        input.args.review_body_max_bytes,
+        ReviewBodyAudience::Artifact,
+    );
+    let pr_body = render_review_body(
+        input.shared_context_id,
+        input.plan,
+        input.diff,
+        input.model_lanes,
+        input.missing_or_failed_sensor_evidence,
+        input.missing_or_failed_model_evidence,
+        input.inline_comments,
+        input.summary_only_findings,
+        input.observations,
+        input.proof_receipts,
+        input.args.review_body_max_bytes,
+        ReviewBodyAudience::PullRequest,
+    );
+    validate_pr_review_body_policy(&pr_body, input.review_body_policy)
+        .with_context(|| "validate pull request review body policy")?;
+    let github_review = GitHubReview {
+        event: "COMMENT".to_owned(),
+        body: pr_body.clone(),
+        comments: input
+            .inline_comments
+            .iter()
+            .map(|comment| GitHubReviewComment {
+                path: comment.path.clone(),
+                line: comment.line,
+                side: comment.side.clone(),
+                body: comment.body.clone(),
+            })
+            .collect(),
+    };
+    let should_prepare_github_review = should_prepare_github_review_payload(
+        input.args,
+        input.inline_comments,
+        input.summary_only_findings,
+        input.proof_receipts,
+        &pr_body,
+    );
+    let review_payload_status = if should_prepare_github_review {
+        "prepared"
+    } else {
+        "skipped_empty_smoke"
+    };
+    let terminal_state = build_review_terminal_state(TerminalStateInput {
+        args: input.args,
+        plan: input.plan,
+        review_payload_status,
+        should_prepare_github_review,
+        pr_body: &pr_body,
+        inline_comments: input.inline_comments,
+        summary_only_findings: input.summary_only_findings,
+        model_lanes: input.model_lanes,
+        missing_or_failed_sensor_evidence: input.missing_or_failed_sensor_evidence,
+        missing_or_failed_model_evidence: input.missing_or_failed_model_evidence,
+        proof_receipts: input.proof_receipts,
+    });
+    Ok(CompiledReviewSurface {
+        artifact_body,
+        github_review,
+        should_prepare_github_review,
+        review_payload_status,
+        terminal_state,
+    })
 }
 
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
@@ -14196,24 +14269,24 @@ mod tests {
         PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
         ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
         RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewDepth, ReviewInlineComment,
-        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
-        append_follow_up_evidence_witnesses, apply_model_output, apply_plan_selectors,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
+        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
+        ToolClass, append_follow_up_evidence_witnesses, apply_model_output, apply_plan_selectors,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
         build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
         classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
         collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
-        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
-        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        command_display, compile_review_surface, dedupe_inline_comments, default_lanes,
+        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
+        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
+        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
         render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
@@ -18439,6 +18512,50 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert_eq!(state.status, "needs-reviewer-attention");
         assert!(state.reviewer_value_present);
+    }
+
+    #[test]
+    fn compiler_surface_promotes_follow_up_observation_to_final_review() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let follow_up_observation = test_observation(
+            "orchestrator-follow-up-route",
+            "The source-route concern was refuted by the routed proof receipt.",
+            "false-premise",
+            "refuted",
+            "medium",
+            "high",
+            "source-route-refuted",
+        );
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &[follow_up_observation],
+            proof_receipts: &[],
+        })?;
+
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "prepared");
+        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
+        assert!(surface.github_review.body.contains("## Refuted"));
+        assert!(
+            surface
+                .github_review
+                .body
+                .contains("source-route concern was refuted")
+        );
+        assert!(surface.github_review.comments.is_empty());
+        Ok(())
     }
 
     #[test]
