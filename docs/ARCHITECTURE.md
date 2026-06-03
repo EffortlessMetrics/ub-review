@@ -58,3 +58,18 @@ runner over one shared evidence packet. OpenCode Go is an optional direct
 provider lane, not an agent orchestrator. GLM is skipped for v0.
 `agent-investigate` and `agent-patch` are reserved for future leased
 Codex/OpenCode/Pi-style workers and are not part of the default review path.
+
+## Prompt-prefix cache boundary
+
+Wide direct-provider fanout should use prompt/prefix caching when the selected
+provider proves support. The runner builds one byte-stable shared context block,
+writes its hash as an artifact, warms the provider cache once, and then appends
+small lane-specific tails for the model lanes. This is provider/runtime plumbing,
+not a mutable shared model session and not PR-review content.
+
+Cacheable content is limited to stable run-start evidence: policy, schemas, PR
+thread snapshot, diff, RIGHT-side line map, changed-file context, sensor
+receipts, ledger excerpt, and observations known before cache warm. Lane ids,
+lane questions, post-warm proof receipts, and follow-up observation deltas stay
+outside the cached prefix. Provider cache metrics are recorded in artifacts only.
+See [Prompt prefix caching](PROMPT_PREFIX_CACHING.md) for the full contract.

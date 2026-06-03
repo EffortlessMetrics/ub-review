@@ -183,6 +183,9 @@ target/ub-review/
 
   review/
     shared_context.md
+    shared_context_cache_block.md
+    shared_context_hash
+    cache_manifest.json
     metrics.json
     review.json
     review.md
@@ -302,6 +305,13 @@ The intended cheap path is:
 Do not run many independent review jobs that rediscover the repository. This
 action builds shared context once, runs bounded model lanes over that context,
 validates inline candidates, and submits one grouped PR review when configured.
+
+When provider support is proven, wide MiniMax fanout should reuse that shared
+context through prompt/prefix caching: one canonical cacheable prefix is warmed
+once, then each lane adds only a small task tail. Cache receipts and token
+accounting belong in artifacts such as `review/metrics.json`; they are not part
+of the GitHub PR review body. The full design is documented in
+[`docs/PROMPT_PREFIX_CACHING.md`](docs/PROMPT_PREFIX_CACHING.md).
 
 ## Inputs
 

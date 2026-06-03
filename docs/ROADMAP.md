@@ -269,7 +269,30 @@ Acceptance:
 - old smoke PRs no longer clutter the fork queue;
 - no upstream Bun branch was touched.
 
-### 2. Review efficiency metrics
+### 2. Shared prompt-prefix caching
+
+Implement provider prompt caching as runtime plumbing for MiniMax lanes. Build a
+byte-stable `review/shared_context_cache_block.md`, record
+`review/shared_context_hash`, warm MiniMax once before lane fanout, then append
+small lane-specific tails. Use Anthropic-compatible explicit `cache_control`
+only after a MiniMax M3 canary proves cache creation and cache reads; otherwise
+fall back to automatic caching or no-cache without changing correctness.
+
+Acceptance:
+
+- the cached prefix contains only stable run-start evidence and excludes lane
+  names, lane questions, timestamps, post-warm proof receipts, and follow-up
+  deltas;
+- primary lane fanout starts only after the primer succeeds or the scheduler has
+  selected an automatic/no-cache fallback;
+- follow-up calls reuse the same cached prefix and include only small deltas;
+- cache TTL guard/keepwarm logic protects proof runs that may exceed the
+  provider cache window;
+- `review/metrics.json` records provider-returned cache creation/read tokens,
+  lane cache hit/miss counts, effective cache mode, and `shared_context_hash`;
+- the GitHub PR review body remains pure signal and contains no cache telemetry.
+
+### 3. Review efficiency metrics
 
 Add factual runtime and review-efficiency fields to artifacts and summaries:
 
@@ -287,7 +310,7 @@ Acceptance:
 - `running-summary.md` has a short review-efficiency block;
 - no quality score is invented.
 
-### 3. Clean PR review body rendering
+### 4. Clean PR review body rendering
 
 Lane rosters are setup metadata, not reviewer value. A successful
 provider/model/lane table belongs in artifacts, not in the GitHub PR Review
@@ -648,7 +671,7 @@ Acceptance:
 - report is factual and evidence-backed;
 - it identifies tuning work without broadening the product.
 
-### 20. Sensor image and base cache
+### 21. Sensor image and base cache
 
 Make the standard runner image supply the core evidence tools before review
 time.
@@ -669,7 +692,7 @@ Acceptance:
   clean review;
 - no fake heavyweight index is created for tools that do not expose one.
 
-### 21. Release binary path
+### 22. Release binary path
 
 Move the action from source build by default to release binary download with
 source build fallback.
@@ -680,7 +703,7 @@ Acceptance:
 - no correctness depends on a durable cache;
 - source fallback still works.
 
-### 22. Deep mode
+### 23. Deep mode
 
 Add more candidate/refuter pressure without increasing PR noise.
 
