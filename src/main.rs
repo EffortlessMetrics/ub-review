@@ -2042,7 +2042,9 @@ struct ModelCallOutcome<T> {
 struct SensorReceipt {
     status: String,
     reason: String,
+    #[serde(default)]
     exit_code: Option<i32>,
+    #[serde(default)]
     timed_out: bool,
 }
 
@@ -14610,6 +14612,35 @@ mod tests {
         assert_eq!(value["reason"], "command not found");
         assert!(out.join("sensors/ripr/stdout.txt").exists());
         assert!(out.join("sensors/ripr/stderr.txt").exists());
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_receipt_defaults_missing_exit_fields() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let status_path = temp
+            .path()
+            .join("sensors/ripr/ub-review-sensor-status.json");
+        let parent = status_path
+            .parent()
+            .ok_or_else(|| anyhow::anyhow!("status path missing parent"))?;
+        fs::create_dir_all(parent)?;
+        fs::write(
+            &status_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "sensor": "ripr",
+                "status": "missing",
+                "reason": "command not found"
+            }))?,
+        )?;
+
+        let receipt = super::read_sensor_receipt(&status_path)
+            .ok_or_else(|| anyhow::anyhow!("sensor receipt missing"))?;
+
+        assert_eq!(receipt.status, "missing");
+        assert_eq!(receipt.reason, "command not found");
+        assert_eq!(receipt.exit_code, None);
+        assert!(!receipt.timed_out);
         Ok(())
     }
 
