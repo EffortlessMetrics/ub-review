@@ -255,6 +255,14 @@ This layer is how `ub-review` should eventually answer questions like:
 - a test was skipped because the runtime profile had no budget;
 - missing proof was recorded as missing evidence, not safety.
 
+## Standard Rust repo template
+
+For Rust repositories that adopt this review style, use `cargo-allow` as the
+source-tree exception ledger and keep `xtask` as the control plane. The ledger
+pattern, CI artifact paths, and boundaries with Clippy, `ripr`, mutation,
+coverage, and release gates are documented in
+[`docs/CARGO_ALLOW_LEDGER.md`](CARGO_ALLOW_LEDGER.md).
+
 ## Next PRs
 
 ### 1. Smoke cleanup
