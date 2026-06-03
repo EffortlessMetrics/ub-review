@@ -2928,11 +2928,7 @@ fn apply_plan_selectors(plan: &mut Plan, selectors: &SelectorArgs) -> Result<()>
     let tool_include = parse_selector_set(&selectors.tools, "--tools")?;
     let tool_exclude = parse_selector_set(&selectors.except_tools, "--except-tools")?;
     if !tool_include.is_empty() || !tool_exclude.is_empty() {
-        plan.sensors = filter_sensor_plans(
-            std::mem::take(&mut plan.sensors),
-            &tool_include,
-            &tool_exclude,
-        )?;
+        plan.sensors = filter_sensor_plans(plan.sensors.clone(), &tool_include, &tool_exclude)?;
         plan.notes.push(format!(
             "tool selectors applied: tools=[{}] except-tools=[{}]",
             tool_include
@@ -13065,6 +13061,23 @@ mod tests {
     }
 
     #[test]
+    fn test_and_fixture_only_diff_is_classified_before_ub_risk() {
+        let files = vec![
+            "tests/ffi_regression.rs".to_owned(),
+            "fixtures/bun-rab-mini/tests/rab.rs".to_owned(),
+            "test/js/bun/ffi/ffi.test.js".to_owned(),
+        ];
+        let patch = "+ unsafe { *ptr }\n+ test(\"resizable ArrayBuffer proof\", () => {});";
+
+        let flags = classify_diff(&files, patch);
+
+        assert!(flags.rust_changed);
+        assert!(flags.rust_tests_changed);
+        assert!(flags.unsafe_or_native_risk);
+        assert_eq!(classify_diff_class(&files, &flags), DiffClass::TestsOnly);
+    }
+
+    #[test]
     fn lane_model_identity_is_split() {
         let lanes = default_lanes();
         let security = lanes.iter().find(|lane| lane.id == "security");
@@ -16108,6 +16121,47 @@ index 1111111..2222222 100644
             .unwrap_or_default();
 
         assert!(err.contains("unknown lane selector"));
+    }
+
+    #[test]
+    fn malformed_selector_ids_are_rejected_before_planning() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.selectors.lanes = "tests-oracle,source route".to_owned();
+
+        let err = validate_run_args(&args)
+            .err()
+            .map(|err| err.to_string())
+            .unwrap_or_default();
+
+        assert!(err.contains("--lanes contains invalid selector id `source route`"));
+    }
+
+    #[test]
+    fn unknown_tool_selector_is_rejected_with_available_tools() -> Result<()> {
+        let mut plan = test_plan(vec![
+            sensor_plan("tokmd", "tokmd", true),
+            sensor_plan("ripr", "ripr", true),
+        ]);
+        let selectors = SelectorArgs {
+            tools: "tokmd,missing-tool".to_owned(),
+            ..SelectorArgs::default()
+        };
+
+        let err = apply_plan_selectors(&mut plan, &selectors)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("unknown tool selector unexpectedly passed"))?;
+        let message = err.to_string();
+
+        assert!(message.contains("unknown tool selector(s): missing-tool"));
+        assert!(message.contains("available: ripr,tokmd"));
+        assert_eq!(
+            plan.sensors
+                .iter()
+                .map(|sensor| sensor.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tokmd", "ripr"]
+        );
+        Ok(())
     }
 
     #[test]
