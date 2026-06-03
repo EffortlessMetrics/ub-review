@@ -1666,7 +1666,7 @@ impl Default for Profile {
             "gh-runner",
             20,
             16,
-            3,
+            4,
             6,
             3,
             2,
@@ -2064,7 +2064,8 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     let mut args = normalize_run_args(args)?;
     let (config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
-    apply_runtime_profile_limits(&mut args, config.selected_profile()?)?;
+    let profile = config.selected_profile()?;
+    apply_runtime_profile_limits(&mut args, profile)?;
     let selected_model_lanes = selected_review_lanes_for_args(&plan, &args)?;
     print_plan(&plan, &box_state);
     write_plan_artifacts(
@@ -2091,7 +2092,13 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         event_log.append("run_dry", serde_json::json!({"reason": "--dry-run"}))?;
     } else {
         write_skipped_sensor_receipts(&args.review.root, &args.review.out, &plan, &event_log)?;
-        run_sensors(&args.review.root, &args.review.out, &plan, &event_log)?;
+        run_sensors(
+            &args.review.root,
+            &args.review.out,
+            &plan,
+            profile,
+            &event_log,
+        )?;
     }
 
     write_lane_packets(&args.review.out, &diff, &plan, &event_log)?;
@@ -3157,7 +3164,13 @@ fn write_dry_run_sensor_receipts(
     Ok(())
 }
 
-fn run_sensors(root: &Path, out: &Path, plan: &Plan, event_log: &EventLog) -> Result<()> {
+fn run_sensors(
+    root: &Path,
+    out: &Path,
+    plan: &Plan,
+    profile: &Profile,
+    event_log: &EventLog,
+) -> Result<()> {
     let runnable = plan
         .sensors
         .iter()
@@ -3168,9 +3181,7 @@ fn run_sensors(root: &Path, out: &Path, plan: &Plan, event_log: &EventLog) -> Re
         event_log.append("sensors_empty", serde_json::json!({}))?;
         return Ok(());
     }
-    let jobs = sensor_jobs_for_profile(&plan.profile_name)
-        .max(1)
-        .min(runnable.len());
+    let jobs = sensor_job_count(profile, runnable.len())?;
     let queue = Arc::new(Mutex::new(runnable));
     let failures = Arc::new(Mutex::new(Vec::<String>::new()));
 
@@ -3209,13 +3220,14 @@ fn run_sensors(root: &Path, out: &Path, plan: &Plan, event_log: &EventLog) -> Re
     Ok(())
 }
 
-fn sensor_jobs_for_profile(profile: &str) -> usize {
-    match profile {
-        "cx43" => 6,
-        "cx33" => 3,
-        "gh-runner" => 4,
-        _ => 2,
+fn sensor_job_count(profile: &Profile, runnable_len: usize) -> Result<usize> {
+    if profile.limits.sensor_jobs == 0 {
+        bail!(
+            "runtime profile {} has sensor_jobs=0; sensors cannot be scheduled",
+            profile.name
+        );
     }
+    Ok(profile.limits.sensor_jobs.min(runnable_len))
 }
 
 fn run_sensor(
@@ -10803,7 +10815,7 @@ fn builtin_profiles() -> Vec<Profile> {
             "gh-runner",
             20,
             16,
-            3,
+            4,
             6,
             3,
             2,
@@ -11288,8 +11300,8 @@ mod tests {
         proof_budget, provider_spec_for_lane_with_key_state, read_github_event_pr_context,
         render_ledger_context, render_pr_thread_context, render_review_body, render_summary,
         review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_override, sha256_hex,
-        split_curl_http_status, validate_github_review_payload,
+        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_override,
+        sensor_job_count, sha256_hex, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
         write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
@@ -13792,6 +13804,62 @@ index 1111111..2222222 100644
         assert!(
             err.to_string()
                 .contains("runtime profile broken has llm_in_flight=0")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_jobs_use_runtime_profile_limit() -> Result<()> {
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+        let cx23 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx23")
+            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
+        let cx43 = profiles
+            .iter()
+            .find(|profile| profile.name == "cx43")
+            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
+
+        assert_eq!(sensor_job_count(gh_runner, 10)?, 4);
+        assert_eq!(sensor_job_count(cx23, 10)?, 2);
+        assert_eq!(sensor_job_count(cx43, 10)?, 6);
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_jobs_cap_to_runnable_sensors() -> Result<()> {
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+
+        assert_eq!(sensor_job_count(gh_runner, 2)?, 2);
+        Ok(())
+    }
+
+    #[test]
+    fn zero_sensor_runtime_limit_is_rejected() -> Result<()> {
+        let profile = Profile {
+            name: "broken".to_owned(),
+            limits: Limits {
+                sensor_jobs: 0,
+                ..Limits::default()
+            },
+            ..Profile::default()
+        };
+
+        let err = sensor_job_count(&profile, 2)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("zero sensor limit unexpectedly passed"))?;
+
+        assert!(
+            err.to_string()
+                .contains("runtime profile broken has sensor_jobs=0")
         );
         Ok(())
     }
