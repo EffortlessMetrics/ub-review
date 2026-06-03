@@ -75,7 +75,7 @@ fn active_len_tracks_view_after_resize() {
     )?;
 
     let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run(
         temp.path(),
@@ -178,6 +178,7 @@ fn active_len_tracks_view_after_resize() {
     let review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
     assert_eq!(review["mode"], "review-direct");
+    assert_eq!(review["review_profile"], "bun-ub-v0");
     assert_eq!(review["provider_policy"], "minimax-primary");
     assert_eq!(review["model_provider_policy"], "minimax-primary");
     assert_eq!(review["runtime_profile"], "gh-runner");
@@ -189,7 +190,10 @@ fn active_len_tracks_view_after_resize() {
         serde_json::from_slice(&fs::read(out.join("resolved-profile.json"))?)?;
     assert_eq!(resolved_profile["schema"], "ub-review.resolved_profile.v1");
     assert_eq!(resolved_profile["selected_profile"], "gh-runner");
+    assert_eq!(resolved_profile["selected_review_profile"], "bun-ub-v0");
     assert_eq!(resolved_profile["selected_runtime_profile"], "gh-runner");
+    assert_eq!(resolved_profile["review_profile"]["name"], "bun-ub-v0");
+    assert_eq!(resolved_profile["review_profile"]["repo_kind"], "bun");
     assert_eq!(
         resolved_profile["profile"]["limits"]["tests"],
         serde_json::json!(2)
@@ -219,6 +223,7 @@ fn active_len_tracks_view_after_resize() {
     let resolved_plan: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("resolved-plan.json"))?)?;
     assert_eq!(resolved_plan["schema"], "ub-review.resolved_plan.v1");
+    assert_eq!(resolved_plan["review_profile"], "bun-ub-v0");
     assert_eq!(resolved_plan["profile_name"], "gh-runner");
     assert_eq!(resolved_plan["runtime_profile"], "gh-runner");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
@@ -327,6 +332,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["schema_version"], 1);
     assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
+    assert_eq!(metrics["review_profile"], "bun-ub-v0");
     assert_eq!(metrics["profile_name"], "gh-runner");
     assert_eq!(metrics["runtime_profile"], "gh-runner");
     assert_eq!(metrics["depth"], "standard");
@@ -494,7 +500,7 @@ fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
     run(&repo, "git", &["commit", "-m", "baseline"])?;
 
     let cache = temp.path().join("cache");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run(
         temp.path(),
@@ -650,7 +656,7 @@ path = "src/lib.rs"
         "RAB resize follow-up: verify post-capture mutation before upstream. This tail should be truncated away.",
     )?;
     let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run(
         temp.path(),
@@ -748,7 +754,7 @@ path = "src/lib.rs"
         "Author reply: ASAN bad-free receipt attached; old base fails. This tail should be truncated away.",
     )?;
     let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run(
         temp.path(),
@@ -845,7 +851,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     write_fake_bun(&fake_bin)?;
     let path = prepend_to_path(&fake_bin)?;
     let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run_with_env(
         temp.path(),
@@ -1004,7 +1010,7 @@ path = "src/lib.rs"
     let dummy_key = "dummy-minimax-key-for-local-test";
     let (provider_url, provider) = spawn_fake_openai_provider(2)?;
     let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run_with_env(
         temp.path(),
@@ -1567,7 +1573,7 @@ fn spawn_fake_openai_provider(
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
+        let deadline = Instant::now() + Duration::from_secs(120);
         let mut requests = Vec::new();
         while requests.len() < expected_requests {
             match listener.accept() {

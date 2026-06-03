@@ -23,6 +23,7 @@ use wait_timeout::ChildExt;
 const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
 const STANDARD_MAX_MODEL_CALLS: usize = 14;
+const DEFAULT_REVIEW_PROFILE: &str = "bun-ub-v0";
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -594,6 +595,7 @@ struct ToolCacheReceipt {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 struct Config {
+    review_profile: String,
     profile: String,
     repo: RepoConfig,
     review: ReviewConfig,
@@ -856,6 +858,7 @@ struct ReviewTerminalState {
 #[derive(Clone, Debug, Serialize)]
 struct ReviewArtifacts {
     shared_context_id: String,
+    review_profile: String,
     mode: String,
     posting: String,
     runtime_profile: String,
@@ -909,6 +912,7 @@ struct ReviewMetrics {
     shared_context_id: String,
     base: String,
     head: String,
+    review_profile: String,
     profile_name: String,
     runtime_profile: String,
     mode: String,
@@ -1858,6 +1862,7 @@ impl Default for Config {
             .map(|tool| (tool.id.clone(), tool))
             .collect();
         Self {
+            review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
             profile: "gh-runner".to_owned(),
             repo: RepoConfig::default(),
             review: ReviewConfig::default(),
@@ -2739,9 +2744,16 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
     serde_json::json!({
         "schema": "ub-review.resolved_profile.v1",
         "selected_profile": &profile.name,
+        "selected_review_profile": &config.review_profile,
         "selected_runtime_profile": &profile.name,
         "repo": &config.repo,
         "review": &config.review,
+        "review_profile": {
+            "name": &config.review_profile,
+            "repo_kind": &config.repo.kind,
+            "default_lanes_enabled": config.review.enable_default_lanes,
+            "posting_engine": &config.review.posting_engine,
+        },
         "profile": profile,
         "tools": &config.tools,
     })
@@ -2761,6 +2773,7 @@ fn resolved_plan_artifact(
         "base": &plan.base,
         "head": &plan.head,
         "diff_class": diff.diff_class.key(),
+        "review_profile": &config.review_profile,
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
         "budgets": &profile.budgets,
@@ -4316,6 +4329,7 @@ fn write_review_artifacts(
     });
     let review = ReviewArtifacts {
         shared_context_id,
+        review_profile: config.review_profile.clone(),
         mode: args.mode.key().to_owned(),
         posting: args.posting.key().to_owned(),
         runtime_profile: profile.name.clone(),
@@ -4624,6 +4638,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         shared_context_id: review.shared_context_id.clone(),
         base: diff.base.clone(),
         head: diff.head.clone(),
+        review_profile: review.review_profile.clone(),
         profile_name: plan.profile_name.clone(),
         runtime_profile: review.runtime_profile.clone(),
         mode: review.mode.clone(),
@@ -11446,6 +11461,7 @@ fn run_curl_json_post(
         File::create(&stdout_path).with_context(|| format!("create {}", stdout_path.display()))?;
     let stderr =
         File::create(&stderr_path).with_context(|| format!("create {}", stderr_path.display()))?;
+    let data_binary_arg = curl_data_binary_arg(request_path)?;
     let mut command = ProcessCommand::new("curl");
     command
         .arg("-sS")
@@ -11459,7 +11475,7 @@ fn run_curl_json_post(
         .arg("-K")
         .arg("-")
         .arg("--data-binary")
-        .arg(format!("@{}", request_path.display()))
+        .arg(data_binary_arg)
         .arg(url)
         .current_dir(root)
         .stdin(Stdio::piped())
@@ -11511,6 +11527,13 @@ fn curl_temp_output_paths(request_path: &Path) -> (PathBuf, PathBuf) {
         dir.join(format!("{file_name}.curl.stdout.tmp")),
         dir.join(format!("{file_name}.curl.stderr.tmp")),
     )
+}
+
+fn curl_data_binary_arg(request_path: &Path) -> Result<String> {
+    let absolute = fs::canonicalize(request_path)
+        .with_context(|| format!("canonicalize {}", request_path.display()))?;
+    let path = absolute.to_string_lossy().replace('\\', "/");
+    Ok(format!("@{path}"))
 }
 
 fn wait_for_child_output_files(
@@ -12994,8 +13017,8 @@ mod tests {
 
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CommandStatus, Config,
-        DiffClass, DiffContext, DiffFlags, EventLog, FollowUpQuestionTask, GitHubReview,
-        GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
+        DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FollowUpQuestionTask,
+        GitHubReview, GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
         ModelCandidateComment, ModelCandidateFinding, ModelEvidenceIssue, ModelLaneReceipt,
         ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext,
         NO_LGTM_POSTURE, Observation, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
@@ -13133,8 +13156,9 @@ mod tests {
 
     #[test]
     fn bun_config_loads_with_default_lanes_enabled() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../configs/bun-gh-runner.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../profiles/bun-ub-v0.toml"))?;
         config.merge_defaults();
+        assert_eq!(config.review_profile, DEFAULT_REVIEW_PROFILE);
         assert_eq!(config.profile, "gh-runner");
         assert!(config.review.enable_default_lanes);
         let profile = config.selected_profile()?;
@@ -17070,6 +17094,7 @@ UB_REVIEW_HTTP_STATUS:429
     fn review_metrics_count_efficiency_facts() {
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
+            review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
@@ -17990,6 +18015,7 @@ index 1111111..2222222 100644
         let temp = tempfile::tempdir()?;
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
+            review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),

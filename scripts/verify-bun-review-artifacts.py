@@ -137,6 +137,8 @@ def require_common_tree(root: pathlib.Path) -> None:
         "input/diff-context.json",
         "events.ndjson",
         "plan.json",
+        "resolved-profile.json",
+        "resolved-plan.json",
         "running-summary.md",
         "review/shared_context.md",
         "review/pr_thread_context.json",
@@ -218,6 +220,36 @@ def require_summary(root: pathlib.Path) -> None:
     no_standalone_approval_line(summary, summary_path)
 
 
+def require_profile_artifacts(root: pathlib.Path) -> tuple[dict, dict]:
+    resolved_profile = load_json(root / "resolved-profile.json")
+    resolved_plan = load_json(root / "resolved-plan.json")
+    if not isinstance(resolved_profile, dict):
+        fail("resolved-profile.json is not an object")
+    if not isinstance(resolved_plan, dict):
+        fail("resolved-plan.json is not an object")
+    if resolved_profile.get("schema") != "ub-review.resolved_profile.v1":
+        fail("resolved-profile.json has wrong schema")
+    if resolved_plan.get("schema") != "ub-review.resolved_plan.v1":
+        fail("resolved-plan.json has wrong schema")
+    if resolved_profile.get("selected_review_profile") != "bun-ub-v0":
+        fail("resolved-profile.json selected_review_profile is not bun-ub-v0")
+    review_profile = resolved_profile.get("review_profile")
+    if not isinstance(review_profile, dict):
+        fail("resolved-profile.json review_profile is not an object")
+    if review_profile.get("name") != "bun-ub-v0":
+        fail("resolved-profile.json review_profile.name is not bun-ub-v0")
+    if review_profile.get("repo_kind") != "bun":
+        fail("resolved-profile.json review_profile.repo_kind is not bun")
+    runtime_profile = resolved_profile.get("selected_runtime_profile")
+    if not isinstance(runtime_profile, str) or not runtime_profile:
+        fail("resolved-profile.json selected_runtime_profile is invalid")
+    if resolved_plan.get("review_profile") != "bun-ub-v0":
+        fail("resolved-plan.json review_profile is not bun-ub-v0")
+    if resolved_plan.get("runtime_profile") != runtime_profile:
+        fail("resolved-plan.json runtime_profile does not match resolved-profile.json")
+    return resolved_profile, resolved_plan
+
+
 def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
     review = load_json(root / "review/review.json")
     review_body = read_text(root / "review/review.md")
@@ -230,6 +262,11 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         fail("review.json shared_context_id is not a 64-character hex digest")
     if review.get("mode") != "review-direct":
         fail(f"review.json mode expected review-direct, got {review.get('mode')!r}")
+    if review.get("review_profile") != "bun-ub-v0":
+        fail(
+            "review.json review_profile expected bun-ub-v0, "
+            f"got {review.get('review_profile')!r}"
+        )
     if review.get("posting") not in {"review", "artifact-only"}:
         fail(f"review.json posting has unexpected value {review.get('posting')!r}")
     if not isinstance(review.get("model_lanes"), list):
@@ -348,6 +385,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("metrics shared_context_id does not match review.json")
     if metrics.get("mode") != review.get("mode"):
         fail("metrics mode does not match review.json")
+    if metrics.get("review_profile") != review.get("review_profile"):
+        fail("metrics review_profile does not match review.json")
     if metrics.get("provider_policy") != review.get("provider_policy"):
         fail("metrics provider_policy does not match review.json")
     if metrics.get("inline_comments") != len(review.get("inline_comments", [])):
@@ -2366,6 +2405,7 @@ def main(argv: list[str]) -> int:
 
     require_common_tree(root)
     require_summary(root)
+    require_profile_artifacts(root)
     require_sensor_receipts(root)
     review = require_review(root, args.max_inline_comments)
     metrics = require_metrics(root, review)
