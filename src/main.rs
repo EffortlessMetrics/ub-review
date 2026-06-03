@@ -5648,8 +5648,7 @@ fn run_proof_broker_v0(
     args: &RunArgs,
 ) -> Result<ProofBrokerResult> {
     let budget = proof_budget(profile)?;
-    let tasks =
-        focused_test_candidates_from_diff(diff, proof_requests, budget.max_focused_test_files);
+    let tasks = focused_test_candidates_from_diff(diff, proof_requests);
     run_focused_red_green_proof_tasks_with_runner(
         root,
         out,
@@ -5682,6 +5681,7 @@ where
     let mut receipts = Vec::new();
     let mut leases = Vec::new();
     let mut executed_tasks = 0_usize;
+    let mut executed_files = BTreeSet::new();
     let mut estimated_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
@@ -5719,7 +5719,13 @@ where
             )?);
             continue;
         }
-        if !focused_proof_budget_allows_next(executed_tasks, estimated_seconds, budget) {
+        if !focused_proof_budget_allows_next(
+            executed_tasks,
+            &executed_files,
+            &task.file,
+            estimated_seconds,
+            budget,
+        ) {
             leases.push(focused_test_resource_lease(
                 &task,
                 budget,
@@ -5736,6 +5742,7 @@ where
             )?);
             continue;
         }
+        executed_files.insert(task.file.clone());
         leases.push(focused_test_resource_lease(
             &task,
             budget,
@@ -6022,14 +6029,21 @@ fn focused_test_tasks_from_diff(
     proof_requests: &[ProofRequest],
     budget: ProofBudget,
 ) -> Vec<FocusedTestTask> {
-    let candidates =
-        focused_test_candidates_from_diff(diff, proof_requests, budget.max_focused_test_files);
+    let candidates = focused_test_candidates_from_diff(diff, proof_requests);
     let mut tasks = Vec::new();
+    let mut files = BTreeSet::new();
     let mut estimated_seconds = 0_u64;
     for task in candidates {
-        if !focused_proof_budget_allows_next(tasks.len(), estimated_seconds, budget) {
+        if !focused_proof_budget_allows_next(
+            tasks.len(),
+            &files,
+            &task.file,
+            estimated_seconds,
+            budget,
+        ) {
             return tasks;
         }
+        files.insert(task.file.clone());
         tasks.push(task);
         estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
     }
@@ -6039,7 +6053,6 @@ fn focused_test_tasks_from_diff(
 fn focused_test_candidates_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
-    max_focused_test_files: usize,
 ) -> Vec<FocusedTestTask> {
     let request_groups = proof_request_groups(proof_requests);
     let mut tasks = Vec::new();
@@ -6047,7 +6060,6 @@ fn focused_test_candidates_from_diff(
         .changed_files
         .iter()
         .filter(|path| is_bun_focused_test_file(path))
-        .take(max_focused_test_files)
     {
         let names = focused_test_names_for_file(&diff.patch, file);
         if names.is_empty() {
@@ -6063,10 +6075,14 @@ fn focused_test_candidates_from_diff(
 
 fn focused_proof_budget_allows_next(
     current_tasks: usize,
+    current_files: &BTreeSet<String>,
+    next_file: &str,
     estimated_seconds: u64,
     budget: ProofBudget,
 ) -> bool {
     current_tasks < budget.max_focused_tests
+        && (current_files.contains(next_file)
+            || current_files.len() < budget.max_focused_test_files)
         && estimated_seconds.saturating_add(budget.per_command_timeout_sec)
             <= budget.max_total_seconds
 }
@@ -13602,6 +13618,141 @@ index 1111111..2222222 100644
         assert_eq!(
             proof_result.resource_leases[1].reason,
             "focused red/green proof lease budget exhausted by runtime profile"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_records_candidates_beyond_focused_file_budget() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let patch = "\
+diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
+index 1111111..2222222 100644
+--- a/test/js/bun/md/md-edge-cases.test.ts
++++ b/test/js/bun/md/md-edge-cases.test.ts
+@@ -1,2 +1,3 @@
+ import { test } from 'bun:test';
++test(\"snapshots resizable ArrayBuffer input\", () => {});
+diff --git a/test/js/bun/ffi/ffi.test.js b/test/js/bun/ffi/ffi.test.js
+index 3333333..4444444 100644
+--- a/test/js/bun/ffi/ffi.test.js
++++ b/test/js/bun/ffi/ffi.test.js
+@@ -1,2 +1,3 @@
+ import { test } from 'bun:test';
++test(\"no-finalizer toBuffer keeps caller memory alive\", () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec![
+                "test/js/bun/md/md-edge-cases.test.ts".to_owned(),
+                "test/js/bun/ffi/ffi.test.js".to_owned(),
+            ],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-md-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+                reason: "Need md red/green witness.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-ffi-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/ffi/ffi.test.js -t 'no-finalizer toBuffer keeps caller memory alive'".to_owned(),
+                reason: "Need ffi red/green witness.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+        ];
+        let tasks = super::focused_test_candidates_from_diff(&diff, &proof_requests);
+        assert_eq!(tasks.len(), 2);
+
+        let args = test_run_args(out.clone());
+        let prepared_base_root = base_root.clone();
+        let mut commands = Vec::<String>::new();
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 1,
+                max_focused_tests: 6,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, argv, _timeout, stdout, stderr| {
+                commands.push(command_display(argv));
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(if is_base { 1 } else { 0 }),
+                    timed_out: false,
+                    success: !is_base,
+                    reason: "completed".to_owned(),
+                    duration_ms: 42,
+                })
+            },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
+        )?;
+
+        assert_eq!(commands.len(), 2);
+        assert_eq!(proof_result.proof_receipts.len(), 2);
+        assert_eq!(proof_result.resource_leases.len(), 2);
+        assert_eq!(proof_result.proof_receipts[0].result, "discriminating");
+        assert_eq!(
+            proof_result.proof_receipts[0].request_ids,
+            vec!["proof-md-001"]
+        );
+        assert_eq!(proof_result.resource_leases[0].status, "granted");
+        assert_eq!(
+            proof_result.resource_leases[0].consumer,
+            proof_result.proof_receipts[0].id
+        );
+        assert_eq!(proof_result.proof_receipts[1].result, "skipped_budget");
+        assert_eq!(
+            proof_result.proof_receipts[1].request_ids,
+            vec!["proof-ffi-001"]
+        );
+        assert_eq!(proof_result.proof_receipts[1].commands[0].status, "skipped");
+        assert_eq!(proof_result.resource_leases[1].status, "exhausted");
+        assert_eq!(
+            proof_result.resource_leases[1].consumer,
+            proof_result.proof_receipts[1].id
+        );
+        assert!(
+            proof_result.proof_receipts[1]
+                .reason
+                .contains("lease budget exhausted"),
+            "unexpected skipped-budget reason: {}",
+            proof_result.proof_receipts[1].reason
         );
         Ok(())
     }
