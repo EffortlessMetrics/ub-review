@@ -20,4 +20,8 @@ Review breadth and local work are separate.
 20 local tool monsters are not fine.
 ```
 
+Runtime profiles now set model fanout, sensor worker fanout, and focused proof
+budgets. The effective values are emitted in `resolved-profile.json` and
+`resolved-plan.json` under `limits.*` and `budgets.proof_*`.
+
 If a guard fails, sensors degrade and the summary records missing evidence.
