@@ -125,6 +125,7 @@ fn active_len_tracks_view_after_resize() {
         "sensors/unsafe-review/ub-review-sensor-status.json",
         "sensors/ast-grep/ub-review-sensor-status.json",
         "review/shared_context.md",
+        "review/pr_thread_context.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/review.json",
@@ -163,6 +164,21 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
     assert_eq!(review["max_model_calls"], 14);
+    assert_eq!(
+        review["pr_thread_context"]["schema"],
+        "ub-review.pr_thread_context.v1"
+    );
+    assert!(
+        review["pr_thread_context"]["status"]
+            .as_str()
+            .is_some_and(|status| matches!(status, "seeded" | "absent" | "unavailable"))
+    );
+    let pr_thread_context: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
+    assert_eq!(pr_thread_context, review["pr_thread_context"]);
+    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+    assert!(shared_context.contains("## PR Thread Context"));
+    assert!(shared_context.contains("- Status: `"));
     let metrics: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
     let diff_context: serde_json::Value =
@@ -515,6 +531,117 @@ path = "src/lib.rs"
             .as_str()
             .is_some_and(|value| value.len() == 64)
     );
+    Ok(())
+}
+
+#[test]
+fn run_with_pr_thread_context_seeds_shared_context() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "bun-ffi-mini"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn copy_len(len: usize) -> usize {
+    len
+}
+"#,
+    )?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn copy_len(len: usize) -> usize {
+    let ptr = &len as *const usize;
+    unsafe { *ptr }
+}
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "touch ffi route"])?;
+
+    let thread = temp.path().join("thread.md");
+    write_file(
+        &thread,
+        "Author reply: ASAN bad-free receipt attached; old base fails. This tail should be truncated away.",
+    )?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("configs/bun-gh-runner.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--pr-thread-context",
+            path_str(&thread)?,
+            "--pr-thread-context-max-bytes",
+            "64",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+
+    let pr_thread_context: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
+    assert_eq!(
+        pr_thread_context["schema"],
+        "ub-review.pr_thread_context.v1"
+    );
+    assert_eq!(pr_thread_context["status"], "seeded");
+    assert_eq!(pr_thread_context["thread_context_truncated"], true);
+    assert!(
+        pr_thread_context["thread_context"]
+            .as_str()
+            .is_some_and(|text| text.contains("ASAN bad-free receipt"))
+    );
+    assert!(
+        !pr_thread_context["thread_context"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("tail should be truncated")
+    );
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    assert_eq!(review["pr_thread_context"], pr_thread_context);
+    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+    assert!(shared_context.contains("## PR Thread Context"));
+    assert!(shared_context.contains("### Prior Review Thread"));
+    assert!(shared_context.contains("ASAN bad-free receipt"));
+    assert!(shared_context.contains("[truncated]"));
+    assert!(!shared_context.contains("tail should be truncated"));
     Ok(())
 }
 
