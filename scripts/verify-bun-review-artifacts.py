@@ -118,6 +118,16 @@ FOLLOW_UP_OUTPUT_COUNT_FIELDS = [
     "failed_objections",
     "proof_requests",
 ]
+MODEL_CALL_ATTEMPTED_STATUSES = {
+    "ok",
+    "failed",
+    "degraded",
+    "invalid_json",
+    "timed_out",
+    "rate_limited",
+    "auth_failed",
+    "bad_envelope",
+}
 
 
 def require_common_tree(root: pathlib.Path) -> None:
@@ -378,7 +388,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("review resource_leases does not match review/resource_leases.json")
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
-    require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
+    follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
+    require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
         if metrics.get("review_payload_status") != "skipped_empty_smoke":
@@ -1146,7 +1157,9 @@ def require_follow_up_question_packet_files(
             )
 
 
-def require_follow_up_results(root: pathlib.Path, follow_up_tasks: list[dict]) -> None:
+def require_follow_up_results(
+    root: pathlib.Path, follow_up_tasks: list[dict]
+) -> list[dict]:
     results = load_json(root / "review/follow_up_results.json")
     if not isinstance(results, list):
         fail("review/follow_up_results.json is not an array")
@@ -1170,6 +1183,26 @@ def require_follow_up_results(root: pathlib.Path, follow_up_tasks: list[dict]) -
         if parsed != result:
             fail(f"follow_up_results.ndjson line {index + 1} does not match JSON artifact")
         require_follow_up_result_schema(root, result, task)
+    return results
+
+
+def require_follow_up_result_metrics(metrics: dict, results: list[dict]) -> None:
+    result_metrics = metrics.get("follow_up_results")
+    if not isinstance(result_metrics, dict):
+        fail("metrics.follow_up_results is missing")
+    if result_metrics.get("total") != len(results):
+        fail("metrics.follow_up_results.total does not match follow-up result artifacts")
+    expected_status_counts: dict[str, int] = {}
+    for result in results:
+        status = result["status"]
+        expected_status_counts[status] = expected_status_counts.get(status, 0) + 1
+    if result_metrics.get("status_counts") != expected_status_counts:
+        fail("metrics.follow_up_results.status_counts does not match follow-up result artifacts")
+    expected_attempted = sum(
+        1 for result in results if result["status"] in MODEL_CALL_ATTEMPTED_STATUSES
+    )
+    if result_metrics.get("calls_attempted") != expected_attempted:
+        fail("metrics.follow_up_results.calls_attempted does not match follow-up result artifacts")
 
 
 def require_follow_up_result_schema(

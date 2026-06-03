@@ -398,6 +398,24 @@ fn active_len_tracks_view_after_resize() {
             .unwrap_or_default()
     );
     assert_eq!(metrics["github_review_comments"], 0);
+    let follow_up_results: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/follow_up_results.json"))?)?;
+    assert_eq!(
+        metrics["follow_up_results"]["total"]
+            .as_u64()
+            .unwrap_or_default(),
+        follow_up_results
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default() as u64
+    );
+    assert_eq!(
+        sum_json_object_values(&metrics["follow_up_results"]["status_counts"]),
+        metrics["follow_up_results"]["total"]
+            .as_u64()
+            .unwrap_or_default()
+    );
+    assert_eq!(metrics["follow_up_results"]["calls_attempted"], 0);
     assert_eq!(metrics["resource_leases"], 0);
     assert_eq!(
         metrics["review_body_bytes"],
