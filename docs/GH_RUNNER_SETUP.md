@@ -14,7 +14,10 @@ repositories.
 
 Use `@main` for the first live Bun fork verification. After that run proves the
 review and artifact path, tag `v0` in this repository and switch the Bun
-workflow to `EffortlessMetrics/ub-review@v0`.
+workflow to `EffortlessMetrics/ub-review@v0`. Tagged action refs use
+`install-mode: auto` to try the Linux x64 release asset
+`ub-review-x86_64-unknown-linux-gnu.tar.gz` first, then fall back to a source
+build when the asset is not available.
 
 For Bun review posting, the consuming workflow should set:
 
@@ -39,9 +42,12 @@ The consuming workflow is responsible for:
 4. allowing the action to submit one grouped Pull Request Review when configured;
 5. uploading `target/ub-review` as an artifact.
 
-Until release binaries are published, the action bootstraps from source on the
-runner. Cache Cargo registry/git and `CARGO_TARGET_DIR` in consuming workflows if
-runtime matters.
+To force a path during rollout, set `install-mode: source` for source bootstrap,
+`install-mode: release` for release-download-first fallback, or
+`install-mode: path` with `binary-path` for a preinstalled executable. Until
+release binaries are published, the fallback source build remains the expected
+runner path. Cache Cargo registry/git and `CARGO_TARGET_DIR` in consuming
+workflows if runtime matters.
 
 ## Self-smoke model verification
 
