@@ -410,10 +410,12 @@ def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
 
 def require_orchestrator_plan(root: pathlib.Path) -> None:
     candidates = load_json(root / "review/candidates.json")
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    resource_leases = load_json(root / "review/resource_leases.json")
     plan = load_json(root / "review/orchestrator_plan.json")
-    expected = expected_orchestrator_plan(candidates)
+    expected = expected_orchestrator_plan(candidates, proof_receipts, resource_leases)
     if plan != expected:
-        fail("review/orchestrator_plan.json does not match candidate evidence grouping")
+        fail("review/orchestrator_plan.json does not match candidate evidence routing")
 
     lines = [line for line in read_text(root / "follow_up_questions.ndjson").splitlines() if line.strip()]
     tasks = plan["follow_up_tasks"]
@@ -429,7 +431,9 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
     require_orchestrator_plan_schema(plan)
 
 
-def expected_orchestrator_plan(candidates: list[dict]) -> dict:
+def expected_orchestrator_plan(
+    candidates: list[dict], proof_receipts: list[dict], resource_leases: list[dict]
+) -> dict:
     grouped: dict[tuple[str, str], list[dict]] = {}
     for candidate in candidates:
         key = (candidate["disposition"], candidate_evidence_need(candidate))
@@ -441,6 +445,9 @@ def expected_orchestrator_plan(candidates: list[dict]) -> dict:
         group_candidates = grouped[(disposition, evidence_need)]
         candidate_ids = [candidate["id"] for candidate in group_candidates]
         lanes = sorted({candidate["lane"] for candidate in group_candidates})
+        routed_evidence = routed_evidence_for_group(
+            evidence_need, lanes, proof_receipts, resource_leases
+        )
         group_id = "evidence-group-" + hashlib.sha256(
             f"{disposition}\n{evidence_need}".encode("utf-8")
         ).hexdigest()[:12]
@@ -451,10 +458,13 @@ def expected_orchestrator_plan(candidates: list[dict]) -> dict:
             "disposition": disposition,
             "candidate_ids": candidate_ids,
             "lanes": lanes,
+            "routed_evidence": routed_evidence,
             "duplicate_count": max(0, len(candidate_ids) - 1),
             "reason": f"grouped candidate disposition `{disposition}` under evidence need `{evidence_need}`",
         }
-        task = follow_up_task_for_group(group_id, disposition, evidence_need, candidate_ids)
+        task = follow_up_task_for_group(
+            group_id, disposition, evidence_need, candidate_ids, routed_evidence
+        )
         if task is not None:
             follow_up_tasks.append(task)
         evidence_groups.append(group)
@@ -488,7 +498,11 @@ def candidate_evidence_need(candidate: dict) -> str:
 
 
 def follow_up_task_for_group(
-    group_id: str, disposition: str, evidence_need: str, candidate_ids: list[str]
+    group_id: str,
+    disposition: str,
+    evidence_need: str,
+    candidate_ids: list[str],
+    routed_evidence: list[dict],
 ) -> dict | None:
     if disposition in {"inline", "dropped"}:
         return None
@@ -502,10 +516,70 @@ def follow_up_task_for_group(
         "evidence_need": evidence_need,
         "disposition": disposition,
         "candidate_ids": candidate_ids,
+        "routed_evidence": routed_evidence,
         "question": follow_up_question_text(disposition, evidence_need),
         "status": "planned",
         "reason": "deterministic orchestrator skeleton; no shell commands or posting side effects",
     }
+
+
+def routed_evidence_for_group(
+    evidence_need: str,
+    lanes: list[str],
+    proof_receipts: list[dict],
+    resource_leases: list[dict],
+) -> list[dict]:
+    if evidence_need not in {"proof-confirmation", "test-oracle-confirmation"}:
+        return []
+    routed = []
+    for receipt in proof_receipts:
+        if not proof_receipt_routes_to_lanes(receipt, lanes):
+            continue
+        routed.append(proof_receipt_routed_evidence(receipt))
+        for lease in resource_leases:
+            if lease["consumer"] == receipt["id"]:
+                routed.append(resource_lease_routed_evidence(lease))
+    return routed
+
+
+def proof_receipt_routes_to_lanes(receipt: dict, lanes: list[str]) -> bool:
+    requested_by = receipt["requested_by"]
+    return "proof-broker" in requested_by or any(lane in lanes for lane in requested_by)
+
+
+def proof_receipt_routed_evidence(receipt: dict) -> dict:
+    return {
+        "schema": "ub-review.orchestrator_routed_evidence.v1",
+        "id": receipt["id"],
+        "kind": "proof-receipt",
+        "artifact": "review/proof_receipts.json",
+        "status": routed_status_for_proof_receipt(receipt),
+        "result": receipt["result"],
+        "reason": receipt["reason"],
+    }
+
+
+def resource_lease_routed_evidence(lease: dict) -> dict:
+    return {
+        "schema": "ub-review.orchestrator_routed_evidence.v1",
+        "id": lease["id"],
+        "kind": "resource-lease",
+        "artifact": "review/resource_leases.json",
+        "status": lease["status"],
+        "result": lease["status"],
+        "reason": lease["reason"],
+    }
+
+
+def routed_status_for_proof_receipt(receipt: dict) -> str:
+    result = receipt["result"]
+    if result in {"discriminating", "head_passed", "head_failed"}:
+        return "tool-confirmed"
+    if result == "non_discriminating":
+        return "residual-risk"
+    if result in {"base_patch_failed", "timed_out", "skipped_budget", "skipped_profile"}:
+        return "missing-evidence"
+    return "recorded"
 
 
 def follow_up_question_text(disposition: str, evidence_need: str) -> str:
@@ -1260,6 +1334,11 @@ def require_orchestrator_group_schema(group: dict) -> None:
         values = group.get(field)
         if not isinstance(values, list) or not all(isinstance(item, str) and item for item in values):
             fail(f"orchestrator group {field} is not a string array: {group!r}")
+    routed_evidence = group.get("routed_evidence")
+    if not isinstance(routed_evidence, list):
+        fail(f"orchestrator group routed_evidence is not an array: {group!r}")
+    for evidence in routed_evidence:
+        require_orchestrator_routed_evidence_schema(evidence)
     if not isinstance(group.get("duplicate_count"), int) or group["duplicate_count"] < 0:
         fail(f"orchestrator group duplicate_count is invalid: {group!r}")
 
@@ -1287,6 +1366,23 @@ def require_follow_up_task_schema(task: dict, group_ids: set[str]) -> None:
         isinstance(item, str) and item for item in candidate_ids
     ):
         fail(f"follow-up task candidate_ids is not a string array: {task!r}")
+    routed_evidence = task.get("routed_evidence")
+    if not isinstance(routed_evidence, list):
+        fail(f"follow-up task routed_evidence is not an array: {task!r}")
+    for evidence in routed_evidence:
+        require_orchestrator_routed_evidence_schema(evidence)
+
+
+def require_orchestrator_routed_evidence_schema(evidence: dict) -> None:
+    if evidence.get("schema") != "ub-review.orchestrator_routed_evidence.v1":
+        fail(f"routed evidence has wrong schema: {evidence!r}")
+    for field in ["id", "kind", "artifact", "status", "result", "reason"]:
+        if not isinstance(evidence.get(field), str) or not evidence[field]:
+            fail(f"routed evidence missing string field {field}: {evidence!r}")
+    if evidence["kind"] not in {"proof-receipt", "resource-lease"}:
+        fail(f"routed evidence has unsupported kind: {evidence!r}")
+    if evidence["artifact"] not in {"review/proof_receipts.json", "review/resource_leases.json"}:
+        fail(f"routed evidence has unsupported artifact path: {evidence!r}")
 
 
 def require_proof_request_schema(request: dict) -> None:
