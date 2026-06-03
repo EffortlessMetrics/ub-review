@@ -192,6 +192,7 @@ target/ub-review/
     merged_observations.json
     dropped_observations.json
     orchestrator_plan.json
+    follow_up_results.json
     proof_requests.json
     proof_request_groups.json
     proof_plan.md

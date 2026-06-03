@@ -1301,6 +1301,52 @@ struct FollowUpQuestionPacket<'a> {
     prompt: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct FollowUpQuestionPacketArtifact {
+    schema: String,
+    id: String,
+    task_id: String,
+    group_id: String,
+    prompt: String,
+}
+
+#[derive(Debug, Serialize)]
+struct FollowUpResult {
+    schema: String,
+    task_id: String,
+    group_id: String,
+    packet_path: String,
+    model_lane: String,
+    status: String,
+    reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    http_status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_shape: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    normalized_content_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    stderr_path: Option<String>,
+    output_counts: FollowUpOutputCounts,
+}
+
+#[derive(Debug, Default, Serialize)]
+struct FollowUpOutputCounts {
+    observations: usize,
+    candidate_findings: usize,
+    summary_only_findings: usize,
+    failed_objections: usize,
+    proof_requests: usize,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct GitHubReview {
     event: String,
@@ -1651,6 +1697,16 @@ struct RefuterRunContext<'a> {
     shared_context: &'a str,
     args: &'a RunArgs,
     model_calls_used: usize,
+}
+
+struct FollowUpRunContext<'a> {
+    root: &'a Path,
+    out: &'a Path,
+    review_dir: &'a Path,
+    provider_preflights: &'a [ProviderPreflightReceipt],
+    args: &'a RunArgs,
+    model_calls_used: usize,
+    tasks: &'a [FollowUpQuestionTask],
 }
 
 struct ModelLaneTask {
@@ -4095,6 +4151,7 @@ fn write_review_artifacts(
     let mut inline_comments = Vec::new();
     let mut model_observations = Vec::new();
     let mut proof_requests = Vec::new();
+    let mut model_calls_used = 0usize;
 
     if matches!(args.model_mode, ModelMode::Auto) {
         run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
@@ -4102,7 +4159,7 @@ fn write_review_artifacts(
             &provider_preflights,
             &mut missing_or_failed_model_evidence,
         );
-        let model_calls_used = run_available_model_lanes(
+        model_calls_used = run_available_model_lanes(
             ModelRunContext {
                 root,
                 review_dir: &review_dir,
@@ -4120,7 +4177,7 @@ fn write_review_artifacts(
             &mut proof_requests,
         )?;
         dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
-        run_refuter_pass(
+        model_calls_used += run_refuter_pass(
             RefuterRunContext {
                 root,
                 review_dir: &review_dir,
@@ -4257,6 +4314,20 @@ fn write_review_artifacts(
     );
     write_observation_artifacts(out, &observations)?;
     write_orchestrator_artifacts(out, &orchestrator_plan)?;
+    let mut follow_up_results = Vec::new();
+    run_follow_up_model_pass(
+        FollowUpRunContext {
+            root,
+            out,
+            review_dir: &review_dir,
+            provider_preflights: &review.provider_preflights,
+            args,
+            model_calls_used,
+            tasks: &orchestrator_plan.follow_up_tasks,
+        },
+        &mut follow_up_results,
+    )?;
+    write_follow_up_result_artifacts(&review_dir, &follow_up_results)?;
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -5245,6 +5316,15 @@ fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> 
     Ok(())
 }
 
+fn write_follow_up_result_artifacts(review_dir: &Path, results: &[FollowUpResult]) -> Result<()> {
+    fs::create_dir_all(review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("follow_up_results.json"),
+        serde_json::to_vec_pretty(results)?,
+    )?;
+    Ok(())
+}
+
 fn write_follow_up_question_packets(out: &Path, tasks: &[FollowUpQuestionTask]) -> Result<()> {
     let follow_up_dir = out.join("questions").join("orchestrator-follow-up");
     if follow_up_dir.exists() {
@@ -5322,7 +5402,10 @@ fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
         prompt.push('\n');
     }
     prompt.push_str(
-        "Return strict JSON with observations, candidate_findings, summary_only_findings, failed_objections, and proof_requests. Do not post, mutate, or run shell commands.\n",
+        &format!(
+            "Return strict JSON with observations, summary_only_findings, failed_objections, and proof_requests. Use question `{}` for observations. Do not emit candidate_findings or inline_comments. Do not post, mutate, or run shell commands.\n",
+            task.id
+        ),
     );
     prompt
 }
@@ -8271,6 +8354,230 @@ fn run_available_model_lanes(
     Ok(calls)
 }
 
+fn run_follow_up_model_pass(
+    context: FollowUpRunContext<'_>,
+    follow_up_results: &mut Vec<FollowUpResult>,
+) -> Result<usize> {
+    let spec = direct_minimax_spec(context.args);
+    let available = context
+        .args
+        .max_model_calls
+        .saturating_sub(context.model_calls_used);
+    let model_mode_enabled = matches!(context.args.model_mode, ModelMode::Auto);
+    let preflight_ready = provider_preflight_ok(&spec, context.provider_preflights);
+    let key_present = env_value_present(model_api_key_env(spec.provider));
+    let mut calls = 0usize;
+    for task in context.tasks {
+        let model_lane = follow_up_model_lane_id(task);
+        let packet_path = follow_up_packet_artifact_path(task);
+        let packet = read_follow_up_packet(context.out, task)?;
+        if !model_mode_enabled {
+            follow_up_results.push(follow_up_result(
+                task,
+                &packet_path,
+                &model_lane,
+                "skipped",
+                "model-mode off; follow-up task remains artifact-only",
+                FollowUpResultArtifacts::default(),
+                FollowUpOutputCounts::default(),
+            ));
+            continue;
+        }
+        if !preflight_ready {
+            let reason = provider_preflight_reason(&spec, context.provider_preflights)
+                .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
+            follow_up_results.push(follow_up_result(
+                task,
+                &packet_path,
+                &model_lane,
+                "preflight_failed",
+                &reason,
+                FollowUpResultArtifacts::default(),
+                FollowUpOutputCounts::default(),
+            ));
+            continue;
+        }
+        if !key_present {
+            let reason = format!(
+                "{} not provided; follow-up task remains artifact-only",
+                model_api_key_env(spec.provider)
+            );
+            follow_up_results.push(follow_up_result(
+                task,
+                &packet_path,
+                &model_lane,
+                "missing_key",
+                &reason,
+                FollowUpResultArtifacts::default(),
+                FollowUpOutputCounts::default(),
+            ));
+            continue;
+        }
+        if calls >= available {
+            follow_up_results.push(follow_up_result(
+                task,
+                &packet_path,
+                &model_lane,
+                "skipped_budget",
+                "follow-up model call budget exhausted before task execution",
+                FollowUpResultArtifacts::default(),
+                FollowUpOutputCounts::default(),
+            ));
+            continue;
+        }
+
+        let task_dir = context.review_dir.join("model").join(&model_lane);
+        fs::create_dir_all(&task_dir)?;
+        calls += 1;
+        match call_model_prompt(context.root, &task_dir, &spec, &packet.prompt, context.args) {
+            Ok(outcome) => {
+                let status = if outcome.degraded { "degraded" } else { "ok" };
+                let reason = if outcome.degraded {
+                    "contentful follow-up output was preserved as degraded evidence"
+                } else {
+                    "completed"
+                };
+                let mut result = follow_up_result(
+                    task,
+                    &packet_path,
+                    &model_lane,
+                    status,
+                    reason,
+                    follow_up_result_artifacts(&model_lane, &task_dir),
+                    follow_up_output_counts(&outcome.output),
+                );
+                result.duration_ms = Some(outcome.duration_ms);
+                result.http_status = outcome.http_status;
+                result.response_shape = Some(outcome.response_shape);
+                follow_up_results.push(result);
+            }
+            Err(err) => {
+                let status = classify_model_error(&err);
+                let mut result = follow_up_result(
+                    task,
+                    &packet_path,
+                    &model_lane,
+                    &status,
+                    &format!("{err:#}"),
+                    follow_up_result_artifacts(&model_lane, &task_dir),
+                    FollowUpOutputCounts::default(),
+                );
+                result.http_status = http_status_from_error(&err);
+                follow_up_results.push(result);
+            }
+        }
+    }
+    Ok(calls)
+}
+
+fn read_follow_up_packet(
+    out: &Path,
+    task: &FollowUpQuestionTask,
+) -> Result<FollowUpQuestionPacketArtifact> {
+    let path = out.join(follow_up_packet_artifact_path(task));
+    let packet: FollowUpQuestionPacketArtifact = serde_json::from_slice(&fs::read(&path)?)?;
+    if packet.schema != "ub-review.follow_up_question_packet.v1"
+        || packet.task_id != task.id
+        || packet.group_id != task.group_id
+        || packet.id != task.id
+    {
+        bail!(
+            "follow-up packet {} does not match task {}",
+            path.display(),
+            task.id
+        );
+    }
+    Ok(packet)
+}
+
+fn follow_up_packet_artifact_path(task: &FollowUpQuestionTask) -> String {
+    format!(
+        "questions/orchestrator-follow-up/{}.json",
+        sanitize_artifact_name(&task.id)
+    )
+}
+
+fn follow_up_model_lane_id(task: &FollowUpQuestionTask) -> String {
+    format!(
+        "orchestrator-follow-up-{}",
+        sanitize_artifact_name(&task.id)
+    )
+}
+
+#[derive(Default)]
+struct FollowUpResultArtifacts {
+    request_path: Option<String>,
+    response_path: Option<String>,
+    content_path: Option<String>,
+    normalized_content_path: Option<String>,
+    stderr_path: Option<String>,
+}
+
+fn follow_up_result_artifacts(model_lane: &str, task_dir: &Path) -> FollowUpResultArtifacts {
+    FollowUpResultArtifacts {
+        request_path: follow_up_result_artifact_path(model_lane, task_dir, "request.json"),
+        response_path: follow_up_result_artifact_path(model_lane, task_dir, "response.json"),
+        content_path: follow_up_result_artifact_path(model_lane, task_dir, "content.json"),
+        normalized_content_path: follow_up_result_artifact_path(
+            model_lane,
+            task_dir,
+            "content-normalized.json",
+        ),
+        stderr_path: follow_up_result_artifact_path(model_lane, task_dir, "stderr.txt"),
+    }
+}
+
+fn follow_up_result_artifact_path(
+    model_lane: &str,
+    task_dir: &Path,
+    file_name: &str,
+) -> Option<String> {
+    task_dir
+        .join(file_name)
+        .exists()
+        .then(|| format!("review/model/{model_lane}/{file_name}"))
+}
+
+fn follow_up_output_counts(output: &LaneModelOutput) -> FollowUpOutputCounts {
+    FollowUpOutputCounts {
+        observations: output.observations.len(),
+        candidate_findings: output.candidate_findings.len() + output.inline_comments.len(),
+        summary_only_findings: output.summary_only_findings.len()
+            + usize::from(output.summary.is_some()),
+        failed_objections: output.failed_objections.len(),
+        proof_requests: output.proof_requests.len(),
+    }
+}
+
+fn follow_up_result(
+    task: &FollowUpQuestionTask,
+    packet_path: &str,
+    model_lane: &str,
+    status: &str,
+    reason: &str,
+    artifacts: FollowUpResultArtifacts,
+    output_counts: FollowUpOutputCounts,
+) -> FollowUpResult {
+    FollowUpResult {
+        schema: "ub-review.follow_up_result.v1".to_owned(),
+        task_id: task.id.clone(),
+        group_id: task.group_id.clone(),
+        packet_path: packet_path.to_owned(),
+        model_lane: model_lane.to_owned(),
+        status: status.to_owned(),
+        reason: reason.to_owned(),
+        duration_ms: None,
+        http_status: None,
+        response_shape: None,
+        request_path: artifacts.request_path,
+        response_path: artifacts.response_path,
+        content_path: artifacts.content_path,
+        normalized_content_path: artifacts.normalized_content_path,
+        stderr_path: artifacts.stderr_path,
+        output_counts,
+    }
+}
+
 fn run_model_lane_tasks(
     context: &ModelRunContext<'_>,
     model_dir: &Path,
@@ -8327,7 +8634,7 @@ fn run_refuter_pass(
     missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
     inline_comments: &mut Vec<ReviewInlineComment>,
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
-) -> Result<()> {
+) -> Result<usize> {
     let spec = direct_minimax_spec(context.args);
     let mut receipt = ModelLaneReceipt {
         lane: "refuter".to_owned(),
@@ -8346,7 +8653,7 @@ fn run_refuter_pass(
         receipt.status = "skipped".to_owned();
         receipt.reason = "no inline candidates passed guardrails before refuter".to_owned();
         model_lanes.push(receipt);
-        return Ok(());
+        return Ok(0);
     }
     if context.model_calls_used >= context.args.max_model_calls {
         receipt.status = "skipped".to_owned();
@@ -8360,7 +8667,7 @@ fn run_refuter_pass(
             summary_only_findings,
         );
         model_lanes.push(receipt);
-        return Ok(());
+        return Ok(0);
     }
     if !provider_preflight_ok(&spec, context.provider_preflights) {
         receipt.status = "preflight_failed".to_owned();
@@ -8373,7 +8680,7 @@ fn run_refuter_pass(
             summary_only_findings,
         );
         model_lanes.push(receipt);
-        return Ok(());
+        return Ok(0);
     }
     let env_name = model_api_key_env(spec.provider);
     if !env_value_present(env_name) {
@@ -8386,7 +8693,7 @@ fn run_refuter_pass(
             summary_only_findings,
         );
         model_lanes.push(receipt);
-        return Ok(());
+        return Ok(0);
     }
 
     let refuter_dir = context.review_dir.join("model").join("refuter");
@@ -8421,7 +8728,7 @@ fn run_refuter_pass(
         }
     }
     model_lanes.push(receipt);
-    Ok(())
+    Ok(1)
 }
 
 fn demote_inline_candidates_for_refuter_unavailable(
@@ -16977,6 +17284,71 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(
             observation_packet["observation_group_ids"],
             serde_json::json!([observation_group.observation_group_id])
+        );
+
+        let mut args = test_run_args(temp.path().join("out"));
+        args.model_mode = ModelMode::Off;
+        let review_dir = temp.path().join("review");
+        let mut follow_up_results = Vec::new();
+        let calls = super::run_follow_up_model_pass(
+            super::FollowUpRunContext {
+                root: Path::new("."),
+                out: temp.path(),
+                review_dir: &review_dir,
+                provider_preflights: &[],
+                args: &args,
+                model_calls_used: 0,
+                tasks: &plan.follow_up_tasks,
+            },
+            &mut follow_up_results,
+        )?;
+        assert_eq!(calls, 0);
+        assert_eq!(follow_up_results.len(), plan.follow_up_tasks.len());
+        let proof_result = follow_up_results
+            .iter()
+            .find(|result| result.task_id == proof_task.id)
+            .ok_or_else(|| anyhow::anyhow!("proof follow-up result should be present"))?;
+        assert_eq!(proof_result.schema, "ub-review.follow_up_result.v1");
+        assert_eq!(proof_result.group_id, proof_task.group_id);
+        assert_eq!(
+            proof_result.packet_path,
+            format!("questions/orchestrator-follow-up/{}.json", proof_task.id)
+        );
+        assert_eq!(
+            proof_result.model_lane,
+            format!("orchestrator-follow-up-{}", proof_task.id)
+        );
+        assert_eq!(proof_result.status, "skipped");
+        assert_eq!(
+            proof_result.reason,
+            "model-mode off; follow-up task remains artifact-only"
+        );
+        assert_eq!(proof_result.output_counts.observations, 0);
+        assert_eq!(proof_result.output_counts.candidate_findings, 0);
+        assert_eq!(proof_result.output_counts.summary_only_findings, 0);
+        assert_eq!(proof_result.output_counts.failed_objections, 0);
+        assert_eq!(proof_result.output_counts.proof_requests, 0);
+        assert!(proof_result.request_path.is_none());
+        assert!(proof_result.response_path.is_none());
+        assert!(proof_result.content_path.is_none());
+        assert!(proof_result.stderr_path.is_none());
+
+        super::write_follow_up_result_artifacts(&review_dir, &follow_up_results)?;
+        let written_results: serde_json::Value =
+            serde_json::from_slice(&fs::read(review_dir.join("follow_up_results.json"))?)?;
+        assert_eq!(
+            written_results.as_array().map(Vec::len),
+            Some(plan.follow_up_tasks.len())
+        );
+        assert!(
+            written_results
+                .as_array()
+                .is_some_and(
+                    |results| results.iter().any(|result| result["task_id"].as_str()
+                        == Some(proof_task.id.as_str())
+                        && result["status"].as_str() == Some("skipped")
+                        && result.get("request_path").is_none())
+                )
         );
         Ok(())
     }
