@@ -96,8 +96,10 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/dropped_observations.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
+        "review/proof_receipts.json",
         "review/proof_plan.md",
         "proof_requests.ndjson",
+        "proof_receipts.ndjson",
     ]:
         require_file(root / path)
     if not (root / "review/github-review.json").exists() and not (
@@ -246,6 +248,8 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("metrics observations is not an integer")
     if not isinstance(metrics.get("proof_requests"), int):
         fail("metrics proof_requests is not an integer")
+    if not isinstance(metrics.get("proof_receipts"), int):
+        fail("metrics proof_receipts is not an integer")
     observations = load_json(root / "review/observations.json")
     if not isinstance(observations, list):
         fail("review/observations.json is not an array")
@@ -260,6 +264,14 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if review.get("proof_requests", []) != proof_requests:
         fail("review proof_requests does not match review/proof_requests.json")
     require_proof_request_ndjson(root, proof_requests)
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    if not isinstance(proof_receipts, list):
+        fail("review/proof_receipts.json is not an array")
+    if metrics.get("proof_receipts") != len(proof_receipts):
+        fail("metrics proof_receipts does not match review/proof_receipts.json")
+    if review.get("proof_receipts", []) != proof_receipts:
+        fail("review proof_receipts does not match review/proof_receipts.json")
+    require_proof_receipt_ndjson(root, proof_receipts)
     require_observation_files(root, observations)
     if (root / "review/github-review-skip.json").exists():
         if metrics.get("review_payload_status") != "skipped_empty_smoke":
@@ -295,13 +307,33 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
         fail("review/proof_plan.md missing heading")
     if proof_requests and "Grouped proof broker tasks" not in proof_plan:
         fail("review/proof_plan.md missing grouped proof request summary")
-    if "## Focused red/green proof plan" in proof_plan and "No proof broker commands were executed" not in proof_plan:
-        fail("review/proof_plan.md missing planner-only no-execution note")
+    if "## Focused red/green proof plan" in proof_plan and not (
+        "No proof broker commands were executed" in proof_plan
+        or "Proof broker v0 executed focused HEAD proof only" in proof_plan
+    ):
+        fail("review/proof_plan.md missing proof execution/planner note")
     if not proof_requests and not (
         "No proof requests were emitted" in proof_plan
         or "No model-lane proof requests were emitted" in proof_plan
     ):
         fail("review/proof_plan.md missing empty proof request note")
+
+
+def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict]) -> None:
+    for receipt in proof_receipts:
+        require_proof_receipt_schema(receipt)
+    ndjson_path = root / "proof_receipts.ndjson"
+    text = read_text(ndjson_path)
+    lines = [line for line in text.splitlines() if line.strip()]
+    if len(lines) != len(proof_receipts):
+        fail("proof_receipts.ndjson line count does not match review/proof_receipts.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid proof_receipts.ndjson line {index + 1}: {error}")
+        if parsed != proof_receipts[index]:
+            fail(f"proof_receipts.ndjson line {index + 1} does not match JSON artifact")
 
 
 def require_proof_request_groups(root: pathlib.Path, proof_requests: list[dict]) -> None:
@@ -712,6 +744,60 @@ def require_proof_request_schema(request: dict) -> None:
         fail(f"proof request required is not boolean: {request!r}")
     if request["status"] not in {"requested", "invalid"}:
         fail(f"proof request has unsupported status: {request!r}")
+
+
+def require_proof_receipt_schema(receipt: dict) -> None:
+    if receipt.get("schema") != "ub-review.proof_receipt.v1":
+        fail(f"proof receipt has wrong schema: {receipt!r}")
+    for field in ["id", "kind", "base", "head", "test_patch_mode", "result", "reason"]:
+        if not isinstance(receipt.get(field), str) or not receipt[field]:
+            fail(f"proof receipt missing string field {field}: {receipt!r}")
+    if receipt["kind"] not in {"focused-head"}:
+        fail(f"proof receipt has unsupported kind: {receipt!r}")
+    if receipt["test_patch_mode"] not in {"head-only", "base-plus-tests"}:
+        fail(f"proof receipt has unsupported test_patch_mode: {receipt!r}")
+    if receipt["result"] not in {
+        "head_passed",
+        "head_failed",
+        "timed_out",
+        "skipped_budget",
+        "skipped_profile",
+        "discriminating",
+        "non_discriminating",
+        "base_patch_failed",
+    }:
+        fail(f"proof receipt has unsupported result: {receipt!r}")
+    for field in ["requested_by", "request_ids"]:
+        values = receipt.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(item, str) and item for item in values
+        ):
+            fail(f"proof receipt {field} is not a string array: {receipt!r}")
+    commands = receipt.get("commands")
+    if not isinstance(commands, list) or not commands:
+        fail(f"proof receipt commands is not a non-empty array: {receipt!r}")
+    for command in commands:
+        require_proof_command_receipt_schema(command)
+
+
+def require_proof_command_receipt_schema(command: dict) -> None:
+    for field in ["side", "command", "status", "stdout", "stderr", "reason"]:
+        if not isinstance(command.get(field), str) or not command[field]:
+            fail(f"proof command receipt missing string field {field}: {command!r}")
+    if command["side"] not in {"head", "base-plus-tests"}:
+        fail(f"proof command receipt has unsupported side: {command!r}")
+    if command["status"] not in {"passed", "failed", "timed_out", "skipped"}:
+        fail(f"proof command receipt has unsupported status: {command!r}")
+    if command.get("exit_code") is not None and not isinstance(command.get("exit_code"), int):
+        fail(f"proof command receipt exit_code is invalid: {command!r}")
+    if not isinstance(command.get("timed_out"), bool):
+        fail(f"proof command receipt timed_out is not boolean: {command!r}")
+    timeout = command.get("timeout_sec")
+    if not isinstance(timeout, int) or timeout < 0 or timeout > 900:
+        fail(f"proof command receipt timeout_sec is invalid: {command!r}")
+    duration_ms = command.get("duration_ms")
+    if not isinstance(duration_ms, int) or duration_ms < 0:
+        fail(f"proof command receipt duration_ms is invalid: {command!r}")
 
 
 def require_proof_request_group_schema(group: dict) -> None:
