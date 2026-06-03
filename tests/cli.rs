@@ -119,6 +119,8 @@ fn active_len_tracks_view_after_resize() {
         "input/diff.patch",
         "input/diff-context.json",
         "events.ndjson",
+        "resolved-profile.json",
+        "resolved-plan.json",
         "running-summary.md",
         "sensors/tokmd/ub-review-sensor-status.json",
         "sensors/ripr/ub-review-sensor-status.json",
@@ -168,6 +170,32 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
     assert_eq!(review["max_model_calls"], 14);
+    let resolved_profile: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-profile.json"))?)?;
+    assert_eq!(resolved_profile["schema"], "ub-review.resolved_profile.v1");
+    assert_eq!(resolved_profile["selected_profile"], "gh-runner");
+    assert_eq!(
+        resolved_profile["profile"]["limits"]["tests"],
+        serde_json::json!(2)
+    );
+    assert_eq!(resolved_profile["review"]["posting_engine"], "artifact");
+    assert!(resolved_profile["tools"]["tokmd"]["enabled"].as_bool() == Some(true));
+    let resolved_plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-plan.json"))?)?;
+    assert_eq!(resolved_plan["schema"], "ub-review.resolved_plan.v1");
+    assert_eq!(resolved_plan["profile_name"], "gh-runner");
+    assert_eq!(resolved_plan["diff_class"], "source-ub");
+    assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 900);
+    assert!(resolved_plan["sensors"].as_array().is_some_and(|sensors| {
+        sensors
+            .iter()
+            .any(|sensor| sensor["id"] == "tokmd" && sensor["run"] == true)
+    }));
+    assert!(
+        resolved_plan["lanes"]
+            .as_array()
+            .is_some_and(|lanes| { lanes.iter().any(|lane| lane["id"] == "source-route") })
+    );
     assert_eq!(
         review["pr_thread_context"]["schema"],
         "ub-review.pr_thread_context.v1"
