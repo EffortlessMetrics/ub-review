@@ -154,6 +154,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
         "review/witnesses.json",
+        "review/witness_registry.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
@@ -1253,6 +1254,9 @@ def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> l
     witnesses = load_json(root / "review/witnesses.json")
     if not isinstance(witnesses, list):
         fail("review/witnesses.json is not an array")
+    registry = load_json(root / "review/witness_registry.json")
+    if not isinstance(registry, dict):
+        fail("review/witness_registry.json is not an object")
     lines = [
         line
         for line in read_text(root / "witnesses.ndjson").splitlines()
@@ -1287,7 +1291,53 @@ def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> l
     )
     if actual_follow_up != expected_follow_up:
         fail("follow-up witness count does not match follow_up_evidence")
+    require_witness_registry(registry, witnesses)
     return witnesses
+
+
+def require_witness_registry(registry: dict, witnesses: list[dict]) -> None:
+    if registry.get("schema") != "ub-review.witness_registry.v1":
+        fail(f"witness registry has wrong schema: {registry!r}")
+    expected = expected_witness_registry(witnesses)
+    for field, expected_value in expected.items():
+        if registry.get(field) != expected_value:
+            fail(f"witness registry {field} does not match witnesses.json")
+
+
+def expected_witness_registry(witnesses: list[dict]) -> dict:
+    status_counts: dict[str, int] = {}
+    kind_counts: dict[str, int] = {}
+    source_counts: dict[str, int] = {}
+    follow_up_status_counts: dict[str, int] = {}
+    witness_ids_by_status: dict[str, list[str]] = {}
+    follow_up_witness_ids_by_status: dict[str, list[str]] = {}
+    follow_up_total = 0
+
+    for witness in witnesses:
+        status = witness["status"]
+        kind = witness["kind"]
+        source = witness["source"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+        kind_counts[kind] = kind_counts.get(kind, 0) + 1
+        source_counts[source] = source_counts.get(source, 0) + 1
+        witness_ids_by_status.setdefault(status, []).append(witness["id"])
+        if source.startswith("follow-up-"):
+            follow_up_total += 1
+            follow_up_status_counts[status] = follow_up_status_counts.get(status, 0) + 1
+            follow_up_witness_ids_by_status.setdefault(status, []).append(witness["id"])
+
+    return {
+        "total": len(witnesses),
+        "status_counts": dict(sorted(status_counts.items())),
+        "kind_counts": dict(sorted(kind_counts.items())),
+        "source_counts": dict(sorted(source_counts.items())),
+        "follow_up_total": follow_up_total,
+        "follow_up_status_counts": dict(sorted(follow_up_status_counts.items())),
+        "witness_ids_by_status": dict(sorted(witness_ids_by_status.items())),
+        "follow_up_witness_ids_by_status": dict(
+            sorted(follow_up_witness_ids_by_status.items())
+        ),
+    }
 
 
 def require_follow_up_result_metrics(metrics: dict, results: list[dict]) -> None:

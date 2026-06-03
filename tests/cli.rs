@@ -143,6 +143,7 @@ fn active_len_tracks_view_after_resize() {
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
         "review/witnesses.json",
+        "review/witness_registry.json",
         "review/proof_requests.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
