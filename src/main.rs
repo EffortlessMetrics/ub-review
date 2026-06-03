@@ -967,6 +967,14 @@ struct Observation {
     source: String,
 }
 
+#[derive(Debug, Serialize)]
+struct QuestionObservationArtifact<'a> {
+    schema: &'static str,
+    lane: &'a str,
+    question: &'a str,
+    observations: Vec<&'a Observation>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct ProofRequest {
     schema: String,
@@ -4639,6 +4647,14 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
     fs::create_dir_all(&observations_dir)
         .with_context(|| format!("create {}", observations_dir.display()))?;
 
+    let questions_dir = out.join("questions");
+    if questions_dir.exists() {
+        fs::remove_dir_all(&questions_dir)
+            .with_context(|| format!("remove {}", questions_dir.display()))?;
+    }
+    fs::create_dir_all(&questions_dir)
+        .with_context(|| format!("create {}", questions_dir.display()))?;
+
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     fs::write(
@@ -4660,11 +4676,31 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
     )?;
 
     let mut by_lane: BTreeMap<&str, Vec<&Observation>> = BTreeMap::new();
+    let mut by_question: BTreeMap<(String, String), QuestionObservationArtifact<'_>> =
+        BTreeMap::new();
     for observation in observations {
         by_lane
             .entry(observation.lane.as_str())
             .or_default()
             .push(observation);
+        let lane_name = sanitize_artifact_name(&observation.lane);
+        let question_name = sanitize_artifact_name(&observation.question);
+        let artifact = by_question
+            .entry((lane_name, question_name))
+            .or_insert_with(|| QuestionObservationArtifact {
+                schema: "ub-review.question_observations.v1",
+                lane: &observation.lane,
+                question: &observation.question,
+                observations: Vec::new(),
+            });
+        if artifact.lane != observation.lane || artifact.question != observation.question {
+            bail!(
+                "questions artifact path collision for {}/{}",
+                observation.lane,
+                observation.question
+            );
+        }
+        artifact.observations.push(observation);
     }
     for (lane, lane_observations) in by_lane {
         let path = observations_dir.join(format!("{}.ndjson", sanitize_artifact_name(lane)));
@@ -4674,6 +4710,14 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
             text.push('\n');
         }
         fs::write(path, text)?;
+    }
+    for ((lane_name, question_name), artifact) in by_question {
+        let lane_dir = questions_dir.join(lane_name);
+        fs::create_dir_all(&lane_dir).with_context(|| format!("create {}", lane_dir.display()))?;
+        fs::write(
+            lane_dir.join(format!("{question_name}.json")),
+            serde_json::to_vec_pretty(&artifact)?,
+        )?;
     }
     Ok(())
 }
@@ -15536,14 +15580,24 @@ UB_REVIEW_HTTP_STATUS:429
                 status: "missing".to_owned(),
                 reason: "command not found".to_owned(),
             }],
-            missing_or_failed_model_evidence: vec![ModelEvidenceIssue {
-                lane: "opposition".to_owned(),
-                provider: "minimax".to_owned(),
-                model: "MiniMax-M3".to_owned(),
-                endpoint_kind: "anthropic-messages".to_owned(),
-                status: "timed_out".to_owned(),
-                reason: "model call timed out".to_owned(),
-            }],
+            missing_or_failed_model_evidence: vec![
+                ModelEvidenceIssue {
+                    lane: "opposition".to_owned(),
+                    provider: "minimax".to_owned(),
+                    model: "MiniMax-M3".to_owned(),
+                    endpoint_kind: "anthropic-messages".to_owned(),
+                    status: "timed_out".to_owned(),
+                    reason: "model call timed out".to_owned(),
+                },
+                ModelEvidenceIssue {
+                    lane: "opposition".to_owned(),
+                    provider: "minimax".to_owned(),
+                    model: "MiniMax-M3".to_owned(),
+                    endpoint_kind: "anthropic-messages".to_owned(),
+                    status: "failed".to_owned(),
+                    reason: "model returned malformed JSON".to_owned(),
+                },
+            ],
             inline_comments: vec![ReviewInlineComment {
                 lane: "tests-oracle".to_owned(),
                 severity: "medium".to_owned(),
@@ -15604,17 +15658,41 @@ UB_REVIEW_HTTP_STATUS:429
             temp.path().join("review/dropped_observations.json"),
         )?)?;
         let lane_ndjson = fs::read_to_string(temp.path().join("observations/tests-oracle.ndjson"))?;
+        let question_artifact: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path()
+                .join("questions/opposition/missing-model-evidence.json"),
+        )?)?;
 
-        assert_eq!(aggregate.len(), 6);
+        assert_eq!(aggregate.len(), 7);
         assert_eq!(unique.as_array().map(Vec::len), Some(5));
-        assert_eq!(merged.as_array().map(Vec::len), Some(1));
-        assert_eq!(dropped.as_array().map(Vec::len), Some(1));
+        assert_eq!(merged.as_array().map(Vec::len), Some(2));
+        assert_eq!(dropped.as_array().map(Vec::len), Some(2));
         assert_eq!(unique[0]["schema"], "ub-review.observation_group.v1");
         assert_eq!(unique[0]["duplicate_count"], 1);
         assert_eq!(merged[0]["schema"], "ub-review.merged_observation.v1");
         assert_eq!(dropped[0]["schema"], "ub-review.dropped_observation.v1");
         assert!(lane_ndjson.contains("\"schema\":\"ub-review.observation.v1\""));
         assert!(lane_ndjson.contains("\"kind\":\"test-gap\""));
+        assert_eq!(
+            question_artifact["schema"],
+            "ub-review.question_observations.v1"
+        );
+        assert_eq!(question_artifact["lane"], "opposition");
+        assert_eq!(question_artifact["question"], "missing-model-evidence");
+        let expected_question_observations: Vec<_> = aggregate
+            .iter()
+            .filter(|observation| {
+                observation.lane == "opposition" && observation.question == "missing-model-evidence"
+            })
+            .collect();
+        assert_eq!(
+            question_artifact["observations"],
+            serde_json::to_value(expected_question_observations)?
+        );
+        assert_eq!(
+            question_artifact["observations"].as_array().map(Vec::len),
+            Some(2)
+        );
         assert!(aggregate.iter().any(|observation| {
             observation.lane == "tests-oracle"
                 && observation.status == "confirmed"
@@ -15638,6 +15716,45 @@ UB_REVIEW_HTTP_STATUS:429
                 && observation.kind == "missing-evidence"
                 && observation.question == "missing-model-evidence"
         }));
+        Ok(())
+    }
+
+    #[test]
+    fn observation_question_artifacts_reject_path_collisions() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut observations = vec![
+            test_observation(
+                "lane/a",
+                "First question observation.",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "question-path-collision-a",
+            ),
+            test_observation(
+                "lane-a",
+                "Second question observation.",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "question-path-collision-b",
+            ),
+        ];
+        observations[0].question = "same/question".to_owned();
+        observations[1].question = "same-question".to_owned();
+
+        let error = match write_observation_artifacts(temp.path(), &observations) {
+            Ok(()) => return Err(anyhow::anyhow!("question path collision was not rejected")),
+            Err(error) => error,
+        };
+
+        assert!(
+            error
+                .to_string()
+                .contains("questions artifact path collision")
+        );
         Ok(())
     }
 

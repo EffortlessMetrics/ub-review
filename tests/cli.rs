@@ -152,6 +152,7 @@ fn active_len_tracks_view_after_resize() {
         assert!(out.join(path).exists(), "missing {}", path);
     }
     assert!(out.join("proof_requests").is_dir());
+    assert!(out.join("questions").is_dir());
 
     assert!(!out.join("review/github-review.json").exists());
     let github_skip: serde_json::Value =
