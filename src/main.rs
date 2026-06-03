@@ -1148,8 +1148,31 @@ struct FocusedTestTask {
     id: String,
     file: String,
     test_name: Option<String>,
+    mode: FocusedProofMode,
     requested_by: Vec<String>,
     request_ids: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FocusedProofMode {
+    HeadOnly,
+    RedGreen,
+}
+
+impl FocusedProofMode {
+    fn key(self) -> &'static str {
+        match self {
+            Self::HeadOnly => "head-only",
+            Self::RedGreen => "red-green",
+        }
+    }
+
+    fn command_count(self) -> u64 {
+        match self {
+            Self::HeadOnly => 1,
+            Self::RedGreen => 2,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1157,6 +1180,7 @@ struct FocusedProofPlan {
     id: String,
     test_file: String,
     test_name: Option<String>,
+    mode: FocusedProofMode,
     head_command: String,
     base_plus_tests_command: String,
     requested_by: Vec<String>,
@@ -6167,9 +6191,11 @@ fn write_proof_request_artifacts(
             plan.push('\n');
         }
         if focused_plans.is_empty() {
-            plan.push_str("No focused red/green test targets were planned from the diff.\n");
+            plan.push_str(
+                "No focused proof targets were planned from the diff or proof requests.\n",
+            );
         } else {
-            plan.push_str("## Focused red/green proof plan\n\n");
+            plan.push_str("## Focused proof plan\n\n");
             if proof_receipts.is_empty() {
                 plan.push_str(
                     "No proof broker commands were executed in this planner-only pass.\n\n",
@@ -6180,9 +6206,10 @@ fn write_proof_request_artifacts(
                 );
                 for receipt in proof_receipts {
                     plan.push_str(&format!(
-                        "- Receipt `{}`: kind=`{}`, result=`{}`, commands=`{}`.\n",
+                        "- Receipt `{}`: kind=`{}`, test_patch_mode=`{}`, result=`{}`, commands=`{}`.\n",
                         receipt.id,
                         receipt.kind,
+                        receipt.test_patch_mode,
                         receipt.result,
                         receipt.commands.len()
                     ));
@@ -6191,7 +6218,7 @@ fn write_proof_request_artifacts(
             }
             for plan_item in focused_plans {
                 plan.push_str(&format!(
-                    "- `{}` `{}`{} requested by `{}`: status=`{}`, cost=`focused-test`, head=`{}`, base+tests=`{}`. {}\n",
+                    "- `{}` `{}`{} requested by `{}`: mode=`{}`, status=`{}`, cost=`focused-test`, head=`{}`, base+tests=`{}`. {}\n",
                     plan_item.id,
                     plan_item.test_file,
                     plan_item
@@ -6200,6 +6227,7 @@ fn write_proof_request_artifacts(
                         .map(|name| format!(" - `{}`", escape_md(name)))
                         .unwrap_or_default(),
                     plan_item.requested_by.join(", "),
+                    plan_item.mode.key(),
                     plan_item.status,
                     escape_md(&plan_item.head_command),
                     escape_md(&plan_item.base_plus_tests_command),
@@ -6391,12 +6419,16 @@ fn focused_proof_plans_from_diff(
         .into_iter()
         .map(|task| {
             let head_command = proof_task_plan_command(&task, "head", "head");
-            let base_plus_tests_command =
-                proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests");
+            let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
+                proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
+            } else {
+                "not planned for head-only proof".to_owned()
+            };
             FocusedProofPlan {
                 id: task.id,
                 test_file: task.file,
                 test_name: task.test_name,
+                mode: task.mode,
                 head_command,
                 base_plus_tests_command,
                 requested_by: task.requested_by,
@@ -6509,6 +6541,7 @@ where
             &executed_files,
             &task.file,
             estimated_seconds,
+            task.mode.command_count(),
             budget,
         ) {
             leases.push(focused_test_resource_lease(
@@ -6535,22 +6568,73 @@ where
             "granted",
             "focused red/green proof lease granted by runtime profile",
         ));
-        receipts.push(run_focused_red_green_proof_task(
-            root,
-            out,
-            diff,
-            &task,
-            budget.per_command_timeout_sec,
-            &mut runner,
-            &mut prepare_base_plus_tests,
-        )?);
+        let receipt = match task.mode {
+            FocusedProofMode::HeadOnly => run_focused_head_proof_task(
+                root,
+                out,
+                diff,
+                &task,
+                budget.per_command_timeout_sec,
+                &mut runner,
+            )?,
+            FocusedProofMode::RedGreen => run_focused_red_green_proof_task(
+                root,
+                out,
+                diff,
+                &task,
+                budget.per_command_timeout_sec,
+                &mut runner,
+                &mut prepare_base_plus_tests,
+            )?,
+        };
+        receipts.push(receipt);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
+        estimated_seconds = estimated_seconds.saturating_add(
+            budget
+                .per_command_timeout_sec
+                .saturating_mul(task.mode.command_count()),
+        );
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
         resource_leases: leases,
     })
+}
+
+fn run_focused_head_proof_task<F>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    timeout_sec: u64,
+    runner: &mut F,
+) -> Result<ProofReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+{
+    let head_spec = proof_task_command_spec(task, "head");
+    let head = run_proof_command_receipt(root, out, task, "head", &head_spec, timeout_sec, runner)?;
+    let result = match head.status.as_str() {
+        "passed" => "head_passed",
+        "failed" => "head_failed",
+        "timed_out" => "timed_out",
+        _ => "skipped_profile",
+    };
+    let reason = format!("HEAD proof {}: {}", head.status, head.reason);
+    Ok(focused_head_receipt(
+        diff,
+        task,
+        vec![head],
+        result.to_owned(),
+        reason,
+    ))
 }
 
 fn run_focused_red_green_proof_task<F, G>(
@@ -6758,20 +6842,52 @@ fn skipped_focused_proof_receipt(
     reason: &str,
 ) -> Result<ProofReceipt> {
     let spec = proof_task_command_spec(task, "head");
-    Ok(focused_red_green_receipt(
+    let command =
+        skipped_proof_command_receipt(out, task, "head", &spec, "skipped", reason.to_owned())?;
+    Ok(focused_receipt(
         diff,
         task,
-        vec![skipped_proof_command_receipt(
-            out,
-            task,
-            "head",
-            &spec,
-            "skipped",
-            reason.to_owned(),
-        )?],
+        vec![command],
         result.to_owned(),
         reason.to_owned(),
     ))
+}
+
+fn focused_receipt(
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    commands: Vec<ProofCommandReceipt>,
+    result: String,
+    reason: String,
+) -> ProofReceipt {
+    match task.mode {
+        FocusedProofMode::HeadOnly => focused_head_receipt(diff, task, commands, result, reason),
+        FocusedProofMode::RedGreen => {
+            focused_red_green_receipt(diff, task, commands, result, reason)
+        }
+    }
+}
+
+fn focused_head_receipt(
+    diff: &DiffContext,
+    task: &FocusedTestTask,
+    commands: Vec<ProofCommandReceipt>,
+    result: String,
+    reason: String,
+) -> ProofReceipt {
+    ProofReceipt {
+        schema: "ub-review.proof_receipt.v1".to_owned(),
+        id: task.id.clone(),
+        kind: "focused-head".to_owned(),
+        base: diff.base.clone(),
+        head: diff.head.clone(),
+        test_patch_mode: "head-only".to_owned(),
+        requested_by: task.requested_by.clone(),
+        request_ids: task.request_ids.clone(),
+        commands,
+        result,
+        reason,
+    }
 }
 
 fn focused_red_green_receipt(
@@ -6848,13 +6964,18 @@ fn focused_test_tasks_from_diff(
             &files,
             &task.file,
             estimated_seconds,
+            task.mode.command_count(),
             budget,
         ) {
             return tasks;
         }
         files.insert(task.file.clone());
+        estimated_seconds = estimated_seconds.saturating_add(
+            budget
+                .per_command_timeout_sec
+                .saturating_mul(task.mode.command_count()),
+        );
         tasks.push(task);
-        estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
     }
     tasks
 }
@@ -6865,6 +6986,12 @@ fn focused_test_candidates_from_diff(
 ) -> Vec<FocusedTestTask> {
     let request_groups = proof_request_groups(proof_requests);
     let mut tasks = Vec::new();
+    let changed_test_files = diff
+        .changed_files
+        .iter()
+        .filter(|path| is_bun_focused_test_file(path))
+        .map(|path| normalize_repo_path(path))
+        .collect::<BTreeSet<_>>();
     for file in diff
         .changed_files
         .iter()
@@ -6872,12 +6999,49 @@ fn focused_test_candidates_from_diff(
     {
         let names = focused_test_names_for_file(&diff.patch, file);
         if names.is_empty() {
-            tasks.push(focused_test_task(file, None, &request_groups));
+            merge_focused_test_task(
+                &mut tasks,
+                focused_test_task_with_mode(
+                    file,
+                    None,
+                    FocusedProofMode::RedGreen,
+                    &request_groups,
+                ),
+            );
         } else {
             for name in names {
-                tasks.push(focused_test_task(file, Some(name), &request_groups));
+                merge_focused_test_task(
+                    &mut tasks,
+                    focused_test_task_with_mode(
+                        file,
+                        Some(name),
+                        FocusedProofMode::RedGreen,
+                        &request_groups,
+                    ),
+                );
             }
         }
+    }
+    for group in &request_groups {
+        let Some(target) = focused_test_request_target(group) else {
+            continue;
+        };
+        let mode = if changed_test_files.contains(&target.file) {
+            FocusedProofMode::RedGreen
+        } else {
+            FocusedProofMode::HeadOnly
+        };
+        merge_focused_test_task(
+            &mut tasks,
+            FocusedTestTask {
+                id: focused_test_task_id(&target.file, target.test_name.as_deref(), mode),
+                file: target.file,
+                test_name: target.test_name,
+                mode,
+                requested_by: group.requested_by.clone(),
+                request_ids: group.request_ids.clone(),
+            },
+        );
     }
     tasks
 }
@@ -6887,18 +7051,35 @@ fn focused_proof_budget_allows_next(
     current_files: &BTreeSet<String>,
     next_file: &str,
     estimated_seconds: u64,
+    next_command_count: u64,
     budget: ProofBudget,
 ) -> bool {
     current_tasks < budget.max_focused_tests
         && (current_files.contains(next_file)
             || current_files.len() < budget.max_focused_test_files)
-        && estimated_seconds.saturating_add(budget.per_command_timeout_sec)
+        && estimated_seconds
+            .saturating_add(budget.per_command_timeout_sec)
+            .saturating_add(
+                budget
+                    .per_command_timeout_sec
+                    .saturating_mul(next_command_count.saturating_sub(1)),
+            )
             <= budget.max_total_seconds
 }
 
+#[cfg(test)]
 fn focused_test_task(
     file: &str,
     test_name: Option<String>,
+    request_groups: &[ProofRequestGroup],
+) -> FocusedTestTask {
+    focused_test_task_with_mode(file, test_name, FocusedProofMode::RedGreen, request_groups)
+}
+
+fn focused_test_task_with_mode(
+    file: &str,
+    test_name: Option<String>,
+    mode: FocusedProofMode,
     request_groups: &[ProofRequestGroup],
 ) -> FocusedTestTask {
     let mut requested_by = Vec::new();
@@ -6921,14 +7102,99 @@ fn focused_test_task(
     if requested_by.is_empty() {
         requested_by.push("proof-broker".to_owned());
     }
-    let fingerprint =
-        sha256_hex(format!("{file}\n{}", test_name.as_deref().unwrap_or("")).as_bytes());
     FocusedTestTask {
-        id: format!("proof-red-green-{}", &fingerprint[..12]),
+        id: focused_test_task_id(file, test_name.as_deref(), mode),
         file: file.to_owned(),
         test_name,
+        mode,
         requested_by,
         request_ids,
+    }
+}
+
+fn focused_test_task_id(file: &str, test_name: Option<&str>, mode: FocusedProofMode) -> String {
+    let fingerprint = sha256_hex(format!("{file}\n{}", test_name.unwrap_or("")).as_bytes());
+    let prefix = match mode {
+        FocusedProofMode::HeadOnly => "proof-head",
+        FocusedProofMode::RedGreen => "proof-red-green",
+    };
+    format!("{prefix}-{}", &fingerprint[..12])
+}
+
+fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: FocusedTestTask) {
+    if let Some(existing) = tasks
+        .iter_mut()
+        .find(|existing| existing.file == task.file && existing.test_name == task.test_name)
+    {
+        if existing.mode == FocusedProofMode::HeadOnly && task.mode == FocusedProofMode::RedGreen {
+            existing.mode = FocusedProofMode::RedGreen;
+            existing.id =
+                focused_test_task_id(&existing.file, existing.test_name.as_deref(), existing.mode);
+        }
+        for lane in task.requested_by.drain(..) {
+            push_unique(&mut existing.requested_by, &lane);
+        }
+        for request_id in task.request_ids.drain(..) {
+            push_unique(&mut existing.request_ids, &request_id);
+        }
+        return;
+    }
+    tasks.push(task);
+}
+
+#[derive(Clone, Debug)]
+struct FocusedTestRequestTarget {
+    file: String,
+    test_name: Option<String>,
+}
+
+fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestRequestTarget> {
+    if group.status != "requested" || group.cost != "focused-test" {
+        return None;
+    }
+    let parts = group.command.split_whitespace().collect::<Vec<_>>();
+    let (file, args) = match parts.as_slice() {
+        ["bun", "test", file, args @ ..] => (*file, args),
+        ["bun", "bd", "test", file, args @ ..] => (*file, args),
+        _ => return None,
+    };
+    if !is_bun_focused_test_file(file) {
+        return None;
+    }
+    Some(FocusedTestRequestTarget {
+        file: normalize_repo_path(file),
+        test_name: focused_test_name_arg(args),
+    })
+}
+
+fn focused_test_name_arg(args: &[&str]) -> Option<String> {
+    let index = args
+        .iter()
+        .position(|arg| matches!(*arg, "-t" | "--test-name-pattern"))?;
+    let mut tokens = Vec::new();
+    for token in &args[index + 1..] {
+        if token.starts_with('-') {
+            break;
+        }
+        tokens.push(*token);
+    }
+    let joined = tokens.join(" ");
+    let value = strip_matching_quotes(joined.trim());
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn strip_matching_quotes(value: &str) -> &str {
+    if value.len() < 2 {
+        return value;
+    }
+    let bytes = value.as_bytes();
+    if matches!(
+        (bytes.first(), bytes.last()),
+        (Some(b'\''), Some(b'\'')) | (Some(b'"'), Some(b'"'))
+    ) {
+        &value[1..value.len() - 1]
+    } else {
+        value
     }
 }
 
@@ -6951,16 +7217,25 @@ fn focused_test_resource_lease(
         disk_mb: lease_budget.disk_mb,
         timeout_sec: budget
             .per_command_timeout_sec
-            .saturating_mul(2)
+            .saturating_mul(task.mode.command_count())
             .min(budget.max_total_seconds),
         network: lease_budget.network,
         scratch: lease_budget.scratch,
-        worktree: Some("base-plus-tests".to_owned()),
-        command: Some(format!(
-            "head: {}; base+tests: {}",
-            proof_task_plan_command(task, "head", "head"),
-            proof_task_plan_command(task, "base-plus-tests", "base-plus-tests")
-        )),
+        worktree: if task.mode == FocusedProofMode::RedGreen {
+            Some("base-plus-tests".to_owned())
+        } else {
+            None
+        },
+        command: Some(match task.mode {
+            FocusedProofMode::HeadOnly => {
+                format!("head: {}", proof_task_plan_command(task, "head", "head"))
+            }
+            FocusedProofMode::RedGreen => format!(
+                "head: {}; base+tests: {}",
+                proof_task_plan_command(task, "head", "head"),
+                proof_task_plan_command(task, "base-plus-tests", "base-plus-tests")
+            ),
+        }),
     }
 }
 
@@ -13902,9 +14177,9 @@ index 1111111..2222222 100644
         assert_eq!(proof_request_file, serde_json::to_value(&proof_json[0])?);
         assert_eq!(proof_groups.len(), 1);
         assert_eq!(proof_groups[0].duplicate_count, 1);
-        assert!(
-            proof_plan.contains("No focused red/green test targets were planned from the diff.")
-        );
+        assert!(proof_plan.contains("## Focused proof plan"));
+        assert!(proof_plan.contains("mode=`head-only`"));
+        assert!(proof_plan.contains("base+tests=`not planned for head-only proof`"));
         assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
         Ok(())
     }
@@ -14244,31 +14519,48 @@ index 1111111..2222222 100644
                 max_focused_test_files: 3,
                 max_focused_tests: 6,
                 per_command_timeout_sec: 300,
-                max_total_seconds: 600,
+                max_total_seconds: 1_200,
             },
         );
 
         assert_eq!(tasks.len(), 2);
         assert_eq!(tasks[0].file, "test/js/bun/md/md-edge-cases.test.ts");
+        assert_eq!(tasks[0].mode, super::FocusedProofMode::RedGreen);
         assert_eq!(
             tasks[0].test_name.as_deref(),
             Some("snapshots resizable ArrayBuffer input")
         );
-        assert_eq!(
-            tasks[0].requested_by,
-            vec!["tests-oracle".to_owned(), "opposition".to_owned()]
+        assert_eq!(tasks[0].requested_by.len(), 2);
+        assert!(
+            tasks[0]
+                .requested_by
+                .iter()
+                .any(|lane| lane == "tests-oracle")
         );
-        assert_eq!(
-            tasks[0].request_ids,
-            vec![
-                "proof-tests-001".to_owned(),
-                "proof-opposition-001".to_owned()
-            ]
+        assert!(
+            tasks[0]
+                .requested_by
+                .iter()
+                .any(|lane| lane == "opposition")
+        );
+        assert_eq!(tasks[0].request_ids.len(), 2);
+        assert!(
+            tasks[0]
+                .request_ids
+                .iter()
+                .any(|request_id| request_id == "proof-tests-001")
+        );
+        assert!(
+            tasks[0]
+                .request_ids
+                .iter()
+                .any(|request_id| request_id == "proof-opposition-001")
         );
         assert_eq!(
             tasks[1].test_name.as_deref(),
             Some("keeps stable bytes after getter reentry")
         );
+        assert_eq!(tasks[1].mode, super::FocusedProofMode::RedGreen);
         let time_capped_tasks = focused_test_tasks_from_diff(
             &diff,
             &proof_requests,
@@ -14276,11 +14568,144 @@ index 1111111..2222222 100644
                 max_focused_test_files: 3,
                 max_focused_tests: 6,
                 per_command_timeout_sec: 300,
-                max_total_seconds: 300,
+                max_total_seconds: 600,
             },
         );
         assert_eq!(time_capped_tasks.len(), 1);
         assert_eq!(proof_budget(&Profile::default())?.max_focused_tests, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn proof_broker_v0_executes_allowlisted_request_as_head_only_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-tests-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"
+                    .to_owned(),
+                reason: "Run the requested focused Bun proof.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-opposition-001".to_owned(),
+                lane: "opposition".to_owned(),
+                requested_by: vec!["opposition".to_owned()],
+                command:
+                    "bun bd test test/js/bun/ffi/ffi.test.js --test-name-pattern \"ffi toBuffer bad free\""
+                        .to_owned(),
+                reason: "Confirm the same requested focused Bun proof.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            },
+        ];
+        let tasks = focused_test_tasks_from_diff(
+            &diff,
+            &proof_requests,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 300,
+            },
+        );
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].mode, super::FocusedProofMode::HeadOnly);
+        assert_eq!(tasks[0].file, "test/js/bun/ffi/ffi.test.js");
+        assert_eq!(tasks[0].test_name.as_deref(), Some("ffi toBuffer bad free"));
+        assert_eq!(tasks[0].requested_by.len(), 2);
+        assert!(
+            tasks[0]
+                .requested_by
+                .iter()
+                .any(|lane| lane == "tests-oracle")
+        );
+        assert!(
+            tasks[0]
+                .requested_by
+                .iter()
+                .any(|lane| lane == "opposition")
+        );
+        assert_eq!(tasks[0].request_ids.len(), 2);
+        assert!(
+            tasks[0]
+                .request_ids
+                .iter()
+                .any(|request_id| request_id == "proof-tests-001")
+        );
+        assert!(
+            tasks[0]
+                .request_ids
+                .iter()
+                .any(|request_id| request_id == "proof-opposition-001")
+        );
+
+        let args = test_run_args(out.clone());
+        let mut commands = Vec::<String>::new();
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 300,
+            },
+            tasks,
+            |_root, argv, env, timeout, stdout, stderr| {
+                commands.push(command_display(argv));
+                assert!(env.is_empty());
+                assert_eq!(timeout, 300);
+                fs::write(stdout, b"head ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 21,
+                })
+            },
+            |_root, _out, _diff| {
+                unreachable!("head-only proof must not prepare a base+tests worktree")
+            },
+        )?;
+
+        assert_eq!(
+            commands,
+            vec!["bun bd test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"]
+        );
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        let receipt = &proof_result.proof_receipts[0];
+        assert_eq!(receipt.kind, "focused-head");
+        assert_eq!(receipt.test_patch_mode, "head-only");
+        assert_eq!(receipt.result, "head_passed");
+        assert_eq!(receipt.commands.len(), 1);
+        assert_eq!(receipt.commands[0].side, "head");
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert!(out.join(&receipt.commands[0].stdout).exists());
+        let lease = &proof_result.resource_leases[0];
+        assert_eq!(lease.status, "granted");
+        assert_eq!(lease.timeout_sec, 300);
+        assert_eq!(lease.worktree, None);
+        assert!(lease.command.as_deref().is_some_and(
+            |command| command.contains("head: cwd=") && !command.contains("base+tests:")
+        ));
         Ok(())
     }
 
@@ -14560,7 +14985,8 @@ index 1111111..2222222 100644
             temp.path().join("review/proof_request_groups.json"),
         )?)?;
 
-        assert!(proof_plan.contains("## Focused red/green proof plan"));
+        assert!(proof_plan.contains("## Focused proof plan"));
+        assert!(proof_plan.contains("mode=`red-green`"));
         assert!(proof_plan.contains("status=unsupported"));
         assert!(proof_plan.contains("No proof broker commands were executed"));
         assert!(
@@ -14638,7 +15064,7 @@ index 1111111..2222222 100644
                 max_focused_test_files: 3,
                 max_focused_tests: 2,
                 per_command_timeout_sec: 300,
-                max_total_seconds: 600,
+                max_total_seconds: 1_200,
             },
         );
         assert_eq!(tasks.len(), 2);
@@ -14655,7 +15081,7 @@ index 1111111..2222222 100644
                 max_focused_test_files: 3,
                 max_focused_tests: 2,
                 per_command_timeout_sec: 300,
-                max_total_seconds: 600,
+                max_total_seconds: 1_200,
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
