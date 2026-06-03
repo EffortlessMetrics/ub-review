@@ -155,6 +155,8 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
     let workspace = workspace_packages(root)?;
     let affected = affected_packages(root, &workspace, &changed)?;
     write_affected_packages(&out_dir, &affected, &changed)?;
+    let diff_path = write_diff_artifact(root, &out_dir, options.staged)?;
+    let diff_arg = diff_path.display().to_string();
 
     let mut receipts = Vec::new();
     let mut blocking_failures = 0;
@@ -203,11 +205,26 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         receipts.extend(clippy_receipts);
     }
 
+    let cargo_allow_receipt = out_dir.join("cargo-allow.receipt.json");
+    let cargo_allow_receipt_arg = cargo_allow_receipt.display().to_string();
+    let cargo_allow_output = out_dir.join("cargo-allow.md");
+    let cargo_allow_output_arg = cargo_allow_output.display().to_string();
     let cargo_allow = run_relevant_tool(
         root,
         &out_dir.join("cargo-allow.json"),
         "cargo-allow",
-        &["cargo-allow"],
+        &[
+            "cargo-allow",
+            "check",
+            "--mode",
+            "no-new",
+            "--format",
+            "markdown",
+            "--receipt",
+            cargo_allow_receipt_arg.as_str(),
+            "--output",
+            cargo_allow_output_arg.as_str(),
+        ],
         relevant_cargo_allow(&changed),
         "no changed source exception surfaces",
     )?;
@@ -220,7 +237,16 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         root,
         &out_dir.join("ripr.md"),
         "ripr",
-        &["ripr"],
+        &[
+            "ripr",
+            "check",
+            "--diff",
+            diff_arg.as_str(),
+            "--mode",
+            "draft",
+            "--format",
+            "json",
+        ],
         relevant_rust_change(&changed),
         "no changed Rust behavior surface",
     )?;
@@ -230,9 +256,20 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         root,
         &out_dir.join("unsafe-review.md"),
         "unsafe-review",
-        &["unsafe-review"],
+        &[
+            "unsafe-review",
+            "check",
+            "--root",
+            ".",
+            "--diff",
+            diff_arg.as_str(),
+            "--format",
+            "markdown",
+            "--policy",
+            "advisory",
+        ],
         relevant_unsafe_or_native(&changed),
-        "no changed unsafe/native seam",
+        "no changed unsafe/native surface",
     )?;
     if unsafe_review.success_is_blocking_failure() {
         blocking_failures += 1;
@@ -252,11 +289,24 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
     }
     receipts.push(actionlint);
 
+    let ast_grep_config = root.join("tools/ub-rules/sgconfig.yml");
+    let ast_grep_config_arg = ast_grep_config.display().to_string();
+    let ast_grep_argv = if ast_grep_config.exists() {
+        vec![
+            "ast-grep",
+            "scan",
+            "--config",
+            ast_grep_config_arg.as_str(),
+            ".",
+        ]
+    } else {
+        vec!["ast-grep", "scan"]
+    };
     let ast_grep = run_relevant_tool(
         root,
         &out_dir.join("ast-grep.md"),
         "ast-grep",
-        &["ast-grep", "scan"],
+        &ast_grep_argv,
         relevant_rust_change(&changed),
         "no changed Rust files",
     )?;
@@ -444,9 +494,14 @@ fn workspace_packages(root: &Path) -> Result<Vec<WorkspacePackage>> {
         .canonicalize()
         .context("canonicalize repository root")?;
     for package in &mut parsed {
-        if package.manifest_dir.is_relative() {
-            package.manifest_dir = canonical_root.join(&package.manifest_dir);
-        }
+        let manifest_dir = if package.manifest_dir.is_relative() {
+            canonical_root.join(&package.manifest_dir)
+        } else {
+            package.manifest_dir.clone()
+        };
+        package.manifest_dir = manifest_dir
+            .canonicalize()
+            .with_context(|| format!("canonicalize package {}", package.name))?;
     }
     Ok(parsed)
 }
@@ -487,12 +542,26 @@ fn affected_packages(
         .canonicalize()
         .context("canonicalize repository root")?;
     let mut affected = BTreeSet::new();
-    for file in changed.iter().filter(|file| file.path.ends_with(".rs")) {
-        let absolute = canonical_root.join(&file.path);
-        if let Some(package) = packages
-            .iter()
-            .filter(|package| absolute.starts_with(&package.manifest_dir))
-            .max_by_key(|package| package.manifest_dir.as_os_str().len())
+    for file in changed {
+        let normalized = normalize_path(&file.path);
+        if normalized == "Cargo.lock" || normalized == "Cargo.toml" {
+            affected.extend(packages.iter().map(|package| package.name.clone()));
+            continue;
+        }
+
+        let absolute = repo_absolute_path(&canonical_root, &normalized);
+        if normalized.ends_with("Cargo.toml") {
+            if let Some(package) = packages
+                .iter()
+                .find(|package| absolute == package.manifest_dir.join("Cargo.toml"))
+            {
+                affected.insert(package.name.clone());
+            }
+            continue;
+        }
+
+        if normalized.ends_with(".rs")
+            && let Some(package) = nearest_package_for_path(packages, &absolute)
         {
             affected.insert(package.name.clone());
         }
@@ -543,6 +612,25 @@ fn write_affected_packages(
     Ok(())
 }
 
+fn write_diff_artifact(root: &Path, out_dir: &Path, staged: bool) -> Result<PathBuf> {
+    let args = if staged {
+        vec!["diff", "--cached", "--unified=3"]
+    } else {
+        vec!["diff", "HEAD", "--unified=3"]
+    };
+    let output = command_output(root, "git", &args)?;
+    if !output.status.success() {
+        bail!("git diff artifact failed: {}", output.stderr.trim());
+    }
+    let path = out_dir.join(if staged {
+        "staged.diff"
+    } else {
+        "working-tree.diff"
+    });
+    fs::write(&path, output.stdout).with_context(|| format!("write {}", path.display()))?;
+    Ok(path)
+}
+
 fn run_clippy_on_diff(
     root: &Path,
     out_dir: &Path,
@@ -551,7 +639,7 @@ fn run_clippy_on_diff(
 ) -> Result<(Vec<CommandReceipt>, Vec<ClippyDiagnostic>)> {
     let changed_map = changed
         .iter()
-        .map(|file| (normalize_path(&file.path), file.lines.clone()))
+        .map(|file| (normalize_repo_path(root, &file.path), file.lines.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut receipts = Vec::new();
     let mut all_messages = Vec::new();
@@ -578,7 +666,13 @@ fn run_clippy_on_diff(
         {
             match serde_json::from_str::<JsonValue>(line) {
                 Ok(value) => {
-                    collect_clippy_finding(&package.name, &value, &changed_map, &mut findings);
+                    collect_clippy_finding(
+                        root,
+                        &package.name,
+                        &value,
+                        &changed_map,
+                        &mut findings,
+                    );
                     all_messages.push(value);
                 }
                 Err(_) => all_messages.push(json!({ "text": line })),
@@ -604,6 +698,7 @@ fn run_clippy_on_diff(
 }
 
 fn collect_clippy_finding(
+    root: &Path,
     package: &str,
     value: &JsonValue,
     changed: &BTreeMap<String, BTreeSet<u64>>,
@@ -636,7 +731,7 @@ fn collect_clippy_finding(
         let Some(path) = span.get("file_name").and_then(JsonValue::as_str) else {
             continue;
         };
-        let normalized = normalize_path(path);
+        let normalized = normalize_repo_path(root, path);
         let line = span
             .get("line_start")
             .and_then(JsonValue::as_u64)
@@ -646,7 +741,7 @@ fn collect_clippy_finding(
         }
         if changed
             .get(&normalized)
-            .is_some_and(|lines| lines.is_empty() || lines.contains(&line))
+            .is_some_and(|lines| lines.contains(&line))
         {
             findings.push(ClippyDiagnostic {
                 package: package.to_owned(),
@@ -712,9 +807,9 @@ fn relevant_cargo_allow(changed: &[ChangedFile]) -> bool {
 }
 
 fn relevant_rust_change(changed: &[ChangedFile]) -> bool {
-    changed
-        .iter()
-        .any(|file| file.path.ends_with(".rs") || file.path.ends_with("Cargo.toml"))
+    changed.iter().any(|file| {
+        file.path.ends_with(".rs") || file.path.ends_with("Cargo.toml") || file.path == "Cargo.lock"
+    })
 }
 
 fn relevant_unsafe_or_native(changed: &[ChangedFile]) -> bool {
@@ -798,6 +893,8 @@ fn write_tool_artifact(path: &Path, receipt: &CommandReceipt, command: &str) -> 
             "success": receipt.success,
             "skipped": receipt.skipped,
             "detail": receipt.reason,
+            "stdout": receipt.stdout,
+            "stderr": receipt.stderr,
         });
         fs::write(
             path,
@@ -913,6 +1010,193 @@ fn safe_name(name: &str) -> String {
 fn normalize_path(path: &str) -> String {
     path.trim_start_matches("./").replace('\\', "/")
 }
+
+fn repo_absolute_path(canonical_root: &Path, path: &str) -> PathBuf {
+    let candidate = Path::new(path);
+    if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        canonical_root.join(candidate)
+    }
+}
+
+fn nearest_package_for_path<'a>(
+    packages: &'a [WorkspacePackage],
+    absolute: &Path,
+) -> Option<&'a WorkspacePackage> {
+    packages
+        .iter()
+        .filter(|package| absolute.starts_with(&package.manifest_dir))
+        .max_by_key(|package| package.manifest_dir.as_os_str().len())
+}
+
+fn normalize_repo_path(root: &Path, path: &str) -> String {
+    let normalized = normalize_path(path);
+    let candidate = Path::new(path);
+    if !candidate.is_absolute() {
+        return normalized;
+    }
+
+    let Some(relative) = repo_relative_path(root, candidate) else {
+        return normalized;
+    };
+    relative
+}
+
+fn repo_relative_path(root: &Path, candidate: &Path) -> Option<String> {
+    let canonical_root = root.canonicalize().ok()?;
+    let absolute = candidate
+        .canonicalize()
+        .unwrap_or_else(|_| candidate.to_path_buf());
+    absolute
+        .strip_prefix(canonical_root)
+        .ok()
+        .map(path_to_slash_string)
+}
+
+fn path_to_slash_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_repo_root(name: &str) -> Result<PathBuf> {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .context("system time before unix epoch")?
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!(
+            "ub-review-xtask-{name}-{}-{suffix}",
+            std::process::id()
+        ));
+        fs::create_dir_all(&root).with_context(|| format!("create {}", root.display()))?;
+        Ok(root)
+    }
+
+    fn package(name: &str, manifest_dir: PathBuf) -> WorkspacePackage {
+        WorkspacePackage {
+            name: name.to_owned(),
+            manifest_dir,
+            targets: Vec::new(),
+        }
+    }
+
+    fn changed(path: &str, lines: &[u64]) -> ChangedFile {
+        ChangedFile {
+            path: path.to_owned(),
+            lines: lines.iter().copied().collect(),
+        }
+    }
+
+    fn changed_names(packages: Vec<WorkspacePackage>) -> Vec<String> {
+        packages
+            .into_iter()
+            .map(|package| package.name)
+            .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn affected_packages_include_package_manifest_changes() -> Result<()> {
+        let root = temp_repo_root("manifest")?;
+        let xtask_dir = root.join("xtask");
+        fs::create_dir_all(&xtask_dir)
+            .with_context(|| format!("create {}", xtask_dir.display()))?;
+        let packages = vec![
+            package("ub-review", root.canonicalize()?),
+            package("xtask", xtask_dir.canonicalize()?),
+        ];
+
+        let affected = affected_packages(&root, &packages, &[changed("xtask/Cargo.toml", &[])])?;
+
+        assert_eq!(changed_names(affected), vec!["xtask"]);
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn affected_packages_include_all_packages_for_root_manifest_and_lockfile() -> Result<()> {
+        let root = temp_repo_root("workspace")?;
+        let xtask_dir = root.join("xtask");
+        fs::create_dir_all(&xtask_dir)
+            .with_context(|| format!("create {}", xtask_dir.display()))?;
+        let packages = vec![
+            package("ub-review", root.canonicalize()?),
+            package("xtask", xtask_dir.canonicalize()?),
+        ];
+
+        let manifest_affected = affected_packages(&root, &packages, &[changed("Cargo.toml", &[])])?;
+        let lock_affected = affected_packages(&root, &packages, &[changed("Cargo.lock", &[])])?;
+
+        assert_eq!(changed_names(manifest_affected), vec!["ub-review", "xtask"]);
+        assert_eq!(changed_names(lock_affected), vec!["ub-review", "xtask"]);
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn clippy_findings_match_absolute_diagnostic_paths() -> Result<()> {
+        let root = temp_repo_root("absolute-diagnostic")?;
+        let source_dir = root.join("xtask/src");
+        fs::create_dir_all(&source_dir)
+            .with_context(|| format!("create {}", source_dir.display()))?;
+        let source = source_dir.join("main.rs");
+        fs::write(&source, "fn main() {}\n")
+            .with_context(|| format!("write {}", source.display()))?;
+
+        let mut changed = BTreeMap::new();
+        changed.insert("xtask/src/main.rs".to_owned(), [1].into_iter().collect());
+        let diagnostic = json!({
+            "reason": "compiler-message",
+            "message": {
+                "level": "warning",
+                "message": "lint on changed line",
+                "spans": [{
+                    "is_primary": true,
+                    "file_name": source.display().to_string(),
+                    "line_start": 1
+                }]
+            }
+        });
+        let mut findings = Vec::new();
+
+        collect_clippy_finding(&root, "xtask", &diagnostic, &changed, &mut findings);
+
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].path, "xtask/src/main.rs");
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn clippy_findings_do_not_expand_empty_line_sets_to_whole_file() -> Result<()> {
+        let root = temp_repo_root("empty-lines")?;
+        let mut changed = BTreeMap::new();
+        changed.insert("src/main.rs".to_owned(), BTreeSet::new());
+        let diagnostic = json!({
+            "reason": "compiler-message",
+            "message": {
+                "level": "warning",
+                "message": "existing lint",
+                "spans": [{
+                    "is_primary": true,
+                    "file_name": "src/main.rs",
+                    "line_start": 10
+                }]
+            }
+        });
+        let mut findings = Vec::new();
+
+        collect_clippy_finding(&root, "ub-review", &diagnostic, &changed, &mut findings);
+
+        assert!(findings.is_empty());
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+}
+
 #[derive(Debug, Default)]
 struct PolicyReport {
     policy_files: usize,
