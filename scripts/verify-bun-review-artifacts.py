@@ -151,6 +151,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/dropped_observations.json",
         "review/orchestrator_plan.json",
         "review/follow_up_results.json",
+        "review/follow_up_outputs.json",
         "review/proof_requests.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
@@ -159,6 +160,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/resource_plan.md",
         "follow_up_questions.ndjson",
         "follow_up_results.ndjson",
+        "follow_up_outputs.ndjson",
         "proof_requests.ndjson",
         "proof_receipts.ndjson",
         "resource_leases.ndjson",
@@ -392,6 +394,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
+    require_follow_up_outputs(root, follow_up_results)
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
@@ -1189,6 +1192,33 @@ def require_follow_up_results(
     return results
 
 
+def require_follow_up_outputs(root: pathlib.Path, results: list[dict]) -> list[dict]:
+    outputs = load_json(root / "review/follow_up_outputs.json")
+    if not isinstance(outputs, list):
+        fail("review/follow_up_outputs.json is not an array")
+    if len(outputs) != len(results):
+        fail("review/follow_up_outputs.json count does not match follow-up results")
+    lines = [
+        line
+        for line in read_text(root / "follow_up_outputs.ndjson").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != len(outputs):
+        fail("follow_up_outputs.ndjson line count does not match review/follow_up_outputs.json")
+    for index, result in enumerate(results):
+        output = outputs[index]
+        if not isinstance(output, dict):
+            fail(f"follow-up output {index + 1} is not an object: {output!r}")
+        try:
+            parsed = json.loads(lines[index])
+        except json.JSONDecodeError as error:
+            fail(f"invalid follow_up_outputs.ndjson line {index + 1}: {error}")
+        if parsed != output:
+            fail(f"follow_up_outputs.ndjson line {index + 1} does not match JSON artifact")
+        require_follow_up_output_schema(output, result)
+    return outputs
+
+
 def require_follow_up_result_metrics(metrics: dict, results: list[dict]) -> None:
     result_metrics = metrics.get("follow_up_results")
     if not isinstance(result_metrics, dict):
@@ -1281,6 +1311,61 @@ def require_follow_up_result_schema(
         if not value.startswith(expected_prefix):
             fail(f"follow-up result {field} is outside its model lane: {result!r}")
         require_file(root / value)
+
+
+def require_follow_up_output_schema(output: dict, result: dict) -> None:
+    if output.get("schema") != "ub-review.follow_up_output.v1":
+        fail(f"follow-up output has wrong schema: {output!r}")
+    for field in ["task_id", "group_id", "model_lane", "status", "reason"]:
+        if not isinstance(output.get(field), str) or not output[field]:
+            fail(f"follow-up output missing string field {field}: {output!r}")
+    for field in ["task_id", "group_id", "model_lane", "status", "reason"]:
+        if output[field] != result[field]:
+            fail(f"follow-up output field {field} does not match result: {output!r}")
+    inline_comments = output.get("inline_comments")
+    if not isinstance(inline_comments, list):
+        fail(f"follow-up output inline_comments is not an array: {output!r}")
+    for comment in inline_comments:
+        require_follow_up_inline_comment_schema(comment, output["model_lane"])
+    summary_only = output.get("summary_only_findings")
+    if not isinstance(summary_only, list):
+        fail(f"follow-up output summary_only_findings is not an array: {output!r}")
+    for finding in summary_only:
+        require_follow_up_summary_only_schema(finding, output["model_lane"])
+    observations = output.get("observations")
+    if not isinstance(observations, list):
+        fail(f"follow-up output observations is not an array: {output!r}")
+    for observation in observations:
+        require_observation_schema(observation)
+    proof_requests = output.get("proof_requests")
+    if not isinstance(proof_requests, list):
+        fail(f"follow-up output proof_requests is not an array: {output!r}")
+    for request in proof_requests:
+        require_proof_request_schema(request)
+
+
+def require_follow_up_inline_comment_schema(comment: dict, model_lane: str) -> None:
+    if not isinstance(comment, dict):
+        fail(f"follow-up inline comment is not an object: {comment!r}")
+    for field in ["lane", "severity", "confidence", "path", "side", "body", "evidence"]:
+        if not isinstance(comment.get(field), str) or not comment[field]:
+            fail(f"follow-up inline comment missing string field {field}: {comment!r}")
+    if comment["lane"] != model_lane:
+        fail(f"follow-up inline comment lane does not match output lane: {comment!r}")
+    if comment["side"] != "RIGHT":
+        fail(f"follow-up inline comment side is not RIGHT: {comment!r}")
+    if not isinstance(comment.get("line"), int) or comment["line"] <= 0:
+        fail(f"follow-up inline comment line is invalid: {comment!r}")
+
+
+def require_follow_up_summary_only_schema(finding: dict, model_lane: str) -> None:
+    if not isinstance(finding, dict):
+        fail(f"follow-up summary-only finding is not an object: {finding!r}")
+    for field in ["lane", "severity", "confidence", "reason", "evidence"]:
+        if not isinstance(finding.get(field), str) or not finding[field]:
+            fail(f"follow-up summary-only finding missing string field {field}: {finding!r}")
+    if finding["lane"] != model_lane:
+        fail(f"follow-up summary-only finding lane does not match output lane: {finding!r}")
 
 
 def expected_follow_up_question_packet(task: dict) -> dict:

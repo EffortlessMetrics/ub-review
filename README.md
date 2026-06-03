@@ -193,6 +193,7 @@ target/ub-review/
     dropped_observations.json
     orchestrator_plan.json
     follow_up_results.json
+    follow_up_outputs.json
     proof_requests.json
     proof_request_groups.json
     proof_plan.md
@@ -208,6 +209,7 @@ target/ub-review/
   candidates.ndjson
   follow_up_questions.ndjson
   follow_up_results.ndjson
+  follow_up_outputs.ndjson
   proof_requests.ndjson
   running-summary.md
 ```
