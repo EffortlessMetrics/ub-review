@@ -1,6 +1,8 @@
 # Coverage
 
-Coverage is a repository contract for generating local reports and uploading CI reports; credential material stays outside the repository.
+Coverage is a repository contract for generating local reports and uploading CI
+reports; credential material stays outside the repository. CI claim boundaries
+live in [Coverage claims](../ci/coverage.md).
 
 ## Default auth path
 
