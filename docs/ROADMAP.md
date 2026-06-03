@@ -255,6 +255,39 @@ This layer is how `ub-review` should eventually answer questions like:
 - a test was skipped because the runtime profile had no budget;
 - missing proof was recorded as missing evidence, not safety.
 
+## Repo-style ledger correction
+
+For Rust repositories that adopt this style, avoid hand-rolling separate TOML
+ledgers for every source exception class. Prefer `cargo-allow` as the single
+source-tree exception ledger and keep `xtask` as the orchestrator for
+repo-specific gates, release readiness, CI planning, and evidence verification.
+The durable model is documented in
+[SOURCE_EXCEPTION_LEDGER.md](SOURCE_EXCEPTION_LEDGER.md).
+
+```text
+cargo-allow owns:
+  policy/allow.toml
+  source exception inventory
+  exception ownership
+  evidence links
+  review_after / expires
+  PR diff summaries
+  agent worklists
+
+xtask owns:
+  orchestration
+  repo-specific gates
+  CI planning / LEM
+  release readiness
+  calling cargo-allow
+  aggregating receipts
+```
+
+Keep separate semantic evidence tools in place. `cargo-allow` says that a
+visible source exception is owned and evidenced; Clippy/rustc, `ripr`, mutation,
+coverage, `unsafe-review`, `cargo-deny`, and `cargo-vet` say whether the cited
+evidence is real enough for the gate.
+
 ## Next PRs
 
 ### 1. Smoke cleanup

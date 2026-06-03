@@ -10,6 +10,8 @@
 - One grouped Pull Request Review with validated inline comments.
 - Append-only events and single-writer running summary.
 - External UB ledger support.
+- Source exception ledger receipts through `cargo-allow` when adopting the Rust
+  repo template.
 - No rubber-stamp review language.
 - No fake verification from missing evidence.
 - Sensor defects are filed upstream in the matching `*-swarm` repo instead of

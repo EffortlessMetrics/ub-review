@@ -256,6 +256,16 @@ direct MiniMax M3 with `provider-policy: minimax-only`. OpenCode Go canary/deep
 lanes remain available later through `provider-policy: minimax-primary`,
 `opencode-go-canary`, or `opencode-go-wide` once the provider key is proven.
 
+## Source exception ledger
+
+For Rust repositories using this review style, `cargo-allow` is the preferred
+source-tree exception ledger. Keep `policy/allow.toml` as the owned receipt set
+for visible exceptions such as `unsafe`, panic families, lint suppressions,
+indexing/slicing, generated files, scripts, and workflows; use `xtask` only as
+the control plane that wraps `cargo-allow` and verifies evidence from tools such
+as `ripr`, mutation, coverage, Clippy, and `unsafe-review`. See
+[docs/SOURCE_EXCEPTION_LEDGER.md](docs/SOURCE_EXCEPTION_LEDGER.md).
+
 ## Sensors
 
 Default core sensors are best-effort:
