@@ -924,6 +924,53 @@ struct SensorPlan {
     requires_lease: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ResolvedToolArtifact {
+    schema: &'static str,
+    runtime_profile: String,
+    tools: Vec<ResolvedToolEntry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ResolvedToolEntry {
+    id: String,
+    class: ToolClass,
+    command: String,
+    required_if: Trigger,
+    required_reason: String,
+    runtime_profile: String,
+    enabled: bool,
+    planned_run: bool,
+    plan_reason: String,
+    timeout_sec: u64,
+    artifact_budget_mb: u64,
+    requires_lease: bool,
+    artifact_paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ToolStatusArtifact {
+    schema: &'static str,
+    runtime_profile: String,
+    tools: Vec<ToolStatusEntry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ToolStatusEntry {
+    id: String,
+    class: ToolClass,
+    command: String,
+    required_if: Trigger,
+    required_reason: String,
+    runtime_profile: String,
+    planned_run: bool,
+    status: String,
+    reason: String,
+    exit_code: Option<i32>,
+    timed_out: bool,
+    artifact_paths: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct LanePlan {
     id: String,
@@ -1995,6 +2042,8 @@ struct ModelCallOutcome<T> {
 struct SensorReceipt {
     status: String,
     reason: String,
+    exit_code: Option<i32>,
+    timed_out: bool,
 }
 
 impl Default for Config {
@@ -2533,6 +2582,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
             &event_log,
         )?;
     }
+    write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
 
     write_lane_packets(&args.review.out, &diff, &plan, &event_log)?;
     let preliminary_summary = render_summary(&args.review.out, &plan, &diff)?;
@@ -2899,6 +2949,7 @@ fn write_plan_artifacts(
             selectors.effective_model_lanes,
         ))?,
     )?;
+    write_resolved_tools_artifacts(out, config, profile, plan)?;
     fs::write(
         out.join("box-state.json"),
         serde_json::to_vec_pretty(box_state)?,
@@ -2941,6 +2992,174 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
         "profile": profile,
         "tools": &config.tools,
     })
+}
+
+fn write_resolved_tools_artifacts(
+    out: &Path,
+    config: &Config,
+    profile: &Profile,
+    plan: &Plan,
+) -> Result<()> {
+    let artifact = resolved_tools_artifact(config, profile, plan);
+    let bytes = serde_json::to_vec_pretty(&artifact)?;
+    fs::write(out.join("resolved-tools.json"), &bytes)?;
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir)?;
+    fs::write(review_dir.join("resolved-tools.json"), bytes)?;
+    Ok(())
+}
+
+fn resolved_tools_artifact(
+    config: &Config,
+    profile: &Profile,
+    plan: &Plan,
+) -> ResolvedToolArtifact {
+    let plan_by_id = plan
+        .sensors
+        .iter()
+        .map(|sensor| (sensor.id.as_str(), sensor))
+        .collect::<BTreeMap<_, _>>();
+    let tools = config
+        .tools
+        .values()
+        .map(|tool| {
+            let planned = plan_by_id.get(tool.id.as_str());
+            ResolvedToolEntry {
+                id: tool.id.clone(),
+                class: tool.class,
+                command: tool.command.clone(),
+                required_if: tool.default,
+                required_reason: trigger_description(tool.default).to_owned(),
+                runtime_profile: profile.name.clone(),
+                enabled: tool.enabled,
+                planned_run: planned.is_some_and(|sensor| sensor.run),
+                plan_reason: planned
+                    .map(|sensor| sensor.reason.clone())
+                    .unwrap_or_else(|| "not present in resolved plan".to_owned()),
+                timeout_sec: planned
+                    .map(|sensor| sensor.timeout_sec)
+                    .unwrap_or(tool.timeout_sec),
+                artifact_budget_mb: tool.artifact_budget_mb,
+                requires_lease: tool.requires_lease,
+                artifact_paths: tool_artifact_paths(&tool.id),
+            }
+        })
+        .collect();
+    ResolvedToolArtifact {
+        schema: "ub-review.resolved_tools.v1",
+        runtime_profile: profile.name.clone(),
+        tools,
+    }
+}
+
+fn write_tool_status_artifacts(
+    out: &Path,
+    config: &Config,
+    profile: &Profile,
+    plan: &Plan,
+) -> Result<()> {
+    let artifact = tool_status_artifact(out, config, profile, plan);
+    let bytes = serde_json::to_vec_pretty(&artifact)?;
+    fs::write(out.join("tool-status.json"), &bytes)?;
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir)?;
+    fs::write(review_dir.join("tool-status.json"), bytes)?;
+    Ok(())
+}
+
+fn tool_status_artifact(
+    out: &Path,
+    config: &Config,
+    profile: &Profile,
+    plan: &Plan,
+) -> ToolStatusArtifact {
+    let plan_by_id = plan
+        .sensors
+        .iter()
+        .map(|sensor| (sensor.id.as_str(), sensor))
+        .collect::<BTreeMap<_, _>>();
+    let tools = config
+        .tools
+        .values()
+        .map(|tool| {
+            let planned = plan_by_id.get(tool.id.as_str());
+            let receipt = planned.and_then(|sensor| {
+                let receipt_path = out
+                    .join("sensors")
+                    .join(&sensor.id)
+                    .join("ub-review-sensor-status.json");
+                read_sensor_receipt(&receipt_path)
+            });
+            ToolStatusEntry {
+                id: tool.id.clone(),
+                class: planned.map(|sensor| sensor.class).unwrap_or(tool.class),
+                command: tool.command.clone(),
+                required_if: tool.default,
+                required_reason: trigger_description(tool.default).to_owned(),
+                runtime_profile: profile.name.clone(),
+                planned_run: planned.is_some_and(|sensor| sensor.run),
+                status: receipt
+                    .as_ref()
+                    .map(|receipt| receipt.status.clone())
+                    .unwrap_or_else(|| {
+                        if planned.is_some() {
+                            "receipt_absent".to_owned()
+                        } else {
+                            "not_planned".to_owned()
+                        }
+                    }),
+                reason: receipt
+                    .as_ref()
+                    .map(|receipt| receipt.reason.clone())
+                    .or_else(|| planned.map(|sensor| sensor.reason.clone()))
+                    .unwrap_or_else(|| "not present in resolved plan".to_owned()),
+                exit_code: receipt.as_ref().and_then(|receipt| receipt.exit_code),
+                timed_out: receipt.as_ref().is_some_and(|receipt| receipt.timed_out),
+                artifact_paths: tool_artifact_paths(&tool.id),
+            }
+        })
+        .collect();
+    ToolStatusArtifact {
+        schema: "ub-review.tool_status.v1",
+        runtime_profile: profile.name.clone(),
+        tools,
+    }
+}
+
+fn tool_artifact_paths(id: &str) -> Vec<String> {
+    let sensor = SensorPlan {
+        id: id.to_owned(),
+        command: id.to_owned(),
+        run: false,
+        reason: String::new(),
+        timeout_sec: 0,
+        class: ToolClass::Static,
+        weight: 0,
+        requires_lease: false,
+    };
+    let mut paths = vec![format!("sensors/{id}/ub-review-sensor-status.json")];
+    paths.extend(
+        sensor_outputs(&sensor)
+            .into_iter()
+            .map(|output| format!("sensors/{id}/{output}")),
+    );
+    paths
+}
+
+fn trigger_description(trigger: Trigger) -> &'static str {
+    match trigger {
+        Trigger::Always => "every review run",
+        Trigger::SourceChanged => "source file changed",
+        Trigger::RustBehaviorOrTestsChanged => "Rust behavior or tests changed",
+        Trigger::UnsafeOrNativeRiskChanged => "unsafe/native-risk surface changed",
+        Trigger::WorkflowChanged => "workflow or action file changed",
+        Trigger::DependencyChanged => "dependency manifest or lockfile changed",
+        Trigger::ShellChanged => "shell or script file changed",
+        Trigger::CppChanged => "C/C++ file changed",
+        Trigger::Diff => "diff-scoped advisory scan",
+        Trigger::Manual => "manual proof request",
+        Trigger::Never => "disabled unless explicitly selected",
+    }
 }
 
 fn resolved_plan_artifact(
