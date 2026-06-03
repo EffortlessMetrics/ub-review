@@ -17,6 +17,10 @@ inputs:
     description: Box profile. Use `gh-runner` on GitHub-hosted runners.
     default: gh-runner
     required: false
+  runtime-profile:
+    description: Runtime profile for box budgets and local work limits. Overrides profile when set.
+    default: ''
+    required: false
   root:
     description: Repository root to inspect.
     default: .
@@ -448,6 +452,9 @@ runs:
         extra=()
         if [[ "${{ inputs['allow-heavy'] }}" == "true" ]]; then
           extra+=(--allow-heavy)
+        fi
+        if [[ -n "${{ inputs['runtime-profile'] }}" ]]; then
+          extra+=(--runtime-profile "${{ inputs['runtime-profile'] }}")
         fi
 
         config="$GITHUB_ACTION_PATH/configs/bun-gh-runner.toml"

@@ -228,6 +228,13 @@ struct ReviewArgs {
     /// Box profile override.
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     profile: Option<ProfileArg>,
+    /// Runtime profile override. Prefer this over --profile for box budgets.
+    #[arg(
+        long = "runtime-profile",
+        value_enum,
+        env = "UB_REVIEW_RUNTIME_PROFILE"
+    )]
+    runtime_profile: Option<ProfileArg>,
 }
 
 #[derive(Debug, Args)]
@@ -249,6 +256,12 @@ struct DoctorArgs {
     config: PathBuf,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     profile: Option<ProfileArg>,
+    #[arg(
+        long = "runtime-profile",
+        value_enum,
+        env = "UB_REVIEW_RUNTIME_PROFILE"
+    )]
+    runtime_profile: Option<ProfileArg>,
     #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
     root: PathBuf,
     #[arg(long, env = "UB_REVIEW_BASE")]
@@ -277,6 +290,12 @@ struct CacheWarmArgs {
     config: PathBuf,
     #[arg(long, value_enum, env = "UB_REVIEW_PROFILE")]
     profile: Option<ProfileArg>,
+    #[arg(
+        long = "runtime-profile",
+        value_enum,
+        env = "UB_REVIEW_RUNTIME_PROFILE"
+    )]
+    runtime_profile: Option<ProfileArg>,
     #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
     root: PathBuf,
     #[arg(long, default_value = "origin/main", env = "UB_REVIEW_BASE")]
@@ -830,6 +849,7 @@ struct ReviewArtifacts {
     shared_context_id: String,
     mode: String,
     posting: String,
+    runtime_profile: String,
     model_mode: String,
     depth: String,
     provider_policy: String,
@@ -881,6 +901,7 @@ struct ReviewMetrics {
     base: String,
     head: String,
     profile_name: String,
+    runtime_profile: String,
     mode: String,
     posting: String,
     model_mode: String,
@@ -1754,6 +1775,13 @@ impl Config {
     }
 }
 
+fn runtime_profile_override<'a>(
+    legacy_profile: Option<&'a ProfileArg>,
+    runtime_profile: Option<&'a ProfileArg>,
+) -> Option<&'a str> {
+    runtime_profile.or(legacy_profile).map(ProfileArg::key)
+}
+
 impl Limits {
     fn summary_line(&self) -> String {
         format!(
@@ -1862,7 +1890,10 @@ fn cmd_init(args: InitArgs) -> Result<()> {
 }
 
 fn cmd_doctor(args: DoctorArgs) -> Result<()> {
-    let config = Config::load_or_default(&args.config, args.profile.as_ref().map(ProfileArg::key))?;
+    let config = Config::load_or_default(
+        &args.config,
+        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
+    )?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let cache_root = cache_root_path(args.cache_dir.as_ref());
@@ -1931,7 +1962,10 @@ fn cmd_cache(args: CacheArgs) -> Result<()> {
 }
 
 fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
-    let config = Config::load_or_default(&args.config, args.profile.as_ref().map(ProfileArg::key))?;
+    let config = Config::load_or_default(
+        &args.config,
+        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
+    )?;
     let profile = config.selected_profile()?;
     let cache_root = cache_root_path(args.cache_dir.as_ref());
     let profile_hash = profile_config_hash(&config)?;
@@ -2369,7 +2403,10 @@ fn prepare_plan(
     selectors: &SelectorArgs,
 ) -> Result<(Config, DiffContext, BoxState, Plan)> {
     validate_selector_syntax(selectors)?;
-    let config = Config::load_or_default(&args.config, args.profile.as_ref().map(ProfileArg::key))?;
+    let config = Config::load_or_default(
+        &args.config,
+        runtime_profile_override(args.profile.as_ref(), args.runtime_profile.as_ref()),
+    )?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
@@ -2437,6 +2474,7 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
     serde_json::json!({
         "schema": "ub-review.resolved_profile.v1",
         "selected_profile": &profile.name,
+        "selected_runtime_profile": &profile.name,
         "repo": &config.repo,
         "review": &config.review,
         "profile": profile,
@@ -2459,6 +2497,7 @@ fn resolved_plan_artifact(
         "head": &plan.head,
         "diff_class": diff.diff_class.key(),
         "profile_name": &plan.profile_name,
+        "runtime_profile": &profile.name,
         "budgets": &profile.budgets,
         "guards": &profile.guards,
         "limits": &profile.limits,
@@ -4004,6 +4043,7 @@ fn write_review_artifacts(
         shared_context_id,
         mode: args.mode.key().to_owned(),
         posting: args.posting.key().to_owned(),
+        runtime_profile: profile.name.clone(),
         model_mode: args.model_mode.key().to_owned(),
         depth: args.depth.key().to_owned(),
         provider_policy: args.provider_policy.key().to_owned(),
@@ -4274,6 +4314,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         base: diff.base.clone(),
         head: diff.head.clone(),
         profile_name: plan.profile_name.clone(),
+        runtime_profile: review.runtime_profile.clone(),
         mode: review.mode.clone(),
         posting: review.posting.clone(),
         model_mode: review.model_mode.clone(),
@@ -11215,13 +11256,13 @@ mod tests {
         ModelEvidenceIssue, ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider,
         ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
         OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
-        Profile, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
-        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
-        STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue, SensorPlan,
-        SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, build_review_metrics,
+        Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest,
+        ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
+        ResourceLease, ReviewArgs, ReviewBodyAudience, ReviewDepth, ReviewInlineComment,
+        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
+        apply_model_output, apply_plan_selectors, apply_refuter_output, build_review_metrics,
         build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
         builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
         cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
@@ -11233,11 +11274,11 @@ mod tests {
         proof_budget, provider_spec_for_lane_with_key_state, read_github_event_pr_context,
         render_ledger_context, render_pr_thread_context, render_review_body, render_summary,
         review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, sha256_hex, split_curl_http_status,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_github_review_payload, write_observation_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_override, sha256_hex,
+        split_curl_http_status, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_github_review_payload,
+        write_observation_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -11315,6 +11356,18 @@ mod tests {
             github_actions: true,
         };
         assert_eq!(box_state.suggested_profile(), "gh-runner");
+    }
+
+    #[test]
+    fn runtime_profile_override_takes_precedence_over_legacy_profile() {
+        assert_eq!(
+            runtime_profile_override(Some(&ProfileArg::Cx23), Some(&ProfileArg::Cx43)),
+            Some("cx43")
+        );
+        assert_eq!(
+            runtime_profile_override(Some(&ProfileArg::Cx23), None),
+            Some("cx23")
+        );
     }
 
     #[test]
@@ -14739,6 +14792,7 @@ UB_REVIEW_HTTP_STATUS:429
             shared_context_id: "abc123".to_owned(),
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
+            runtime_profile: "gh-runner".to_owned(),
             model_mode: "auto".to_owned(),
             depth: "standard".to_owned(),
             provider_policy: "minimax-only".to_owned(),
@@ -14832,6 +14886,7 @@ UB_REVIEW_HTTP_STATUS:429
             shared_context_id: "abc123".to_owned(),
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
+            runtime_profile: "gh-runner".to_owned(),
             model_mode: "auto".to_owned(),
             depth: "standard".to_owned(),
             provider_policy: "minimax-only".to_owned(),
@@ -15505,6 +15560,7 @@ UB_REVIEW_HTTP_STATUS:429
                 config: Path::new(".ub-review.toml").to_path_buf(),
                 out,
                 profile: None,
+                runtime_profile: None,
             },
             dry_run: false,
             allow_heavy: false,
