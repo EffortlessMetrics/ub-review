@@ -4222,7 +4222,7 @@ fn render_claim_prompt(diff: &DiffContext) -> String {
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn write_review_artifacts(
     root: &Path,
@@ -6426,7 +6426,7 @@ fn run_proof_broker_v0(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     root: &Path,
@@ -7437,7 +7437,7 @@ fn github_review_skip_path(review_json: &Path) -> PathBuf {
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn render_shared_context(
     root: &Path,
@@ -10321,7 +10321,7 @@ fn validate_inline_candidate(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn render_review_body(
     shared_context_id: &str,
@@ -10496,7 +10496,7 @@ fn render_review_body(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn render_pull_request_review_body(
     _shared_context_id: &str,
@@ -12797,7 +12797,7 @@ fn builtin_tools() -> Vec<ToolPolicy> {
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "tracked in policy/clippy-debt.toml#clippy-too-many-arguments-artifact-writers"
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
 fn tool(
     id: &str,

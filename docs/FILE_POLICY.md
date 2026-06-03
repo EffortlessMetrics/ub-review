@@ -5,8 +5,10 @@ receipted and fit a real platform need: GitHub workflow YAML, documentation,
 fixtures, generated artifacts, release compatibility wrappers, external tool
 rules, or other ecosystem surfaces Rust cannot replace cleanly.
 
-`policy/non-rust-allowlist.toml` answers only whether a non-Rust file may exist.
-Companion ledgers answer narrower questions:
+`policy/allow.toml` is the default source-tree exception ledger. It answers
+whether a controlled file or call site may exist and why. Companion ledgers
+should be added only when the repo has enough policy volume to justify them.
+Examples of narrower questions are:
 
 - may this file execute?
 - may this workflow use secrets?

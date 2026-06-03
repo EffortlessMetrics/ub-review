@@ -17,5 +17,5 @@ A line-based waiver says "whatever is at this line may panic." A semantic
 receipt says "this specific call shape in this specific container is
 temporarily allowed for this specific reason."
 
-Receipts belong in `policy/no-panic-allowlist.toml` and should include owner,
+Receipts belong in `policy/allow.toml` and should include owner,
 classification, explanation, review timing, and expiry when temporary.

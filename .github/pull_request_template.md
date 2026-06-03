@@ -6,13 +6,9 @@
 
 If this PR adds or changes any controlled surface, link the TOML receipt here:
 
-- non-Rust files:
-- panic-family calls:
-- Clippy suppressions:
-- generated/executable files:
-- workflow/process/network/dependency surfaces:
+- source-tree exceptions in `policy/allow.toml`:
 - expensive CI lanes or risk packs:
-- `ripr` suppressions:
+- `ripr` or `unsafe-review` suppressions, only if needed:
 
 ## Verification
 
@@ -33,4 +29,6 @@ Cheapest relevant proof first, deeper proof where it buys signal.
 - Prefer small SRP PRs.
 - Do not use bare `#[allow]`; use `#[expect(..., reason = "...")]` with a receipt.
 - `ripr` is static mutation-exposure analysis; runtime mutation remains the slower backstop.
+- `unsafe-review` owns unsafe/native reviewability; do not duplicate it in repo scripts.
+- `xtask` should orchestrate repo-local receipts and checks, not replace specialized tools.
 - CI cost discipline exists so we can afford more verification, not less.

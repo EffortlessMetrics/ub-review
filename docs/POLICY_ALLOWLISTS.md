@@ -1,4 +1,4 @@
-# Policy allowlists
+# Policy exception ledger
 
 `ub-review` uses receipt-backed policy ledgers instead of anonymous exceptions.
 The platform rule is:
@@ -12,25 +12,23 @@ A receipt should explain where the exception is, who owns it, why it exists,
 what covers it, when it should be reviewed, and when it expires if temporary.
 This applies to panic-family calls, Clippy suppressions, non-Rust files,
 generated files, executable files, workflows, process spawning, network access,
-dependency surfaces, expensive CI lanes, and `ripr` suppressions.
+dependency surfaces, expensive CI lanes, `ripr` suppressions, and
+`unsafe-review` suppressions.
 
 ## Ledgers
 
 The seed policy kit lives under `policy/`:
 
-- `clippy-lints.toml`, `clippy-debt.toml`, and `clippy-exceptions.toml` track
-  active Clippy posture, planned lint upgrades, and suppression receipts.
-- `no-panic-allowlist.toml` and `no-panic-baseline.toml` track panic-family
-  exceptions by semantic identity, not line number.
-- `non-rust-allowlist.toml` and `non-rust-debt.toml` explain which non-Rust
-  surfaces may exist and which are scheduled for conversion or review.
-- `generated-allowlist.toml`, `executable-allowlist.toml`,
-  `dependency-surface-allowlist.toml`, `workflow-allowlist.toml`,
-  `process-allowlist.toml`, and `network-allowlist.toml` govern companion
-  questions that the non-Rust ledger does not answer by itself.
-- `ripr-suppressions.toml` records static mutation-exposure suppressions.
+- `allow.toml` is the default source-tree exception ledger. It is the place for
+  syntax-visible exceptions such as panic-family calls, lint suppressions,
+  non-Rust files, generated files, executable files, scripts, workflows,
+  process spawning, network access, and dependency surfaces.
 - `ci-budget.toml`, `ci-lanes.toml`, and `ci-risk-packs.toml` keep PR-time proof
   cheap by policy rather than by weakening deep verification.
+
+Do not add separate per-surface ledgers by default. Split `allow.toml` only when
+the repo has enough real exception volume that a narrower ledger improves
+reviewability.
 
 ## Receipt quality
 
