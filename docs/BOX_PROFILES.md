@@ -1,8 +1,9 @@
 # Box profiles
 
-Profiles let the same review intent run on different hardware safely.
-Use `--runtime-profile` to choose these box budgets explicitly. The older
-`--profile` option remains a compatibility alias for the same runtime profiles.
+The Bun review profile lives in `profiles/bun-ub-v0.toml`. Runtime profiles let
+that same review intent run on different hardware safely. Use
+`--runtime-profile` to choose these box budgets explicitly. The older `--profile`
+option remains a compatibility alias for the same runtime profiles.
 
 | Profile | Local posture |
 |---|---|
@@ -22,6 +23,7 @@ Review breadth and local work are separate.
 
 Runtime profiles now set model fanout, sensor worker fanout, and focused proof
 budgets. The effective values are emitted in `resolved-profile.json` and
-`resolved-plan.json` under `limits.*` and `budgets.proof_*`.
+`resolved-plan.json` under `selected_review_profile`,
+`selected_runtime_profile`, `limits.*`, and `budgets.proof_*`.
 
 If a guard fails, sensors degrade and the summary records missing evidence.

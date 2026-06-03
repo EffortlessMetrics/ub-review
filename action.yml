@@ -457,10 +457,10 @@ runs:
           extra+=(--runtime-profile "${{ inputs['runtime-profile'] }}")
         fi
 
-        config="$GITHUB_ACTION_PATH/configs/bun-gh-runner.toml"
+        config="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
         case "${{ inputs.preset }}" in
           bun-ub|bun)
-            config="$GITHUB_ACTION_PATH/configs/bun-gh-runner.toml"
+            config="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
             ;;
           *)
             echo "::warning::Unknown preset '${{ inputs.preset }}'; using bun-ub"

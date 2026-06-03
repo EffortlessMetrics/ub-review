@@ -111,7 +111,7 @@ next smallest PR.
 - If cargo installs are too slow on GitHub runners, replace
   `scripts/install-gh-runner-tools.sh` with release binary downloads for
   `tokmd`, `ripr`, and `unsafe-review`.
-- If `ast-grep` npm install is noisy, disable it in `configs/bun-gh-runner.toml`
+- If `ast-grep` npm install is noisy, disable it in `profiles/bun-ub-v0.toml`
   until a pinned binary path is available.
 - Consider adding a `--changed-files-from` mode later for PR event payloads, but
   keep git diff as the default because it is reproducible locally.

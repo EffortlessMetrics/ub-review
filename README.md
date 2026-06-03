@@ -234,7 +234,11 @@ target/ub-review/input/diff.patch
 
 ## Bun preset
 
-The `bun-ub` preset creates six lane packets:
+The `bun-ub` preset loads `profiles/bun-ub-v0.toml` as the Bun review profile.
+The runtime profile (`gh-runner`, `cx23`, `cx33`, or `cx43`) supplies box
+budgets separately.
+
+The profile creates six lane packets:
 
 | Lane | Purpose |
 |---|---|
