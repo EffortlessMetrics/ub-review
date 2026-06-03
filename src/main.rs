@@ -1233,7 +1233,19 @@ struct OrchestratorEvidenceGroup {
     disposition: String,
     candidate_ids: Vec<String>,
     lanes: Vec<String>,
+    routed_evidence: Vec<OrchestratorRoutedEvidence>,
     duplicate_count: usize,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct OrchestratorRoutedEvidence {
+    schema: String,
+    id: String,
+    kind: String,
+    artifact: String,
+    status: String,
+    result: String,
     reason: String,
 }
 
@@ -1245,6 +1257,7 @@ struct FollowUpQuestionTask {
     evidence_need: String,
     disposition: String,
     candidate_ids: Vec<String>,
+    routed_evidence: Vec<OrchestratorRoutedEvidence>,
     question: String,
     status: String,
     reason: String,
@@ -4092,7 +4105,7 @@ fn write_review_artifacts(
     let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
     write_candidate_artifacts(out, &candidates)?;
     let candidates = read_candidate_records(out)?;
-    let orchestrator_plan = build_orchestrator_plan(&candidates);
+    let orchestrator_plan = build_orchestrator_plan(&candidates, &proof_receipts, &resource_leases);
     write_orchestrator_artifacts(out, &orchestrator_plan)?;
     let (inline_comments, summary_only_findings) = read_candidate_review_surfaces(out)?;
 
@@ -5068,7 +5081,11 @@ fn candidate_review_surfaces(
     Ok((inline_comments, summary_only_findings))
 }
 
-fn build_orchestrator_plan(candidates: &[CandidateRecord]) -> OrchestratorPlanArtifact {
+fn build_orchestrator_plan(
+    candidates: &[CandidateRecord],
+    proof_receipts: &[ProofReceipt],
+    resource_leases: &[ResourceLease],
+) -> OrchestratorPlanArtifact {
     let mut grouped: BTreeMap<(String, String), Vec<&CandidateRecord>> = BTreeMap::new();
     for candidate in candidates {
         let evidence_need = candidate_evidence_need(candidate);
@@ -5091,6 +5108,8 @@ fn build_orchestrator_plan(candidates: &[CandidateRecord]) -> OrchestratorPlanAr
                 .map(|candidate| candidate.lane.clone())
                 .collect(),
         );
+        let routed_evidence =
+            routed_evidence_for_group(&evidence_need, &lanes, proof_receipts, resource_leases);
         let fingerprint = sha256_hex(format!("{disposition}\n{evidence_need}").as_bytes());
         let group_id = format!("evidence-group-{}", &fingerprint[..12]);
         let group = OrchestratorEvidenceGroup {
@@ -5100,12 +5119,17 @@ fn build_orchestrator_plan(candidates: &[CandidateRecord]) -> OrchestratorPlanAr
             disposition: disposition.clone(),
             candidate_ids: candidate_ids.clone(),
             lanes,
+            routed_evidence: routed_evidence.clone(),
             duplicate_count: candidate_ids.len().saturating_sub(1),
             reason: orchestrator_group_reason(&disposition, &evidence_need),
         };
-        if let Some(task) =
-            follow_up_task_for_group(&group_id, &disposition, &evidence_need, &candidate_ids)
-        {
+        if let Some(task) = follow_up_task_for_group(
+            &group_id,
+            &disposition,
+            &evidence_need,
+            &candidate_ids,
+            &routed_evidence,
+        ) {
             follow_up_tasks.push(task);
         }
         evidence_groups.push(group);
@@ -5162,6 +5186,7 @@ fn follow_up_task_for_group(
     disposition: &str,
     evidence_need: &str,
     candidate_ids: &[String],
+    routed_evidence: &[OrchestratorRoutedEvidence],
 ) -> Option<FollowUpQuestionTask> {
     if matches!(disposition, "inline" | "dropped") {
         return None;
@@ -5174,11 +5199,87 @@ fn follow_up_task_for_group(
         evidence_need: evidence_need.to_owned(),
         disposition: disposition.to_owned(),
         candidate_ids: candidate_ids.to_vec(),
+        routed_evidence: routed_evidence.to_vec(),
         question: follow_up_question_text(disposition, evidence_need),
         status: "planned".to_owned(),
         reason: "deterministic orchestrator skeleton; no shell commands or posting side effects"
             .to_owned(),
     })
+}
+
+fn routed_evidence_for_group(
+    evidence_need: &str,
+    lanes: &[String],
+    proof_receipts: &[ProofReceipt],
+    resource_leases: &[ResourceLease],
+) -> Vec<OrchestratorRoutedEvidence> {
+    if !matches!(
+        evidence_need,
+        "proof-confirmation" | "test-oracle-confirmation"
+    ) {
+        return Vec::new();
+    }
+    let mut routed = Vec::new();
+    for receipt in proof_receipts {
+        if !proof_receipt_routes_to_lanes(receipt, lanes) {
+            continue;
+        }
+        routed.push(proof_receipt_routed_evidence(receipt));
+        for lease in resource_leases
+            .iter()
+            .filter(|lease| lease.consumer == receipt.id)
+        {
+            routed.push(resource_lease_routed_evidence(lease));
+        }
+    }
+    routed
+}
+
+fn proof_receipt_routes_to_lanes(receipt: &ProofReceipt, lanes: &[String]) -> bool {
+    receipt
+        .requested_by
+        .iter()
+        .any(|lane| lane == "proof-broker")
+        || receipt
+            .requested_by
+            .iter()
+            .any(|lane| lanes.iter().any(|group_lane| group_lane == lane))
+}
+
+fn proof_receipt_routed_evidence(receipt: &ProofReceipt) -> OrchestratorRoutedEvidence {
+    OrchestratorRoutedEvidence {
+        schema: "ub-review.orchestrator_routed_evidence.v1".to_owned(),
+        id: receipt.id.clone(),
+        kind: "proof-receipt".to_owned(),
+        artifact: "review/proof_receipts.json".to_owned(),
+        status: routed_status_for_proof_receipt(receipt).to_owned(),
+        result: receipt.result.clone(),
+        reason: receipt.reason.clone(),
+    }
+}
+
+fn resource_lease_routed_evidence(lease: &ResourceLease) -> OrchestratorRoutedEvidence {
+    OrchestratorRoutedEvidence {
+        schema: "ub-review.orchestrator_routed_evidence.v1".to_owned(),
+        id: lease.id.clone(),
+        kind: "resource-lease".to_owned(),
+        artifact: "review/resource_leases.json".to_owned(),
+        status: lease.status.clone(),
+        result: lease.status.clone(),
+        reason: lease.reason.clone(),
+    }
+}
+
+fn routed_status_for_proof_receipt(receipt: &ProofReceipt) -> &'static str {
+    if proof_receipt_is_test_proof_result(receipt) {
+        "tool-confirmed"
+    } else if proof_receipt_is_residual_risk(receipt) {
+        "residual-risk"
+    } else if proof_receipt_is_missing_evidence(receipt) {
+        "missing-evidence"
+    } else {
+        "recorded"
+    }
 }
 
 fn follow_up_question_text(disposition: &str, evidence_need: &str) -> String {
@@ -16370,7 +16471,58 @@ UB_REVIEW_HTTP_STATUS:429
             },
         ];
 
-        let plan = build_orchestrator_plan(&candidates);
+        let no_evidence_plan = build_orchestrator_plan(&candidates, &[], &[]);
+        let no_evidence_proof_group = no_evidence_plan
+            .evidence_groups
+            .iter()
+            .find(|group| group.evidence_need == "proof-confirmation")
+            .ok_or_else(|| anyhow::anyhow!("proof group should be present without evidence"))?;
+        assert!(no_evidence_proof_group.routed_evidence.is_empty());
+
+        let mut confirmed_receipt = test_red_green_proof_receipt("discriminating", "failed");
+        confirmed_receipt.id = "proof-confirmed".to_owned();
+        confirmed_receipt.reason =
+            "HEAD passed; base+tests failed: discriminating proof".to_owned();
+        let mut missing_receipt = test_proof_receipt("timed_out", "timed_out");
+        missing_receipt.id = "proof-timeout".to_owned();
+        missing_receipt.reason = "Focused proof timed out.".to_owned();
+        let proof_receipts = vec![confirmed_receipt, missing_receipt];
+        let resource_leases = vec![
+            ResourceLease {
+                schema: "ub-review.resource_lease.v1".to_owned(),
+                id: "lease-proof-confirmed".to_owned(),
+                kind: "focused-test".to_owned(),
+                consumer: "proof-confirmed".to_owned(),
+                status: "granted".to_owned(),
+                reason: "focused proof lease granted".to_owned(),
+                cpu: 2,
+                memory_mb: 2_048,
+                disk_mb: 1_024,
+                timeout_sec: 600,
+                network: false,
+                scratch: true,
+                worktree: Some("base-plus-tests".to_owned()),
+                command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
+            },
+            ResourceLease {
+                schema: "ub-review.resource_lease.v1".to_owned(),
+                id: "lease-proof-timeout".to_owned(),
+                kind: "focused-test".to_owned(),
+                consumer: "proof-timeout".to_owned(),
+                status: "exhausted".to_owned(),
+                reason: "focused proof lease budget exhausted".to_owned(),
+                cpu: 2,
+                memory_mb: 2_048,
+                disk_mb: 1_024,
+                timeout_sec: 600,
+                network: false,
+                scratch: true,
+                worktree: Some("base-plus-tests".to_owned()),
+                command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
+            },
+        ];
+
+        let plan = build_orchestrator_plan(&candidates, &proof_receipts, &resource_leases);
         write_orchestrator_artifacts(temp.path(), &plan)?;
 
         let aggregate: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -16402,8 +16554,35 @@ UB_REVIEW_HTTP_STATUS:429
         );
         assert_eq!(proof_group.lanes, vec!["opposition", "tests-oracle"]);
         assert_eq!(proof_group.duplicate_count, 1);
+        assert_eq!(proof_group.routed_evidence.len(), 4);
+        assert!(proof_group.routed_evidence.iter().any(|evidence| {
+            evidence.kind == "proof-receipt"
+                && evidence.id == "proof-confirmed"
+                && evidence.artifact == "review/proof_receipts.json"
+                && evidence.status == "tool-confirmed"
+                && evidence.result == "discriminating"
+        }));
+        assert!(proof_group.routed_evidence.iter().any(|evidence| {
+            evidence.kind == "proof-receipt"
+                && evidence.id == "proof-timeout"
+                && evidence.status == "missing-evidence"
+                && evidence.result == "timed_out"
+        }));
+        assert!(proof_group.routed_evidence.iter().any(|evidence| {
+            evidence.kind == "resource-lease"
+                && evidence.id == "lease-proof-confirmed"
+                && evidence.artifact == "review/resource_leases.json"
+                && evidence.status == "granted"
+        }));
+        assert!(proof_group.routed_evidence.iter().any(|evidence| {
+            evidence.kind == "resource-lease"
+                && evidence.id == "lease-proof-timeout"
+                && evidence.status == "exhausted"
+        }));
         assert_eq!(inline_group.duplicate_count, 0);
+        assert!(inline_group.routed_evidence.is_empty());
         assert_eq!(dropped_group.duplicate_count, 0);
+        assert!(dropped_group.routed_evidence.is_empty());
         assert!(
             !plan
                 .follow_up_tasks
@@ -16418,6 +16597,15 @@ UB_REVIEW_HTTP_STATUS:429
             .collect::<Vec<_>>();
         assert_eq!(plan.follow_up_tasks.len(), 3);
         assert!(task_group_ids.contains(&proof_group.id.as_str()));
+        let proof_task = plan
+            .follow_up_tasks
+            .iter()
+            .find(|task| task.group_id == proof_group.id)
+            .ok_or_else(|| anyhow::anyhow!("proof follow-up task should be present"))?;
+        assert_eq!(
+            serde_json::to_value(&proof_task.routed_evidence)?,
+            serde_json::to_value(&proof_group.routed_evidence)?
+        );
         assert!(
             plan.follow_up_tasks
                 .iter()
