@@ -2245,10 +2245,19 @@ fn write_plan_artifacts(
     plan: &Plan,
 ) -> Result<()> {
     fs::create_dir_all(out.join("input"))?;
+    let profile = config.selected_profile()?;
     fs::write(out.join("plan.json"), serde_json::to_vec_pretty(plan)?)?;
     fs::write(
         out.join("effective-config.json"),
         serde_json::to_vec_pretty(config)?,
+    )?;
+    fs::write(
+        out.join("resolved-profile.json"),
+        serde_json::to_vec_pretty(&resolved_profile_artifact(config, profile))?,
+    )?;
+    fs::write(
+        out.join("resolved-plan.json"),
+        serde_json::to_vec_pretty(&resolved_plan_artifact(config, profile, diff, plan))?,
     )?;
     fs::write(
         out.join("box-state.json"),
@@ -2266,6 +2275,39 @@ fn write_plan_artifacts(
     fs::write(out.join("input/pr.md"), render_pr_packet(diff))?;
     fs::write(out.join("input/claims.md"), render_claim_prompt(diff))?;
     Ok(())
+}
+
+fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "ub-review.resolved_profile.v1",
+        "selected_profile": &profile.name,
+        "repo": &config.repo,
+        "review": &config.review,
+        "profile": profile,
+        "tools": &config.tools,
+    })
+}
+
+fn resolved_plan_artifact(
+    config: &Config,
+    profile: &Profile,
+    diff: &DiffContext,
+    plan: &Plan,
+) -> serde_json::Value {
+    serde_json::json!({
+        "schema": "ub-review.resolved_plan.v1",
+        "base": &plan.base,
+        "head": &plan.head,
+        "diff_class": diff.diff_class.key(),
+        "profile_name": &plan.profile_name,
+        "budgets": &profile.budgets,
+        "guards": &profile.guards,
+        "limits": &profile.limits,
+        "posting": &config.review,
+        "sensors": &plan.sensors,
+        "lanes": &plan.lanes,
+        "notes": &plan.notes,
+    })
 }
 
 fn print_plan(plan: &Plan, box_state: &BoxState) {
