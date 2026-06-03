@@ -188,6 +188,7 @@ target/ub-review/
     unique_observations.json
     merged_observations.json
     dropped_observations.json
+    orchestrator_plan.json
     proof_requests.json
     proof_request_groups.json
     proof_plan.md
@@ -201,6 +202,7 @@ target/ub-review/
 
   events.ndjson
   candidates.ndjson
+  follow_up_questions.ndjson
   proof_requests.ndjson
   running-summary.md
 ```
