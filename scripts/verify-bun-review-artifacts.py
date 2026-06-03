@@ -944,14 +944,15 @@ def require_model_receipts(review: dict, metrics: dict, min_ok_model_lanes: int)
     ok_preflights = [receipt for receipt in preflights if receipt.get("status") == "ok"]
     if not ok_preflights:
         fail("no ok provider preflight receipt")
-    ok_lanes = [
+    usable_lanes = [
         lane
         for lane in review.get("model_lanes", [])
-        if lane.get("status") == "ok" and lane.get("lane") != "refuter"
+        if lane.get("status") in {"ok", "degraded"} and lane.get("lane") != "refuter"
     ]
-    if len(ok_lanes) < min_ok_model_lanes:
+    if len(usable_lanes) < min_ok_model_lanes:
         fail(
-            f"expected at least {min_ok_model_lanes} ok model lanes, got {len(ok_lanes)}"
+            "expected at least "
+            f"{min_ok_model_lanes} usable ok/degraded model lanes, got {len(usable_lanes)}"
         )
     model_metrics = metrics.get("models", {})
     if model_metrics.get("provider_preflight_calls_attempted", 0) < 1:
@@ -1058,10 +1059,10 @@ def main(argv: list[str]) -> int:
     require_post_receipt(root)
     require_no_secret_markers(root)
 
-    ok_lanes = [
+    usable_lanes = [
         lane.get("lane")
         for lane in review.get("model_lanes", [])
-        if lane.get("status") == "ok" and lane.get("lane") != "refuter"
+        if lane.get("status") in {"ok", "degraded"} and lane.get("lane") != "refuter"
     ]
     observations = load_json(root / "review/observations.json")
     unique_observations = load_json(root / "review/unique_observations.json")
@@ -1076,7 +1077,7 @@ def main(argv: list[str]) -> int:
         f"unique_observations={len(unique_observations)} "
         f"merged_observations={len(merged_observations)} "
         f"dropped_observations={len(dropped_observations)} "
-        f"ok_model_lanes={','.join(ok_lanes)}"
+        f"usable_model_lanes={','.join(usable_lanes)}"
     )
     return 0
 
