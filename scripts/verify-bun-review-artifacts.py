@@ -201,6 +201,8 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/witnesses.json",
         "review/witness_registry.json",
         "review/proof_requests.json",
+        "review/proof_planner_input.json",
+        "review/proof_planner_output.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
         "review/proof_plan.md",
@@ -211,10 +213,12 @@ def require_common_tree(root: pathlib.Path) -> None:
         "follow_up_outputs.ndjson",
         "witnesses.ndjson",
         "proof_requests.ndjson",
+        "proof_tasks.ndjson",
         "proof_receipts.ndjson",
         "resource_leases.ndjson",
     ]:
         require_file(root / path)
+    require_events(root)
     if not (root / "review/github-review.json").exists() and not (
         root / "review/github-review-skip.json"
     ).exists():
@@ -244,6 +248,30 @@ def require_common_tree(root: pathlib.Path) -> None:
         if f"[{lane}]" not in lane_text:
             fail(f"lane packet {lane_path} does not include [{lane}] prefix")
         no_standalone_approval_line(lane_text, lane_path)
+
+
+def require_events(root: pathlib.Path) -> None:
+    events_path = root / "events.ndjson"
+    kinds: list[str] = []
+    for index, line in enumerate(read_text(events_path).splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid events.ndjson line {index}: {error}")
+        if not isinstance(event, dict):
+            fail(f"events.ndjson line {index} is not an object")
+        if not isinstance(event.get("ts"), str) or not event["ts"]:
+            fail(f"events.ndjson line {index} missing string ts")
+        if not isinstance(event.get("kind"), str) or not event["kind"]:
+            fail(f"events.ndjson line {index} missing string kind")
+        if "payload" not in event:
+            fail(f"events.ndjson line {index} missing payload")
+        kinds.append(event["kind"])
+    for required in ["run_started", "run_finished"]:
+        if required not in kinds:
+            fail(f"events.ndjson missing {required}")
 
 
 def require_summary(root: pathlib.Path) -> None:
@@ -427,6 +455,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail(f"metrics schema_version expected 1, got {metrics.get('schema_version')!r}")
     if metrics.get("shared_context_id") != review.get("shared_context_id"):
         fail("metrics shared_context_id does not match review.json")
+    require_run_loop_metrics(metrics)
     if metrics.get("mode") != review.get("mode"):
         fail("metrics mode does not match review.json")
     if metrics.get("review_profile") != review.get("review_profile"):
@@ -463,6 +492,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if review.get("proof_requests", []) != proof_requests:
         fail("review proof_requests does not match review/proof_requests.json")
     require_proof_request_ndjson(root, proof_requests)
+    require_proof_planner_artifacts(root)
     proof_receipts = load_json(root / "review/proof_receipts.json")
     if not isinstance(proof_receipts, list):
         fail("review/proof_receipts.json is not an array")
@@ -497,6 +527,52 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if not isinstance(models, dict):
         fail("metrics.models is missing")
     return metrics
+
+
+def require_run_loop_metrics(metrics: dict) -> None:
+    run = metrics.get("run")
+    if not isinstance(run, dict):
+        fail("metrics.run is missing")
+    if run.get("concurrency_model") != "instrumented-sequential-v0":
+        fail(f"metrics.run.concurrency_model is invalid: {run.get('concurrency_model')!r}")
+    if run.get("local_proof_wall_excludes_model_wait") is not True:
+        fail("metrics.run.local_proof_wall_excludes_model_wait must be true")
+    for field in [
+        "model_wall_ms",
+        "local_proof_wall_ms",
+        "compiler_wall_ms",
+        "model_call_duration_ms_sum",
+        "proof_command_duration_ms_sum",
+        "model_proof_overlap_ms",
+    ]:
+        require_non_negative_int(run, f"metrics.run.{field}", field)
+    loops = run.get("loops")
+    if not isinstance(loops, dict):
+        fail("metrics.run.loops is missing")
+    for loop_name in ["model", "proof", "compiler"]:
+        loop = loops.get(loop_name)
+        if not isinstance(loop, dict):
+            fail(f"metrics.run.loops.{loop_name} is missing")
+        started = require_non_negative_int(
+            loop, f"metrics.run.loops.{loop_name}.started_at_offset_ms", "started_at_offset_ms"
+        )
+        finished = require_non_negative_int(
+            loop, f"metrics.run.loops.{loop_name}.finished_at_offset_ms", "finished_at_offset_ms"
+        )
+        wall = require_non_negative_int(
+            loop, f"metrics.run.loops.{loop_name}.wall_ms", "wall_ms"
+        )
+        if finished < started:
+            fail(f"metrics.run.loops.{loop_name} finished before it started")
+        if wall > finished - started and finished > started:
+            fail(f"metrics.run.loops.{loop_name} wall exceeds observed span")
+
+
+def require_non_negative_int(container: dict, label: str, field: str) -> int:
+    value = container.get(field)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        fail(f"{label} is not a non-negative integer: {value!r}")
+    return value
 
 
 def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
@@ -1025,6 +1101,57 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
         fail("review/proof_plan.md missing empty proof request note")
 
 
+def require_proof_planner_artifacts(root: pathlib.Path) -> None:
+    planner_input = load_json(root / "review/proof_planner_input.json")
+    planner_output = load_json(root / "review/proof_planner_output.json")
+    if planner_input.get("schema") != "ub-review.proof_planner_input.v1":
+        fail("review/proof_planner_input.json has wrong schema")
+    if planner_output.get("schema") != "ub-review.proof_planner_output.v1":
+        fail("review/proof_planner_output.json has wrong schema")
+    proof_tasks = planner_output.get("proof_tasks")
+    if not isinstance(proof_tasks, list):
+        fail("review/proof_planner_output.json proof_tasks is not an array")
+    for task in proof_tasks:
+        require_proof_task_schema(task)
+    lines = [line for line in read_text(root / "proof_tasks.ndjson").splitlines() if line.strip()]
+    if len(lines) != len(proof_tasks):
+        fail("proof_tasks.ndjson line count does not match proof planner output")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid proof_tasks.ndjson line {index + 1}: {error}")
+        if parsed != proof_tasks[index]:
+            fail(f"proof_tasks.ndjson line {index + 1} does not match proof planner output")
+
+
+def require_proof_task_schema(task: dict) -> None:
+    if not isinstance(task, dict):
+        fail(f"proof task is not an object: {task!r}")
+    if task.get("schema") != "ub-review.proof_task.v1":
+        fail(f"proof task has wrong schema: {task!r}")
+    for field in ["id", "kind", "mode", "command", "purpose", "value", "cost", "status"]:
+        if not isinstance(task.get(field), str) or not task[field]:
+            fail(f"proof task missing string field {field}: {task!r}")
+    timeout = task.get("timeout_sec")
+    if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 0:
+        fail(f"proof task timeout_sec is invalid: {task!r}")
+    consumers = task.get("consumers")
+    if not isinstance(consumers, list) or not all(
+        isinstance(consumer, str) and consumer for consumer in consumers
+    ):
+        fail(f"proof task consumers is not a string array: {task!r}")
+    lease = task.get("lease")
+    if not isinstance(lease, dict):
+        fail(f"proof task lease is not an object: {task!r}")
+    for field in ["cpu", "memory_mb", "disk_mb"]:
+        value = lease.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"proof task lease {field} is invalid: {task!r}")
+    if lease.get("network") not in {True, False}:
+        fail(f"proof task lease network is not boolean: {task!r}")
+
+
 def require_proof_request_files(root: pathlib.Path, proof_requests: list[dict]) -> None:
     proof_request_dir = root / "proof_requests"
     if not proof_request_dir.is_dir():
@@ -1040,8 +1167,13 @@ def require_proof_request_files(root: pathlib.Path, proof_requests: list[dict]) 
 
 
 def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict]) -> None:
+    receipt_ids: set[str] = set()
     for receipt in proof_receipts:
-        require_proof_receipt_schema(receipt)
+        require_proof_receipt_schema(root, receipt)
+        receipt_id = receipt["id"]
+        if receipt_id in receipt_ids:
+            fail(f"duplicate proof receipt id: {receipt_id}")
+        receipt_ids.add(receipt_id)
     ndjson_path = root / "proof_receipts.ndjson"
     text = read_text(ndjson_path)
     lines = [line for line in text.splitlines() if line.strip()]
@@ -1059,8 +1191,13 @@ def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict])
 def require_resource_lease_artifacts(
     root: pathlib.Path, proof_receipts: list[dict], resource_leases: list[dict]
 ) -> None:
+    lease_ids: set[str] = set()
     for lease in resource_leases:
         require_resource_lease_schema(lease)
+        lease_id = lease["id"]
+        if lease_id in lease_ids:
+            fail(f"duplicate resource lease id: {lease_id}")
+        lease_ids.add(lease_id)
     ndjson_path = root / "resource_leases.ndjson"
     text = read_text(ndjson_path)
     lines = [line for line in text.splitlines() if line.strip()]
@@ -1080,9 +1217,14 @@ def require_resource_lease_artifacts(
     if resource_leases and "## Focused proof leases" not in resource_plan:
         fail("review/resource_plan.md missing focused proof lease section")
 
-    focused_leases = {
-        lease["consumer"]: lease for lease in resource_leases if lease.get("kind") == "focused-test"
-    }
+    focused_leases = {}
+    for lease in resource_leases:
+        if lease.get("kind") != "focused-test":
+            continue
+        consumer = lease["consumer"]
+        if consumer in focused_leases:
+            fail(f"duplicate focused-test lease consumer: {consumer}")
+        focused_leases[consumer] = lease
     focused_receipts = [
         receipt
         for receipt in proof_receipts
@@ -2275,7 +2417,7 @@ def require_proof_request_schema(request: dict) -> None:
         fail(f"proof request has unsupported status: {request!r}")
 
 
-def require_proof_receipt_schema(receipt: dict) -> None:
+def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
     if receipt.get("schema") != "ub-review.proof_receipt.v1":
         fail(f"proof receipt has wrong schema: {receipt!r}")
     for field in ["id", "kind", "base", "head", "test_patch_mode", "result", "reason"]:
@@ -2306,10 +2448,12 @@ def require_proof_receipt_schema(receipt: dict) -> None:
     if not isinstance(commands, list) or not commands:
         fail(f"proof receipt commands is not a non-empty array: {receipt!r}")
     for command in commands:
-        require_proof_command_receipt_schema(command)
+        require_proof_command_receipt_schema(root, receipt["id"], command)
 
 
-def require_proof_command_receipt_schema(command: dict) -> None:
+def require_proof_command_receipt_schema(
+    root: pathlib.Path, receipt_id: str, command: dict
+) -> None:
     for field in ["side", "command", "status", "stdout", "stderr", "reason"]:
         if not isinstance(command.get(field), str) or not command[field]:
             fail(f"proof command receipt missing string field {field}: {command!r}")
@@ -2333,6 +2477,20 @@ def require_proof_command_receipt_schema(command: dict) -> None:
     duration_ms = command.get("duration_ms")
     if not isinstance(duration_ms, int) or duration_ms < 0:
         fail(f"proof command receipt duration_ms is invalid: {command!r}")
+    for field in ["stdout", "stderr"]:
+        rel = command[field]
+        path = pathlib.PurePosixPath(rel.replace("\\", "/"))
+        if path.is_absolute() or ".." in path.parts:
+            fail(f"proof command {field} path is not repo-relative: {command!r}")
+        expected = pathlib.PurePosixPath(
+            f"proof/{sanitize_artifact_name(receipt_id)}/{command['side']}/{field}.txt"
+        )
+        if path != expected:
+            fail(
+                f"proof command {field} path expected {expected}, got {path}: {command!r}"
+            )
+        if not (root / path).is_file():
+            fail(f"proof command {field} artifact missing: {path}")
 
 
 def require_resource_lease_schema(lease: dict) -> None:

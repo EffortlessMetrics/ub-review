@@ -450,6 +450,36 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["schema_version"], 1);
     assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
+    assert_eq!(
+        metrics["run"]["concurrency_model"],
+        "instrumented-sequential-v0"
+    );
+    assert_eq!(metrics["run"]["local_proof_wall_excludes_model_wait"], true);
+    for pointer in [
+        "/run/model_wall_ms",
+        "/run/local_proof_wall_ms",
+        "/run/compiler_wall_ms",
+        "/run/model_call_duration_ms_sum",
+        "/run/proof_command_duration_ms_sum",
+        "/run/model_proof_overlap_ms",
+        "/run/loops/model/started_at_offset_ms",
+        "/run/loops/model/finished_at_offset_ms",
+        "/run/loops/model/wall_ms",
+        "/run/loops/proof/started_at_offset_ms",
+        "/run/loops/proof/finished_at_offset_ms",
+        "/run/loops/proof/wall_ms",
+        "/run/loops/compiler/started_at_offset_ms",
+        "/run/loops/compiler/finished_at_offset_ms",
+        "/run/loops/compiler/wall_ms",
+    ] {
+        assert!(
+            metrics
+                .pointer(pointer)
+                .and_then(serde_json::Value::as_u64)
+                .is_some(),
+            "missing non-negative metric {pointer}"
+        );
+    }
     assert_eq!(metrics["review_profile"], "bun-ub-v0");
     assert_eq!(metrics["profile_name"], "gh-runner");
     assert_eq!(metrics["runtime_profile"], "gh-runner");
@@ -591,10 +621,27 @@ fn active_len_tracks_view_after_resize() {
     assert!(summary.contains("## Model lane status"));
     assert!(summary.contains("## Missing or failed model evidence"));
     assert!(summary.contains("## Review efficiency"));
+    assert!(summary.contains("Run loops:"));
     assert!(summary.contains("Follow-up results:"));
     assert!(summary.contains("`ub-memory-lifetime`"));
     assert!(summary.contains("MiniMax-M3"));
     assert!(summary.contains("## Lane packets"));
+    let event_kinds = event_kinds(&out.join("events.ndjson"))?;
+    for kind in [
+        "run_started",
+        "model_loop_started",
+        "model_loop_finished",
+        "proof_loop_started",
+        "proof_loop_finished",
+        "compiler_loop_started",
+        "compiler_loop_finished",
+        "run_finished",
+    ] {
+        assert!(
+            event_kinds.iter().any(|event| event == kind),
+            "missing event {kind}"
+        );
+    }
     Ok(())
 }
 
@@ -1080,6 +1127,10 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         assert!(out.join(json_str_field(command, "stdout")?).exists());
         assert!(out.join(json_str_field(command, "stderr")?).exists());
     }
+    let proof_command_duration_sum = commands
+        .iter()
+        .filter_map(|command| command["duration_ms"].as_u64())
+        .sum::<u64>();
 
     let leases: Vec<serde_json::Value> =
         serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
@@ -1098,6 +1149,17 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
     assert_eq!(metrics["proof_receipts"], 1);
     assert_eq!(metrics["resource_leases"], 1);
+    assert_eq!(
+        metrics["run"]["proof_command_duration_ms_sum"],
+        proof_command_duration_sum
+    );
+    assert!(
+        metrics["run"]["local_proof_wall_ms"]
+            .as_u64()
+            .is_some_and(|wall| wall >= proof_command_duration_sum)
+    );
+    assert_eq!(metrics["run"]["model_proof_overlap_ms"], 0);
+    assert_eq!(metrics["run"]["local_proof_wall_excludes_model_wait"], true);
 
     let proof_plan = fs::read_to_string(out.join("review/proof_plan.md"))?;
     assert!(proof_plan.contains("Proof broker v0 executed focused proof under the runtime budget"));
@@ -1126,6 +1188,9 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     let base_stderr = fs::read_to_string(out.join(json_str_field(&commands[1], "stderr")?))?;
     assert!(base_stderr.contains("base failure"));
     assert!(!out.join("proof-worktrees/base-plus-tests").exists());
+    let event_kinds = event_kinds(&out.join("events.ndjson"))?;
+    assert!(event_kinds.iter().any(|kind| kind == "proof_loop_started"));
+    assert!(event_kinds.iter().any(|kind| kind == "proof_loop_finished"));
     Ok(())
 }
 
@@ -1335,6 +1400,21 @@ path = "src/lib.rs"
         1
     );
     assert_eq!(metrics["models"]["model_lane_status_counts"]["ok"], 1);
+    let preflight_duration = preflight["duration_ms"].as_u64().unwrap_or_default();
+    let lane_duration = ub_lane["duration_ms"].as_u64().unwrap_or_default();
+    assert!(
+        metrics["run"]["model_call_duration_ms_sum"]
+            .as_u64()
+            .is_some_and(|duration| duration >= preflight_duration + lane_duration)
+    );
+    assert!(
+        metrics["run"]["model_wall_ms"]
+            .as_u64()
+            .is_some_and(|duration| duration > 0)
+    );
+    let event_kinds = event_kinds(&out.join("events.ndjson"))?;
+    assert!(event_kinds.iter().any(|kind| kind == "model_loop_started"));
+    assert!(event_kinds.iter().any(|kind| kind == "model_loop_finished"));
 
     let summary = fs::read_to_string(out.join("running-summary.md"))?;
     assert!(summary.contains(
@@ -2113,6 +2193,29 @@ fn json_str_field<'a>(value: &'a serde_json::Value, field: &str) -> Result<&'a s
         .get(field)
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("JSON field `{field}` is not a string"))
+}
+
+fn event_kinds(path: &Path) -> Result<Vec<String>> {
+    let file = fs::File::open(path)?;
+    let reader = BufReader::new(file);
+    let mut kinds = Vec::new();
+    for line in reader.lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let event: serde_json::Value = serde_json::from_str(&line)?;
+        assert!(event["ts"].as_str().is_some(), "event missing ts: {event}");
+        assert!(
+            event["payload"].is_object(),
+            "event missing payload object: {event}"
+        );
+        let kind = event["kind"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("event missing kind: {event}"))?;
+        kinds.push(kind.to_owned());
+    }
+    Ok(kinds)
 }
 
 fn sum_json_object_values(value: &serde_json::Value) -> u64 {
