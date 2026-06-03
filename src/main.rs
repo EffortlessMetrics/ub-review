@@ -10768,6 +10768,7 @@ fn lane_output_malformed_content_observation(
 }
 
 fn render_lane_model_prompt(lane: &LanePlan, spec: &ProviderSpec, shared_context: &str) -> String {
+    let lane_guidance = lane_specific_prompt_guidance(lane);
     format!(
         r#"Lane: {lane}
 Provider: {provider}
@@ -10775,6 +10776,7 @@ Model: {model}
 Endpoint kind: {endpoint_kind}
 Role: {role}
 Focus: {focus}
+{lane_guidance}
 
 Use the shared context below. Return only one strict JSON object:
 {{
@@ -10845,8 +10847,18 @@ Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure 
         endpoint_kind = spec.endpoint_kind.key(),
         role = lane.role,
         focus = lane.focus,
+        lane_guidance = lane_guidance,
         shared_context = shared_context
     )
+}
+
+fn lane_specific_prompt_guidance(lane: &LanePlan) -> &'static str {
+    match lane.id.as_str() {
+        "tests" | "tests-oracle" => {
+            "Convergence calibration: batch every material test-oracle weakness you can substantiate in this pass; classify correctness/oracle gaps as blocker/high/medium and submaterial polish as low advisory or parked-follow-up. If the test is red/green-correct or proof receipts answer the concern, emit a resolved-check or failed_objection instead of a fresh candidate finding. Do not drip-feed one nit per pass."
+        }
+        _ => "",
+    }
 }
 
 struct ModelOutputSinks<'a> {
@@ -14289,11 +14301,11 @@ mod tests {
         model_request_payload, model_response_shape, normalize_run_args,
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
-        read_github_event_pr_context, render_ledger_context, render_pr_thread_context,
-        render_review_body, render_summary, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
-        split_curl_http_status, validate_github_review_payload,
+        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
+        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
+        run_sensor, runtime_profile_from_toml, runtime_profile_override, sensor_job_count,
+        sha256_hex, split_curl_http_status, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate,
         validate_pr_review_body_policy, validate_run_args, validate_summary_only_candidate,
         wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
@@ -14352,6 +14364,24 @@ mod tests {
                 || lane.focus.contains("worker handoff")
                 || lane.role.contains("undefined-behavior")
         }));
+    }
+
+    #[test]
+    fn tests_oracle_prompt_batches_oracle_critique_and_convergence() -> Result<()> {
+        let lane = default_lanes()
+            .into_iter()
+            .find(|lane| lane.id == "tests")
+            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+        let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
+
+        assert!(prompt.contains("batch every material test-oracle weakness"));
+        assert!(prompt.contains("submaterial polish as low advisory or parked-follow-up"));
+        assert!(prompt.contains("red/green-correct or proof receipts answer the concern"));
+        assert!(prompt.contains("resolved-check or failed_objection"));
+        assert!(prompt.contains("Do not drip-feed one nit per pass"));
+        Ok(())
     }
 
     #[test]
