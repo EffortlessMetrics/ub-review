@@ -1,0 +1,9 @@
+schema_version = "1.0"
+
+[policy]
+style = "expect-with-reason"
+reason_prefix = "policy:"
+blanket_allows = false
+
+# Add entries only after the local code site uses:
+# #[expect(clippy::some_lint, reason = "policy:clippy-0001")]

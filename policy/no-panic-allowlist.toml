@@ -1,0 +1,8 @@
+schema_version = "0.3"
+
+[policy]
+panic_free_tests = true
+allow_test_carveouts = false
+entries_require_owner = true
+entries_require_expires = true
+line_column_are_advisory = true

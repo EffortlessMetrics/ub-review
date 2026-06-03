@@ -1,0 +1,14 @@
+schema_version = "1.0"
+unit = "linux-equivalent-minute"
+
+[budget.default]
+limit_lem = 35
+requires_label = false
+
+[budget.elevated]
+limit_lem = 75
+requires_label = "ci-budget-ack"
+
+[budget.hard]
+limit_lem = 125
+requires_label = "ci-budget-override"

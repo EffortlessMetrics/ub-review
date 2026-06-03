@@ -1,0 +1,10 @@
+schema_version = "1.0"
+
+[[allow]]
+glob = "Cargo.lock"
+kind = "cargo_lockfile"
+owner = "maintainers"
+surface = "dependency_metadata"
+classification = "generated_metadata"
+reason = "Cargo lockfiles record resolved dependency versions for reproducible CI."
+covered_by = ["cargo check --workspace --all-targets --locked"]

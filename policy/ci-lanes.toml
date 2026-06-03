@@ -1,0 +1,37 @@
+schema_version = "1.0"
+
+[lane.rust_quick]
+description = "Format, check, tests, Clippy, and docs on Rust 1.95."
+intent = "baseline Rust correctness"
+runner = "ubuntu_24_04"
+base_lem = 12
+default_pr = true
+blocking = true
+paths = ["Cargo.toml", "Cargo.lock", "src/**", "tests/**", "fixtures/**"]
+outputs = ["target/test-results/**"]
+cheaper_signal_considered = "cargo check before tests and Clippy"
+skip_safely_when = "No Rust, lockfile, fixture, or policy-relevant files changed."
+
+[lane.ripr_advisory]
+description = "Static mutation-exposure analysis for production Rust diffs."
+intent = "oracle-gap detection"
+runner = "ubuntu_24_04"
+base_lem = 4
+default_pr = true
+blocking = false
+paths = ["src/**", "tests/**", "fixtures/**"]
+outputs = ["target/ripr/pr/summary.md", "target/ripr/pr/repo-exposure.json"]
+cheaper_signal_considered = "cargo check and unit tests"
+skip_safely_when = "No Rust behavior-affecting files changed or ripr-waive is accepted."
+
+[lane.policy]
+description = "Validate policy receipts, file surfaces, and CI plan metadata."
+intent = "governance receipt integrity"
+runner = "ubuntu_24_04"
+base_lem = 2
+default_pr = true
+blocking = true
+paths = ["policy/**", "docs/**", ".github/**", "Cargo.toml", "clippy.toml", "ripr.toml"]
+outputs = ["target/receipts/**", "target/ci/ci-plan.json"]
+cheaper_signal_considered = "TOML parse and schema checks"
+skip_safely_when = "No policy, docs, workflow, or config files changed."

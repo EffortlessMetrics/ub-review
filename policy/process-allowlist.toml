@@ -1,0 +1,9 @@
+schema_version = "1.0"
+
+[[allow]]
+path = "src/main.rs"
+owner = "ub-review"
+surface = "sensor_runner"
+classification = "process_execution"
+reason = "The CLI launches bounded external sensors and provider tooling to build evidence packets."
+covered_by = ["cargo test --workspace --all-targets --locked"]

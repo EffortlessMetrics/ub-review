@@ -1,0 +1,6 @@
+schema_version = "1.0"
+
+[policy]
+unsafe_code = "forbid"
+entries_require_owner = true
+entries_require_expires = true

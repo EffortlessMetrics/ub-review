@@ -1,0 +1,49 @@
+name: ripr advisory
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "fixtures/**"
+      - "ripr.toml"
+      - "policy/ripr-suppressions.toml"
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ripr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  advisory:
+    name: Static mutation-exposure advisory
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - name: Record ripr policy
+        run: |
+          set -euo pipefail
+          mkdir -p target/ripr/pr
+          cp ripr.toml target/ripr/pr/ripr.toml
+          cp policy/ripr-suppressions.toml target/ripr/pr/ripr-suppressions.toml
+          cat > target/ripr/pr/summary.md <<'SUMMARY'
+          # ripr advisory
+
+          ripr is configured as static mutation-exposure advisory signal. Install
+          and run ripr here once the project pins the executable source.
+          SUMMARY
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ripr-advisory-${{ github.run_id }}
+          path: target/ripr/pr
+          if-no-files-found: warn
+          retention-days: 7

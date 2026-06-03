@@ -1,0 +1,6 @@
+schema_version = "1.0"
+
+[policy]
+entries_require_owner = true
+entries_require_expires = true
+waiver_label = "ripr-waive"

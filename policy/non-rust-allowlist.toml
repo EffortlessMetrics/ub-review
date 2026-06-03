@@ -1,0 +1,46 @@
+schema_version = "1.0"
+
+[[allow]]
+glob = ".github/workflows/*.yml"
+kind = "ci_declarative"
+owner = "release/ci"
+surface = "ci"
+classification = "config"
+reason = "GitHub Actions workflow definitions are platform-required YAML."
+covered_by = ["cargo xtask check-file-policy"]
+
+[[allow]]
+glob = "docs/**/*.md"
+kind = "documentation"
+owner = "maintainers"
+surface = "docs"
+classification = "documentation"
+reason = "Repository policy, architecture, and user documentation are maintained as Markdown."
+covered_by = ["cargo xtask check-file-policy"]
+
+[[allow]]
+glob = "README.md"
+kind = "documentation"
+owner = "maintainers"
+surface = "docs"
+classification = "documentation"
+reason = "Repository entry-point documentation is maintained as Markdown."
+covered_by = ["cargo xtask check-file-policy"]
+
+[[allow]]
+glob = "scripts/*.sh"
+kind = "tool_bootstrap"
+owner = "release/ci"
+surface = "tooling"
+classification = "script"
+reason = "Shell is used for local and runner bootstrap wrappers around repo-native checks."
+covered_by = ["cargo xtask check-file-policy"]
+
+[[allow]]
+glob = "scripts/*.py"
+kind = "artifact_validator"
+owner = "release/ci"
+surface = "tooling"
+classification = "script"
+reason = "Python validators inspect generated review artifacts for release readiness."
+covered_by = ["cargo xtask check-file-policy"]

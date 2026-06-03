@@ -1,0 +1,13 @@
+schema_version = "1.0"
+
+[analysis]
+mode = "static-mutation-exposure"
+default_pr = true
+advisory = true
+
+[outputs]
+summary = "target/ripr/pr/summary.md"
+repo_exposure = "target/ripr/pr/repo-exposure.json"
+
+[policy]
+suppressions = "policy/ripr-suppressions.toml"

@@ -1,0 +1,11 @@
+schema_version = "1.0"
+
+[risk_pack.rust_core]
+description = "Rust source, tests, fixtures, or lockfile changed."
+paths = ["src/**", "tests/**", "fixtures/**", "Cargo.toml", "Cargo.lock"]
+lanes = ["rust_quick", "ripr_advisory"]
+
+[risk_pack.policy_control_plane]
+description = "Policy, CI, or documentation control-plane files changed."
+paths = ["policy/**", "docs/**", ".github/**", "clippy.toml", "ripr.toml", ".config/nextest.toml"]
+lanes = ["policy", "rust_quick"]

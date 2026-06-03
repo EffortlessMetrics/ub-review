@@ -1,0 +1,14 @@
+schema_version = "1.0"
+
+[policy]
+panic_free_tests = true
+allow_test_carveouts = false
+suppression_style = "expect-with-reason"
+blanket_categories = false
+
+[deny]
+panic_family = ["unwrap_used", "expect_used", "panic", "todo", "unimplemented"]
+debugging = ["dbg_macro"]
+
+[planned]
+clippy_future_label = "clippy-future"
