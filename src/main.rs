@@ -68,6 +68,8 @@ enum Command {
 #[derive(Clone, Debug, ValueEnum)]
 enum ProfileArg {
     GhRunner,
+    GhRunnerStandard,
+    GhRunnerFull,
     Cx23,
     Cx33,
     Cx43,
@@ -79,6 +81,8 @@ impl ProfileArg {
     fn key(&self) -> &'static str {
         match self {
             Self::GhRunner => "gh-runner",
+            Self::GhRunnerStandard => "gh-runner-standard",
+            Self::GhRunnerFull => "gh-runner-full",
             Self::Cx23 => "cx23",
             Self::Cx33 => "cx33",
             Self::Cx43 => "cx43",
@@ -647,6 +651,7 @@ struct Profile {
     limits: Limits,
     guards: Guards,
     budgets: Budgets,
+    trusted_repo: TrustedRepo,
 }
 
 #[derive(Debug, Deserialize)]
@@ -655,6 +660,7 @@ struct RuntimeProfileFile {
     limits: RuntimeLimitsFile,
     guards: RuntimeGuardsFile,
     budgets: RuntimeBudgetsFile,
+    trusted_repo: TrustedRepo,
 }
 
 #[derive(Debug, Deserialize)]
@@ -686,6 +692,7 @@ struct RuntimeBudgetsFile {
     artifact_budget_mb: u64,
     scratch_budget_mb: u64,
     default_timeout_sec: u64,
+    hard_timeout_sec: u64,
     proof_max_focused_test_files: usize,
     proof_max_focused_tests: usize,
     proof_command_timeout_sec: u64,
@@ -695,9 +702,19 @@ struct RuntimeBudgetsFile {
     proof_disk_mb: u64,
     proof_network: bool,
     proof_scratch: bool,
+    mutation: bool,
+    sanitizer: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+struct TrustedRepo {
+    pass_triggers: Vec<String>,
+    synchronize: bool,
+    proof_lanes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Limits {
     logical_lanes: usize,
@@ -715,7 +732,7 @@ struct Limits {
     patch_writers: usize,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Guards {
     min_free_mem_mb: u64,
@@ -723,12 +740,13 @@ struct Guards {
     max_load_1m: f32,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
 struct Budgets {
     artifact_budget_mb: u64,
     scratch_budget_mb: u64,
     default_timeout_sec: u64,
+    hard_timeout_sec: u64,
     proof_max_focused_test_files: usize,
     proof_max_focused_tests: usize,
     proof_command_timeout_sec: u64,
@@ -738,6 +756,8 @@ struct Budgets {
     proof_disk_mb: u64,
     proof_network: bool,
     proof_scratch: bool,
+    mutation: bool,
+    sanitizer: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1994,6 +2014,7 @@ impl Default for Profile {
             limits: Limits::default(),
             guards: Guards::default(),
             budgets: Budgets::default(),
+            trusted_repo: TrustedRepo::default(),
         }
     }
 }
@@ -2033,7 +2054,8 @@ impl Default for Budgets {
         Self {
             artifact_budget_mb: 750,
             scratch_budget_mb: 4_000,
-            default_timeout_sec: 900,
+            default_timeout_sec: 1_800,
+            hard_timeout_sec: 3_600,
             proof_max_focused_test_files: 3,
             proof_max_focused_tests: 1,
             proof_command_timeout_sec: 300,
@@ -2043,6 +2065,23 @@ impl Default for Budgets {
             proof_disk_mb: 1_024,
             proof_network: false,
             proof_scratch: true,
+            mutation: false,
+            sanitizer: false,
+        }
+    }
+}
+
+impl Default for TrustedRepo {
+    fn default() -> Self {
+        Self {
+            pass_triggers: vec!["opened".to_owned(), "ready_for_review".to_owned()],
+            synchronize: false,
+            proof_lanes: vec![
+                "focused-tests".to_owned(),
+                "base-tests-red-green".to_owned(),
+                "actionlint".to_owned(),
+                "scoped-source-route-checks".to_owned(),
+            ],
         }
     }
 }
@@ -2873,6 +2912,7 @@ fn resolved_plan_artifact(
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
         "budgets": &profile.budgets,
+        "trusted_repo": &profile.trusted_repo,
         "guards": &profile.guards,
         "limits": &profile.limits,
         "posting": &config.review,
@@ -3311,8 +3351,14 @@ fn build_plan(
     if !allow_heavy {
         notes.push("heavy witnesses are disabled unless --allow-heavy is passed".to_owned());
     }
-    if profile.name == "gh-runner" {
-        notes.push("gh-runner profile: one evidence pass, bounded model review, optional grouped PR Review posting".to_owned());
+    if matches!(
+        profile.name.as_str(),
+        "gh-runner" | "gh-runner-standard" | "gh-runner-full"
+    ) {
+        notes.push(format!(
+            "{} profile: trusted repos get opened and ready_for_review evidence passes, 30m target, 60m hard timeout",
+            profile.name
+        ));
     }
     Plan {
         base: diff.base.clone(),
@@ -13229,12 +13275,20 @@ fn detect_disk_free_mb() -> Option<u64> {
 fn builtin_profiles() -> Vec<Profile> {
     [
         include_str!("../runtime/gh-runner.toml"),
+        include_str!("../configs/runtime/gh-runner-standard.toml"),
+        include_str!("../configs/runtime/gh-runner-full.toml"),
         include_str!("../runtime/cx23.toml"),
         include_str!("../runtime/cx33.toml"),
         include_str!("../runtime/cx43.toml"),
     ]
     .into_iter()
-    .filter_map(|profile| runtime_profile_from_toml(profile).ok())
+    .map(|profile| match runtime_profile_from_toml(profile) {
+        Ok(profile) => profile,
+        Err(err) => {
+            eprintln!("fatal: parse builtin runtime profile: {err}");
+            std::process::exit(2);
+        }
+    })
     .collect()
 }
 
@@ -13266,6 +13320,7 @@ fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
             artifact_budget_mb: profile.budgets.artifact_budget_mb,
             scratch_budget_mb: profile.budgets.scratch_budget_mb,
             default_timeout_sec: profile.budgets.default_timeout_sec,
+            hard_timeout_sec: profile.budgets.hard_timeout_sec,
             proof_max_focused_test_files: profile.budgets.proof_max_focused_test_files,
             proof_max_focused_tests: profile.budgets.proof_max_focused_tests,
             proof_command_timeout_sec: profile.budgets.proof_command_timeout_sec,
@@ -13275,7 +13330,10 @@ fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
             proof_disk_mb: profile.budgets.proof_disk_mb,
             proof_network: profile.budgets.proof_network,
             proof_scratch: profile.budgets.proof_scratch,
+            mutation: profile.budgets.mutation,
+            sanitizer: profile.budgets.sanitizer,
         },
+        trusted_repo: profile.trusted_repo,
     })
 }
 
@@ -13793,6 +13851,10 @@ mod tests {
             Some("cx43")
         );
         assert_eq!(
+            runtime_profile_override(Some(&ProfileArg::GhRunner), Some(&ProfileArg::GhRunnerFull)),
+            Some("gh-runner-full")
+        );
+        assert_eq!(
             runtime_profile_override(Some(&ProfileArg::Cx23), None),
             Some("cx23")
         );
@@ -13818,10 +13880,19 @@ mod tests {
                 .iter()
                 .map(|profile| profile.name.as_str())
                 .collect::<Vec<_>>(),
-            vec!["gh-runner", "cx23", "cx33", "cx43"]
+            vec![
+                "gh-runner",
+                "gh-runner-standard",
+                "gh-runner-full",
+                "cx23",
+                "cx33",
+                "cx43",
+            ]
         );
         let from_files = vec![
             runtime_profile_from_toml(include_str!("../runtime/gh-runner.toml"))?,
+            runtime_profile_from_toml(include_str!("../configs/runtime/gh-runner-standard.toml"))?,
+            runtime_profile_from_toml(include_str!("../configs/runtime/gh-runner-full.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx23.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx33.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx43.toml"))?,
@@ -13831,6 +13902,82 @@ mod tests {
             serde_json::to_value(&from_files)?
         );
         Ok(())
+    }
+
+    #[test]
+    fn gh_runner_alias_matches_standard_profile_except_name() -> Result<()> {
+        let profiles = builtin_profiles();
+        let gh_runner = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
+        let standard = profiles
+            .iter()
+            .find(|profile| profile.name == "gh-runner-standard")
+            .ok_or_else(|| anyhow::anyhow!("missing gh-runner-standard profile"))?;
+
+        assert_eq!(gh_runner.limits, standard.limits);
+        assert_eq!(gh_runner.guards, standard.guards);
+        assert_eq!(gh_runner.budgets, standard.budgets);
+        assert_eq!(gh_runner.trusted_repo, standard.trusted_repo);
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_config_presets_match_embedded_profiles_for_shared_names() -> Result<()> {
+        let shared = [
+            (
+                include_str!("../runtime/cx23.toml"),
+                include_str!("../configs/runtime/cx23.toml"),
+            ),
+            (
+                include_str!("../runtime/cx33.toml"),
+                include_str!("../configs/runtime/cx33.toml"),
+            ),
+            (
+                include_str!("../runtime/cx43.toml"),
+                include_str!("../configs/runtime/cx43.toml"),
+            ),
+        ];
+        for (embedded, config) in shared {
+            assert_eq!(
+                serde_json::to_value(runtime_profile_from_toml(embedded)?)?,
+                serde_json::to_value(runtime_profile_from_toml(config)?)?
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn builtin_runtime_profiles_encode_trusted_repo_gate_defaults() {
+        for profile in builtin_profiles() {
+            assert_eq!(
+                profile.trusted_repo.pass_triggers,
+                vec!["opened".to_owned(), "ready_for_review".to_owned()],
+                "{} pass triggers",
+                profile.name
+            );
+            assert!(
+                !profile.trusted_repo.synchronize,
+                "{} should not run full passes on synchronize by default",
+                profile.name
+            );
+            assert_eq!(
+                profile.budgets.default_timeout_sec, 1_800,
+                "{} target timeout",
+                profile.name
+            );
+            assert_eq!(
+                profile.budgets.hard_timeout_sec, 3_600,
+                "{} hard timeout",
+                profile.name
+            );
+            assert!(
+                profile.budgets.default_timeout_sec <= profile.budgets.hard_timeout_sec,
+                "{} target timeout exceeds hard timeout",
+                profile.name
+            );
+        }
     }
 
     #[test]
