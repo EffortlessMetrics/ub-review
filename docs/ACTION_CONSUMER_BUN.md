@@ -36,6 +36,8 @@ all model lanes. OpenCode Go remains optional for later direct provider
 canary/deep modes; `ub-review` does not invoke the OpenCode agent harness.
 Use `depth: quick`, `standard`, or `deep` for preset lane/model-call pressure;
 keep raw lane/model budget overrides on `standard`.
+For focused reruns, `lanes`, `except-lanes`, `tools`, and `except-tools` accept
+comma-separated IDs and are recorded in `resolved-plan.json`.
 
 ## Permissions
 

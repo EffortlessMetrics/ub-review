@@ -289,6 +289,8 @@ struct CacheWarmArgs {
 struct PlanArgs {
     #[command(flatten)]
     review: ReviewArgs,
+    #[command(flatten)]
+    selectors: SelectorArgs,
     /// Write plan artifacts under the run directory.
     #[arg(long)]
     write: bool,
@@ -329,6 +331,8 @@ struct RunArgs {
     /// Model execution mode.
     #[arg(long, value_enum, default_value = "auto", env = "UB_REVIEW_MODEL_MODE")]
     model_mode: ModelMode,
+    #[command(flatten)]
+    selectors: SelectorArgs,
     /// Review depth selector. Nonstandard depths expand to lane/model budgets.
     #[arg(long, value_enum, default_value = "standard", env = "UB_REVIEW_DEPTH")]
     depth: ReviewDepth,
@@ -409,6 +413,30 @@ struct RunArgs {
         env = "UB_REVIEW_REVIEW_BODY_MAX_BYTES"
     )]
     review_body_max_bytes: usize,
+}
+
+#[derive(Clone, Debug, Default, Args)]
+struct SelectorArgs {
+    /// Comma-separated lane IDs to run. Empty means the profile default.
+    #[arg(long, default_value = "", env = "UB_REVIEW_LANES")]
+    lanes: String,
+    /// Comma-separated lane IDs to skip after applying --lanes.
+    #[arg(
+        long = "except-lanes",
+        default_value = "",
+        env = "UB_REVIEW_EXCEPT_LANES"
+    )]
+    except_lanes: String,
+    /// Comma-separated sensor/tool IDs to plan. Empty means the profile default.
+    #[arg(long, default_value = "", env = "UB_REVIEW_TOOLS")]
+    tools: String,
+    /// Comma-separated sensor/tool IDs to skip after applying --tools.
+    #[arg(
+        long = "except-tools",
+        default_value = "",
+        env = "UB_REVIEW_EXCEPT_TOOLS"
+    )]
+    except_tools: String,
 }
 
 #[derive(Debug, Args)]
@@ -1977,10 +2005,22 @@ fn cmd_cache_warm(args: CacheWarmArgs) -> Result<()> {
 }
 
 fn cmd_plan(args: PlanArgs) -> Result<()> {
-    let (config, diff, box_state, plan) = prepare_plan(&args.review, args.allow_heavy)?;
+    let (config, diff, box_state, plan) =
+        prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     print_plan(&plan, &box_state);
     if args.write {
-        write_plan_artifacts(&args.review.out, &config, &diff, &box_state, &plan, None)?;
+        write_plan_artifacts(
+            &args.review.out,
+            &config,
+            &diff,
+            &box_state,
+            &plan,
+            PlanArtifactSelectors {
+                run_args: None,
+                selectors: &args.selectors,
+                effective_model_lanes: None,
+            },
+        )?;
     }
     Ok(())
 }
@@ -1988,7 +2028,9 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
 fn cmd_run(args: RunArgs) -> Result<()> {
     let run_started = Instant::now();
     let args = normalize_run_args(args)?;
-    let (config, diff, box_state, plan) = prepare_plan(&args.review, args.allow_heavy)?;
+    let (config, diff, box_state, plan) =
+        prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    let selected_model_lanes = selected_review_lanes_for_args(&plan, &args)?;
     print_plan(&plan, &box_state);
     write_plan_artifacts(
         &args.review.out,
@@ -1996,7 +2038,11 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         &diff,
         &box_state,
         &plan,
-        Some(&args),
+        PlanArtifactSelectors {
+            run_args: Some(&args),
+            selectors: &args.selectors,
+            effective_model_lanes: Some(&selected_model_lanes),
+        },
     )?;
 
     let event_log = EventLog::open(&args.review.out.join("events.ndjson"))?;
@@ -2080,6 +2126,7 @@ fn ensure_supported_mode(mode: RunMode) -> Result<()> {
 
 fn validate_run_args(args: &RunArgs) -> Result<()> {
     ensure_supported_mode(args.mode)?;
+    validate_selector_syntax(&args.selectors)?;
     if !matches!(args.lane_width, 6 | 10 | 20) {
         bail!("--lane-width must be one of 6, 10, or 20");
     }
@@ -2319,12 +2366,15 @@ fn off_diff_comment_count(review: &GitHubReview, right_lines: &BTreeSet<(String,
 fn prepare_plan(
     args: &ReviewArgs,
     allow_heavy: bool,
+    selectors: &SelectorArgs,
 ) -> Result<(Config, DiffContext, BoxState, Plan)> {
+    validate_selector_syntax(selectors)?;
     let config = Config::load_or_default(&args.config, args.profile.as_ref().map(ProfileArg::key))?;
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
-    let plan = build_plan(&config, profile, &box_state, &diff, allow_heavy);
+    let mut plan = build_plan(&config, profile, &box_state, &diff, allow_heavy);
+    apply_plan_selectors(&mut plan, selectors)?;
     Ok((config, diff, box_state, plan))
 }
 
@@ -2334,7 +2384,7 @@ fn write_plan_artifacts(
     diff: &DiffContext,
     box_state: &BoxState,
     plan: &Plan,
-    run_args: Option<&RunArgs>,
+    selectors: PlanArtifactSelectors<'_>,
 ) -> Result<()> {
     fs::create_dir_all(out.join("input"))?;
     let profile = config.selected_profile()?;
@@ -2350,7 +2400,13 @@ fn write_plan_artifacts(
     fs::write(
         out.join("resolved-plan.json"),
         serde_json::to_vec_pretty(&resolved_plan_artifact(
-            config, profile, diff, plan, run_args,
+            config,
+            profile,
+            diff,
+            plan,
+            selectors.run_args,
+            selectors.selectors,
+            selectors.effective_model_lanes,
         ))?,
     )?;
     fs::write(
@@ -2371,6 +2427,12 @@ fn write_plan_artifacts(
     Ok(())
 }
 
+struct PlanArtifactSelectors<'a> {
+    run_args: Option<&'a RunArgs>,
+    selectors: &'a SelectorArgs,
+    effective_model_lanes: Option<&'a [LanePlan]>,
+}
+
 fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::Value {
     serde_json::json!({
         "schema": "ub-review.resolved_profile.v1",
@@ -2388,6 +2450,8 @@ fn resolved_plan_artifact(
     diff: &DiffContext,
     plan: &Plan,
     run_args: Option<&RunArgs>,
+    selectors: &SelectorArgs,
+    effective_model_lanes: Option<&[LanePlan]>,
 ) -> serde_json::Value {
     serde_json::json!({
         "schema": "ub-review.resolved_plan.v1",
@@ -2399,14 +2463,25 @@ fn resolved_plan_artifact(
         "guards": &profile.guards,
         "limits": &profile.limits,
         "posting": &config.review,
-        "selectors": resolved_selector_artifact(run_args),
+        "selectors": resolved_selector_artifact(run_args, selectors, effective_model_lanes),
         "sensors": &plan.sensors,
         "lanes": &plan.lanes,
         "notes": &plan.notes,
     })
 }
 
-fn resolved_selector_artifact(run_args: Option<&RunArgs>) -> serde_json::Value {
+fn resolved_selector_artifact(
+    run_args: Option<&RunArgs>,
+    selectors: &SelectorArgs,
+    effective_model_lanes: Option<&[LanePlan]>,
+) -> serde_json::Value {
+    let lane_include = selector_values_or_empty(&selectors.lanes);
+    let lane_exclude = selector_values_or_empty(&selectors.except_lanes);
+    let tool_include = selector_values_or_empty(&selectors.tools);
+    let tool_exclude = selector_values_or_empty(&selectors.except_tools);
+    let effective_lanes = effective_model_lanes
+        .map(|lanes| lanes.iter().map(|lane| lane.id.clone()).collect::<Vec<_>>())
+        .unwrap_or_default();
     if let Some(args) = run_args {
         serde_json::json!({
             "depth": args.depth.key(),
@@ -2414,6 +2489,11 @@ fn resolved_selector_artifact(run_args: Option<&RunArgs>) -> serde_json::Value {
             "model_concurrency": args.model_concurrency,
             "max_model_calls": args.max_model_calls,
             "max_inline_comments": args.max_inline_comments,
+            "lanes": lane_include,
+            "except_lanes": lane_exclude,
+            "tools": tool_include,
+            "except_tools": tool_exclude,
+            "effective_model_lanes": effective_lanes,
         })
     } else {
         serde_json::json!({
@@ -2422,9 +2502,158 @@ fn resolved_selector_artifact(run_args: Option<&RunArgs>) -> serde_json::Value {
             "model_concurrency": STANDARD_MODEL_CONCURRENCY,
             "max_model_calls": STANDARD_MAX_MODEL_CALLS,
             "max_inline_comments": 8,
+            "lanes": lane_include,
+            "except_lanes": lane_exclude,
+            "tools": tool_include,
+            "except_tools": tool_exclude,
+            "effective_model_lanes": effective_lanes,
             "source": "plan-default",
         })
     }
+}
+
+fn validate_selector_syntax(selectors: &SelectorArgs) -> Result<()> {
+    parse_selector_set(&selectors.lanes, "--lanes")?;
+    parse_selector_set(&selectors.except_lanes, "--except-lanes")?;
+    parse_selector_set(&selectors.tools, "--tools")?;
+    parse_selector_set(&selectors.except_tools, "--except-tools")?;
+    Ok(())
+}
+
+fn selector_values_or_empty(value: &str) -> Vec<String> {
+    let mut values = value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    values.sort();
+    values.dedup();
+    values
+}
+
+fn parse_selector_set(value: &str, flag: &str) -> Result<BTreeSet<String>> {
+    let mut selected = BTreeSet::new();
+    for item in value
+        .split(',')
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+    {
+        if !is_selector_id(item) {
+            bail!("{flag} contains invalid selector id `{item}`");
+        }
+        selected.insert(item.to_owned());
+    }
+    Ok(selected)
+}
+
+fn is_selector_id(value: &str) -> bool {
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+}
+
+fn apply_plan_selectors(plan: &mut Plan, selectors: &SelectorArgs) -> Result<()> {
+    let tool_include = parse_selector_set(&selectors.tools, "--tools")?;
+    let tool_exclude = parse_selector_set(&selectors.except_tools, "--except-tools")?;
+    if !tool_include.is_empty() || !tool_exclude.is_empty() {
+        plan.sensors = filter_sensor_plans(
+            std::mem::take(&mut plan.sensors),
+            &tool_include,
+            &tool_exclude,
+        )?;
+        plan.notes.push(format!(
+            "tool selectors applied: tools=[{}] except-tools=[{}]",
+            tool_include
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(","),
+            tool_exclude
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
+    }
+    let lane_include = parse_selector_set(&selectors.lanes, "--lanes")?;
+    let lane_exclude = parse_selector_set(&selectors.except_lanes, "--except-lanes")?;
+    if !lane_include.is_empty() || !lane_exclude.is_empty() {
+        plan.notes.push(format!(
+            "lane selectors will filter model assignments: lanes=[{}] except-lanes=[{}]",
+            lane_include
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(","),
+            lane_exclude
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
+    }
+    Ok(())
+}
+
+fn filter_sensor_plans(
+    sensors: Vec<SensorPlan>,
+    include: &BTreeSet<String>,
+    exclude: &BTreeSet<String>,
+) -> Result<Vec<SensorPlan>> {
+    validate_known_selectors(
+        "tool",
+        sensors.iter().map(|sensor| sensor.id.as_str()),
+        include,
+    )?;
+    validate_known_selectors(
+        "tool",
+        sensors.iter().map(|sensor| sensor.id.as_str()),
+        exclude,
+    )?;
+    Ok(sensors
+        .into_iter()
+        .filter(|sensor| include.is_empty() || include.contains(&sensor.id))
+        .filter(|sensor| !exclude.contains(&sensor.id))
+        .collect())
+}
+
+fn filter_lane_plans(
+    lanes: Vec<LanePlan>,
+    include: &BTreeSet<String>,
+    exclude: &BTreeSet<String>,
+) -> Result<Vec<LanePlan>> {
+    validate_known_selectors("lane", lanes.iter().map(|lane| lane.id.as_str()), include)?;
+    validate_known_selectors("lane", lanes.iter().map(|lane| lane.id.as_str()), exclude)?;
+    Ok(lanes
+        .into_iter()
+        .filter(|lane| include.is_empty() || include.contains(&lane.id))
+        .filter(|lane| !exclude.contains(&lane.id))
+        .collect())
+}
+
+fn validate_known_selectors<'a>(
+    kind: &str,
+    available: impl Iterator<Item = &'a str>,
+    selected: &BTreeSet<String>,
+) -> Result<()> {
+    if selected.is_empty() {
+        return Ok(());
+    }
+    let available = available.collect::<BTreeSet<_>>();
+    let unknown = selected
+        .iter()
+        .filter(|item| !available.contains(item.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        bail!(
+            "unknown {kind} selector(s): {}; available: {}",
+            unknown.join(","),
+            available.into_iter().collect::<Vec<_>>().join(",")
+        );
+    }
+    Ok(())
 }
 
 fn print_plan(plan: &Plan, box_state: &BoxState) {
@@ -3646,7 +3875,7 @@ fn write_review_artifacts(
     )?;
     let shared_context_id = sha256_hex(shared_context.as_bytes());
     let line_map = right_side_diff_lines(&diff.patch);
-    let assignments = model_assignments(plan, args);
+    let assignments = model_assignments(plan, args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
@@ -6188,6 +6417,12 @@ fn review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Vec<LanePlan> {
     }
 }
 
+fn selected_review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Result<Vec<LanePlan>> {
+    let include = parse_selector_set(&args.selectors.lanes, "--lanes")?;
+    let exclude = parse_selector_set(&args.selectors.except_lanes, "--except-lanes")?;
+    filter_lane_plans(review_lanes_for_args(plan, args), &include, &exclude)
+}
+
 fn review_lanes_for_width(width: usize, plan: &Plan) -> Vec<LanePlan> {
     match plan.diff_class {
         DiffClass::SourceUb => match width {
@@ -6555,9 +6790,9 @@ fn model_lane(id: &str, role: &str, receives: &[&str], focus: &str) -> LanePlan 
     )
 }
 
-fn model_assignments(plan: &Plan, args: &RunArgs) -> Vec<ModelAssignment> {
-    let lanes = review_lanes_for_args(plan, args);
-    lanes
+fn model_assignments(plan: &Plan, args: &RunArgs) -> Result<Vec<ModelAssignment>> {
+    let lanes = selected_review_lanes_for_args(plan, args)?;
+    let assignments = lanes
         .into_iter()
         .map(|lane| {
             let spec = provider_spec_for_lane(&lane, args);
@@ -6568,7 +6803,8 @@ fn model_assignments(plan: &Plan, args: &RunArgs) -> Vec<ModelAssignment> {
                 fallback,
             }
         })
-        .collect()
+        .collect::<Vec<_>>();
+    Ok(assignments)
 }
 
 fn provider_spec_for_lane(lane: &LanePlan, args: &RunArgs) -> ProviderSpec {
@@ -10983,12 +11219,12 @@ mod tests {
         ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
         ReviewArgs, ReviewBodyAudience, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
         ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
-        STANDARD_MODEL_CONCURRENCY, SensorEvidenceIssue, SensorPlan, SensorStatusWrite,
-        SummaryOnlyFinding, TerminalStateInput, ToolClass, apply_model_output,
-        apply_refuter_output, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue, SensorPlan,
+        SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, dedupe_inline_comments, default_lanes, direct_minimax_spec,
         extract_model_content, focused_test_tasks_from_diff, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
@@ -13388,16 +13624,17 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn provider_policy_minimax_only_uses_direct_m3() {
+    fn provider_policy_minimax_only_uses_direct_m3() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::MinimaxOnly;
         args.lane_width = 6;
-        let assignments = model_assignments(&test_plan(Vec::new()), &args);
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
 
         assert_eq!(assignments.len(), 1);
         assert_eq!(assignments[0].spec.provider, ModelProvider::MiniMaxDirect);
         assert_eq!(assignments[0].spec.model, "MiniMax-M3");
         assert!(assignments[0].fallback.is_none());
+        Ok(())
     }
 
     #[test]
@@ -13451,6 +13688,82 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn lane_selectors_filter_model_assignments() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.selectors.lanes = "tests-oracle,source-route".to_owned();
+
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
+
+        assert_eq!(
+            assignments
+                .iter()
+                .map(|assignment| assignment.lane.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tests-oracle", "source-route"]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn except_lane_selector_filters_model_assignments() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.selectors.except_lanes = "security,opposition".to_owned();
+
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
+
+        assert!(
+            !assignments
+                .iter()
+                .any(|assignment| matches!(assignment.lane.id.as_str(), "security" | "opposition"))
+        );
+        assert_eq!(assignments.len(), 8);
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_lane_selector_is_rejected() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.selectors.lanes = "missing-lane".to_owned();
+
+        let err = model_assignments(&test_plan(Vec::new()), &args)
+            .err()
+            .map(|err| err.to_string())
+            .unwrap_or_default();
+
+        assert!(err.contains("unknown lane selector"));
+    }
+
+    #[test]
+    fn tool_selectors_filter_planned_sensors() -> Result<()> {
+        let mut plan = test_plan(vec![
+            sensor_plan("tokmd", "tokmd", true),
+            sensor_plan("ripr", "ripr", true),
+            sensor_plan("ast-grep", "ast-grep", true),
+        ]);
+        let selectors = SelectorArgs {
+            tools: "tokmd,ripr".to_owned(),
+            except_tools: "ripr".to_owned(),
+            ..SelectorArgs::default()
+        };
+
+        apply_plan_selectors(&mut plan, &selectors)?;
+
+        assert_eq!(
+            plan.sensors
+                .iter()
+                .map(|sensor| sensor.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["tokmd"]
+        );
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("tool selectors"))
+        );
+        Ok(())
+    }
+
+    #[test]
     fn direct_minimax_openai_uses_chat_endpoint_and_bearer_header() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.minimax_provider_kind = ProviderKindArg::Openai;
@@ -13487,7 +13800,7 @@ index 1111111..2222222 100644
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::OpencodeGoCanary;
         args.lane_width = 10;
-        let assignments = model_assignments(&test_plan(Vec::new()), &args);
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
 
         let opposition = assignments
             .iter()
@@ -13528,11 +13841,11 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn provider_policy_opencode_wide_uses_flash_for_fast_lanes() {
+    fn provider_policy_opencode_wide_uses_flash_for_fast_lanes() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::OpencodeGoWide;
         args.lane_width = 20;
-        let assignments = model_assignments(&test_plan(Vec::new()), &args);
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
 
         assert_eq!(assignments.len(), 20);
         assert!(assignments.iter().any(|assignment| {
@@ -13545,6 +13858,7 @@ index 1111111..2222222 100644
                 && assignment.spec.model == "deepseek-v4-flash"
                 && assignment.spec.endpoint_kind == super::ProviderEndpointKind::OpenAiChat
         }));
+        Ok(())
     }
 
     #[test]
@@ -15198,6 +15512,7 @@ UB_REVIEW_HTTP_STATUS:429
             posting: PostingMode::ArtifactOnly,
             mode: RunMode::ReviewDirect,
             model_mode: ModelMode::Auto,
+            selectors: SelectorArgs::default(),
             depth: ReviewDepth::Standard,
             max_inline_comments: 8,
             model_concurrency: STANDARD_MODEL_CONCURRENCY,

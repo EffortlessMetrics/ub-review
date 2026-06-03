@@ -117,6 +117,22 @@ inputs:
     description: 'Review depth selector: quick, standard, or deep.'
     default: standard
     required: false
+  lanes:
+    description: Comma-separated lane IDs to run. Empty uses the selected depth default.
+    default: ''
+    required: false
+  except-lanes:
+    description: Comma-separated lane IDs to skip after applying lanes.
+    default: ''
+    required: false
+  tools:
+    description: Comma-separated sensor/tool IDs to plan. Empty uses the profile default.
+    default: ''
+    required: false
+  except-tools:
+    description: Comma-separated sensor/tool IDs to skip after applying tools.
+    default: ''
+    required: false
   provider-policy:
     description: 'Provider policy: minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
     default: minimax-primary
@@ -455,6 +471,10 @@ runs:
           --mode "${{ inputs.mode }}" \
           --model-mode "${{ inputs['model-mode'] }}" \
           --depth "${{ inputs.depth }}" \
+          --lanes "${{ inputs.lanes }}" \
+          --except-lanes "${{ inputs['except-lanes'] }}" \
+          --tools "${{ inputs.tools }}" \
+          --except-tools "${{ inputs['except-tools'] }}" \
           --provider-policy "${{ inputs['provider-policy'] }}" \
           --lane-width "${{ inputs['lane-width'] }}" \
           --model-timeout-sec "${{ inputs['model-timeout-sec'] }}" \
