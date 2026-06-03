@@ -1,16 +1,16 @@
 # Box profiles
 
-The Bun review profile lives in `profiles/bun-ub-v0.toml`. Runtime profiles live
-in `runtime/*.toml` and let that same review intent run on different hardware
-safely. Use `--runtime-profile` to choose these box budgets explicitly. The older
-`--profile` option remains a compatibility alias for the same runtime profiles.
+The Bun review profile lives in `profiles/bun-ub-v0.toml`. Runtime profiles are documented in `docs/RUNTIME_PROFILES.md` and encoded as technical presets under `configs/runtime/*.toml`: `gh-runner-standard`, `gh-runner-full`, `cx23`, `cx33`, and `cx43`.
+
+The current CLI also embeds compatibility profiles from `runtime/*.toml`; use `--runtime-profile` for box budgets explicitly, while the older `--profile` option remains a compatibility alias for those runtime budgets.
 
 | Profile | Local posture |
 |---|---|
-| `gh-runner` | ephemeral, disk-constrained, artifact-oriented |
+| `gh-runner-standard` | GitHub-hosted runner, focused proof, artifact-oriented |
+| `gh-runner-full` | explicitly leased GitHub runner, broader proof and leased heavy witnesses |
 | `cx23` | tiny coordinator, high remote thinking, minimal local work |
 | `cx33` | balanced small box, full fast sensors |
-| `cx43` | stronger local sensor box, occasional tests/builds |
+| `cx43` | stronger local sensor box, occasional tests/builds and leased heavy witnesses |
 | `auto` | conservative detection |
 | `custom` | config-owned |
 
@@ -21,9 +21,6 @@ Review breadth and local work are separate.
 20 local tool monsters are not fine.
 ```
 
-Runtime profiles now set model fanout, sensor worker fanout, and focused proof
-budgets. The effective values are emitted in `resolved-profile.json` and
-`resolved-plan.json` under `selected_review_profile`,
-`selected_runtime_profile`, `limits.*`, and `budgets.proof_*`.
+Runtime profiles set model fanout, sensor worker fanout, and focused proof budgets. The effective values are emitted in `resolved-profile.json` and `resolved-plan.json` under `selected_review_profile`, `selected_runtime_profile`, `limits.*`, and `budgets.proof_*`.
 
 If a guard fails, sensors degrade and the summary records missing evidence.
