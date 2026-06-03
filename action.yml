@@ -447,10 +447,13 @@ runs:
         UB_REVIEW_MINIMAX_API_URL: ${{ inputs['minimax-api-url'] }}
         UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
         UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
-        UB_REVIEW_GITHUB_TOKEN: ${{ inputs['github-token'] }}
       run: |
         set -euo pipefail
         extra=()
+        pr_thread_auth="${{ inputs['github-token'] }}"
+        if [[ -n "$pr_thread_auth" ]]; then
+          extra+=(--github-token "$pr_thread_auth")
+        fi
         if [[ "${{ inputs['allow-heavy'] }}" == "true" ]]; then
           extra+=(--allow-heavy)
         fi

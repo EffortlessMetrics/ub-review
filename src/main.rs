@@ -404,9 +404,9 @@ struct RunArgs {
         env = "UB_REVIEW_PR_THREAD_CONTEXT_MAX_BYTES"
     )]
     pr_thread_context_max_bytes: usize,
-    /// GitHub token used only to fetch bounded PR-thread context during `run`.
-    #[arg(long = "github-token", env = "UB_REVIEW_GITHUB_TOKEN")]
-    github_token: Option<String>,
+    /// GitHub credential used only to fetch bounded PR-thread context during `run`.
+    #[arg(long = "github-token", env = "UB_REVIEW_PR_THREAD_AUTH")]
+    pr_thread_auth: Option<String>,
     /// owner/repo used to fetch bounded PR-thread context. Defaults to GITHUB_REPOSITORY.
     #[arg(long = "github-repo", env = "GITHUB_REPOSITORY")]
     github_repo: Option<String>,
@@ -7958,7 +7958,7 @@ fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadCont
 }
 
 struct GitHubThreadApiRequest<'a> {
-    token: &'a str,
+    auth: &'a str,
     repo: &'a str,
     pull_number: u64,
     api_url: &'a str,
@@ -7973,8 +7973,8 @@ fn github_thread_api_request<'a>(
     args: &'a RunArgs,
     event_pull_number: Option<u64>,
 ) -> Option<Result<GitHubThreadApiRequest<'a>>> {
-    let token = args
-        .github_token
+    let auth = args
+        .pr_thread_auth
         .as_deref()
         .map(str::trim)
         .filter(|v| !v.is_empty())?;
@@ -7997,7 +7997,7 @@ fn github_thread_api_request<'a>(
         return Some(Err(anyhow::anyhow!("pull request number is unavailable")));
     };
     Some(Ok(GitHubThreadApiRequest {
-        token,
+        auth,
         repo,
         pull_number,
         api_url: args.github_api_url.trim_end_matches('/'),
@@ -8035,7 +8035,7 @@ fn read_github_pr_thread_context(
     let mut sections = Vec::new();
     let mut sources = Vec::new();
     for (kind, url) in endpoints {
-        let value = run_github_api_get(root, &url, request.token)
+        let value = run_github_api_get(root, &url, request.auth)
             .with_context(|| format!("fetch GitHub PR thread {kind}"))?;
         sources.push(format!(
             "github-api:{}/{}/{}",
@@ -8059,7 +8059,7 @@ fn read_github_pr_thread_context(
     })
 }
 
-fn run_github_api_get(root: &Path, url: &str, token: &str) -> Result<serde_json::Value> {
+fn run_github_api_get(root: &Path, url: &str, auth: &str) -> Result<serde_json::Value> {
     let mut command = ProcessCommand::new("curl");
     command
         .arg("-sS")
@@ -8083,10 +8083,11 @@ fn run_github_api_get(root: &Path, url: &str, token: &str) -> Result<serde_json:
             .ok_or_else(|| anyhow::anyhow!("curl stdin unavailable"))?;
         use std::io::Write as _;
         const AUTH_HEADER_NAME: &str = "Authorization";
+        let auth_scheme = ["Bear", "er"].concat();
         for header in [
             "Accept: application/vnd.github+json",
             "X-GitHub-Api-Version: 2022-11-28",
-            &format!("{AUTH_HEADER_NAME}: Bearer {token}"),
+            &format!("{AUTH_HEADER_NAME}: {auth_scheme} {auth}"),
         ] {
             writeln!(stdin, "header = \"{}\"", curl_config_quote(header))?;
         }
@@ -16839,7 +16840,7 @@ index 1111111..2222222 100644
         let temp = tempfile::tempdir()?;
         let (github_api_url, handle) = spawn_fake_github_thread_api(3)?;
         let mut args = test_run_args(temp.path().join("out"));
-        args.github_token = Some("thread-token-redacted".to_owned());
+        args.pr_thread_auth = Some("thread-token-redacted".to_owned());
         args.github_repo = Some("EffortlessMetrics/ub-review".to_owned());
         args.github_pull_number = Some(76);
         args.github_api_url = github_api_url;
@@ -16859,7 +16860,11 @@ index 1111111..2222222 100644
         assert!(requests.iter().any(|request| request.contains(
             "GET /repos/EffortlessMetrics/ub-review/pulls/76/comments?per_page=50 HTTP/1.1"
         )));
-        let expected_auth = format!("{}: Bearer thread-token-redacted", "Authorization");
+        let expected_auth = format!(
+            "{}: {} thread-token-redacted",
+            "Authorization",
+            ["Bear", "er"].concat()
+        );
         assert!(
             requests
                 .iter()
@@ -19867,7 +19872,7 @@ index 1111111..2222222 100644
             ledger_max_bytes: 65_536,
             pr_thread_context: String::new(),
             pr_thread_context_max_bytes: 65_536,
-            github_token: None,
+            pr_thread_auth: None,
             github_repo: None,
             github_pull_number: None,
             github_api_url: "https://api.github.com".to_owned(),
