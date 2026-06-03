@@ -167,6 +167,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["mode"], "review-direct");
     assert_eq!(review["provider_policy"], "minimax-primary");
     assert_eq!(review["model_provider_policy"], "minimax-primary");
+    assert_eq!(review["runtime_profile"], "gh-runner");
     assert_eq!(review["depth"], "standard");
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
@@ -175,6 +176,7 @@ fn active_len_tracks_view_after_resize() {
         serde_json::from_slice(&fs::read(out.join("resolved-profile.json"))?)?;
     assert_eq!(resolved_profile["schema"], "ub-review.resolved_profile.v1");
     assert_eq!(resolved_profile["selected_profile"], "gh-runner");
+    assert_eq!(resolved_profile["selected_runtime_profile"], "gh-runner");
     assert_eq!(
         resolved_profile["profile"]["limits"]["tests"],
         serde_json::json!(2)
@@ -185,6 +187,7 @@ fn active_len_tracks_view_after_resize() {
         serde_json::from_slice(&fs::read(out.join("resolved-plan.json"))?)?;
     assert_eq!(resolved_plan["schema"], "ub-review.resolved_plan.v1");
     assert_eq!(resolved_plan["profile_name"], "gh-runner");
+    assert_eq!(resolved_plan["runtime_profile"], "gh-runner");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
     assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 900);
     assert_eq!(resolved_plan["selectors"]["depth"], "standard");
@@ -246,6 +249,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
     assert_eq!(metrics["profile_name"], "gh-runner");
+    assert_eq!(metrics["runtime_profile"], "gh-runner");
     assert_eq!(metrics["depth"], "standard");
     assert_eq!(
         metrics["changed_files"],

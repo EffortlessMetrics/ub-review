@@ -1,6 +1,8 @@
 # Box profiles
 
 Profiles let the same review intent run on different hardware safely.
+Use `--runtime-profile` to choose these box budgets explicitly. The older
+`--profile` option remains a compatibility alias for the same runtime profiles.
 
 | Profile | Local posture |
 |---|---|

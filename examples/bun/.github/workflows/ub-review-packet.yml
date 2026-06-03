@@ -61,6 +61,7 @@ jobs:
         with:
           preset: bun-ub
           profile: gh-runner
+          runtime-profile: gh-runner
           root: .
           base: origin/${{ github.base_ref }}
           head: HEAD

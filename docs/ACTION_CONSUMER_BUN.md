@@ -8,6 +8,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
   with:
     preset: bun-ub
     profile: gh-runner
+    runtime-profile: gh-runner
     root: .
     base: origin/${{ github.base_ref }}
     head: HEAD
@@ -38,6 +39,8 @@ Use `depth: quick`, `standard`, or `deep` for preset lane/model-call pressure;
 keep raw lane/model budget overrides on `standard`.
 For focused reruns, `lanes`, `except-lanes`, `tools`, and `except-tools` accept
 comma-separated IDs and are recorded in `resolved-plan.json`.
+Use `runtime-profile` for box budgets and local work limits; `profile` is kept
+as the backward-compatible action input.
 
 ## Permissions
 
