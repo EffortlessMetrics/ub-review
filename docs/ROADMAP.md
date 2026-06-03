@@ -664,8 +664,8 @@ time.
 
 Acceptance:
 
-- `tokmd`, `ripr`, `unsafe-review`, and `ast-grep` are installed on the
-  standard image and visible on `PATH`;
+- `tokmd`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint` are installed
+  on the standard image and visible on `PATH`;
 - `tokmd` is versioned for the Bun profile and emits on-diff `analyze`,
   compact `cockpit`, and bounded changed-file `context` receipts;
 - `tokmd analyze --preset bun-ub` replaces the current verified effort-delta

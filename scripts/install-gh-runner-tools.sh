@@ -39,6 +39,33 @@ install_npm_bin() {
   echo "::endgroup::"
 }
 
+install_go_bin() {
+  local bin="$1"
+  local package="$2"
+  local version="$3"
+  if command -v "$bin" >/dev/null 2>&1; then
+    echo "::notice::$bin already available"
+    return 0
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    echo "::warning::go unavailable; $bin sensor will be skipped"
+    return 0
+  fi
+  local gobin="${UB_REVIEW_GO_BIN_DIR:-${GOBIN:-$HOME/go/bin}}"
+  mkdir -p "$gobin"
+  echo "::group::go install $package@$version"
+  if GOBIN="$gobin" go install "$package@$version"; then
+    echo "::notice::installed $bin"
+    export PATH="$gobin:$PATH"
+    if [[ -n "${GITHUB_PATH:-}" ]]; then
+      echo "$gobin" >> "$GITHUB_PATH"
+    fi
+  else
+    echo "::warning::could not install $package@$version; $bin sensor will be skipped"
+  fi
+  echo "::endgroup::"
+}
+
 case "$bundle" in
   none)
     echo "::notice::UB_REVIEW_TOOL_BUNDLE=none; not installing sensors"
@@ -48,6 +75,7 @@ case "$bundle" in
     install_cargo_bin ripr ripr
     install_cargo_bin unsafe-review unsafe-review
     install_npm_bin ast-grep @ast-grep/cli
+    install_go_bin actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
     ;;
   *)
     echo "::warning::unknown UB_REVIEW_TOOL_BUNDLE=$bundle; using core"
@@ -55,6 +83,7 @@ case "$bundle" in
     install_cargo_bin ripr ripr
     install_cargo_bin unsafe-review unsafe-review
     install_npm_bin ast-grep @ast-grep/cli
+    install_go_bin actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
     ;;
 esac
 
@@ -63,5 +92,5 @@ if [[ "$bundle" == "full" ]]; then
 fi
 
 # Optional sensors are intentionally not installed by default:
-# semgrep, gitleaks, osv-scanner, cargo-audit, cargo-deny, cppcheck.
+# semgrep, gitleaks, osv-scanner, cargo-audit, cargo-deny, cppcheck, zizmor.
 # Enable them by preinstalling in the workflow and flipping their tool policy.

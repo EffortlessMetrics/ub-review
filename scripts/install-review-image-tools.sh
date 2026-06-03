@@ -18,12 +18,25 @@ install_tool() {
   "$prefix/bin/$bin" --version
 }
 
+install_go_tool() {
+  local bin="$1"
+  local package="$2"
+  local version="$3"
+  command -v go >/dev/null 2>&1 || {
+    echo "go is required to install $bin for the standard ub-review image" >&2
+    exit 1
+  }
+  GOBIN="$prefix/bin" go install "$package@$version"
+  "$prefix/bin/$bin" --version
+}
+
 mkdir -p "$prefix/bin"
 
 install_tool tokmd tokmd "${UB_REVIEW_TOKMD_VERSION:-1.11.1}"
 install_tool ripr ripr
 install_tool unsafe-review unsafe-review
 install_tool ast-grep ast-grep
+install_go_tool actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
 
 cat <<EOF
 

@@ -12,7 +12,7 @@ import sys
 from typing import Any
 
 
-SENSORS = ["tokmd", "ripr", "unsafe-review", "ast-grep"]
+SENSORS = ["tokmd", "ripr", "unsafe-review", "ast-grep", "actionlint"]
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 APPROVAL_LINES = {
     "lgtm",

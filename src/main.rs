@@ -13935,7 +13935,7 @@ fn has_standalone_approval_line(text: &str) -> bool {
     })
 }
 
-const CORE_REVIEW_TOOLS: [&str; 4] = ["tokmd", "ripr", "unsafe-review", "ast-grep"];
+const CORE_REVIEW_TOOLS: [&str; 5] = ["tokmd", "ripr", "unsafe-review", "ast-grep", "actionlint"];
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)

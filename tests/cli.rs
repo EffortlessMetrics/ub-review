@@ -128,6 +128,7 @@ fn active_len_tracks_view_after_resize() {
         "sensors/ripr/ub-review-sensor-status.json",
         "sensors/unsafe-review/ub-review-sensor-status.json",
         "sensors/ast-grep/ub-review-sensor-status.json",
+        "sensors/actionlint/ub-review-sensor-status.json",
         "review/shared_context.md",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
@@ -655,12 +656,12 @@ fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
             .as_array()
             .map(std::vec::Vec::len)
             .unwrap_or_default(),
-        4
+        5
     );
 
     let base_dir = cache.join("bases").join(base_tree_sha);
     assert!(base_dir.join("manifest.json").exists());
-    for tool in ["tokmd", "ripr", "unsafe-review", "ast-grep"] {
+    for tool in ["tokmd", "ripr", "unsafe-review", "ast-grep", "actionlint"] {
         assert!(
             cache
                 .join("rules")
