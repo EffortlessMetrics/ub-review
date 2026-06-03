@@ -7032,12 +7032,6 @@ fn focused_test_candidates_from_diff(
 ) -> Vec<FocusedTestTask> {
     let request_groups = proof_request_groups(proof_requests);
     let mut tasks = Vec::new();
-    let changed_test_files = diff
-        .changed_files
-        .iter()
-        .filter(|path| is_bun_focused_test_file(path))
-        .map(|path| normalize_repo_path(path))
-        .collect::<BTreeSet<_>>();
     for file in diff
         .changed_files
         .iter()
@@ -7072,18 +7066,17 @@ fn focused_test_candidates_from_diff(
         let Some(target) = focused_test_request_target(group) else {
             continue;
         };
-        let mode = if changed_test_files.contains(&target.file) {
-            FocusedProofMode::RedGreen
-        } else {
-            FocusedProofMode::HeadOnly
-        };
         merge_focused_test_task(
             &mut tasks,
             FocusedTestTask {
-                id: focused_test_task_id(&target.file, target.test_name.as_deref(), mode),
+                id: focused_test_task_id(
+                    &target.file,
+                    target.test_name.as_deref(),
+                    FocusedProofMode::RedGreen,
+                ),
                 file: target.file,
                 test_name: target.test_name,
-                mode,
+                mode: FocusedProofMode::RedGreen,
                 requested_by: group.requested_by.clone(),
                 request_ids: group.request_ids.clone(),
             },
@@ -7391,10 +7384,6 @@ fn prepare_base_plus_tests_worktree(
     diff: &DiffContext,
 ) -> Result<PathBuf> {
     let patch_files = base_plus_tests_patch_files(diff);
-    if patch_files.is_empty() {
-        bail!("no test, fixture, or doc-test files were available for base+tests patching");
-    }
-
     let worktrees_dir = out.join("proof-worktrees");
     fs::create_dir_all(&worktrees_dir)
         .with_context(|| format!("create {}", worktrees_dir.display()))?;
@@ -7405,12 +7394,6 @@ fn prepare_base_plus_tests_worktree(
             safe_remove_dir_all_under(&worktrees_dir, &worktree)?;
         }
     }
-
-    let patch = base_plus_tests_patch(root, diff, &patch_files)?;
-    let proof_dir = out.join("proof");
-    fs::create_dir_all(&proof_dir).with_context(|| format!("create {}", proof_dir.display()))?;
-    let patch_path = proof_dir.join("base-plus-tests.patch");
-    fs::write(&patch_path, patch).with_context(|| format!("write {}", patch_path.display()))?;
 
     let add_args = vec![
         "worktree".to_owned(),
@@ -7427,16 +7410,25 @@ fn prepare_base_plus_tests_worktree(
         )
     })?;
 
-    let apply_args = vec![
-        "apply".to_owned(),
-        "--whitespace=nowarn".to_owned(),
-        patch_path.to_string_lossy().to_string(),
-    ];
-    if let Err(error) = git_text_owned(&worktree, &apply_args)
-        .with_context(|| format!("apply test-only patch in {}", worktree.display()))
-    {
-        let _ = cleanup_base_plus_tests_worktree(root, &worktree);
-        return Err(error);
+    if !patch_files.is_empty() {
+        let patch = base_plus_tests_patch(root, diff, &patch_files)?;
+        let proof_dir = out.join("proof");
+        fs::create_dir_all(&proof_dir)
+            .with_context(|| format!("create {}", proof_dir.display()))?;
+        let patch_path = proof_dir.join("base-plus-tests.patch");
+        fs::write(&patch_path, patch).with_context(|| format!("write {}", patch_path.display()))?;
+
+        let apply_args = vec![
+            "apply".to_owned(),
+            "--whitespace=nowarn".to_owned(),
+            patch_path.to_string_lossy().to_string(),
+        ];
+        if let Err(error) = git_text_owned(&worktree, &apply_args)
+            .with_context(|| format!("apply test-only patch in {}", worktree.display()))
+        {
+            let _ = cleanup_base_plus_tests_worktree(root, &worktree);
+            return Err(error);
+        }
     }
 
     Ok(worktree)
@@ -14363,8 +14355,8 @@ index 1111111..2222222 100644
         assert_eq!(proof_groups.len(), 1);
         assert_eq!(proof_groups[0].duplicate_count, 1);
         assert!(proof_plan.contains("## Focused proof plan"));
-        assert!(proof_plan.contains("mode=`head-only`"));
-        assert!(proof_plan.contains("base+tests=`not planned for head-only proof`"));
+        assert!(proof_plan.contains("mode=`red-green`"));
+        assert!(proof_plan.contains("base+tests=`cwd=target/ub-review/proof-worktrees/base-plus-tests USE_SYSTEM_BUN=1 bun test test/js/bun/md/md-edge-cases.test.ts`"));
         assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
         Ok(())
     }
@@ -14762,9 +14754,11 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn proof_broker_v0_executes_allowlisted_request_as_head_only_proof() -> Result<()> {
+    fn proof_broker_v0_executes_allowlisted_request_as_red_green_proof() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
         let diff = test_diff();
         let proof_requests = vec![
             ProofRequest {
@@ -14802,11 +14796,11 @@ index 1111111..2222222 100644
                 max_focused_test_files: 3,
                 max_focused_tests: 2,
                 per_command_timeout_sec: 300,
-                max_total_seconds: 300,
+                max_total_seconds: 600,
             },
         );
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].mode, super::FocusedProofMode::HeadOnly);
+        assert_eq!(tasks[0].mode, super::FocusedProofMode::RedGreen);
         assert_eq!(tasks[0].file, "test/js/bun/ffi/ffi.test.js");
         assert_eq!(tasks[0].test_name.as_deref(), Some("ffi toBuffer bad free"));
         assert_eq!(tasks[0].requested_by.len(), 2);
@@ -14838,6 +14832,7 @@ index 1111111..2222222 100644
 
         let args = test_run_args(out.clone());
         let mut commands = Vec::<String>::new();
+        let prepared_base_root = base_root.clone();
         let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
             temp.path(),
             &out,
@@ -14848,48 +14843,60 @@ index 1111111..2222222 100644
                 max_focused_test_files: 3,
                 max_focused_tests: 2,
                 per_command_timeout_sec: 300,
-                max_total_seconds: 300,
+                max_total_seconds: 600,
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(command_display(argv));
-                assert!(env.is_empty());
+                commands.push(super::command_display_with_env(env, argv));
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 assert_eq!(timeout, 300);
-                fs::write(stdout, b"head ok\n")?;
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
                 fs::write(stderr, b"")?;
                 Ok(CommandStatus {
-                    exit_code: Some(0),
+                    exit_code: Some(if is_base { 1 } else { 0 }),
                     timed_out: false,
-                    success: true,
+                    success: !is_base,
                     reason: "completed".to_owned(),
                     duration_ms: 21,
                 })
             },
-            |_root, _out, _diff| {
-                unreachable!("head-only proof must not prepare a base+tests worktree")
-            },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
         )?;
 
         assert_eq!(
             commands,
-            vec!["bun bd test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"]
+            vec![
+                "bun bd test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'",
+                "USE_SYSTEM_BUN=1 bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'",
+            ]
         );
         assert_eq!(proof_result.proof_receipts.len(), 1);
         assert_eq!(proof_result.resource_leases.len(), 1);
         let receipt = &proof_result.proof_receipts[0];
-        assert_eq!(receipt.kind, "focused-head");
-        assert_eq!(receipt.test_patch_mode, "head-only");
-        assert_eq!(receipt.result, "head_passed");
-        assert_eq!(receipt.commands.len(), 1);
+        assert_eq!(receipt.kind, "focused-red-green");
+        assert_eq!(receipt.test_patch_mode, "base-plus-tests");
+        assert_eq!(receipt.result, "discriminating");
+        assert_eq!(receipt.commands.len(), 2);
         assert_eq!(receipt.commands[0].side, "head");
         assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[1].side, "base-plus-tests");
+        assert_eq!(receipt.commands[1].status, "failed");
         assert!(out.join(&receipt.commands[0].stdout).exists());
+        assert!(out.join(&receipt.commands[1].stdout).exists());
         let lease = &proof_result.resource_leases[0];
         assert_eq!(lease.status, "granted");
-        assert_eq!(lease.timeout_sec, 300);
-        assert_eq!(lease.worktree, None);
+        assert_eq!(lease.timeout_sec, 600);
+        assert_eq!(lease.worktree, Some("base-plus-tests".to_owned()));
         assert!(lease.command.as_deref().is_some_and(
-            |command| command.contains("head: cwd=") && !command.contains("base+tests:")
+            |command| command.contains("head: cwd=") && command.contains("base+tests:")
         ));
         Ok(())
     }
@@ -15813,6 +15820,59 @@ index 3333333..4444444 100644
         assert_eq!(proof_result.proof_receipts[0].result, "skipped_budget");
         assert_eq!(proof_result.resource_leases.len(), 1);
         assert_eq!(proof_result.resource_leases[0].status, "exhausted");
+        Ok(())
+    }
+
+    #[test]
+    fn prepare_base_plus_tests_worktree_allows_source_only_request_without_test_patch() -> Result<()>
+    {
+        let repo = tempfile::tempdir()?;
+        fs::create_dir_all(repo.path().join("src"))?;
+        fs::write(repo.path().join("src/lib.rs"), "pub fn current() {}\n")?;
+        run_test_command(repo.path(), "git", &["init"])?;
+        run_test_command(
+            repo.path(),
+            "git",
+            &["config", "user.email", "ub-review@example.invalid"],
+        )?;
+        run_test_command(
+            repo.path(),
+            "git",
+            &["config", "user.name", "UB Review Test"],
+        )?;
+        run_test_command(repo.path(), "git", &["add", "."])?;
+        run_test_command(
+            repo.path(),
+            "git",
+            &["-c", "commit.gpgsign=false", "commit", "-m", "initial"],
+        )?;
+
+        let out = tempfile::tempdir()?;
+        let diff = DiffContext {
+            base: "HEAD".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: "+pub fn changed() {}\n".to_owned(),
+            flags: DiffFlags {
+                source_changed: true,
+                rust_changed: true,
+                rust_tests_changed: false,
+                workflow_changed: false,
+                dependency_changed: false,
+                shell_changed: false,
+                cpp_changed: false,
+                docs_only: false,
+                unsafe_or_native_risk: true,
+            },
+            diff_class: DiffClass::SourceUb,
+        };
+        assert!(super::base_plus_tests_patch_files(&diff).is_empty());
+
+        let worktree = super::prepare_base_plus_tests_worktree(repo.path(), out.path(), &diff)?;
+
+        assert!(worktree.join("src/lib.rs").exists());
+        assert!(!out.path().join("proof/base-plus-tests.patch").exists());
+        super::cleanup_base_plus_tests_worktree(repo.path(), &worktree)?;
         Ok(())
     }
 

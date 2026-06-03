@@ -38,3 +38,5 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Docs
         run: cargo doc --workspace --no-deps --locked
+      - name: Policy receipts
+        run: cargo xtask policy-check

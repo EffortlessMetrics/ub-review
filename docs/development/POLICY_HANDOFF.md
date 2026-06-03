@@ -20,7 +20,8 @@ feeding it back into agent lanes without copying unimplemented claims.
 ## Implementation order
 
 1. Add doctrine and seed ledgers.
-2. Add a parse-only policy check for the ledgers, normally through `xtask`.
+2. Add a parse-only policy check for the ledgers, normally through
+   `cargo xtask policy-check`.
 3. Add inventory commands that report current exceptions without failing.
 4. Add propose commands that generate candidate receipts.
 5. Add advisory CI and summary output.
