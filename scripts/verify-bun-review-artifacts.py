@@ -1651,6 +1651,8 @@ def require_proof_task_schema(task: dict) -> None:
 def require_proof_request_files(root: pathlib.Path, proof_requests: list[dict]) -> None:
     proof_request_dir = root / "proof_requests"
     if not proof_request_dir.is_dir():
+        if not proof_requests:
+            return
         fail("missing proof_requests directory")
     expected = {f"{sanitize_artifact_name(request['id'])}.json": request for request in proof_requests}
     actual = sorted(path.name for path in proof_request_dir.glob("*.json"))
@@ -3326,6 +3328,7 @@ def run_self_tests() -> None:
             1,
         ),
     )
+    require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     print("Bun review artifact verifier self-test passed")
 
 
