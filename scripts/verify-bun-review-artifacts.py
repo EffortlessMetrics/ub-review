@@ -205,6 +205,8 @@ def has_reviewer_value_heading(body: str) -> bool:
 
 def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
     lowered = body.lower()
+    if is_workflow_trust_posture_review_noise(lowered):
+        fail(f"{path} contains artifact-only workflow trust posture prose")
     for phrase in [
         "no blocking finding after",
         "no blocking ub finding",
@@ -222,6 +224,10 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
         "general bot output",
         "pr-body contract hardening",
         "actionlint ran ok",
+        "pre-existing, not a diff target",
+        "identical to prior pin",
+        "no widened attack surface",
+        "standing-repo concern",
         "lane transcript",
         "lane roster",
         "model lane roster",
@@ -273,6 +279,51 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
             f"unsupported sibling completeness claim leaked into {path}; "
             "report scan coverage as a verification question instead"
         )
+
+
+def is_workflow_trust_posture_review_noise(text: str) -> bool:
+    return is_unchanged_workflow_trust_posture_noise(text) or (
+        (
+            "does not eliminate upstream trust" in text
+            or "trust in upstream tag" in text
+        )
+        and (
+            "secrets.minimax" in text
+            or "github.token" in text
+            or "malicious or compromised" in text
+        )
+    )
+
+
+def is_unchanged_workflow_trust_posture_noise(text: str) -> bool:
+    mentions_workflow_trust = (
+        "upstream trust" in text
+        or "trust in upstream" in text
+        or "malicious or compromised" in text
+        or "would exfiltrate" in text
+        or "reproducibly verified" in text
+        or "secrets.minimax" in text
+        or "github.token" in text
+        or "workflow-level permissions" in text
+        or "permissions block" in text
+        or "exposure surface" in text
+    )
+    says_unchanged_or_out_of_scope = (
+        "not introduced by this" in text
+        or "pre-existing" in text
+        or "not a diff target" in text
+        or "identical to prior" in text
+        or "no widened attack surface" in text
+        or "zero new secret" in text
+        or "zero new" in text
+        or "no permission/trigger/pinning posture change" in text
+        or "no permission" in text
+        or "no permissions" in text
+        or "unchanged" in text
+        or "standing-repo concern" in text
+        or "standing repo concern" in text
+    )
+    return mentions_workflow_trust and says_unchanged_or_out_of_scope
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -1269,6 +1320,8 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         )
         or ("actionlint" in text and "sensor reports ok" in text)
         or ("actionlint" in text and "status=ok" in text)
+        or is_unchanged_workflow_trust_posture_noise(text)
+        or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
             and (
@@ -1295,7 +1348,7 @@ def is_missing_evidence_observation(observation: dict) -> bool:
 
 def is_tool_status_only_gap(text: str) -> bool:
     return (
-        ("sensor `" in text or " sensor " in text)
+        ("sensor `" in text or " sensor " in text or "sensors:" in text)
         and (
             "missing" in text
             or "command not found" in text
@@ -1305,6 +1358,29 @@ def is_tool_status_only_gap(text: str) -> bool:
         and "red/green" not in text
         and "regression test" not in text
         and "changed-line coverage" not in text
+    )
+
+
+def is_pr_body_meta_review_noise(text: str) -> bool:
+    return (
+        "cached prior observation" in text
+        or "refuter demoted inline candidate" in text
+        or "gate proof is pending" in text
+        or "cannot perform from cached context" in text
+        or "commit-existence/ancestry proof" in text
+        or "upstream commit-existence" in text
+        or "general bot output" in text
+        or (
+            "the refutation claiming" in text
+            and "still matches current evidence" in text
+        )
+        or (
+            "pr-body contract hardening" in text
+            and "not verifiable from the repo diff" in text
+        )
+        or ("cache key/uses ref" in text and "40 hex" in text and "non-zero" in text)
+        or ("sha were 39-hex" in text and "all-zero" in text)
+        or "actionlint ran ok" in text
     )
 
 
@@ -3357,8 +3433,75 @@ def run_self_tests() -> None:
             pathlib.Path("review/github-review.json"),
         ),
     )
+    expect_self_test_failure(
+        "standing workflow trust posture prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Confirmed findings\n\n"
+                "- Ub-review action receives secrets.MINIMAX and github.token at runtime; "
+                "a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA "
+                "is correct posture but does not eliminate upstream trust."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    meta_observations = [
+        self_test_observation(
+            "obsgrp-meta-proof",
+            "meta-proof",
+            "Gate proof is pending and commit-existence/ancestry proof is unavailable.",
+            "verification-question",
+        ),
+        self_test_observation(
+            "obsgrp-meta-cache",
+            "meta-cache",
+            "The cached prior observation still matches current evidence.",
+            "bug",
+        ),
+        self_test_observation(
+            "obsgrp-tool-status",
+            "tool-status",
+            "Sensors: zizmor disabled by config.",
+            "missing-evidence",
+        ),
+        self_test_observation(
+            "obsgrp-actionlint",
+            "actionlint-status",
+            "Actionlint ran ok; no reviewer-value change remains.",
+            "missing-evidence",
+        ),
+    ]
+    plan = expected_orchestrator_plan([], meta_observations, [], [])
+    if plan["follow_up_tasks"]:
+        fail("artifact-only meta observations created follow-up tasks in self-test")
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     print("Bun review artifact verifier self-test passed")
+
+
+def self_test_observation(
+    observation_id: str,
+    dedupe_key: str,
+    claim: str,
+    kind: str,
+) -> dict:
+    return {
+        "schema": "ub-review.observation_group.v1",
+        "id": observation_id,
+        "dedupe_key": dedupe_key,
+        "claim": claim,
+        "kind": kind,
+        "status": "open",
+        "severity": "low",
+        "confidence": "medium",
+        "path": None,
+        "line": None,
+        "evidence": [],
+        "lanes": ["self-test"],
+        "sources": ["self-test"],
+        "observation_ids": [f"{observation_id}-raw"],
+        "duplicate_count": 0,
+    }
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
