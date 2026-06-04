@@ -24,6 +24,7 @@ const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
 const STANDARD_MAX_MODEL_CALLS: usize = 14;
 const DEFAULT_REVIEW_PROFILE: &str = "bun-ub-v0";
+const TOKMD_ANALYZE_PRESET: &str = "risk";
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -5034,7 +5035,7 @@ fn build_tokmd_sensor_commands(root: &Path, dir: &Path, plan: &Plan) -> Vec<Sens
         "tokmd".to_owned(),
         "analyze".to_owned(),
         "--preset".to_owned(),
-        "bun-ub".to_owned(),
+        TOKMD_ANALYZE_PRESET.to_owned(),
         "--effort-base-ref".to_owned(),
         plan.base.clone(),
         "--effort-head-ref".to_owned(),
@@ -5048,7 +5049,7 @@ fn build_tokmd_sensor_commands(root: &Path, dir: &Path, plan: &Plan) -> Vec<Sens
         "tokmd".to_owned(),
         "analyze".to_owned(),
         "--preset".to_owned(),
-        "bun-ub".to_owned(),
+        TOKMD_ANALYZE_PRESET.to_owned(),
         "--effort-base-ref".to_owned(),
         plan.base.clone(),
         "--effort-head-ref".to_owned(),
@@ -16836,7 +16837,7 @@ const CORE_REVIEW_TOOLS: [&str; 6] = [
     "ast-grep",
     "actionlint",
 ];
-const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
+const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.11.1";
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)
@@ -18030,12 +18031,12 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(command_texts.iter().any(|command| command.contains(
-            "tokmd analyze --preset bun-ub --effort-base-ref HEAD~1 --effort-head-ref HEAD"
+            "tokmd analyze --preset risk --effort-base-ref HEAD~1 --effort-head-ref HEAD"
         )));
         assert!(
             command_texts
                 .iter()
-                .filter(|command| command.contains("tokmd analyze --preset bun-ub"))
+                .filter(|command| command.contains("tokmd analyze --preset risk"))
                 .all(|command| command.contains("src/lib.rs")),
             "tokmd analyze commands should stay scoped to changed files: {command_texts:?}"
         );
