@@ -3064,6 +3064,9 @@ def require_tool_registry_artifacts(root: pathlib.Path) -> None:
         if expected_status_path not in paths:
             fail(f"tool-status.json {sensor} missing status artifact path")
 
+    if "coverage" in status_by_id:
+        require_coverage_status_artifact(root, status_by_id["coverage"])
+
 
 def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
     tools = artifact.get("tools")
@@ -3088,6 +3091,43 @@ def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
             fail(f"{path} {tool_id} artifact_paths is not a string array")
         by_id[tool_id] = entry
     return by_id
+
+
+def require_coverage_status_artifact(root: pathlib.Path, tool_status: dict) -> None:
+    paths = tool_status.get("artifact_paths", [])
+    if "sensors/coverage/status.json" not in paths:
+        fail("tool-status.json coverage missing status artifact path")
+    status = load_json(root / "sensors/coverage/status.json")
+    if status.get("schema") != "ub-review.coverage_status.v1":
+        fail("sensors/coverage/status.json has wrong schema")
+    if status.get("status") != tool_status.get("status"):
+        fail("coverage status.json status does not match tool-status.json")
+    if status.get("reason") != tool_status.get("reason"):
+        fail("coverage status.json reason does not match tool-status.json")
+    if status.get("execution_surface_only") is not True:
+        fail("coverage status.json must mark execution_surface_only true")
+    if status.get("correctness_claim") is not False:
+        fail("coverage status.json must not claim correctness")
+
+    lcov = status.get("lcov")
+    if not isinstance(lcov, dict):
+        fail("coverage status.json lcov is not an object")
+    if lcov.get("path") != "sensors/coverage/lcov.info":
+        fail("coverage status.json lcov path is invalid")
+    if lcov.get("present") != (root / "sensors/coverage/lcov.info").is_file():
+        fail("coverage status.json lcov present does not match artifact")
+
+    changed_lines = status.get("changed_lines")
+    if not isinstance(changed_lines, dict) or not isinstance(
+        changed_lines.get("status"), str
+    ):
+        fail("coverage status.json changed_lines status is invalid")
+    if changed_lines["status"] not in {"not_collected", "collected", "unknown"}:
+        fail("coverage status.json changed_lines status is unsupported")
+
+    upload = status.get("upload")
+    if not isinstance(upload, dict) or not isinstance(upload.get("status"), str):
+        fail("coverage status.json upload status is invalid")
 
 
 def require_model_receipts(review: dict, metrics: dict, min_ok_model_lanes: int) -> None:
