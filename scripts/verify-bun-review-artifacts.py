@@ -359,6 +359,12 @@ def is_no_finding_workflow_pin_summary_noise(text: str) -> bool:
     mentions_pin = (
         "pinning" in text
         or "sha-pinning" in text
+        or "sha bump" in text
+        or "sha swap" in text
+        or "mechanical sha" in text
+        or "action uses" in text
+        or "uses: ref" in text
+        or "cache key" in text
         or "per-action full-sha" in text
         or "40-hex" in text
         or "all-zero" in text
@@ -367,17 +373,25 @@ def is_no_finding_workflow_pin_summary_noise(text: str) -> bool:
         "no pinning defect introduced" in text
         or "pinning posture preserved" in text
         or "sha-pinning control remains effective" in text
+        or "sha-pinning control is effective" in text
         or "old pin fully absent" in text
         or "pin is 40-hex non-zero" in text
         or "matches expected sha-1 shape" in text
+        or "pin shape valid 40-hex" in text
     )
     says_not_current_diff = (
         "not a diff finding" in text
         or "not a diff-introduced" in text
         or "not introduced by this" in text
         or "identical in posture" in text
+        or "byte-identical" in text
         or "repo-level policy item" in text
         or "unchanged from prior pin" in text
+        or "net new secret/permission surface" in text
+        or "net new secret surface" in text
+        or "no new permission" in text
+        or "no permission, token-scope" in text
+        or "no blocker introduced" in text
     )
     return mentions_pin and (says_no_defect or says_not_current_diff)
 
@@ -3691,6 +3705,20 @@ def run_self_tests() -> None:
                 "SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical "
                 "in posture to the prior pin and is a repo-level policy item, not a "
                 "diff finding."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "mechanical pin no-change prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Confirmed findings\n\n"
+                "- The diff is a 4-line mechanical SHA bump at the three expected "
+                "sites: cache `key`, `restore-keys` prefix, and action `uses:`. "
+                "No permission, trigger, or `with:` block change; net new "
+                "secret/permission surface relative to the prior pin is zero."
             ),
             pathlib.Path("review/github-review.json"),
         ),
