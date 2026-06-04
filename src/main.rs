@@ -1177,9 +1177,17 @@ struct RunLoopMetrics {
     investigation_proof_overlap_ms: u128,
     model_proof_overlap_ms: u128,
     proof_overlap_ms: u128,
+    scheduler_roles: SchedulerRoleTimings,
     streams: RunStreamTimings,
     loops: RunLoopTimings,
     phases: Vec<RunLoopPhase>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SchedulerRoleTimings {
+    evidence: LoopTiming,
+    model: LoopTiming,
+    proof: LoopTiming,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1232,6 +1240,7 @@ struct SchedulerArtifact<'a> {
     scheduler_profile: &'a str,
     local_proof_wall_excludes_model_wait: bool,
     elapsed_wall_ms: u128,
+    scheduler_roles: &'a SchedulerRoleTimings,
     streams: &'a RunStreamTimings,
     loops: &'a RunLoopTimings,
     overlaps: SchedulerOverlapArtifact,
@@ -2190,6 +2199,11 @@ impl RunLoopTracker {
             investigation_proof_overlap_ms,
             model_proof_overlap_ms: investigation_proof_overlap_ms,
             proof_overlap_ms: investigation_proof_overlap_ms,
+            scheduler_roles: SchedulerRoleTimings {
+                evidence: self.evidence.timing(),
+                model: investigation_timing.clone(),
+                proof: proof_timing.clone(),
+            },
             streams: RunStreamTimings {
                 coordination: coordination_timing,
                 investigation: investigation_timing,
@@ -6353,6 +6367,7 @@ fn write_scheduler_artifact(review_dir: &Path, run: &RunLoopMetrics) -> Result<(
         scheduler_profile: &run.scheduler_profile,
         local_proof_wall_excludes_model_wait: run.local_proof_wall_excludes_model_wait,
         elapsed_wall_ms: run.elapsed_wall_ms,
+        scheduler_roles: &run.scheduler_roles,
         streams: &run.streams,
         loops: &run.loops,
         overlaps: SchedulerOverlapArtifact {
@@ -20509,6 +20524,8 @@ index 1111111..2222222 100644
         let metrics = tracker.metrics();
         assert_eq!(metrics.model_wall_ms, 100);
         assert_eq!(metrics.local_proof_wall_ms, 30);
+        assert_eq!(metrics.scheduler_roles.model.wall_ms, 100);
+        assert_eq!(metrics.scheduler_roles.proof.wall_ms, 30);
         assert_eq!(metrics.investigation_proof_overlap_ms, 30);
         assert_eq!(metrics.model_proof_overlap_ms, 30);
         assert_eq!(metrics.proof_overlap_ms, 30);
@@ -25265,6 +25282,23 @@ index 1111111..2222222 100644
             investigation_proof_overlap_ms: 0,
             model_proof_overlap_ms: 0,
             proof_overlap_ms: 0,
+            scheduler_roles: super::SchedulerRoleTimings {
+                evidence: super::LoopTiming {
+                    started_at_offset_ms: 0,
+                    finished_at_offset_ms: 10,
+                    wall_ms: 10,
+                },
+                model: super::LoopTiming {
+                    started_at_offset_ms: 10,
+                    finished_at_offset_ms: 310,
+                    wall_ms: 300,
+                },
+                proof: super::LoopTiming {
+                    started_at_offset_ms: 320,
+                    finished_at_offset_ms: 400,
+                    wall_ms: 80,
+                },
+            },
             streams: super::RunStreamTimings {
                 coordination: super::LoopTiming {
                     started_at_offset_ms: 0,
