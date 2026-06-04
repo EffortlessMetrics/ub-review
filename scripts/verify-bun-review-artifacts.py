@@ -1076,13 +1076,54 @@ def is_global_calibration_refutation(observation: dict) -> bool:
 
 
 def is_pr_body_artifact_only_observation(observation: dict) -> bool:
-    return observation["dedupe_key"].startswith("lane-output-shape") or observation[
-        "dedupe_key"
-    ].startswith("lane-output-malformed-content")
+    text = observation_text(observation)
+    return (
+        observation["status"] == "covered"
+        or observation["kind"] == "resolved-check"
+        or observation["dedupe_key"].startswith("lane-output-shape")
+        or observation["dedupe_key"].startswith("lane-output-malformed-content")
+        or (observation["kind"] == "bug" and "lane model summary" in text)
+        or "inline guard rejected " in text
+        or "severity_allowed=" in text
+        or "confidence_allowed=" in text
+        or (
+            "no permissions" in text
+            and ("no new auth surface" in text or "no new token scope" in text)
+        )
+        or ("supply-chain tightening" in text and "no new scope" in text)
+        or (
+            observation["kind"] == "false-premise"
+            and (
+                "short-prefix" in text
+                or ("cache key" in text and "full 40-hex" in text)
+                or ("supply-chain" in text and "sha pin" in text)
+            )
+        )
+        or (is_missing_evidence_observation(observation) and is_tool_status_only_gap(text))
+    )
+
+
+def observation_text(observation: dict) -> str:
+    return f"{observation['claim']} {' '.join(observation.get('evidence', []))}".lower()
 
 
 def is_missing_evidence_observation(observation: dict) -> bool:
     return observation["kind"] == "missing-evidence"
+
+
+def is_tool_status_only_gap(text: str) -> bool:
+    return (
+        ("sensor `" in text or " sensor " in text)
+        and (
+            "missing" in text
+            or "command not found" in text
+            or "disabled" in text
+        )
+        and "base+tests" not in text
+        and "red/green" not in text
+        and "regression test" not in text
+        and "changed-line coverage" not in text
+    )
 
 
 def is_residual_risk_observation(observation: dict) -> bool:
