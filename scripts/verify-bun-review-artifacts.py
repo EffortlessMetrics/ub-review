@@ -1157,13 +1157,32 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
             "no permissions" in text
             and ("no new auth surface" in text or "no new token scope" in text)
         )
+        or ("no permissions block" in text and "no pull_request_target" in text)
         or ("supply-chain tightening" in text and "no new scope" in text)
+        or (
+            "out-of-hunk" in text
+            and (
+                "cursor" in text
+                or "push-not-synchronize" in text
+                or "pull_request" in text
+            )
+        )
+        or (
+            "full 40-hex" in text
+            and ("prefix collision" in text or "short-prefix" in text)
+        )
+        or ("actionlint" in text and "sensor reports ok" in text)
+        or ("actionlint" in text and "status=ok" in text)
         or (
             observation["kind"] == "false-premise"
             and (
                 "short-prefix" in text
                 or ("cache key" in text and "full 40-hex" in text)
                 or ("supply-chain" in text and "sha pin" in text)
+                or "floating @v0.1" in text
+                or "pinning to a sha" in text
+                or "pinning to immutable commit sha" in text
+                or ("scope change" in text and "supply-chain tightening" in text)
             )
         )
         or (is_missing_evidence_observation(observation) and is_tool_status_only_gap(text))
