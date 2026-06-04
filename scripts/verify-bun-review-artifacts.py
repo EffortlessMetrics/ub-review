@@ -492,7 +492,16 @@ def require_events(root: pathlib.Path) -> None:
         if "payload" not in event:
             fail(f"events.ndjson line {index} missing payload")
         kinds.append(event["kind"])
-    for required in ["run_started", "run_finished"]:
+    for required in [
+        "run_started",
+        "evidence_stream_started",
+        "evidence_stream_completed",
+        "model_stream_started",
+        "model_stream_completed",
+        "proof_stream_started",
+        "proof_stream_completed",
+        "run_finished",
+    ]:
         if required not in kinds:
             fail(f"events.ndjson missing {required}")
 

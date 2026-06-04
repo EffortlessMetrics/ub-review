@@ -240,6 +240,42 @@ def require_scheduler_artifact(root: pathlib.Path, metrics: dict) -> None:
                 fail(f"review/scheduler.json phase {index} {field} is invalid")
 
 
+def require_events(root: pathlib.Path) -> None:
+    events_path = root / "events.ndjson"
+    try:
+        lines = events_path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        fail(f"missing {events_path}")
+    kinds: list[str] = []
+    for index, line in enumerate(lines, start=1):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid events.ndjson line {index}: {error}")
+        if not isinstance(event, dict):
+            fail(f"events.ndjson line {index} is not an object")
+        kind = event.get("kind")
+        if not isinstance(kind, str) or not kind:
+            fail(f"events.ndjson line {index} missing string kind")
+        if "payload" not in event:
+            fail(f"events.ndjson line {index} missing payload")
+        kinds.append(kind)
+    for required in [
+        "run_started",
+        "evidence_stream_started",
+        "evidence_stream_completed",
+        "model_stream_started",
+        "model_stream_completed",
+        "proof_stream_started",
+        "proof_stream_completed",
+        "run_finished",
+    ]:
+        if required not in kinds:
+            fail(f"events.ndjson missing {required}")
+
+
 def require_timing(container: dict, label: str, field: str) -> None:
     timing = container.get(field)
     if not isinstance(timing, dict):
@@ -458,6 +494,7 @@ def main(argv: list[str]) -> int:
     ok_lanes = require_ok_lanes(review.get("model_lanes", []), min_ok_lanes)
     require_metrics(metrics, min_ok_lanes)
     require_scheduler_artifact(root, metrics)
+    require_events(root)
     require_preflight_artifacts(root, preflight)
     for lane in ok_lanes:
         require_ok_lane_artifacts(root, lane)

@@ -2801,6 +2801,18 @@ fn start_run_loop(
     });
     event_log.append(&format!("{loop_id}_loop_started"), payload.clone())?;
     event_log.append(&format!("{stream_id}_stream_started"), payload)?;
+    if let Some(role_stream_id) = scheduler_role_stream_id(loop_id)
+        && role_stream_id != stream_id
+    {
+        let role_payload = serde_json::json!({
+            "loop_id": loop_id,
+            "stream_id": role_stream_id,
+            "legacy_stream_id": stream_id,
+            "stage": stage,
+            "started_at_offset_ms": started_at_offset_ms,
+        });
+        event_log.append(&format!("{role_stream_id}_stream_started"), role_payload)?;
+    }
     Ok(ActiveRunLoop {
         loop_id,
         stream_id,
@@ -2844,6 +2856,21 @@ fn finish_run_loop_phase(
         payload.clone(),
     )?;
     event_log.append(&format!("{}_stream_completed", active.stream_id), payload)?;
+    if let Some(role_stream_id) = scheduler_role_stream_id(active.loop_id)
+        && role_stream_id != active.stream_id
+    {
+        let role_payload = serde_json::json!({
+            "loop_id": active.loop_id,
+            "stream_id": role_stream_id,
+            "legacy_stream_id": active.stream_id,
+            "stage": active.stage,
+            "started_at_offset_ms": active.started_at_offset_ms,
+            "finished_at_offset_ms": finished_at_offset_ms,
+            "duration_ms": duration_ms,
+            "status": status,
+        });
+        event_log.append(&format!("{role_stream_id}_stream_completed"), role_payload)?;
+    }
     Ok(RunLoopPhase {
         loop_id: active.loop_id.to_owned(),
         stream_id: active.stream_id.to_owned(),
@@ -2853,6 +2880,13 @@ fn finish_run_loop_phase(
         finished_at_offset_ms,
         duration_ms,
     })
+}
+
+fn scheduler_role_stream_id(loop_id: &str) -> Option<&str> {
+    match loop_id {
+        "evidence" | "model" | "proof" => Some(loop_id),
+        _ => None,
+    }
 }
 
 fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
