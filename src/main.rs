@@ -5642,8 +5642,22 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
         "no blocking ub finding",
         "no actionable findings",
         "a human should still inspect",
+        "human should still review",
+        "residual risk remains for human review",
+        "bounded review",
         "lane transcript",
+        "lane roster",
+        "model lane roster",
         "raw observations",
+        "provider preflight",
+        "provider status",
+        "sensor status",
+        "shared context hash",
+        "cache manifest",
+        "runtime profile",
+        "review payload status",
+        "terminal state",
+        "github-review-skip",
     ]
     .iter()
     .any(|needle| lower.contains(needle))
@@ -14444,6 +14458,9 @@ fn validate_github_review_payload_with_policy(
         if has_standalone_approval_line(&comment.body) {
             bail!("github review comment contains standalone approval language");
         }
+        if has_forbidden_pr_review_boilerplate(&comment.body) {
+            bail!("github review comment contains artifact-only boilerplate");
+        }
     }
     Ok(())
 }
@@ -19182,6 +19199,50 @@ index 1111111..2222222 100644
             .err()
             .ok_or_else(|| anyhow::anyhow!("execution summary unexpectedly passed"))?;
         assert!(err.to_string().contains("execution summary"), "{err:#}");
+
+        review.body =
+            "## Test proof\n\n- Provider status was ok and the model lane roster completed."
+                .to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("status boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Evidence gaps\n\n- Shared context hash and terminal state are available in artifacts.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("artifact pointer boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn github_review_payload_rejects_inline_comment_boilerplate() -> Result<()> {
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the focused proof.".to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[tests] No actionable findings after checking this path.".to_owned(),
+            }],
+        };
+
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("inline boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string()
+                .contains("comment contains artifact-only boilerplate"),
+            "{err:#}"
+        );
         Ok(())
     }
 
