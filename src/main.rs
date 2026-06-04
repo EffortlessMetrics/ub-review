@@ -14345,7 +14345,10 @@ fn render_pull_request_review_body(
     let observation_items = unique_review_observations(observations);
     let pr_observation_items = observation_items
         .iter()
-        .filter(|observation| !is_pr_body_artifact_only_observation(observation))
+        .filter(|observation| {
+            !is_pr_body_artifact_only_observation(observation)
+                && !is_pr_body_stale_for_current_diff_observation(observation, diff)
+        })
         .collect::<Vec<_>>();
     let refuted_observations = pr_observation_items
         .iter()
@@ -14611,6 +14614,7 @@ fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
 
 fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
     let reason = finding.reason.to_ascii_lowercase();
+    let evidence = finding.evidence.to_ascii_lowercase();
     reason.starts_with("inline guard rejected ")
         || reason.contains("severity_allowed=")
         || reason.contains("confidence_allowed=")
@@ -14618,10 +14622,17 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || reason.contains("body_present=")
         || reason.contains("evidence_present=")
         || reason.contains("repo_relative=")
+        || evidence == "lane model summary"
+        || reason.contains("lane model summary")
         || reason.contains("lane is clean")
         || (reason.contains("no token-scope") && reason.contains("no new"))
+        || (reason.contains("no permissions") && reason.contains("no new auth surface"))
         || (reason.contains("no permissions") && reason.contains("no new attack surface"))
+        || reason.contains("worth a one-line note for future audits")
+        || (reason.contains("supply-chain tightening") && reason.contains("no new scope"))
         || (reason.contains("supply-chain tightening") && reason.contains("not widening"))
+        || (reason.contains("passes core opposition tests")
+            && reason.contains("remaining concerns"))
 }
 
 fn is_pr_body_stale_for_current_diff(finding: &SummaryOnlyFinding, diff: &DiffContext) -> bool {
@@ -14630,6 +14641,20 @@ fn is_pr_body_stale_for_current_diff(finding: &SummaryOnlyFinding, diff: &DiffCo
     }
     let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
     mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch)
+}
+
+fn is_pr_body_stale_for_current_diff_observation(
+    observation: &ObservationGroup,
+    diff: &DiffContext,
+) -> bool {
+    if diff.diff_class != DiffClass::WorkflowTooling {
+        return false;
+    }
+    let text =
+        format!("{} {}", observation.claim, observation.evidence.join(" ")).to_ascii_lowercase();
+    (mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch))
+        || (mentions_pr_trigger_synchronize_scope(&text)
+            && !diff_adds_pr_trigger_scope(&diff.patch))
 }
 
 fn mentions_workflow_tool_cache_path(text: &str) -> bool {
@@ -14647,6 +14672,25 @@ fn diff_adds_workflow_tool_cache_path(patch: &str) -> bool {
         line.starts_with('+')
             && !line.starts_with("+++")
             && (line.contains("~/go/bin/actionlint") || line.contains("~/.cargo/bin/cargo-allow"))
+    })
+}
+
+fn mentions_pr_trigger_synchronize_scope(text: &str) -> bool {
+    text.contains("ready_for_review")
+        && (text.contains("synchronize")
+            || text.contains("pushes to skip")
+            || text.contains("push-not-synchronize")
+            || text.contains("skip re-running"))
+}
+
+fn diff_adds_pr_trigger_scope(patch: &str) -> bool {
+    patch.lines().any(|line| {
+        line.starts_with('+')
+            && !line.starts_with("+++")
+            && (line.contains("pull_request")
+                || line.contains("types:")
+                || line.contains("ready_for_review")
+                || line.contains("synchronize"))
     })
 }
 
@@ -14690,10 +14734,26 @@ fn is_refutation_confirmation_observation(observation: &ObservationGroup) -> boo
 }
 
 fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool {
-    observation.dedupe_key.starts_with("lane-output-shape")
+    let text =
+        format!("{} {}", observation.claim, observation.evidence.join(" ")).to_ascii_lowercase();
+    observation.status == "covered"
+        || observation.kind == "resolved-check"
+        || observation.dedupe_key.starts_with("lane-output-shape")
         || observation
             .dedupe_key
             .starts_with("lane-output-malformed-content")
+        || (observation.kind == "bug" && text.contains("lane model summary"))
+        || text.contains("inline guard rejected ")
+        || text.contains("severity_allowed=")
+        || text.contains("confidence_allowed=")
+        || (text.contains("no permissions")
+            && (text.contains("no new auth surface") || text.contains("no new token scope")))
+        || (text.contains("supply-chain tightening") && text.contains("no new scope"))
+        || (observation.kind == "false-premise"
+            && (text.contains("short-prefix")
+                || (text.contains("cache key") && text.contains("full 40-hex"))
+                || (text.contains("supply-chain") && text.contains("sha pin"))))
+        || (is_missing_evidence_observation(observation) && is_tool_status_only_gap(&text))
 }
 
 fn is_global_calibration_refutation(observation: &ObservationGroup) -> bool {
@@ -14707,6 +14767,17 @@ fn is_global_calibration_refutation(observation: &ObservationGroup) -> bool {
 
 fn is_missing_evidence_observation(observation: &ObservationGroup) -> bool {
     observation.kind == "missing-evidence"
+}
+
+fn is_tool_status_only_gap(text: &str) -> bool {
+    (text.contains("sensor `") || text.contains(" sensor "))
+        && (text.contains("missing")
+            || text.contains("command not found")
+            || text.contains("disabled"))
+        && !text.contains("base+tests")
+        && !text.contains("red/green")
+        && !text.contains("regression test")
+        && !text.contains("changed-line coverage")
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -22920,6 +22991,106 @@ UB_REVIEW_HTTP_STATUS:429
         );
 
         assert!(body.contains("actionlint"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_workflow_status_residue_artifact_only() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![".github/workflows/ub-review-packet.yml".to_owned()];
+        diff.patch = concat!(
+            "+          key: ub-review-gh-runner-v2-4dfbd9d7caeff4f506984c63cc36f248233206e6-${{ runner.os }}-rust-1.95-core\n",
+            "+            ub-review-gh-runner-v2-4dfbd9d7caeff4f506984c63cc36f248233206e6-${{ runner.os }}-rust-1.95-\n",
+            "+        uses: EffortlessMetrics/ub-review@4dfbd9d7caeff4f506984c63cc36f248233206e6\n",
+        )
+        .to_owned();
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "workflow-permissions lane: no permissions, pull_request_target, token-scope, or fork-vector change in this diff. No new auth surface. actionlint ok in this packet.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "Pin of EffortlessMetrics/ub-review to a specific commit SHA is supply-chain tightening and inherits that repo's default GITHUB_TOKEN scope; no new scope is requested in the workflow itself. Worth a one-line note for future audits that third-party action token scope is not visible here.".to_owned(),
+                evidence: "uses: EffortlessMetrics/ub-review@4dfbd9d7caeff4f506984c63cc36f248233206e6 with preset/profile inputs only; no permissions: override.".to_owned(),
+            },
+        ];
+        let mut tokmd_gap = test_observation(
+            "sensor-tokmd",
+            "Sensor `tokmd` evidence is `missing`: command not found",
+            "missing-evidence",
+            "open",
+            "low",
+            "high",
+            "sensor-tokmd-missing",
+        );
+        tokmd_gap.evidence = vec!["command not found".to_owned()];
+        let observations = vec![
+            test_observation(
+                "workflow-permissions",
+                "workflow-permissions lane: no permissions, pull_request_target, token-scope, or fork-vector change in this diff. No new auth surface. actionlint ok in this packet.",
+                "bug",
+                "open",
+                "low",
+                "medium",
+                "bug:workflow-permissions",
+            ),
+            test_observation(
+                "orchestrator-follow-up",
+                "`pull_request` types limited to `opened` and `ready_for_review` cause pushes to skip re-running the UB packet.",
+                "bug",
+                "open",
+                "medium",
+                "medium",
+                "follow-up-trigger-scope",
+            ),
+            test_observation(
+                "workflow-proof",
+                "actionlint install step absent from the changed hunk: a future runner without preinstalled ~/go/bin/actionlint would cache-restore an empty path.",
+                "bug",
+                "open",
+                "medium",
+                "medium",
+                "workflow-tool-cache-path",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "v2-4dfbd9d7 cache key will collide on a future re-pin sharing the same prefix; refuted because the current diff uses the full 40-hex SHA in both key and restore-keys.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "sha-prefix-refuted",
+            ),
+            tokmd_gap,
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &observations,
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Needs reviewer attention"));
+        assert!(!body.contains("Confirmed findings"));
+        assert!(!body.contains("workflow-permissions lane"));
+        assert!(!body.contains("ready_for_review"));
+        assert!(!body.contains("actionlint install step"));
+        assert!(!body.contains("tokmd"));
     }
 
     #[test]
