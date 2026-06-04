@@ -822,6 +822,7 @@ enum ToolClass {
 enum Trigger {
     Always,
     SourceChanged,
+    SourceExceptionChanged,
     RustBehaviorOrTestsChanged,
     UnsafeOrNativeRiskChanged,
     WorkflowChanged,
@@ -3572,6 +3573,7 @@ fn trigger_description(trigger: Trigger) -> &'static str {
     match trigger {
         Trigger::Always => "every review run",
         Trigger::SourceChanged => "source file changed",
+        Trigger::SourceExceptionChanged => "source-tree exception surface changed",
         Trigger::RustBehaviorOrTestsChanged => "Rust behavior or tests changed",
         Trigger::UnsafeOrNativeRiskChanged => "unsafe/native-risk surface changed",
         Trigger::WorkflowChanged => "workflow or action file changed",
@@ -4144,6 +4146,14 @@ fn trigger_match(trigger: Trigger, flags: &DiffFlags) -> Option<String> {
     match trigger {
         Trigger::Always => Some("always-on base packet".to_owned()),
         Trigger::SourceChanged if flags.source_changed => Some("source file changed".to_owned()),
+        Trigger::SourceExceptionChanged
+            if flags.source_changed
+                || flags.workflow_changed
+                || flags.shell_changed
+                || flags.dependency_changed =>
+        {
+            Some("source-tree exception surface changed".to_owned())
+        }
         Trigger::RustBehaviorOrTestsChanged if flags.rust_changed || flags.rust_tests_changed => {
             Some("Rust behavior or tests changed".to_owned())
         }
@@ -4201,17 +4211,18 @@ fn guard_ok(profile: &Profile, box_state: &BoxState, notes: &mut Vec<String>) ->
 fn sensor_order(id: &str) -> u8 {
     match id {
         "tokmd" => 0,
-        "ripr" => 1,
-        "unsafe-review" => 2,
-        "ast-grep" => 3,
-        "semgrep" => 4,
-        "actionlint" => 5,
-        "zizmor" => 6,
-        "gitleaks" => 7,
-        "osv-scanner" => 8,
-        "cargo-audit" => 9,
-        "cargo-deny" => 10,
-        "coverage" => 11,
+        "cargo-allow" => 1,
+        "ripr" => 2,
+        "unsafe-review" => 3,
+        "ast-grep" => 4,
+        "semgrep" => 5,
+        "actionlint" => 6,
+        "zizmor" => 7,
+        "gitleaks" => 8,
+        "osv-scanner" => 9,
+        "cargo-audit" => 10,
+        "cargo-deny" => 11,
+        "coverage" => 12,
         _ => 50,
     }
 }
@@ -4607,6 +4618,18 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--base".to_owned(),
             plan.base.clone(),
         ],
+        "cargo-allow" => vec![
+            "cargo-allow".to_owned(),
+            "check".to_owned(),
+            "--mode".to_owned(),
+            "no-new".to_owned(),
+            "--format".to_owned(),
+            "markdown".to_owned(),
+            "--receipt".to_owned(),
+            dir.join("cargo-allow.receipt.json").display().to_string(),
+            "--output".to_owned(),
+            dir.join("cargo-allow.md").display().to_string(),
+        ],
         "ast-grep" => {
             let config = root.join("tools/ub-rules/sgconfig.yml");
             if config.exists() {
@@ -4942,6 +4965,10 @@ fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "cockpit.md".to_owned(),
             "cockpit.json".to_owned(),
             "context.md".to_owned(),
+        ]),
+        "cargo-allow" => outputs.extend([
+            "cargo-allow.md".to_owned(),
+            "cargo-allow.receipt.json".to_owned(),
         ]),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
         "coverage" => outputs.push("lcov.info".to_owned()),
@@ -14989,6 +15016,7 @@ fn optional_str_cell(value: Option<&str>) -> String {
 fn evidence_label(sensor_id: &str) -> &'static str {
     match sensor_id {
         "tokmd" => "deterministic repository/diff packet",
+        "cargo-allow" => "source-tree exception ledger",
         "ripr" => "Rust test-oracle packet",
         "unsafe-review" => "unsafe/native reviewability packet",
         "ast-grep" => "structural route scan",
@@ -15043,7 +15071,14 @@ fn has_standalone_approval_line(text: &str) -> bool {
     })
 }
 
-const CORE_REVIEW_TOOLS: [&str; 5] = ["tokmd", "ripr", "unsafe-review", "ast-grep", "actionlint"];
+const CORE_REVIEW_TOOLS: [&str; 6] = [
+    "tokmd",
+    "cargo-allow",
+    "ripr",
+    "unsafe-review",
+    "ast-grep",
+    "actionlint",
+];
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)
@@ -15257,6 +15292,17 @@ fn builtin_tools() -> Vec<ToolPolicy> {
             Trigger::Always,
             180,
             128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-allow",
+            "cargo-allow",
+            ToolClass::Static,
+            2,
+            Trigger::SourceExceptionChanged,
+            120,
+            64,
             false,
             true,
         ),
@@ -15986,6 +16032,53 @@ mod tests {
             .get("ripr")
             .ok_or_else(|| anyhow::anyhow!("ripr tool policy missing"))?;
         assert!(ripr.enabled);
+        let cargo_allow = config
+            .tools
+            .get("cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("cargo-allow tool policy missing"))?;
+        assert!(cargo_allow.enabled);
+        assert_eq!(cargo_allow.default, Trigger::SourceExceptionChanged);
+        Ok(())
+    }
+
+    #[test]
+    fn cargo_allow_sensor_command_writes_exception_receipts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let out = root.join("out");
+        let plan = test_plan(vec![sensor_plan("cargo-allow", "cargo-allow", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("cargo-allow sensor missing"))?;
+        let dir = out.join("sensors/cargo-allow");
+        let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "cargo-allow".to_owned(),
+                "check".to_owned(),
+                "--mode".to_owned(),
+                "no-new".to_owned(),
+                "--format".to_owned(),
+                "markdown".to_owned(),
+                "--receipt".to_owned(),
+                dir.join("cargo-allow.receipt.json").display().to_string(),
+                "--output".to_owned(),
+                dir.join("cargo-allow.md").display().to_string(),
+            ]
+        );
+        assert_eq!(
+            super::sensor_outputs(sensor),
+            vec![
+                "stdout.txt".to_owned(),
+                "stderr.txt".to_owned(),
+                "cargo-allow.md".to_owned(),
+                "cargo-allow.receipt.json".to_owned(),
+            ]
+        );
         Ok(())
     }
 

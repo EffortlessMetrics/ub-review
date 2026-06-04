@@ -32,6 +32,15 @@ timeout_sec = 300
 artifact_budget_mb = 192
 requires_lease = false
 
+[tools.cargo-allow]
+enabled = true
+class = "static"
+default = "source-exception-changed"
+weight = 2
+timeout_sec = 120
+artifact_budget_mb = 64
+requires_lease = false
+
 [tools.ripr]
 enabled = true
 class = "static"

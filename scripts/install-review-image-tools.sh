@@ -33,6 +33,7 @@ install_go_tool() {
 mkdir -p "$prefix/bin"
 
 install_tool tokmd tokmd "${UB_REVIEW_TOKMD_VERSION:-1.11.1}"
+install_tool cargo-allow cargo-allow
 install_tool ripr ripr
 install_tool unsafe-review unsafe-review
 install_tool ast-grep ast-grep
