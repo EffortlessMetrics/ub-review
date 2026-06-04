@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
+import io
 import json
 import pathlib
 import re
 import sys
-from typing import Any
+from typing import Any, Callable
 
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
@@ -88,6 +90,26 @@ SAFE_SECRET_VALUE_WORDS = {
 def fail(message: str) -> None:
     print(f"verify-bun-review-artifacts: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def expect_self_test_failure(
+    label: str, expected_message: str, callback: Callable[[], None]
+) -> None:
+    stderr = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(stderr):
+            callback()
+    except SystemExit as error:
+        if error.code != 1:
+            fail(f"self-test {label} exited with unexpected code {error.code!r}")
+        message = stderr.getvalue()
+        if expected_message not in message:
+            fail(
+                f"self-test {label} failed for the wrong reason: "
+                f"expected {expected_message!r}, got {message!r}"
+            )
+        return
+    fail(f"self-test {label} unexpectedly passed")
 
 
 def read_text(path: pathlib.Path) -> str:
@@ -714,6 +736,9 @@ def require_github_comment(comment: dict, index: int) -> None:
     if len(body) > 1_200:
         fail(f"github review comment {index} body exceeds 1200 characters")
     no_standalone_approval_line(body, pathlib.Path("review/github-review.json"))
+    require_pr_review_body_policy(
+        body, pathlib.Path(f"review/github-review.json comments[{index}].body")
+    )
 
 
 def require_metrics(root: pathlib.Path, review: dict) -> dict:
@@ -3231,17 +3256,54 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
             fail(f"secret marker {marker!r} found in {path}")
 
 
+def run_self_tests() -> None:
+    require_github_comment(
+        {
+            "path": "src/lib.rs",
+            "side": "RIGHT",
+            "line": 12,
+            "body": (
+                "[tests-oracle] Added no-finalizer FFI test passes on HEAD "
+                "and fails on base+tests."
+            ),
+        },
+        0,
+    )
+    expect_self_test_failure(
+        "inline comment boilerplate",
+        "artifact-only boilerplate",
+        lambda: require_github_comment(
+            {
+                "path": "src/lib.rs",
+                "side": "RIGHT",
+                "line": 12,
+                "body": (
+                    "[tests-oracle] No blocking finding after bounded review; "
+                    "residual risk remains for human review."
+                ),
+            },
+            1,
+        ),
+    )
+    print("Bun review artifact verifier self-test passed")
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("root", nargs="?", default="target/ub-review")
     parser.add_argument("--min-ok-model-lanes", type=int, default=0)
     parser.add_argument("--max-inline-comments", type=int)
     parser.add_argument("--require-no-model-evidence-failures", action="store_true")
+    parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv[1:])
 
 
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
+    if args.self_test:
+        run_self_tests()
+        return 0
+
     root = pathlib.Path(args.root)
     if not root.is_dir():
         fail(f"artifact root is not a directory: {root}")
