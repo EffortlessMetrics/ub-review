@@ -57,6 +57,7 @@ stronger claim is backed by the matching tool receipt.
 Coverage receipts should identify:
 
 - command, tool version, and feature set;
+- local sensor status in `sensors/coverage/status.json`;
 - output artifact path, such as `lcov.info` or Codecov report URL;
 - upload mode and whether the upload was informational or required;
 - skipped and unknown states separately from pass and fail.
