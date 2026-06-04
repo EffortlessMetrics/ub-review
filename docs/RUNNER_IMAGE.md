@@ -35,10 +35,13 @@ Set the image environment:
 
 ```bash
 export PATH="/opt/ub-review/bin:$PATH"
-export UB_REVIEW_TOOL_DIR="/opt/ub-review/bin"
+export UB_REVIEW_TOOL_DIR="/opt/ub-review"
 export UB_REVIEW_CACHE_DIR="/var/cache/ub-review"
 export UB_REVIEW_STANDARD_IMAGE="true"
 ```
+
+`UB_REVIEW_TOOL_DIR` is the install prefix. Put its `bin` directory on `PATH`;
+do not set `UB_REVIEW_TOOL_DIR` to the `bin` directory itself.
 
 `UB_REVIEW_STANDARD_IMAGE=true` makes `ub-review doctor` fail if any core
 sensor is missing. On generic GitHub-hosted runners, missing tools remain
