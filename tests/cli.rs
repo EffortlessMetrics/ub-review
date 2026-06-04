@@ -915,7 +915,29 @@ path = "src/lib.rs"
     run(&repo, "git", &["commit", "-m", "change value"])?;
 
     let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let config = temp.path().join("ub-review.toml");
+    write_file(
+        &config,
+        r#"review_profile = "bun-ub-v0"
+profile = "gh-runner"
+
+[repo]
+kind = "rust"
+ledger = ""
+base = "HEAD~1"
+head = "HEAD"
+
+[[proof.required]]
+id = "cargo-check"
+languages = ["rust"]
+diff_classes = ["source-general"]
+command = "cargo check --workspace --locked"
+reason = "Required Rust workspace check for intelligent CI."
+cost = "focused-build"
+timeout_sec = 300
+required = true
+"#,
+    )?;
     let bin = env!("CARGO_BIN_EXE_ub-review");
     run(
         temp.path(),
@@ -951,6 +973,78 @@ path = "src/lib.rs"
     assert_eq!(metrics["mode"], "intelligent-ci");
     assert_eq!(review["run_pass"], "ready_for_review");
     assert_eq!(metrics["run_pass"], "ready_for_review");
+    let proof_requests_json: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    let proof_requests = proof_requests_json
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("proof_requests artifact is not an array"))?;
+    assert_eq!(proof_requests.len(), 1);
+    let request = &proof_requests[0];
+    assert_eq!(request["lane"], "intelligent-ci-policy");
+    assert_eq!(request["command"], "cargo check --workspace --locked");
+    assert_eq!(request["status"], "requested");
+    assert_eq!(request["cost"], "focused-build");
+    assert_eq!(request["required"], true);
+    let requested_by = request["requested_by"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("request requested_by is not an array"))?;
+    assert!(
+        requested_by
+            .iter()
+            .any(|value| value.as_str() == Some("proof-policy:cargo-check")),
+        "policy requester missing from proof request"
+    );
+    let request_id = request["id"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("request id missing"))?;
+
+    let proof_receipts: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    let receipt = proof_receipts
+        .as_array()
+        .and_then(|receipts| {
+            receipts.iter().find(|receipt| {
+                receipt["request_ids"]
+                    .as_array()
+                    .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+            })
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing proof receipt for policy request"))?;
+    assert_eq!(receipt["kind"], "focused-build");
+    assert_eq!(receipt["result"], "skipped_profile");
+
+    let resource_leases: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+    let lease = resource_leases
+        .as_array()
+        .and_then(|leases| {
+            leases.iter().find(|lease| {
+                lease["kind"] == "focused-build"
+                    && lease["status"] == "skipped_profile"
+                    && lease["command"]
+                        .as_str()
+                        .is_some_and(|command| command.contains("cargo check --workspace --locked"))
+            })
+        })
+        .ok_or_else(|| anyhow::anyhow!("missing skipped focused-build lease"))?;
+    assert!(
+        lease["consumer"]
+            .as_str()
+            .is_some_and(|consumer| consumer.starts_with("proof-build-"))
+    );
+
+    let resolved_plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-plan.json"))?)?;
+    assert_eq!(
+        resolved_plan["proof_policy"]["matched_required"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        resolved_plan["proof_policy"]["matched_required"][0]["id"],
+        "cargo-check"
+    );
     Ok(())
 }
 

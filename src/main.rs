@@ -662,6 +662,7 @@ struct Config {
     repo: RepoConfig,
     review: ReviewConfig,
     review_body: ReviewBodyPolicy,
+    proof: ProofPolicyConfig,
     profiles: BTreeMap<String, Profile>,
     tools: BTreeMap<String, ToolPolicy>,
     lanes: Vec<LanePlan>,
@@ -685,6 +686,26 @@ struct ReviewConfig {
     require_zero_finding_audit: bool,
     enable_default_lanes: bool,
     github_summary: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ProofPolicyConfig {
+    required: Vec<RequiredProofPolicy>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+struct RequiredProofPolicy {
+    id: String,
+    languages: Vec<String>,
+    diff_classes: Vec<String>,
+    command: String,
+    reason: String,
+    cost: Option<String>,
+    timeout_sec: u64,
+    required: bool,
+    enabled: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2540,6 +2561,7 @@ impl Default for Config {
             repo: RepoConfig::default(),
             review: ReviewConfig::default(),
             review_body: ReviewBodyPolicy::default(),
+            proof: ProofPolicyConfig::default(),
             profiles,
             tools,
             lanes: Vec::new(),
@@ -2578,6 +2600,22 @@ impl Default for ReviewBodyPolicy {
             include_provider_table: ReviewBodyTablePolicy::OnFailure,
             include_sensor_table: ReviewBodyTablePolicy::OnFailure,
             include_execution_summary: ReviewBodyExecutionSummaryPolicy::None,
+        }
+    }
+}
+
+impl Default for RequiredProofPolicy {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            languages: Vec::new(),
+            diff_classes: Vec::new(),
+            command: String::new(),
+            reason: String::new(),
+            cost: None,
+            timeout_sec: 300,
+            required: true,
+            enabled: true,
         }
     }
 }
@@ -3665,6 +3703,7 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
         "repo": &config.repo,
         "review": &config.review,
         "review_body": &config.review_body,
+        "proof": &config.proof,
         "review_profile": {
             "name": &config.review_profile,
             "repo_kind": &config.repo.kind,
@@ -3857,13 +3896,15 @@ fn resolved_plan_artifact(
     let run_pass = run_args
         .map(|args| resolved_run_pass(args.run_pass).key())
         .unwrap_or("plan-default");
+    let language_mix = classify_language_mix(&diff.changed_files);
     serde_json::json!({
         "schema": "ub-review.resolved_plan.v1",
         "base": &plan.base,
         "head": &plan.head,
         "run_pass": run_pass,
         "diff_class": diff.diff_class.key(),
-        "language_mix": classify_language_mix(&diff.changed_files),
+        "language_mix": &language_mix,
+        "proof_policy": resolved_proof_policy_artifact(config, diff, &language_mix),
         "review_profile": &config.review_profile,
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
@@ -3878,6 +3919,65 @@ fn resolved_plan_artifact(
         "lanes": &plan.lanes,
         "notes": &plan.notes,
     })
+}
+
+fn resolved_proof_policy_artifact(
+    config: &Config,
+    diff: &DiffContext,
+    language_mix: &LanguageMix,
+) -> serde_json::Value {
+    let matched_required = config
+        .proof
+        .required
+        .iter()
+        .filter(|policy| required_proof_policy_matches_diff(policy, diff, language_mix))
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "schema": "ub-review.proof_policy_resolution.v1",
+        "required": &config.proof.required,
+        "matched_required": matched_required,
+    })
+}
+
+fn required_proof_policy_matches_diff(
+    policy: &RequiredProofPolicy,
+    diff: &DiffContext,
+    language_mix: &LanguageMix,
+) -> bool {
+    policy.enabled
+        && proof_policy_language_matches(&policy.languages, language_mix)
+        && proof_policy_diff_class_matches(&policy.diff_classes, diff.diff_class.key())
+}
+
+fn proof_policy_language_matches(languages: &[String], language_mix: &LanguageMix) -> bool {
+    if languages.is_empty() {
+        return true;
+    }
+    languages.iter().any(|language| {
+        let language = normalize_policy_selector(language);
+        matches!(language.as_str(), "*" | "any" | "all")
+            || (language == "mixed" && language_mix.mixed_language)
+            || language_mix
+                .languages
+                .iter()
+                .any(|candidate| candidate == &language)
+            || language_mix.primary_language.as_deref() == Some(language.as_str())
+    })
+}
+
+fn proof_policy_diff_class_matches(diff_classes: &[String], diff_class: &str) -> bool {
+    if diff_classes.is_empty() {
+        return true;
+    }
+    let diff_class = normalize_policy_selector(diff_class);
+    diff_classes.iter().any(|candidate| {
+        let candidate = normalize_policy_selector(candidate);
+        matches!(candidate.as_str(), "*" | "any" | "all") || candidate == diff_class
+    })
+}
+
+fn normalize_policy_selector(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace('_', "-")
 }
 
 fn resolved_selector_artifact(
@@ -5577,6 +5677,7 @@ fn write_review_artifacts(
     let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
     let profile = config.selected_profile()?;
+    append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
 
     let mut proof_result = ProofBrokerResult::default();
     if matches!(args.model_mode, ModelMode::Auto) {
@@ -14261,16 +14362,44 @@ fn validate_proof_request(
     request: ModelProofRequest,
     index: usize,
 ) -> ProofRequest {
-    let command = request.command.trim().replace(['\r', '\n'], " ");
-    let reason = non_empty_or(request.reason.trim(), "model proof request missing reason");
+    build_proof_request(
+        &lane.id,
+        vec![lane.id.clone()],
+        &request.command,
+        &request.reason,
+        "model proof request missing reason",
+        request.cost.as_deref(),
+        request.timeout_sec,
+        request.required.unwrap_or(false),
+        index,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "proof requests normalize the same fields regardless of source"
+)]
+fn build_proof_request(
+    lane: &str,
+    requested_by: Vec<String>,
+    command: &str,
+    reason: &str,
+    missing_reason_fallback: &str,
+    cost: Option<&str>,
+    timeout_sec: Option<u64>,
+    required: bool,
+    index: usize,
+) -> ProofRequest {
+    let command = command.trim().replace(['\r', '\n'], " ");
+    let reason = non_empty_or(reason.trim(), missing_reason_fallback);
     let command = non_empty_or(&command, "<missing command>");
-    let cost = classify_proof_cost(request.cost.as_deref(), &command);
+    let cost = classify_proof_cost(cost, &command);
     let status = proof_request_status(&command, &cost);
-    let timeout_sec = request.timeout_sec.unwrap_or(300).clamp(1, 900);
+    let timeout_sec = timeout_sec.unwrap_or(300).clamp(1, 900);
     let fingerprint = sha256_hex(
         format!(
             "{}\n{}\n{}\n{}\n{}",
-            lane.id, command, reason, cost, timeout_sec
+            lane, command, reason, cost, timeout_sec
         )
         .as_bytes(),
     );
@@ -14278,14 +14407,71 @@ fn validate_proof_request(
     ProofRequest {
         schema: "ub-review.proof_request.v1".to_owned(),
         id: format!("proof-{index:04}-{short}"),
-        lane: lane.id.clone(),
-        requested_by: vec![lane.id.clone()],
+        lane: lane.to_owned(),
+        requested_by,
         command,
         reason,
         cost,
         timeout_sec,
-        required: request.required.unwrap_or(false),
+        required,
         status: status.to_owned(),
+    }
+}
+
+fn configured_required_proof_requests(
+    config: &Config,
+    diff: &DiffContext,
+    args: &RunArgs,
+    start_index: usize,
+) -> Vec<ProofRequest> {
+    if args.mode != RunMode::IntelligentCi {
+        return Vec::new();
+    }
+    let language_mix = classify_language_mix(&diff.changed_files);
+    config
+        .proof
+        .required
+        .iter()
+        .filter(|policy| required_proof_policy_matches_diff(policy, diff, &language_mix))
+        .enumerate()
+        .map(|(offset, policy)| {
+            let index = start_index + offset;
+            let policy_label = proof_policy_requester(policy, offset);
+            build_proof_request(
+                "intelligent-ci-policy",
+                vec!["intelligent-ci-policy".to_owned(), policy_label],
+                &policy.command,
+                &policy.reason,
+                "configured proof policy missing reason",
+                policy.cost.as_deref(),
+                Some(policy.timeout_sec),
+                policy.required,
+                index,
+            )
+        })
+        .collect()
+}
+
+fn append_configured_required_proof_requests(
+    config: &Config,
+    diff: &DiffContext,
+    args: &RunArgs,
+    proof_requests: &mut Vec<ProofRequest>,
+) {
+    proof_requests.extend(configured_required_proof_requests(
+        config,
+        diff,
+        args,
+        proof_requests.len(),
+    ));
+}
+
+fn proof_policy_requester(policy: &RequiredProofPolicy, index: usize) -> String {
+    let id = policy.id.trim();
+    if id.is_empty() {
+        format!("proof-policy:required-{index}")
+    } else {
+        format!("proof-policy:{id}")
     }
 }
 
@@ -20983,6 +21169,88 @@ index 1111111..2222222 100644
         assert_eq!(build_tasks[0].requested_by, vec!["tests-oracle".to_owned()]);
         assert_eq!(build_tasks[0].request_ids, vec![requests[6].id.clone()]);
         Ok(())
+    }
+
+    #[test]
+    fn intelligent_ci_synthesizes_matching_required_proof_requests() {
+        let mut config = Config::default();
+        config.proof.required = vec![
+            super::RequiredProofPolicy {
+                id: "cargo-check".to_owned(),
+                languages: vec!["rust".to_owned()],
+                diff_classes: vec!["source-ub".to_owned()],
+                command: "cargo check --workspace --locked".to_owned(),
+                reason: "Required Rust workspace check for intelligent CI.".to_owned(),
+                cost: Some("focused-build".to_owned()),
+                timeout_sec: 300,
+                required: true,
+                enabled: true,
+            },
+            super::RequiredProofPolicy {
+                id: "workflow-lint".to_owned(),
+                languages: vec!["yaml".to_owned()],
+                diff_classes: vec!["workflow/tooling".to_owned()],
+                command: "actionlint".to_owned(),
+                reason: "Only workflow diffs should request actionlint.".to_owned(),
+                cost: Some("focused-build".to_owned()),
+                timeout_sec: 120,
+                required: true,
+                enabled: true,
+            },
+        ];
+        let diff = test_diff();
+        let mut args = test_run_args(PathBuf::from("out"));
+        args.mode = RunMode::IntelligentCi;
+
+        let requests = super::configured_required_proof_requests(&config, &diff, &args, 0);
+
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].lane, "intelligent-ci-policy");
+        assert_eq!(
+            requests[0].requested_by,
+            vec![
+                "intelligent-ci-policy".to_owned(),
+                "proof-policy:cargo-check".to_owned()
+            ]
+        );
+        assert_eq!(requests[0].command, "cargo check --workspace --locked");
+        assert_eq!(
+            requests[0].reason,
+            "Required Rust workspace check for intelligent CI."
+        );
+        assert_eq!(requests[0].cost, "focused-build");
+        assert_eq!(requests[0].status, "requested");
+        assert!(requests[0].required);
+
+        let language_mix = super::classify_language_mix(&diff.changed_files);
+        let proof_policy = super::resolved_proof_policy_artifact(&config, &diff, &language_mix);
+        assert_eq!(
+            proof_policy["matched_required"].as_array().map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(proof_policy["matched_required"][0]["id"], "cargo-check");
+    }
+
+    #[test]
+    fn review_byok_does_not_synthesize_required_proof_requests() {
+        let mut config = Config::default();
+        config.proof.required = vec![super::RequiredProofPolicy {
+            id: "cargo-check".to_owned(),
+            languages: vec!["rust".to_owned()],
+            diff_classes: vec!["source-ub".to_owned()],
+            command: "cargo check --workspace --locked".to_owned(),
+            reason: "Required Rust workspace check for intelligent CI.".to_owned(),
+            cost: Some("focused-build".to_owned()),
+            timeout_sec: 300,
+            required: true,
+            enabled: true,
+        }];
+        let diff = test_diff();
+        let args = test_run_args(PathBuf::from("out"));
+
+        let requests = super::configured_required_proof_requests(&config, &diff, &args, 0);
+
+        assert!(requests.is_empty());
     }
 
     #[test]
