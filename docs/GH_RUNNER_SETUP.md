@@ -4,7 +4,7 @@
 repositories.
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@main
+- uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
   with:
     preset: bun-ub
     profile: gh-runner
@@ -12,13 +12,13 @@ repositories.
     model-timeout-sec: '300'
 ```
 
-Use `@main` for the first live Bun fork verification. After that run proves the
-review and artifact path, tag `v0` in this repository and switch the Bun
-workflow to `EffortlessMetrics/ub-review@v0`. Tagged action refs use
-`install-mode: auto` to try the Linux x64 release asset
-`ub-review-x86_64-unknown-linux-gnu.tar.gz` first, then fall back to a source
-build when the asset is not available. Pushing a `v*` tag in this repository
-builds and publishes that archive plus its `.sha256` receipt.
+Use a full commit SHA for the Bun gate. The current known-good pin is
+`0b938918eb20d38d383dba4d588b0a97bc4591f4`, validated by
+`EffortlessSteven/bun#44`. Tagged action refs use `install-mode: auto` to try
+the Linux x64 release asset `ub-review-x86_64-unknown-linux-gnu.tar.gz` first,
+then fall back to a source build when the asset is not available. Pushing a
+`v*` tag in this repository builds and publishes that archive plus its `.sha256`
+receipt.
 
 For Bun review posting, the consuming workflow should set:
 

@@ -18,6 +18,21 @@ remaining product/tool work back to the correct lanes.
 - PR #162: proof-planner artifacts before proof execution:
   `review/proof_planner_input.json`, `review/proof_planner_output.json`, and
   root `proof_tasks.ndjson`.
+- PR #198: standard runner image docs now treat `UB_REVIEW_TOOL_DIR` as an
+  install prefix and put `$UB_REVIEW_TOOL_DIR/bin` on `PATH`.
+- PR #199: Bun artifact verification requires and cross-checks
+  `resolved-tools.json` and `tool-status.json` at the root and under `review/`.
+- PR #200: `cargo xtask precommit` clears `target/precommit` before writing new
+  receipts and uses workspace-wide `cargo fmt --all -- --check`.
+- PR #201: coverage sensor runs write `sensors/coverage/status.json`, and the
+  verifier checks the coverage status receipt.
+- PR #203: standard-image `doctor --require-core-tools` fails when `tokmd`
+  drifts from the pinned `1.12.0` version.
+- PR #204: Bun artifact verifier rejects inline review boilerplate and CI runs
+  the verifier self-test.
+- Bun PR #44: the Bun gate is pinned to
+  `EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4` with
+  a successful `UB evidence packet / gh-runner` run.
 
 ## Adoption checklist
 
@@ -37,6 +52,8 @@ For a serious Rust repo, copy the baseline in this order:
    the PR review; logs, lane rosters, status tables, and raw output in artifacts.
 7. Wire CI so draft and ready-for-review passes get the configured proof lease;
    do not spend a full runner on every synchronize event unless the repo opts in.
+8. Pin consuming workflows to a verified commit SHA. Move the pin only after
+   local verifier checks and a consumer packet smoke succeed.
 
 ## Review gate defaults
 
@@ -46,6 +63,8 @@ Use these defaults unless a repo opts into stricter behavior:
   Clippy on changed lines, and relevant static receipts;
 - missing `cargo-allow`, `ripr`, `unsafe-review`, `actionlint`, or `ast-grep`
   is missing evidence, not a clean result;
+- on standard runner images, missing core tools or a stale `tokmd` pin are
+  image drift and should fail `doctor`;
 - `cargo-allow` owns source-tree exceptions;
 - `ripr` owns static mutation-exposure signal;
 - `unsafe-review` owns unsafe/native reviewability;
@@ -93,6 +112,7 @@ record exactly which checks were skipped and why.
 - Do not turn missing evidence into a pass.
 - Do not post setup tables, lane rosters, command logs, or generic
   no-finding prose in PR review bodies.
+- Do not let inline comments carry the boilerplate banned from PR bodies.
 - Do not reimplement external tool internals in `xtask` or `ub-review`.
 - Do not treat model provider wait as local CPU proof work, and do not exceed
   the runtime hard timeout.

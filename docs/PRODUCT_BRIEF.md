@@ -172,7 +172,8 @@ product proof.
 
 ## Proof obligations
 
-1. Keep PR review bodies free of boilerplate in clean and degraded runs.
+1. Keep PR review bodies and inline comments free of boilerplate in clean and
+   degraded runs.
 2. Expand proof-broker and resource-broker coverage from focused v0 proof to
    risk-routed runtime backstops.
 3. Keep runner images aligned with the documented sensor stack.

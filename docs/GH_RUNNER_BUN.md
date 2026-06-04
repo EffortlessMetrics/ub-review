@@ -5,7 +5,7 @@ The first production use of `ub-review` is the Bun UB hunt.
 The Bun fork should consume this repository as a GitHub Action:
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@main
+- uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
   with:
     preset: bun-ub
     profile: gh-runner
@@ -13,8 +13,10 @@ The Bun fork should consume this repository as a GitHub Action:
     model-timeout-sec: '300'
 ```
 
-Use `@main` until the first Bun fork verification succeeds. After tagging `v0`,
-pin the Bun workflow to `EffortlessMetrics/ub-review@v0`.
+Keep the Bun workflow pinned to a verified commit SHA. The current known-good
+pin is `0b938918eb20d38d383dba4d588b0a97bc4591f4`, validated by
+`EffortlessSteven/bun#44` with a successful `UB evidence packet / gh-runner`
+run and uploaded packet artifact. Do not float the Bun gate on `main`.
 
 The action builds the packet without sensor secrets. In `posting: review` mode,
 the Bun workflow gives it the scoped `github.token` so it can submit one grouped
@@ -30,7 +32,7 @@ doctor --require-core-tools`.
 
 ## Copy-ready workflow
 
-See:
+Use the current template:
 
 ```text
 examples/bun/.github/workflows/ub-review-packet.yml
@@ -71,7 +73,7 @@ Start with `running-summary.md`, then inspect `review/review.md`, the lane
 packets under `lanes/`, and `review/post-result.json` or
 `review/post-error.json` for the grouped review posting trail.
 
-For the first Bun fork verification, download the artifact and run:
+After changing the pin, download the Bun packet artifact and run:
 
 ```bash
 python scripts/verify-bun-review-artifacts.py target/ub-review \

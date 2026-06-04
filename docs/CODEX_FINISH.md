@@ -110,9 +110,11 @@ next smallest PR.
 
 - If cargo installs are too slow on GitHub runners, replace
   `scripts/install-gh-runner-tools.sh` with release binary downloads for
-  `tokmd`, `cargo-allow`, `ripr`, and `unsafe-review`.
-- If `ast-grep` npm install is noisy, disable it in `profiles/bun-ub-v0.toml`
-  until a pinned binary path is available.
+  `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and
+  `actionlint`.
+- Keep the core tool set aligned with [RUNNER_IMAGE.md](RUNNER_IMAGE.md);
+  missing standard-image tools and stale `tokmd` are image drift, not reasons to
+  weaken the Bun profile.
 - Consider adding a `--changed-files-from` mode later for PR event payloads, but
   keep git diff as the default because it is reproducible locally.
 - Improve model provider adapters once MiniMax and OpenCode Go response

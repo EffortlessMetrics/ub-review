@@ -19,8 +19,8 @@ Off-diff comments: 0
 
 Acted on:
 
-- The smoke proved `EffortlessMetrics/ub-review@v0` resolves and runs from the
-  Bun fork workflow.
+- The smoke proved the `ub-review` GitHub Action resolves and runs from the Bun
+  fork workflow.
 - The strict verifier passed with all 10 expected lanes.
 - The grouped review posted successfully with HTTP 200.
 
@@ -36,6 +36,21 @@ Parked follow-ups:
   provider failures, off-diff rejections, body size, and post status.
 - Profile extraction should preserve this v0 behavior as
   `profiles/bun-ub-v0.toml`.
+
+## Current Bun gate pin
+
+Date: 2026-06-04
+Repo: `EffortlessSteven/bun`
+PR: `#44`
+Pin: `EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4`
+Run: `26949368771`
+Artifact: `ub-review-packet-44`
+
+Acted on:
+
+- The Bun workflow pin advanced after `ub-review` PR #203 and PR #204.
+- The `UB evidence packet / gh-runner` job passed on the new pin.
+- The packet artifact uploaded and was not expired at merge time.
 
 Prompt/compiler follow-up:
 
