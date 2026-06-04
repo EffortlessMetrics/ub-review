@@ -5,7 +5,7 @@ This tree is intended to be pushed to `EffortlessMetrics/ub-review`.
 The Bun fork should consume it as a GitHub Action, for example:
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@217f123e688e42ddfce98eec5795b88bf457dd34
+- uses: EffortlessMetrics/ub-review@7b969e53b58d7b2a32db9006f1f2f43916fc2134
   with:
     preset: bun-ub
     profile: gh-runner
@@ -17,8 +17,8 @@ The Bun fork should consume it as a GitHub Action, for example:
 ```
 
 Use a verified commit SHA for the Bun gate. The current known-good pin is
-`217f123e688e42ddfce98eec5795b88bf457dd34`, validated by
-`EffortlessSteven/bun#45` with a successful UB evidence packet run, uploaded
+`7b969e53b58d7b2a32db9006f1f2f43916fc2134`, validated by
+`EffortlessSteven/bun#46` with a successful UB evidence packet run, uploaded
 packet artifact, `tokmd` receipts, and zero inline comments.
 
 Sensor packet generation is no-token by default. Review posting uses the scoped

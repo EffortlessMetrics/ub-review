@@ -4,7 +4,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
 
 ```yaml
 - name: Build UB review packet
-  uses: EffortlessMetrics/ub-review@217f123e688e42ddfce98eec5795b88bf457dd34
+  uses: EffortlessMetrics/ub-review@7b969e53b58d7b2a32db9006f1f2f43916fc2134
   with:
     preset: bun-ub
     profile: gh-runner
@@ -33,7 +33,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
 ```
 
 The Bun fork should use a full commit SHA, not `main`. The current known-good
-pin is `217f123e688e42ddfce98eec5795b88bf457dd34`; update it only after this
+pin is `7b969e53b58d7b2a32db9006f1f2f43916fc2134`; update it only after this
 repo's verifier passes and the Bun consumer workflow uploads a valid packet.
 
 GLM is skipped for v0. The Bun v0 cutover workflow uses direct MiniMax M3 for
