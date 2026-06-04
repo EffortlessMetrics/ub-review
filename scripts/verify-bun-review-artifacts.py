@@ -1774,7 +1774,7 @@ def require_proof_request_groups(root: pathlib.Path, proof_requests: list[dict])
         fail("review/proof_request_groups.json is not an array")
     expected = expected_proof_request_groups(proof_requests)
     if groups != expected:
-        fail("review/proof_request_groups.json does not match raw proof request grouping")
+        fail("review/proof_request_groups.json does not match canonical proof request grouping")
     for group in groups:
         require_proof_request_group_schema(group)
 
@@ -1785,10 +1785,13 @@ def expected_proof_request_groups(proof_requests: list[dict]) -> list[dict]:
         command = request["command"]
         cost = request["cost"]
         timeout_sec = request["timeout_sec"]
-        key = (command, cost, timeout_sec)
+        group_command = canonical_proof_request_group_command(command, cost)
+        key = (group_command, cost, timeout_sec)
         group = groups.get(key)
         if group is None:
-            digest = hashlib.sha256(f"{command}\n{cost}\n{timeout_sec}".encode()).hexdigest()
+            digest = hashlib.sha256(
+                f"{group_command}\n{cost}\n{timeout_sec}".encode()
+            ).hexdigest()
             group = {
                 "schema": "ub-review.proof_request_group.v1",
                 "id": f"proof-group-{digest[:12]}",
@@ -1815,6 +1818,66 @@ def expected_proof_request_groups(proof_requests: list[dict]) -> list[dict]:
         append_unique(group["reasons"], request["reason"])
         group["duplicate_count"] += 1
     return [groups[key] for key in sorted(groups)]
+
+
+def canonical_proof_request_group_command(command: str, cost: str) -> str:
+    if cost != "focused-test":
+        return command
+    parts = command.split()
+    target = focused_bun_request_parts(parts)
+    if target is None:
+        return command
+    file, args = target
+    return (
+        f"focused-bun:{normalize_repo_path(file)}:"
+        f"{focused_test_name_arg(args) or ''}"
+    )
+
+
+def focused_bun_request_parts(parts: list[str]) -> tuple[str, list[str]] | None:
+    if len(parts) >= 3 and parts[0] == "bun" and parts[1] == "test":
+        return parts[2], parts[3:]
+    if len(parts) >= 4 and parts[0] == "bun" and parts[1] == "bd" and parts[2] == "test":
+        return parts[3], parts[4:]
+    if (
+        len(parts) >= 4
+        and parts[0] == "USE_SYSTEM_BUN=1"
+        and parts[1] == "bun"
+        and parts[2] == "test"
+    ):
+        return parts[3], parts[4:]
+    return None
+
+
+def focused_test_name_arg(args: list[str]) -> str | None:
+    try:
+        index = next(
+            index
+            for index, arg in enumerate(args)
+            if arg in {"-t", "--test-name-pattern"}
+        )
+    except StopIteration:
+        return None
+    tokens = []
+    for token in args[index + 1 :]:
+        if token.startswith("-"):
+            break
+        tokens.append(token)
+    value = strip_matching_quotes(" ".join(tokens).strip())
+    return value or None
+
+
+def strip_matching_quotes(value: str) -> str:
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        return value[1:-1]
+    return value
+
+
+def normalize_repo_path(value: str) -> str:
+    value = value.strip()
+    if value.startswith("b/"):
+        value = value[2:]
+    return value.replace("\\", "/")
 
 
 def append_unique(values: list[str], value: str) -> None:
@@ -3357,6 +3420,59 @@ def run_self_tests() -> None:
             pathlib.Path("review/github-review.json"),
         ),
     )
+    canonical_groups = expected_proof_request_groups(
+        [
+            {
+                "schema": "ub-review.proof_request.v1",
+                "id": "proof-tests-001",
+                "lane": "tests-oracle",
+                "requested_by": ["tests-oracle"],
+                "command": "bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'",
+                "reason": "Need red/green proof.",
+                "cost": "focused-test",
+                "timeout_sec": 300,
+                "required": False,
+                "status": "requested",
+            },
+            {
+                "schema": "ub-review.proof_request.v1",
+                "id": "proof-opposition-001",
+                "lane": "opposition",
+                "requested_by": ["opposition"],
+                "command": (
+                    "bun bd test test/js/bun/ffi/ffi.test.js "
+                    "--test-name-pattern \"ffi toBuffer bad free\""
+                ),
+                "reason": "Same focused proof.",
+                "cost": "focused-test",
+                "timeout_sec": 300,
+                "required": True,
+                "status": "requested",
+            },
+            {
+                "schema": "ub-review.proof_request.v1",
+                "id": "proof-system-bun-001",
+                "lane": "tests-red-green",
+                "requested_by": ["tests-red-green"],
+                "command": (
+                    "USE_SYSTEM_BUN=1 bun test test/js/bun/ffi/ffi.test.js "
+                    "-t 'ffi toBuffer bad free'"
+                ),
+                "reason": "Same old-main red proof.",
+                "cost": "focused-test",
+                "timeout_sec": 300,
+                "required": False,
+                "status": "requested",
+            },
+        ]
+    )
+    if len(canonical_groups) != 1 or canonical_groups[0]["duplicate_count"] != 3:
+        fail("canonical Bun proof request grouping self-test failed")
+    if (
+        canonical_groups[0]["command"]
+        != "bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"
+    ):
+        fail("canonical Bun proof request grouping did not preserve first raw command")
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     print("Bun review artifact verifier self-test passed")
 
