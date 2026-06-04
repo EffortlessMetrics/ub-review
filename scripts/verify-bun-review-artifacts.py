@@ -104,8 +104,22 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
         "no blocking ub finding",
         "no actionable findings",
         "a human should still inspect",
+        "human should still review",
+        "residual risk remains for human review",
+        "bounded review",
         "lane transcript",
+        "lane roster",
+        "model lane roster",
         "raw observations",
+        "provider preflight",
+        "provider status",
+        "sensor status",
+        "shared context hash",
+        "cache manifest",
+        "runtime profile",
+        "review payload status",
+        "terminal state",
+        "github-review-skip",
     ]:
         if phrase in lowered:
             fail(f"{path} contains artifact-only boilerplate: {phrase!r}")

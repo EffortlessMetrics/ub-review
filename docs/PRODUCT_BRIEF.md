@@ -50,6 +50,9 @@ include_sensor_table = "on_failure"
 include_execution_summary = "none"
 ```
 
+The concrete PR-commentary style contract is
+[REVIEW_BODY_CONTRACT.md](REVIEW_BODY_CONTRACT.md).
+
 ## Execution contract
 
 Models investigate. Tools produce receipts. The compiler decides what earns the

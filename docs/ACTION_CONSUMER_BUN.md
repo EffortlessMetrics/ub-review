@@ -46,6 +46,8 @@ The default review-body policy keeps PR commentary free of lane rosters,
 successful provider/model status tables, execution summaries, and generic
 no-finding boilerplate. Those surfaces stay in artifacts; `github-review.json`
 is written only when reviewer-value content survives compilation.
+See [REVIEW_BODY_CONTRACT.md](REVIEW_BODY_CONTRACT.md) for the exact decision
+memo style.
 
 ## Permissions
 
