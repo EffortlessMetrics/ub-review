@@ -4703,42 +4703,50 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
 
 fn build_tokmd_sensor_commands(root: &Path, dir: &Path, plan: &Plan) -> Vec<SensorSubcommand> {
     let absolute_dir = absolute_path(dir);
+    let context_paths = changed_paths_for_tokmd_context(root, plan);
+    let analyze_paths = if context_paths.is_empty() {
+        vec![".".to_owned()]
+    } else {
+        context_paths.clone()
+    };
+    let mut analyze_md_argv = vec![
+        "tokmd".to_owned(),
+        "analyze".to_owned(),
+        "--preset".to_owned(),
+        "bun-ub".to_owned(),
+        "--effort-base-ref".to_owned(),
+        plan.base.clone(),
+        "--effort-head-ref".to_owned(),
+        plan.head.clone(),
+        "--format".to_owned(),
+        "md".to_owned(),
+        "--no-progress".to_owned(),
+    ];
+    analyze_md_argv.extend(analyze_paths.clone());
+    let mut analyze_json_argv = vec![
+        "tokmd".to_owned(),
+        "analyze".to_owned(),
+        "--preset".to_owned(),
+        "bun-ub".to_owned(),
+        "--effort-base-ref".to_owned(),
+        plan.base.clone(),
+        "--effort-head-ref".to_owned(),
+        plan.head.clone(),
+        "--format".to_owned(),
+        "json".to_owned(),
+        "--no-progress".to_owned(),
+    ];
+    analyze_json_argv.extend(analyze_paths);
     let mut commands = vec![
         SensorSubcommand {
             label: "analyze-md".to_owned(),
-            argv: vec![
-                "tokmd".to_owned(),
-                "analyze".to_owned(),
-                "--preset".to_owned(),
-                "estimate".to_owned(),
-                "--effort-base-ref".to_owned(),
-                plan.base.clone(),
-                "--effort-head-ref".to_owned(),
-                plan.head.clone(),
-                "--format".to_owned(),
-                "md".to_owned(),
-                "--no-progress".to_owned(),
-                ".".to_owned(),
-            ],
+            argv: analyze_md_argv,
             stdout_path: dir.join("analyze.md"),
             stderr_path: dir.join("analyze.stderr.txt"),
         },
         SensorSubcommand {
             label: "analyze-json".to_owned(),
-            argv: vec![
-                "tokmd".to_owned(),
-                "analyze".to_owned(),
-                "--preset".to_owned(),
-                "estimate".to_owned(),
-                "--effort-base-ref".to_owned(),
-                plan.base.clone(),
-                "--effort-head-ref".to_owned(),
-                plan.head.clone(),
-                "--format".to_owned(),
-                "json".to_owned(),
-                "--no-progress".to_owned(),
-                ".".to_owned(),
-            ],
+            argv: analyze_json_argv,
             stdout_path: dir.join("analyze.json"),
             stderr_path: dir.join("analyze-json.stderr.txt"),
         },
@@ -4775,15 +4783,12 @@ fn build_tokmd_sensor_commands(root: &Path, dir: &Path, plan: &Plan) -> Vec<Sens
             stderr_path: dir.join("cockpit-json.stderr.txt"),
         },
     ];
-    let context_paths = changed_paths_for_tokmd_context(root, plan);
     if !context_paths.is_empty() {
         let mut argv = vec![
             "tokmd".to_owned(),
             "context".to_owned(),
             "--budget".to_owned(),
-            "64k".to_owned(),
-            "--mode".to_owned(),
-            "bundle".to_owned(),
+            "64000".to_owned(),
             "--output".to_owned(),
             absolute_dir.join("context.md").display().to_string(),
             "--force".to_owned(),
@@ -16133,8 +16138,15 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert!(command_texts.iter().any(|command| command.contains(
-            "tokmd analyze --preset estimate --effort-base-ref HEAD~1 --effort-head-ref HEAD"
+            "tokmd analyze --preset bun-ub --effort-base-ref HEAD~1 --effort-head-ref HEAD"
         )));
+        assert!(
+            command_texts
+                .iter()
+                .filter(|command| command.contains("tokmd analyze --preset bun-ub"))
+                .all(|command| command.contains("src/lib.rs")),
+            "tokmd analyze commands should stay scoped to changed files: {command_texts:?}"
+        );
         assert!(
             command_texts
                 .iter()
@@ -16149,6 +16161,17 @@ mod tests {
             command_texts
                 .iter()
                 .any(|command| command.contains("src/lib.rs"))
+        );
+        assert!(
+            command_texts
+                .iter()
+                .any(|command| command.contains("tokmd context --budget 64000"))
+        );
+        assert!(
+            command_texts
+                .iter()
+                .all(|command| !command.contains("--mode bundle")),
+            "tokmd context.md should be an auditable list receipt, not a source bundle"
         );
         assert!(
             commands
