@@ -196,7 +196,6 @@ def has_reviewer_value_heading(body: str) -> bool:
             "## Test proof",
             "## Proof results",
             "## Refuted",
-            "## Residual risk",
             "## Parked follow-ups",
             "## Evidence gaps",
             "## Missing evidence",
@@ -241,6 +240,7 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
         "## Sensors",
         "## Sensor status",
         "## Sensor receipts",
+        "## Residual risk",
     ]:
         if heading in body:
             fail(f"{path} contains artifact-only status section: {heading!r}")
@@ -3326,6 +3326,14 @@ def run_self_tests() -> None:
                 ),
             },
             1,
+        ),
+    )
+    expect_self_test_failure(
+        "residual risk PR section",
+        "artifact-only status section",
+        lambda: require_pr_review_body_policy(
+            "## Residual risk\n\n- External trust risk remains.",
+            pathlib.Path("review/github-review.json"),
         ),
     )
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
