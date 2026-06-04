@@ -4,7 +4,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
 
 ```yaml
 - name: Build UB review packet
-  uses: EffortlessMetrics/ub-review@main
+  uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
   with:
     preset: bun-ub
     profile: gh-runner
@@ -32,6 +32,10 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
     allow-heavy: 'false'
 ```
 
+The Bun fork should use a full commit SHA, not `main`. The current known-good
+pin is `0b938918eb20d38d383dba4d588b0a97bc4591f4`; update it only after this
+repo's verifier passes and the Bun consumer workflow uploads a valid packet.
+
 GLM is skipped for v0. The Bun v0 cutover workflow uses direct MiniMax M3 for
 all model lanes. OpenCode Go remains optional for later direct provider
 canary/deep modes; `ub-review` does not invoke the OpenCode agent harness.
@@ -42,10 +46,11 @@ comma-separated IDs and are recorded in `resolved-plan.json`.
 Use `runtime-profile` for box budgets and local work limits; `profile` is kept
 as the backward-compatible action input.
 
-The default review-body policy keeps PR commentary free of lane rosters,
-successful provider/model status tables, execution summaries, and generic
-no-finding boilerplate. Those surfaces stay in artifacts; `github-review.json`
-is written only when reviewer-value content survives compilation.
+The default review policy keeps PR bodies and inline comments free of lane
+rosters, successful provider/model status tables, execution summaries, and
+generic no-finding boilerplate. Those surfaces stay in artifacts;
+`github-review.json` is written only when reviewer-value content survives
+compilation.
 See [REVIEW_BODY_CONTRACT.md](REVIEW_BODY_CONTRACT.md) for the exact decision
 memo style.
 
