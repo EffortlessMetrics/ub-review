@@ -11562,11 +11562,10 @@ Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure 
 }
 
 fn lane_specific_prompt_guidance(lane: &LanePlan) -> &'static str {
-    match lane.id.as_str() {
-        "tests" | "tests-oracle" => {
-            "Convergence calibration: batch every material test-oracle weakness you can substantiate in this pass; classify correctness/oracle gaps as blocker/high/medium and submaterial polish as low advisory or parked-follow-up. If the test is red/green-correct or proof receipts answer the concern, emit a resolved-check or failed_objection instead of a fresh candidate finding. Do not drip-feed one nit per pass."
-        }
-        _ => "",
+    if lane.id == "tests" || lane.id.starts_with("tests-") {
+        "Convergence calibration: batch every material test-oracle weakness you can substantiate in this pass; classify correctness/oracle gaps as blocker/high/medium and submaterial polish as low advisory or parked-follow-up. If the test is red/green-correct or proof receipts answer the concern, emit a resolved-check or failed_objection instead of a fresh candidate finding. Do not drip-feed one nit per pass."
+    } else {
+        ""
     }
 }
 
@@ -15052,19 +15051,19 @@ mod tests {
         build_witness_records, builtin_profiles, cap_review_body, classify_diff,
         classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
         collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
-        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
-        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
+        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
+        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
         run_sensor, runtime_profile_from_toml, runtime_profile_override, sensor_job_count,
-        sha256_hex, split_curl_http_status, validate_github_review_payload,
+        sha256_hex, split_curl_http_status, standard_minimax_lanes, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate,
         validate_pr_review_body_policy, validate_run_args, validate_summary_only_candidate,
         wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
@@ -15161,19 +15160,26 @@ mod tests {
 
     #[test]
     fn tests_oracle_prompt_batches_oracle_critique_and_convergence() -> Result<()> {
-        let lane = default_lanes()
-            .into_iter()
-            .find(|lane| lane.id == "tests")
-            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let spec = direct_minimax_spec(&args);
-        let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
+        for lane in [
+            standard_minimax_lanes()
+                .into_iter()
+                .find(|lane| lane.id == "tests-oracle")
+                .ok_or_else(|| anyhow::anyhow!("tests-oracle lane missing"))?,
+            deep_minimax_lanes()
+                .into_iter()
+                .find(|lane| lane.id == "tests-oracle-strength")
+                .ok_or_else(|| anyhow::anyhow!("tests-oracle-strength lane missing"))?,
+        ] {
+            let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
 
-        assert!(prompt.contains("batch every material test-oracle weakness"));
-        assert!(prompt.contains("submaterial polish as low advisory or parked-follow-up"));
-        assert!(prompt.contains("red/green-correct or proof receipts answer the concern"));
-        assert!(prompt.contains("resolved-check or failed_objection"));
-        assert!(prompt.contains("Do not drip-feed one nit per pass"));
+            assert!(prompt.contains("batch every material test-oracle weakness"));
+            assert!(prompt.contains("submaterial polish as low advisory or parked-follow-up"));
+            assert!(prompt.contains("red/green-correct or proof receipts answer the concern"));
+            assert!(prompt.contains("resolved-check or failed_objection"));
+            assert!(prompt.contains("Do not drip-feed one nit per pass"));
+        }
         Ok(())
     }
 
