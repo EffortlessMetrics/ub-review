@@ -213,6 +213,15 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
         "human should still review",
         "residual risk remains for human review",
         "bounded review",
+        "cached prior observation",
+        "refuter demoted inline candidate",
+        "gate proof is pending",
+        "cannot perform from cached context",
+        "commit-existence/ancestry proof",
+        "upstream commit-existence",
+        "general bot output",
+        "pr-body contract hardening",
+        "actionlint ran ok",
         "lane transcript",
         "lane roster",
         "model lane roster",
@@ -3333,6 +3342,18 @@ def run_self_tests() -> None:
         "artifact-only status section",
         lambda: require_pr_review_body_policy(
             "## Residual risk\n\n- External trust risk remains.",
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "meta review prose",
+        "artifact-only boilerplate",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Verification questions\n\n"
+                "- Confirm the cached prior observation still matches; "
+                "the refuter demoted inline candidate because Gate proof is pending."
+            ),
             pathlib.Path("review/github-review.json"),
         ),
     )
