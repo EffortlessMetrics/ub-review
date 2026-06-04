@@ -373,6 +373,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/terminal_state.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
+        "review/scheduler.json",
         "review/review.json",
         "review/review.md",
         "review/observations.json",
@@ -708,6 +709,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if metrics.get("shared_context_id") != review.get("shared_context_id"):
         fail("metrics shared_context_id does not match review.json")
     require_run_loop_metrics(metrics)
+    require_scheduler_artifact(root, metrics)
     if metrics.get("mode") != review.get("mode"):
         fail("metrics mode does not match review.json")
     if metrics.get("review_profile") != review.get("review_profile"):
@@ -835,6 +837,71 @@ def require_run_loop_metrics(metrics: dict) -> None:
         fail("metrics.run.loops is missing")
     for loop_name in ["evidence", "model", "proof", "compiler"]:
         require_timing(loops, f"metrics.run.loops.{loop_name}", loop_name)
+    phases = run.get("phases")
+    if not isinstance(phases, list):
+        fail("metrics.run.phases is missing")
+    if not phases:
+        fail("metrics.run.phases is empty")
+    for index, phase in enumerate(phases):
+        require_scheduler_phase(phase, f"metrics.run.phases[{index}]")
+
+
+def require_scheduler_artifact(root: pathlib.Path, metrics: dict) -> None:
+    scheduler = load_json(root / "review/scheduler.json")
+    if scheduler.get("schema") != "ub-review.scheduler.v1":
+        fail("review/scheduler.json has wrong schema")
+    run = metrics.get("run", {})
+    for field in [
+        "concurrency_model",
+        "scheduler_profile",
+        "local_proof_wall_excludes_model_wait",
+        "elapsed_wall_ms",
+    ]:
+        if scheduler.get(field) != run.get(field):
+            fail(f"review/scheduler.json {field} does not match metrics.run")
+    if scheduler.get("streams") != run.get("streams"):
+        fail("review/scheduler.json streams do not match metrics.run.streams")
+    if scheduler.get("loops") != run.get("loops"):
+        fail("review/scheduler.json loops do not match metrics.run.loops")
+    overlaps = scheduler.get("overlaps")
+    if not isinstance(overlaps, dict):
+        fail("review/scheduler.json overlaps is missing")
+    for field in [
+        "investigation_proof_overlap_ms",
+        "model_proof_overlap_ms",
+        "proof_overlap_ms",
+    ]:
+        if overlaps.get(field) != run.get(field):
+            fail(f"review/scheduler.json overlaps.{field} does not match metrics.run")
+    if scheduler.get("phases") != run.get("phases"):
+        fail("review/scheduler.json phases do not match metrics.run.phases")
+    stages = {
+        (phase.get("loop_id"), phase.get("stage"))
+        for phase in scheduler.get("phases", [])
+        if isinstance(phase, dict)
+    }
+    for expected in [
+        ("evidence", "sensors-and-packet"),
+        ("proof", "initial-diff-broker"),
+        ("compiler", "final"),
+    ]:
+        if expected not in stages:
+            fail(f"review/scheduler.json missing scheduler phase {expected}")
+
+
+def require_scheduler_phase(phase: dict, label: str) -> None:
+    if not isinstance(phase, dict):
+        fail(f"{label} is not an object")
+    for field in ["loop_id", "stream_id", "stage", "status"]:
+        if not isinstance(phase.get(field), str) or not phase[field]:
+            fail(f"{label}.{field} is missing")
+    for field in ["started_at_offset_ms", "finished_at_offset_ms", "duration_ms"]:
+        require_non_negative_int(phase, f"{label}.{field}", field)
+    if phase["finished_at_offset_ms"] < phase["started_at_offset_ms"]:
+        fail(f"{label} finished before it started")
+    span = phase["finished_at_offset_ms"] - phase["started_at_offset_ms"]
+    if phase["duration_ms"] > span and phase["finished_at_offset_ms"] > phase["started_at_offset_ms"]:
+        fail(f"{label} duration exceeds observed span")
 
 
 def require_timing(container: dict, label: str, field: str) -> None:

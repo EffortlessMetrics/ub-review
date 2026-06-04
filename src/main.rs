@@ -1179,6 +1179,7 @@ struct RunLoopMetrics {
     proof_overlap_ms: u128,
     streams: RunStreamTimings,
     loops: RunLoopTimings,
+    phases: Vec<RunLoopPhase>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1201,6 +1202,47 @@ struct LoopTiming {
     started_at_offset_ms: u128,
     finished_at_offset_ms: u128,
     wall_ms: u128,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunLoopPhase {
+    loop_id: String,
+    stream_id: String,
+    stage: String,
+    status: String,
+    started_at_offset_ms: u128,
+    finished_at_offset_ms: u128,
+    duration_ms: u128,
+}
+
+impl RunLoopPhase {
+    fn interval(&self) -> LoopInterval {
+        LoopInterval {
+            started_at_offset_ms: self.started_at_offset_ms,
+            finished_at_offset_ms: self.finished_at_offset_ms,
+            duration_ms: self.duration_ms,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct SchedulerArtifact<'a> {
+    schema: &'static str,
+    concurrency_model: &'a str,
+    scheduler_profile: &'a str,
+    local_proof_wall_excludes_model_wait: bool,
+    elapsed_wall_ms: u128,
+    streams: &'a RunStreamTimings,
+    loops: &'a RunLoopTimings,
+    overlaps: SchedulerOverlapArtifact,
+    phases: &'a [RunLoopPhase],
+}
+
+#[derive(Serialize)]
+struct SchedulerOverlapArtifact {
+    investigation_proof_overlap_ms: u128,
+    model_proof_overlap_ms: u128,
+    proof_overlap_ms: u128,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -2095,6 +2137,7 @@ struct RunLoopTracker {
     model: LoopAccumulator,
     proof: LoopAccumulator,
     compiler: LoopAccumulator,
+    phases: Vec<RunLoopPhase>,
 }
 
 impl RunLoopTracker {
@@ -2104,10 +2147,17 @@ impl RunLoopTracker {
             model: LoopAccumulator::default(),
             proof: LoopAccumulator::default(),
             compiler: LoopAccumulator::default(),
+            phases: Vec::new(),
         }
     }
 
-    fn record(&mut self, loop_id: &str, interval: LoopInterval) {
+    fn record(&mut self, phase: RunLoopPhase) {
+        let loop_id = phase.loop_id.clone();
+        self.record_interval(&loop_id, phase.interval());
+        self.phases.push(phase);
+    }
+
+    fn record_interval(&mut self, loop_id: &str, interval: LoopInterval) {
         match loop_id {
             "evidence" => self.evidence.record(interval),
             "model" => self.model.record(interval),
@@ -2151,6 +2201,7 @@ impl RunLoopTracker {
                 proof: self.proof.timing(),
                 compiler: self.compiler.timing(),
             },
+            phases: self.phases.clone(),
         }
     }
 
@@ -2752,18 +2803,17 @@ fn finish_run_loop(
     active: ActiveRunLoop,
     status: &str,
 ) -> Result<()> {
-    let loop_id = active.loop_id;
-    let interval = finish_run_loop_interval(event_log, run_started, active, status)?;
-    tracker.record(loop_id, interval);
+    let phase = finish_run_loop_phase(event_log, run_started, active, status)?;
+    tracker.record(phase);
     Ok(())
 }
 
-fn finish_run_loop_interval(
+fn finish_run_loop_phase(
     event_log: &EventLog,
     run_started: &Instant,
     active: ActiveRunLoop,
     status: &str,
-) -> Result<LoopInterval> {
+) -> Result<RunLoopPhase> {
     let finished_at_offset_ms = run_started.elapsed().as_millis();
     let duration_ms = active.started_at.elapsed().as_millis();
     let payload = serde_json::json!({
@@ -2780,7 +2830,11 @@ fn finish_run_loop_interval(
         payload.clone(),
     )?;
     event_log.append(&format!("{}_stream_completed", active.stream_id), payload)?;
-    Ok(LoopInterval {
+    Ok(RunLoopPhase {
+        loop_id: active.loop_id.to_owned(),
+        stream_id: active.stream_id.to_owned(),
+        stage: active.stage.to_owned(),
+        status: status.to_owned(),
         started_at_offset_ms: active.started_at_offset_ms,
         finished_at_offset_ms,
         duration_ms,
@@ -5347,9 +5401,9 @@ fn write_review_artifacts(
                 } else {
                     "failed"
                 };
-                let interval =
-                    finish_run_loop_interval(event_log, run_started, initial_proof_loop, status)?;
-                broker_result.map(|proof_result| (proof_result, interval))
+                let phase =
+                    finish_run_loop_phase(event_log, run_started, initial_proof_loop, status)?;
+                broker_result.map(|proof_result| (proof_result, phase))
             });
 
             let model_loop =
@@ -5399,10 +5453,10 @@ fn write_review_artifacts(
                 "completed",
             )?;
 
-            let (initial_result, proof_interval) = initial_proof_handle
+            let (initial_result, proof_phase) = initial_proof_handle
                 .join()
                 .map_err(|_| anyhow::anyhow!("initial diff proof thread panicked"))??;
-            run_loop_tracker.record("proof", proof_interval);
+            run_loop_tracker.record(proof_phase);
             proof_result = initial_result;
             Ok(())
         })?;
@@ -5706,6 +5760,7 @@ fn write_review_artifacts(
         review_dir.join("metrics.json"),
         serde_json::to_vec_pretty(&metrics)?,
     )?;
+    write_scheduler_artifact(&review_dir, &metrics.run)?;
     fs::write(
         review_dir.join("terminal_state.json"),
         serde_json::to_vec_pretty(&review.terminal_state)?,
@@ -6240,6 +6295,29 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review_body_truncated: github_review
             .is_some_and(|review| review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim())),
     }
+}
+
+fn write_scheduler_artifact(review_dir: &Path, run: &RunLoopMetrics) -> Result<()> {
+    let artifact = SchedulerArtifact {
+        schema: "ub-review.scheduler.v1",
+        concurrency_model: &run.concurrency_model,
+        scheduler_profile: &run.scheduler_profile,
+        local_proof_wall_excludes_model_wait: run.local_proof_wall_excludes_model_wait,
+        elapsed_wall_ms: run.elapsed_wall_ms,
+        streams: &run.streams,
+        loops: &run.loops,
+        overlaps: SchedulerOverlapArtifact {
+            investigation_proof_overlap_ms: run.investigation_proof_overlap_ms,
+            model_proof_overlap_ms: run.model_proof_overlap_ms,
+            proof_overlap_ms: run.proof_overlap_ms,
+        },
+        phases: &run.phases,
+    };
+    fs::write(
+        review_dir.join("scheduler.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    Ok(())
 }
 
 fn model_call_duration_ms_sum(
@@ -20166,7 +20244,7 @@ index 1111111..2222222 100644
     #[test]
     fn run_loop_metrics_count_actual_model_proof_overlap() {
         let mut tracker = super::RunLoopTracker::new();
-        tracker.record(
+        tracker.record_interval(
             "model",
             super::LoopInterval {
                 started_at_offset_ms: 10,
@@ -20174,7 +20252,7 @@ index 1111111..2222222 100644
                 duration_ms: 100,
             },
         );
-        tracker.record(
+        tracker.record_interval(
             "proof",
             super::LoopInterval {
                 started_at_offset_ms: 50,
@@ -24842,6 +24920,26 @@ index 1111111..2222222 100644
                     wall_ms: 40,
                 },
             },
+            phases: vec![
+                super::RunLoopPhase {
+                    loop_id: "evidence".to_owned(),
+                    stream_id: "coordination".to_owned(),
+                    stage: "sensors".to_owned(),
+                    status: "completed".to_owned(),
+                    started_at_offset_ms: 0,
+                    finished_at_offset_ms: 10,
+                    duration_ms: 10,
+                },
+                super::RunLoopPhase {
+                    loop_id: "model".to_owned(),
+                    stream_id: "investigation".to_owned(),
+                    stage: "primary".to_owned(),
+                    status: "completed".to_owned(),
+                    started_at_offset_ms: 10,
+                    finished_at_offset_ms: 310,
+                    duration_ms: 300,
+                },
+            ],
         }
     }
 

@@ -183,6 +183,50 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
         )
 
 
+def require_scheduler_artifact(root: pathlib.Path, metrics: dict) -> None:
+    scheduler = load_json(root / "review/scheduler.json")
+    if scheduler.get("schema") != "ub-review.scheduler.v1":
+        fail("review/scheduler.json has wrong schema")
+    run = metrics.get("run", {})
+    for field in [
+        "concurrency_model",
+        "scheduler_profile",
+        "local_proof_wall_excludes_model_wait",
+        "elapsed_wall_ms",
+    ]:
+        if scheduler.get(field) != run.get(field):
+            fail(f"review/scheduler.json {field} does not match metrics.run")
+    if scheduler.get("streams") != run.get("streams"):
+        fail("review/scheduler.json streams do not match metrics.run.streams")
+    if scheduler.get("loops") != run.get("loops"):
+        fail("review/scheduler.json loops do not match metrics.run.loops")
+    overlaps = scheduler.get("overlaps")
+    if not isinstance(overlaps, dict):
+        fail("review/scheduler.json overlaps is missing")
+    for field in [
+        "investigation_proof_overlap_ms",
+        "model_proof_overlap_ms",
+        "proof_overlap_ms",
+    ]:
+        if overlaps.get(field) != run.get(field):
+            fail(f"review/scheduler.json overlaps.{field} does not match metrics.run")
+    phases = scheduler.get("phases")
+    if phases != run.get("phases"):
+        fail("review/scheduler.json phases do not match metrics.run.phases")
+    if not isinstance(phases, list) or not phases:
+        fail("review/scheduler.json phases is missing")
+    for index, phase in enumerate(phases):
+        if not isinstance(phase, dict):
+            fail(f"review/scheduler.json phase {index} is not an object")
+        for field in ["loop_id", "stream_id", "stage", "status"]:
+            if not isinstance(phase.get(field), str) or not phase[field]:
+                fail(f"review/scheduler.json phase {index} missing {field}")
+        for field in ["started_at_offset_ms", "finished_at_offset_ms", "duration_ms"]:
+            value = phase.get(field)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                fail(f"review/scheduler.json phase {index} {field} is invalid")
+
+
 def require_timing(container: dict, label: str, field: str) -> None:
     timing = container.get(field)
     if not isinstance(timing, dict):
@@ -400,6 +444,7 @@ def main(argv: list[str]) -> int:
     preflight = require_single_ok_preflight(preflights)
     ok_lanes = require_ok_lanes(review.get("model_lanes", []), min_ok_lanes)
     require_metrics(metrics, min_ok_lanes)
+    require_scheduler_artifact(root, metrics)
     require_preflight_artifacts(root, preflight)
     for lane in ok_lanes:
         require_ok_lane_artifacts(root, lane)

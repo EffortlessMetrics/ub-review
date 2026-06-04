@@ -155,6 +155,7 @@ fn active_len_tracks_view_after_resize() {
         "review/tool-status.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
+        "review/scheduler.json",
         "review/review.json",
         "review/review.md",
         "review/candidates.json",
@@ -561,6 +562,25 @@ fn active_len_tracks_view_after_resize() {
     assert!(cache_events.contains("\"kind\":\"shared_context_prepared\""));
     let metrics: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    let scheduler: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
+    assert_eq!(scheduler["schema"], "ub-review.scheduler.v1");
+    assert_eq!(
+        scheduler["scheduler_profile"],
+        metrics["run"]["scheduler_profile"]
+    );
+    assert_eq!(
+        scheduler["overlaps"]["investigation_proof_overlap_ms"],
+        metrics["run"]["investigation_proof_overlap_ms"]
+    );
+    assert!(
+        scheduler["phases"]
+            .as_array()
+            .is_some_and(|phases| phases.iter().any(|phase| {
+                phase["loop_id"] == "proof" && phase["stage"] == "initial-diff-broker"
+            })),
+        "scheduler artifact should include initial diff proof phase"
+    );
     let diff_context: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("input/diff-context.json"))?)?;
     let plan_json: serde_json::Value = serde_json::from_slice(&fs::read(out.join("plan.json"))?)?;
@@ -1604,6 +1624,149 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn model_auto_run_overlaps_initial_diff_proof_with_model_lanes() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    write_file(&repo.join("README.md"), "# scheduler overlap fixture\n")?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("test/js/bun/ffi/ffi.test.js"),
+        r#"import { expect, test } from "bun:test";
+
+test("no-finalizer toBuffer keeps caller memory alive", () => {
+  expect(true).toBe(true);
+});
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(
+        &repo,
+        "git",
+        &["commit", "-m", "add focused ffi regression"],
+    )?;
+
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_bun(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let dummy_key = "dummy-minimax-key-for-overlap-test";
+    let (provider_url, provider) =
+        spawn_fake_openai_provider_with_delay(2, Duration::from_millis(250))?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[
+            ("PATH", path.as_str()),
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ("FAKE_BUN_SLEEP_MS", "600"),
+            ("FAKE_BUN_SLEEP_SECONDS", "1"),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 2);
+
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["proof_receipts"], 1);
+    assert_eq!(metrics["models"]["model_lane_calls_attempted"], 1);
+    assert!(
+        metrics["run"]["investigation_proof_overlap_ms"]
+            .as_u64()
+            .is_some_and(|overlap| overlap > 0),
+        "expected initial proof to overlap model lane execution"
+    );
+    assert!(
+        metrics["run"]["local_proof_wall_ms"]
+            .as_u64()
+            .is_some_and(|wall| wall >= 600),
+        "fake focused proof should contribute local proof wall time"
+    );
+
+    let scheduler: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
+    assert_eq!(
+        scheduler["overlaps"]["investigation_proof_overlap_ms"],
+        metrics["run"]["investigation_proof_overlap_ms"]
+    );
+    let phases = scheduler["phases"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("scheduler phases missing"))?;
+    let proof_phase = phases
+        .iter()
+        .find(|phase| phase["loop_id"] == "proof" && phase["stage"] == "initial-diff-broker")
+        .ok_or_else(|| anyhow::anyhow!("initial diff proof phase missing"))?;
+    let model_phase = phases
+        .iter()
+        .find(|phase| phase["loop_id"] == "model" && phase["stage"] == "primary")
+        .ok_or_else(|| anyhow::anyhow!("primary model phase missing"))?;
+    let proof_started = proof_phase["started_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("proof phase missing start"))?;
+    let proof_finished = proof_phase["finished_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("proof phase missing finish"))?;
+    let model_started = model_phase["started_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("model phase missing start"))?;
+    let model_finished = model_phase["finished_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("model phase missing finish"))?;
+    assert!(proof_started <= model_started);
+    assert!(proof_finished >= model_started);
+    assert!(model_finished > model_started);
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0]["result"], "discriminating");
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_preserves_contentful_non_json_lane_output_as_degraded() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
@@ -2076,6 +2239,11 @@ fn main() {
     let cwd = env::current_dir().expect("current dir");
     let args = env::args().skip(1).collect::<Vec<_>>();
     println!("fake bun {}", args.join(" "));
+    if let Ok(value) = env::var("FAKE_BUN_SLEEP_MS") {
+        if let Ok(ms) = value.parse::<u64>() {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
+    }
     let mut base_plus_tests = cwd.to_string_lossy().contains("base-plus-tests");
     let git_file = cwd.join(".git");
     if git_file.is_file() {
@@ -2099,6 +2267,9 @@ fn main() {
             &script,
             r#"#!/bin/sh
 echo "fake bun $*"
+if [ -n "$FAKE_BUN_SLEEP_SECONDS" ]; then
+  sleep "$FAKE_BUN_SLEEP_SECONDS"
+fi
 if [ -f .git ] && grep -q base-plus-tests .git; then
   echo "base failure" >&2
   exit 1
@@ -2210,6 +2381,25 @@ fn spawn_fake_openai_provider(
 fn spawn_fake_openai_provider_with_contents(
     contents: Vec<String>,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_contents_and_delay(contents, Duration::ZERO)
+}
+
+fn spawn_fake_openai_provider_with_delay(
+    expected_requests: usize,
+    response_delay: Duration,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_contents_and_delay(
+        (0..expected_requests)
+            .map(|_| fake_openai_lane_content())
+            .collect(),
+        response_delay,
+    )
+}
+
+fn spawn_fake_openai_provider_with_contents_and_delay(
+    contents: Vec<String>,
+    response_delay: Duration,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
@@ -2223,6 +2413,9 @@ fn spawn_fake_openai_provider_with_contents(
                     let content = contents
                         .get(requests.len())
                         .ok_or_else(|| anyhow::anyhow!("fake provider response missing"))?;
+                    if !response_delay.is_zero() {
+                        thread::sleep(response_delay);
+                    }
                     requests.push(handle_fake_openai_request(stream, content)?);
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
