@@ -9,6 +9,20 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, bail};
 
 #[test]
+fn gh_runner_tool_installer_pins_tokmd_for_bun_ub_sensor() -> Result<()> {
+    let script = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-gh-runner-tools.sh"),
+    )?;
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("install_cargo_bin tokmd tokmd \"$tokmd_version\""));
+    assert!(
+        !script.contains("install_cargo_bin tokmd tokmd\n"),
+        "hosted fallback must not install crates.io latest tokmd implicitly"
+    );
+    Ok(())
+}
+
+#[test]
 fn plan_and_dry_run_write_expected_packet_tree() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
