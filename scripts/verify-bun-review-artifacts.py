@@ -1501,21 +1501,27 @@ def require_resource_lease_artifacts(
 
     focused_leases = {}
     for lease in resource_leases:
-        if lease.get("kind") != "focused-test":
+        if lease.get("kind") not in {"focused-test", "focused-build"}:
             continue
         consumer = lease["consumer"]
         if consumer in focused_leases:
-            fail(f"duplicate focused-test lease consumer: {consumer}")
+            fail(f"duplicate focused proof lease consumer: {consumer}")
         focused_leases[consumer] = lease
     focused_receipts = [
         receipt
         for receipt in proof_receipts
-        if receipt.get("kind") in {"focused-head", "focused-red-green"}
+        if receipt.get("kind") in {"focused-head", "focused-red-green", "focused-build"}
     ]
     for receipt in focused_receipts:
         lease = focused_leases.get(receipt["id"])
         if lease is None:
             fail(f"focused proof receipt lacks resource lease: {receipt!r}")
+        expected_kind = "focused-build" if receipt["kind"] == "focused-build" else "focused-test"
+        if lease["kind"] != expected_kind:
+            fail(
+                "focused proof lease kind does not match receipt kind: "
+                f"lease={lease!r} receipt={receipt!r}"
+            )
         expected = expected_lease_statuses_for_proof_result(receipt["result"])
         if lease["status"] not in expected:
             fail(
@@ -2733,7 +2739,7 @@ def require_proof_receipt_schema(root: pathlib.Path, receipt: dict) -> None:
     for field in ["id", "kind", "base", "head", "test_patch_mode", "result", "reason"]:
         if not isinstance(receipt.get(field), str) or not receipt[field]:
             fail(f"proof receipt missing string field {field}: {receipt!r}")
-    if receipt["kind"] not in {"focused-head", "focused-red-green"}:
+    if receipt["kind"] not in {"focused-head", "focused-red-green", "focused-build"}:
         fail(f"proof receipt has unsupported kind: {receipt!r}")
     if receipt["test_patch_mode"] not in {"head-only", "base-plus-tests"}:
         fail(f"proof receipt has unsupported test_patch_mode: {receipt!r}")
@@ -2809,7 +2815,7 @@ def require_resource_lease_schema(lease: dict) -> None:
     for field in ["id", "kind", "consumer", "status", "reason"]:
         if not isinstance(lease.get(field), str) or not lease[field]:
             fail(f"resource lease missing string field {field}: {lease!r}")
-    if lease["kind"] != "focused-test":
+    if lease["kind"] not in {"focused-test", "focused-build"}:
         fail(f"resource lease has unsupported kind: {lease!r}")
     if lease["status"] not in {"granted", "exhausted", "skipped_profile"}:
         fail(f"resource lease has unsupported status: {lease!r}")

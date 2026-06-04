@@ -1356,6 +1356,15 @@ struct FocusedTestTask {
     request_ids: Vec<String>,
 }
 
+#[derive(Clone, Debug)]
+struct FocusedBuildTask {
+    id: String,
+    command: String,
+    argv: Vec<String>,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum FocusedProofMode {
     HeadOnly,
@@ -1386,6 +1395,16 @@ struct FocusedProofPlan {
     mode: FocusedProofMode,
     head_command: String,
     base_plus_tests_command: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+    status: String,
+    reason: String,
+}
+
+#[derive(Clone, Debug)]
+struct FocusedBuildPlan {
+    id: String,
+    command: String,
     requested_by: Vec<String>,
     request_ids: Vec<String>,
     status: String,
@@ -7613,9 +7632,15 @@ fn write_proof_planner_artifacts(
         box_shape: box_state,
     };
     let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
+    let build_plans = focused_build_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
         .into_iter()
         .map(|plan| proof_task_artifact(plan, budget, lease_budget))
+        .chain(
+            build_plans
+                .into_iter()
+                .map(|plan| focused_build_task_artifact(plan, budget, lease_budget)),
+        )
         .collect::<Vec<_>>();
     let skip = proof_planner_skips(diff);
     let output = ProofPlannerOutput {
@@ -7686,6 +7711,43 @@ fn proof_task_artifact(
     }
 }
 
+fn focused_build_task_artifact(
+    plan: FocusedBuildPlan,
+    budget: ProofBudget,
+    lease_budget: ProofLeaseBudget,
+) -> ProofTaskArtifact {
+    ProofTaskArtifact {
+        schema: "ub-review.proof_task.v1",
+        id: plan.id,
+        kind: "focused-build".to_owned(),
+        command: plan.command.clone(),
+        head_command: plan.command.clone(),
+        base_plus_tests_command: None,
+        purpose: format!("Run focused HEAD build proof `{}`.", plan.command),
+        consumers: focused_build_task_consumers(&plan.requested_by),
+        value: "medium".to_owned(),
+        cost: "focused-build".to_owned(),
+        timeout_sec: budget.per_command_timeout_sec.min(budget.max_total_seconds),
+        lease: ProofTaskLease {
+            cpu: lease_budget.cpu,
+            memory_mb: lease_budget.memory_mb,
+            disk_mb: lease_budget.disk_mb,
+            network: lease_budget.network,
+        },
+        test_file: "workspace".to_owned(),
+        test_name: None,
+        mode: FocusedProofMode::HeadOnly.key().to_owned(),
+        requested_by: plan.requested_by,
+        request_ids: plan.request_ids,
+    }
+}
+
+fn focused_build_task_consumers(requested_by: &[String]) -> Vec<String> {
+    let mut consumers = requested_by.to_vec();
+    push_unique(&mut consumers, "compiler");
+    consumers
+}
+
 fn focused_proof_task_purpose(plan: &FocusedProofPlan) -> String {
     match plan.mode {
         FocusedProofMode::HeadOnly => {
@@ -7729,6 +7791,8 @@ fn write_proof_request_artifacts(
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     let proof_groups = proof_request_groups(proof_requests);
     let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
+    let focused_build_plans =
+        focused_build_plans_from_requests(proof_requests, proof_budget(profile)?);
     fs::write(
         review_dir.join("proof_requests.json"),
         serde_json::to_vec_pretty(proof_requests)?,
@@ -7759,7 +7823,7 @@ fn write_proof_request_artifacts(
 
     let mut plan = String::new();
     plan.push_str("# Proof request plan\n\n");
-    if proof_requests.is_empty() && focused_plans.is_empty() {
+    if proof_requests.is_empty() && focused_plans.is_empty() && focused_build_plans.is_empty() {
         plan.push_str("No proof requests were emitted by model lanes.\n");
     } else {
         if proof_requests.is_empty() {
@@ -7788,7 +7852,7 @@ fn write_proof_request_artifacts(
             }
             plan.push('\n');
         }
-        if focused_plans.is_empty() {
+        if focused_plans.is_empty() && focused_build_plans.is_empty() {
             plan.push_str(
                 "No focused proof targets were planned from the diff or proof requests.\n",
             );
@@ -7829,6 +7893,22 @@ fn write_proof_request_artifacts(
                     plan_item.status,
                     escape_md(&plan_item.head_command),
                     escape_md(&plan_item.base_plus_tests_command),
+                    escape_md(&plan_item.reason)
+                ));
+                if !plan_item.request_ids.is_empty() {
+                    plan.push_str(&format!(
+                        "  - Merged requests: `{}`\n",
+                        plan_item.request_ids.join("`, `")
+                    ));
+                }
+            }
+            for plan_item in focused_build_plans {
+                plan.push_str(&format!(
+                    "- `{}` requested by `{}`: mode=`head-only`, status=`{}`, cost=`focused-build`, head=`{}`. {}\n",
+                    plan_item.id,
+                    plan_item.requested_by.join(", "),
+                    plan_item.status,
+                    escape_md(&plan_item.command),
                     escape_md(&plan_item.reason)
                 ));
                 if !plan_item.request_ids.is_empty() {
@@ -8054,7 +8134,7 @@ fn run_proof_broker_v0(
 ) -> Result<ProofBrokerResult> {
     let budget = proof_budget(profile)?;
     let tasks = focused_test_candidates_from_diff(diff, proof_requests);
-    run_focused_red_green_proof_tasks_with_runner(
+    let mut result = run_focused_red_green_proof_tasks_with_runner(
         root,
         out,
         diff,
@@ -8064,7 +8144,22 @@ fn run_proof_broker_v0(
         tasks,
         run_command_to_files,
         prepare_base_plus_tests_worktree,
-    )
+    )?;
+    let remaining_budget = remaining_focused_proof_budget(budget, &result.resource_leases);
+    let build_tasks = focused_build_candidates_from_requests(proof_requests);
+    let build_result = run_focused_build_proof_tasks_with_runner(
+        root,
+        out,
+        diff,
+        profile,
+        args,
+        remaining_budget,
+        build_tasks,
+        run_command_to_files,
+    )?;
+    result.proof_receipts.extend(build_result.proof_receipts);
+    result.resource_leases.extend(build_result.resource_leases);
+    Ok(result)
 }
 
 #[expect(
@@ -8081,12 +8176,13 @@ fn run_follow_up_proof_broker_v0(
     existing_leases: &[ResourceLease],
     args: &RunArgs,
 ) -> Result<ProofBrokerResult> {
-    let budget = remaining_focused_proof_budget(proof_budget(profile)?, existing_leases);
+    let total_budget = proof_budget(profile)?;
+    let budget = remaining_focused_proof_budget(total_budget, existing_leases);
     let tasks = unreceipted_focused_test_tasks(
         focused_test_candidates_from_requests(proof_requests),
         existing_receipts,
     );
-    run_follow_up_proof_broker_v0_with_runner(
+    let mut result = run_follow_up_proof_broker_v0_with_runner(
         root,
         out,
         diff,
@@ -8096,7 +8192,32 @@ fn run_follow_up_proof_broker_v0(
         tasks,
         run_command_to_files,
         prepare_base_plus_tests_worktree,
-    )
+    )?;
+    let mut consumed_leases = existing_leases.to_vec();
+    consumed_leases.extend(result.resource_leases.clone());
+    let remaining_budget = remaining_focused_proof_budget(total_budget, &consumed_leases);
+    let existing_and_new_receipts = existing_receipts
+        .iter()
+        .chain(result.proof_receipts.iter())
+        .cloned()
+        .collect::<Vec<_>>();
+    let build_tasks = unreceipted_focused_build_tasks(
+        focused_build_candidates_from_requests(proof_requests),
+        &existing_and_new_receipts,
+    );
+    let build_result = run_focused_build_proof_tasks_with_runner(
+        root,
+        out,
+        diff,
+        profile,
+        args,
+        remaining_budget,
+        build_tasks,
+        run_command_to_files,
+    )?;
+    result.proof_receipts.extend(build_result.proof_receipts);
+    result.resource_leases.extend(build_result.resource_leases);
+    Ok(result)
 }
 
 #[expect(
@@ -8144,7 +8265,7 @@ fn remaining_focused_proof_budget(
 ) -> ProofBudget {
     let focused_leases = existing_leases
         .iter()
-        .filter(|lease| lease.kind == "focused-test")
+        .filter(|lease| focused_proof_lease_counts_budget(&lease.kind))
         .collect::<Vec<_>>();
     if focused_leases
         .iter()
@@ -8171,10 +8292,28 @@ fn remaining_focused_proof_budget(
     budget
 }
 
+fn focused_proof_lease_counts_budget(kind: &str) -> bool {
+    matches!(kind, "focused-test" | "focused-build")
+}
+
 fn unreceipted_focused_test_tasks(
     tasks: Vec<FocusedTestTask>,
     existing_receipts: &[ProofReceipt],
 ) -> Vec<FocusedTestTask> {
+    let existing_ids = existing_receipts
+        .iter()
+        .map(|receipt| receipt.id.clone())
+        .collect::<BTreeSet<_>>();
+    tasks
+        .into_iter()
+        .filter(|task| !existing_ids.contains(&task.id))
+        .collect()
+}
+
+fn unreceipted_focused_build_tasks(
+    tasks: Vec<FocusedBuildTask>,
+    existing_receipts: &[ProofReceipt],
+) -> Vec<FocusedBuildTask> {
     let existing_ids = existing_receipts
         .iter()
         .map(|receipt| receipt.id.clone())
@@ -8315,6 +8454,158 @@ where
         proof_receipts: receipts,
         resource_leases: leases,
     })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
+fn run_focused_build_proof_tasks_with_runner<F>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    args: &RunArgs,
+    budget: ProofBudget,
+    tasks: Vec<FocusedBuildTask>,
+    mut runner: F,
+) -> Result<ProofBrokerResult>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+{
+    let mut receipts = Vec::new();
+    let mut leases = Vec::new();
+    let mut executed_tasks = 0_usize;
+    let mut estimated_seconds = 0_u64;
+    let lease_budget = proof_lease_budget(profile)?;
+    for task in tasks {
+        if args.dry_run {
+            leases.push(focused_build_resource_lease(
+                &task,
+                budget,
+                lease_budget,
+                "skipped_profile",
+                "dry-run; resource broker did not grant a build proof lease",
+            ));
+            receipts.push(skipped_focused_build_receipt(
+                out,
+                diff,
+                &task,
+                "skipped_profile",
+                "dry-run; proof broker did not execute focused build",
+            )?);
+            continue;
+        }
+        if profile.limits.builds == 0 {
+            leases.push(focused_build_resource_lease(
+                &task,
+                budget,
+                lease_budget,
+                "skipped_profile",
+                "profile allows zero focused build leases",
+            ));
+            receipts.push(skipped_focused_build_receipt(
+                out,
+                diff,
+                &task,
+                "skipped_profile",
+                "profile allows zero focused build leases",
+            )?);
+            continue;
+        }
+        if !focused_build_budget_allows_next(executed_tasks, estimated_seconds, budget) {
+            leases.push(focused_build_resource_lease(
+                &task,
+                budget,
+                lease_budget,
+                "exhausted",
+                "focused build proof lease budget exhausted by runtime profile",
+            ));
+            receipts.push(skipped_focused_build_receipt(
+                out,
+                diff,
+                &task,
+                "skipped_budget",
+                "focused build proof lease budget exhausted by runtime profile",
+            )?);
+            continue;
+        }
+        leases.push(focused_build_resource_lease(
+            &task,
+            budget,
+            lease_budget,
+            "granted",
+            "focused build proof lease granted by runtime profile",
+        ));
+        receipts.push(run_focused_build_proof_task(
+            root,
+            out,
+            diff,
+            &task,
+            budget.per_command_timeout_sec,
+            &mut runner,
+        )?);
+        executed_tasks += 1;
+        estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
+    }
+    Ok(ProofBrokerResult {
+        proof_receipts: receipts,
+        resource_leases: leases,
+    })
+}
+
+fn focused_build_budget_allows_next(
+    current_tasks: usize,
+    estimated_seconds: u64,
+    budget: ProofBudget,
+) -> bool {
+    current_tasks < budget.max_focused_tests
+        && estimated_seconds.saturating_add(budget.per_command_timeout_sec)
+            <= budget.max_total_seconds
+}
+
+fn run_focused_build_proof_task<F>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    task: &FocusedBuildTask,
+    timeout_sec: u64,
+    runner: &mut F,
+) -> Result<ProofReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+{
+    let spec = focused_build_command_spec_for_task(task);
+    let head =
+        run_proof_command_receipt_for_id(root, out, &task.id, "head", &spec, timeout_sec, runner)?;
+    let result = match head.status.as_str() {
+        "passed" => "head_passed",
+        "failed" => "head_failed",
+        "timed_out" => "timed_out",
+        _ => "skipped_profile",
+    };
+    let reason = format!("HEAD build proof {}: {}", head.status, head.reason);
+    Ok(focused_build_receipt(
+        diff,
+        task,
+        vec![head],
+        result.to_owned(),
+        reason,
+    ))
 }
 
 fn run_focused_head_proof_task<F>(
@@ -8471,7 +8762,29 @@ where
         &Path,
     ) -> Result<CommandStatus>,
 {
-    let paths = proof_command_paths(out, &task.id, side)?;
+    run_proof_command_receipt_for_id(command_root, out, &task.id, side, spec, timeout_sec, runner)
+}
+
+fn run_proof_command_receipt_for_id<F>(
+    command_root: &Path,
+    out: &Path,
+    receipt_id: &str,
+    side: &str,
+    spec: &ProofCommandSpec,
+    timeout_sec: u64,
+    runner: &mut F,
+) -> Result<ProofCommandReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+{
+    let paths = proof_command_paths(out, receipt_id, side)?;
     let command = command_display_with_env(&spec.env, &spec.argv);
     let status = runner(
         command_root,
@@ -8534,7 +8847,18 @@ fn skipped_proof_command_receipt(
     status: &str,
     reason: String,
 ) -> Result<ProofCommandReceipt> {
-    let paths = proof_command_paths(out, &task.id, side)?;
+    skipped_proof_command_receipt_for_id(out, &task.id, side, spec, status, reason)
+}
+
+fn skipped_proof_command_receipt_for_id(
+    out: &Path,
+    receipt_id: &str,
+    side: &str,
+    spec: &ProofCommandSpec,
+    status: &str,
+    reason: String,
+) -> Result<ProofCommandReceipt> {
+    let paths = proof_command_paths(out, receipt_id, side)?;
     Ok(ProofCommandReceipt {
         side: side.to_owned(),
         command: command_display_with_env(&spec.env, &spec.argv),
@@ -8569,6 +8893,31 @@ fn skipped_focused_proof_receipt(
     ))
 }
 
+fn skipped_focused_build_receipt(
+    out: &Path,
+    diff: &DiffContext,
+    task: &FocusedBuildTask,
+    result: &str,
+    reason: &str,
+) -> Result<ProofReceipt> {
+    let spec = focused_build_command_spec_for_task(task);
+    let command = skipped_proof_command_receipt_for_id(
+        out,
+        &task.id,
+        "head",
+        &spec,
+        "skipped",
+        reason.to_owned(),
+    )?;
+    Ok(focused_build_receipt(
+        diff,
+        task,
+        vec![command],
+        result.to_owned(),
+        reason.to_owned(),
+    ))
+}
+
 fn focused_receipt(
     diff: &DiffContext,
     task: &FocusedTestTask,
@@ -8581,6 +8930,28 @@ fn focused_receipt(
         FocusedProofMode::RedGreen => {
             focused_red_green_receipt(diff, task, commands, result, reason)
         }
+    }
+}
+
+fn focused_build_receipt(
+    diff: &DiffContext,
+    task: &FocusedBuildTask,
+    commands: Vec<ProofCommandReceipt>,
+    result: String,
+    reason: String,
+) -> ProofReceipt {
+    ProofReceipt {
+        schema: "ub-review.proof_receipt.v1".to_owned(),
+        id: task.id.clone(),
+        kind: "focused-build".to_owned(),
+        base: diff.base.clone(),
+        head: diff.head.clone(),
+        test_patch_mode: "head-only".to_owned(),
+        requested_by: task.requested_by.clone(),
+        request_ids: task.request_ids.clone(),
+        commands,
+        result,
+        reason,
     }
 }
 
@@ -8743,6 +9114,41 @@ fn focused_test_candidates_from_requests(proof_requests: &[ProofRequest]) -> Vec
     tasks
 }
 
+fn focused_build_plans_from_requests(
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedBuildPlan> {
+    focused_build_candidates_from_requests(proof_requests)
+        .into_iter()
+        .take(budget.max_focused_tests)
+        .map(|task| FocusedBuildPlan {
+            id: task.id,
+            command: command_display(&task.argv),
+            requested_by: task.requested_by,
+            request_ids: task.request_ids,
+            status: "planned".to_owned(),
+            reason: format!(
+                "planner-only focused build target under budget: max {} command(s), {}s per command, {}s total",
+                budget.max_focused_tests, budget.per_command_timeout_sec, budget.max_total_seconds
+            ),
+        })
+        .collect()
+}
+
+fn focused_build_candidates_from_requests(
+    proof_requests: &[ProofRequest],
+) -> Vec<FocusedBuildTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
+    for group in &request_groups {
+        let Some(task) = focused_build_task_from_request_group(group) else {
+            continue;
+        };
+        merge_focused_build_task(&mut tasks, task);
+    }
+    tasks
+}
+
 fn merge_focused_test_request_group_tasks(
     tasks: &mut Vec<FocusedTestTask>,
     request_groups: &[ProofRequestGroup],
@@ -8767,6 +9173,42 @@ fn merge_focused_test_request_group_tasks(
             },
         );
     }
+}
+
+fn focused_build_task_from_request_group(group: &ProofRequestGroup) -> Option<FocusedBuildTask> {
+    if group.status != "requested" || group.cost != "focused-build" {
+        return None;
+    }
+    let spec = focused_build_command_spec(&group.command)?;
+    let command = command_display(&spec.argv);
+    Some(FocusedBuildTask {
+        id: focused_build_task_id(&command),
+        command,
+        argv: spec.argv,
+        requested_by: group.requested_by.clone(),
+        request_ids: group.request_ids.clone(),
+    })
+}
+
+fn focused_build_task_id(command: &str) -> String {
+    let fingerprint = sha256_hex(command.as_bytes());
+    format!("proof-build-{}", &fingerprint[..12])
+}
+
+fn merge_focused_build_task(tasks: &mut Vec<FocusedBuildTask>, mut task: FocusedBuildTask) {
+    if let Some(existing) = tasks
+        .iter_mut()
+        .find(|existing| existing.command == task.command)
+    {
+        for lane in task.requested_by.drain(..) {
+            push_unique(&mut existing.requested_by, &lane);
+        }
+        for request_id in task.request_ids.drain(..) {
+            push_unique(&mut existing.request_ids, &request_id);
+        }
+        return;
+    }
+    tasks.push(task);
 }
 
 fn focused_proof_budget_allows_next(
@@ -8962,6 +9404,31 @@ fn focused_test_resource_lease(
     }
 }
 
+fn focused_build_resource_lease(
+    task: &FocusedBuildTask,
+    budget: ProofBudget,
+    lease_budget: ProofLeaseBudget,
+    status: &str,
+    reason: &str,
+) -> ResourceLease {
+    ResourceLease {
+        schema: "ub-review.resource_lease.v1".to_owned(),
+        id: format!("lease-{}", task.id),
+        kind: "focused-build".to_owned(),
+        consumer: task.id.clone(),
+        status: status.to_owned(),
+        reason: reason.to_owned(),
+        cpu: lease_budget.cpu,
+        memory_mb: lease_budget.memory_mb,
+        disk_mb: lease_budget.disk_mb,
+        timeout_sec: budget.per_command_timeout_sec.min(budget.max_total_seconds),
+        network: lease_budget.network,
+        scratch: lease_budget.scratch,
+        worktree: None,
+        command: Some(format!("head: {}", task.command)),
+    }
+}
+
 fn focused_test_names_for_file(patch: &str, file: &str) -> Vec<String> {
     let mut names = Vec::new();
     let mut current_path = String::new();
@@ -9052,6 +9519,94 @@ fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSp
         argv.push(name.clone());
     }
     ProofCommandSpec { argv, env }
+}
+
+fn focused_build_command_spec_for_task(task: &FocusedBuildTask) -> ProofCommandSpec {
+    ProofCommandSpec {
+        argv: task.argv.clone(),
+        env: BTreeMap::new(),
+    }
+}
+
+fn focused_build_command_spec(command: &str) -> Option<ProofCommandSpec> {
+    if has_shell_control_token(command) {
+        return None;
+    }
+    let argv = command
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let [program, subcommand, args @ ..] = argv.as_slice() else {
+        return None;
+    };
+    if program != "cargo" || !matches!(subcommand.as_str(), "build" | "check" | "doc") {
+        return None;
+    }
+    if !args.iter().any(|arg| arg == "--locked") {
+        return None;
+    }
+    if !focused_cargo_build_args_allowed(args) {
+        return None;
+    }
+    Some(ProofCommandSpec {
+        argv,
+        env: BTreeMap::new(),
+    })
+}
+
+fn focused_cargo_build_args_allowed(args: &[String]) -> bool {
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        match arg {
+            "--locked"
+            | "--workspace"
+            | "--all-targets"
+            | "--all-features"
+            | "--no-default-features"
+            | "--release"
+            | "--tests"
+            | "--benches"
+            | "--examples"
+            | "--bins"
+            | "--lib"
+            | "--no-deps"
+            | "--offline"
+            | "--frozen" => {
+                index += 1;
+            }
+            "-p" | "--package" | "--features" | "--target" => {
+                let Some(value) = args.get(index + 1) else {
+                    return false;
+                };
+                if !safe_cargo_build_arg_value(value) {
+                    return false;
+                }
+                index += 2;
+            }
+            _ if arg.starts_with("--package=")
+                || arg.starts_with("--features=")
+                || arg.starts_with("--target=") =>
+            {
+                let Some((_, value)) = arg.split_once('=') else {
+                    return false;
+                };
+                if value.is_empty() || !safe_cargo_build_arg_value(value) {
+                    return false;
+                }
+                index += 1;
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn safe_cargo_build_arg_value(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|ch| {
+            ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/' | ':' | ',' | '+')
+        })
 }
 
 fn proof_task_plan_command(task: &FocusedTestTask, side: &str, worktree: &str) -> String {
@@ -12853,13 +13408,19 @@ fn proof_request_status(command: &str, cost: &str) -> &'static str {
 }
 
 fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
-    if cost != "focused-test" || has_shell_control_token(command) {
+    if has_shell_control_token(command) {
         return false;
     }
-    let parts = command.split_whitespace().collect::<Vec<_>>();
-    match parts.as_slice() {
-        ["bun", "test", file, ..] => is_bun_focused_test_file(file),
-        ["bun", "bd", "test", file, ..] => is_bun_focused_test_file(file),
+    match cost {
+        "focused-test" => {
+            let parts = command.split_whitespace().collect::<Vec<_>>();
+            match parts.as_slice() {
+                ["bun", "test", file, ..] => is_bun_focused_test_file(file),
+                ["bun", "bd", "test", file, ..] => is_bun_focused_test_file(file),
+                _ => false,
+            }
+        }
+        "focused-build" => focused_build_command_spec(command).is_some(),
         _ => false,
     }
 }
@@ -13501,7 +14062,14 @@ fn render_pull_request_review_body(
     }
 
     if !proof_result_receipts.is_empty() {
-        text.push_str("\n## Test proof\n\n");
+        if proof_result_receipts
+            .iter()
+            .any(|receipt| receipt.kind == "focused-build")
+        {
+            text.push_str("\n## Proof results\n\n");
+        } else {
+            text.push_str("\n## Test proof\n\n");
+        }
         for receipt in proof_result_receipts {
             render_proof_receipt_summary(&mut text, receipt);
         }
@@ -13859,6 +14427,12 @@ fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
     let base_plus_tests_status = proof_command_outcome(receipt, "base-plus-tests")
         .unwrap_or_else(|| "base+tests status unknown".to_owned());
     let summary = match receipt.result.as_str() {
+        "head_passed" if receipt.kind == "focused-build" => {
+            format!("Focused build proof passed: `{command}`.")
+        }
+        "head_failed" if receipt.kind == "focused-build" => {
+            format!("Focused build proof failed: `{command}`.")
+        }
         "discriminating" => format!(
             "Focused red/green proof discriminates the patch: {head_status} and {base_plus_tests_status} for `{command}`."
         ),
@@ -17959,6 +18533,143 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn proof_broker_v0_executes_allowlisted_focused_build_request() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-build-001".to_owned(),
+            lane: "architecture".to_owned(),
+            requested_by: vec!["architecture".to_owned()],
+            command: "cargo check --workspace --all-targets --locked".to_owned(),
+            reason: "Run the requested focused build proof.".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+        let tasks = super::focused_build_candidates_from_requests(&proof_requests);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].command, proof_requests[0].command);
+
+        let args = test_run_args(out.clone());
+        let profile = Profile {
+            limits: Limits {
+                builds: 1,
+                ..Limits::default()
+            },
+            ..Profile::default()
+        };
+        let mut commands = Vec::<String>::new();
+        let proof_result = super::run_focused_build_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 120,
+                max_total_seconds: 120,
+            },
+            tasks,
+            |_root, argv, env, timeout, stdout, stderr| {
+                commands.push(super::command_display_with_env(env, argv));
+                assert!(env.is_empty());
+                assert_eq!(timeout, 120);
+                fs::write(stdout, b"build ok\n")?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "completed".to_owned(),
+                    duration_ms: 34,
+                })
+            },
+        )?;
+
+        assert_eq!(
+            commands,
+            vec!["cargo check --workspace --all-targets --locked"]
+        );
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        let receipt = &proof_result.proof_receipts[0];
+        assert_eq!(receipt.kind, "focused-build");
+        assert_eq!(receipt.test_patch_mode, "head-only");
+        assert_eq!(receipt.result, "head_passed");
+        assert_eq!(receipt.commands.len(), 1);
+        assert_eq!(receipt.commands[0].side, "head");
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[0].command, proof_requests[0].command);
+        assert!(out.join(&receipt.commands[0].stdout).exists());
+        let lease = &proof_result.resource_leases[0];
+        assert_eq!(lease.kind, "focused-build");
+        assert_eq!(lease.status, "granted");
+        assert_eq!(lease.timeout_sec, 120);
+        assert_eq!(lease.worktree, None);
+        assert_eq!(
+            lease.command.as_deref(),
+            Some("head: cargo check --workspace --all-targets --locked")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn focused_build_request_skips_when_profile_disables_build_leases() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-build-001".to_owned(),
+            lane: "architecture".to_owned(),
+            requested_by: vec!["architecture".to_owned()],
+            command: "cargo check --workspace --all-targets --locked".to_owned(),
+            reason: "Run the requested focused build proof.".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+        let tasks = super::focused_build_candidates_from_requests(&proof_requests);
+        let args = test_run_args(out.clone());
+        let proof_result = super::run_focused_build_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 120,
+                max_total_seconds: 120,
+            },
+            tasks,
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                Err(anyhow::anyhow!("build runner should not execute"))
+            },
+        )?;
+
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        assert_eq!(proof_result.proof_receipts[0].kind, "focused-build");
+        assert_eq!(proof_result.proof_receipts[0].result, "skipped_profile");
+        assert_eq!(proof_result.proof_receipts[0].commands[0].status, "skipped");
+        assert_eq!(proof_result.resource_leases[0].kind, "focused-build");
+        assert_eq!(proof_result.resource_leases[0].status, "skipped_profile");
+        assert_eq!(
+            proof_result.resource_leases[0].reason,
+            "profile allows zero focused build leases"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn proof_budget_comes_from_runtime_profile_budgets() -> Result<()> {
         let profiles = builtin_profiles();
         let gh_runner = profiles
@@ -18137,13 +18848,24 @@ index 1111111..2222222 100644
             super::validate_proof_request(
                 &lane,
                 super::ModelProofRequest {
-                    command: "cargo build --workspace".to_owned(),
+                    command: "cargo check --workspace --all-targets --locked".to_owned(),
                     reason: "Compile the workspace.".to_owned(),
                     cost: Some("focused-build".to_owned()),
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
                 2,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "cargo build --workspace".to_owned(),
+                    reason: "Unlocked build should not be brokered.".to_owned(),
+                    cost: Some("focused-build".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                3,
             ),
             super::validate_proof_request(
                 &lane,
@@ -18155,7 +18877,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                3,
+                4,
             ),
             super::validate_proof_request(
                 &lane,
@@ -18166,7 +18888,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                4,
+                5,
             ),
         ];
 
@@ -18174,14 +18896,15 @@ index 1111111..2222222 100644
         assert_eq!(requests[0].cost, "focused-test");
         assert_eq!(requests[1].status, "requested");
         assert_eq!(requests[1].cost, "focused-test");
-        assert_eq!(requests[2].status, "unsupported");
+        assert_eq!(requests[2].status, "requested");
         assert_eq!(requests[2].cost, "focused-build");
         assert_eq!(requests[3].status, "unsupported");
-        assert_eq!(requests[4].status, "invalid");
-        assert_eq!(requests[4].command, "<missing command>");
+        assert_eq!(requests[4].status, "unsupported");
+        assert_eq!(requests[5].status, "invalid");
+        assert_eq!(requests[5].command, "<missing command>");
 
         let groups = super::proof_request_groups(&requests);
-        assert_eq!(groups.len(), 5);
+        assert_eq!(groups.len(), 6);
         assert!(groups.iter().any(|group| group.status == "requested"));
         assert!(groups.iter().any(|group| group.status == "unsupported"));
         assert!(groups.iter().any(|group| group.status == "invalid"));
@@ -18195,6 +18918,14 @@ index 1111111..2222222 100644
         assert_eq!(task.request_ids.len(), 2);
         assert!(task.request_ids.contains(&requests[0].id));
         assert!(task.request_ids.contains(&requests[1].id));
+        let build_tasks = super::focused_build_candidates_from_requests(&requests);
+        assert_eq!(build_tasks.len(), 1);
+        assert_eq!(
+            build_tasks[0].command,
+            "cargo check --workspace --all-targets --locked"
+        );
+        assert_eq!(build_tasks[0].requested_by, vec!["tests-oracle".to_owned()]);
+        assert_eq!(build_tasks[0].request_ids, vec![requests[2].id.clone()]);
     }
 
     #[test]
@@ -18235,12 +18966,12 @@ index 1111111..2222222 100644
                 id: "proof-build-001".to_owned(),
                 lane: "architecture".to_owned(),
                 requested_by: vec!["architecture".to_owned()],
-                command: "cargo build --workspace".to_owned(),
-                reason: "Compile proof is outside proof broker v0.".to_owned(),
+                command: "cargo check --workspace --all-targets --locked".to_owned(),
+                reason: "Compile proof is brokered as a focused build.".to_owned(),
                 cost: "focused-build".to_owned(),
                 timeout_sec: 300,
                 required: false,
-                status: "unsupported".to_owned(),
+                status: "requested".to_owned(),
             },
         ];
 
@@ -18259,12 +18990,13 @@ index 1111111..2222222 100644
 
         assert!(proof_plan.contains("## Focused proof plan"));
         assert!(proof_plan.contains("mode=`red-green`"));
-        assert!(proof_plan.contains("status=unsupported"));
+        assert!(proof_plan.contains("cost=`focused-build`"));
+        assert!(proof_plan.contains("cargo check --workspace --all-targets --locked"));
         assert!(proof_plan.contains("No proof broker commands were executed"));
         assert!(
             proof_groups
                 .iter()
-                .any(|group| group.status == "unsupported")
+                .any(|group| { group.status == "requested" && group.cost == "focused-build" })
         );
         assert!(proof_plan.contains(
             "head=`cwd=target/ub-review/proof-worktrees/head bun bd test test/js/bun/md/md-edge-cases.test.ts -t"
