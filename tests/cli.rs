@@ -14,7 +14,7 @@ fn gh_runner_tool_installer_pins_tokmd_for_bun_ub_sensor() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-gh-runner-tools.sh"),
     )?;
-    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.11.1"));
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
     assert!(script.contains("install_cargo_bin tokmd tokmd \"$tokmd_version\""));
     assert!(
         !script.contains("install_cargo_bin tokmd tokmd\n"),
@@ -28,7 +28,7 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
     )?;
-    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.11.1"));
+    assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
     assert!(script.contains("prefix=\"${UB_REVIEW_TOOL_DIR:-/opt/ub-review}\""));
     assert!(script.contains("export PATH=\"$prefix/bin:\\$PATH\""));
     assert!(script.contains("export UB_REVIEW_TOOL_DIR=\"$prefix\""));
@@ -1062,7 +1062,7 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
         &[("PATH", path.as_str())],
     )?;
     assert!(output.contains("required core review tool versions drifted"));
-    assert!(output.contains("tokmd expected 1.11.1"));
+    assert!(output.contains("tokmd expected 1.12.0"));
     assert!(output.contains("tokmd 1.10.0"));
     Ok(())
 }
