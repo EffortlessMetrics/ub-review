@@ -13681,7 +13681,7 @@ If there is no blocker/high/medium actionable issue, use empty arrays and put th
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
-Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure does not return `None`, an empty box, or a recoverable fallback. If that objection arises, return it as a refuted false-premise failed_objection, not as a candidate finding."#,
+Calibration: do not introduce `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation-failure analysis unless the current PR diff, seeded thread, or a candidate explicitly raises that objection. When raised, allocation failure does not return `None`, an empty box, or a recoverable fallback; return it as a refuted false-premise failed_objection, not as a candidate finding."#,
         lane = lane.id,
         provider = spec.provider.key(),
         model = spec.model,
@@ -18175,6 +18175,20 @@ mod tests {
             assert!(prompt.contains("Do not drip-feed one nit per pass"));
         }
         Ok(())
+    }
+
+    #[test]
+    fn lane_prompt_does_not_seed_global_box_refutations() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+        let lane = lane_plan("tests-red-green");
+
+        let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
+
+        assert!(prompt.contains("do not introduce `Box::from(slice)`"));
+        assert!(prompt.contains("unless the current PR diff, seeded thread, or a candidate"));
+        assert!(prompt.contains("return it as a refuted false-premise failed_objection"));
+        assert!(!prompt.contains("If that objection arises"));
     }
 
     #[test]
