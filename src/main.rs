@@ -6000,7 +6000,6 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
         "## Test proof",
         "## Proof results",
         "## Refuted",
-        "## Residual risk",
         "## Parked follow-ups",
         "## Evidence gaps",
         "## Missing evidence",
@@ -6164,6 +6163,7 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
         "human should still review",
         "residual risk remains for human review",
         "bounded review",
+        "## residual risk",
         "lane transcript",
         "lane roster",
         "model lane roster",
@@ -7764,10 +7764,10 @@ fn resource_lease_routed_evidence(lease: &ResourceLease) -> OrchestratorRoutedEv
 fn routed_status_for_proof_receipt(receipt: &ProofReceipt) -> &'static str {
     if proof_receipt_is_test_proof_result(receipt) {
         "tool-confirmed"
-    } else if proof_receipt_is_residual_risk(receipt) {
-        "residual-risk"
     } else if proof_receipt_is_missing_evidence(receipt) {
         "missing-evidence"
+    } else if proof_receipt_is_residual_risk(receipt) {
+        "residual-risk"
     } else {
         "recorded"
     }
@@ -14635,11 +14635,6 @@ fn render_pull_request_review_body(
         .copied()
         .filter(|observation| is_parked_observation(observation))
         .collect::<Vec<_>>();
-    let residual_risk_observations = pr_observation_items
-        .iter()
-        .copied()
-        .filter(|observation| is_residual_risk_observation(observation))
-        .collect::<Vec<_>>();
     let verification_observations = pr_observation_items
         .iter()
         .copied()
@@ -14693,10 +14688,6 @@ fn render_pull_request_review_body(
         .collect::<Vec<_>>();
     let has_specific_missing_evidence = !missing_observations.is_empty()
         || proof_receipts.iter().any(proof_receipt_is_missing_evidence);
-    let residual_risk_receipts = proof_receipts
-        .iter()
-        .filter(|receipt| proof_receipt_is_residual_risk(receipt))
-        .collect::<Vec<_>>();
     let proof_result_receipts = proof_receipts
         .iter()
         .filter(|receipt| proof_receipt_is_test_proof_result(receipt))
@@ -14724,8 +14715,6 @@ fn render_pull_request_review_body(
         || !proof_result_receipts.is_empty()
         || !parked.is_empty()
         || !parked_observations.is_empty()
-        || !residual_risk_observations.is_empty()
-        || !residual_risk_receipts.is_empty()
         || has_specific_missing_evidence;
     if !has_reviewer_value_item {
         return String::new();
@@ -14805,16 +14794,6 @@ fn render_pull_request_review_body(
         }
     }
 
-    if !residual_risk_observations.is_empty() || !residual_risk_receipts.is_empty() {
-        text.push_str("\n## Residual risk\n\n");
-        for observation in &residual_risk_observations {
-            render_review_observation(&mut text, observation, PrObservationTone::Signal);
-        }
-        for receipt in residual_risk_receipts {
-            render_residual_risk_proof_receipt_summary(&mut text, receipt);
-        }
-    }
-
     if has_specific_missing_evidence {
         text.push_str("\n## Evidence gaps\n\n");
         for observation in &missing_observations {
@@ -14878,7 +14857,11 @@ fn proof_receipt_is_residual_risk(receipt: &ProofReceipt) -> bool {
 fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
     matches!(
         receipt.result.as_str(),
-        "base_patch_failed" | "timed_out" | "skipped_budget" | "skipped_profile"
+        "non_discriminating"
+            | "base_patch_failed"
+            | "timed_out"
+            | "skipped_budget"
+            | "skipped_profile"
     )
 }
 
@@ -15285,28 +15268,6 @@ fn render_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
     render_pr_signal(text, &summary);
 }
 
-fn render_residual_risk_proof_receipt_summary(text: &mut String, receipt: &ProofReceipt) {
-    let command = receipt
-        .commands
-        .first()
-        .map(|command| command.command.as_str())
-        .unwrap_or("focused test");
-    let head_status =
-        proof_command_outcome(receipt, "head").unwrap_or_else(|| "HEAD status unknown".to_owned());
-    let base_plus_tests_status = proof_command_outcome(receipt, "base-plus-tests")
-        .unwrap_or_else(|| "base+tests status unknown".to_owned());
-    let summary = match receipt.result.as_str() {
-        "non_discriminating" => format!(
-            "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
-        ),
-        _ => format!(
-            "Focused proof result `{}` leaves residual risk for `{}`.",
-            receipt.result, command
-        ),
-    };
-    render_pr_signal(text, &summary);
-}
-
 fn proof_command_outcome(receipt: &ProofReceipt, side: &str) -> Option<String> {
     let command = receipt
         .commands
@@ -15350,6 +15311,15 @@ fn render_missing_proof_receipt_summary(text: &mut String, receipt: &ProofReceip
         "base_patch_failed" => format!(
             "Base+tests proof was unavailable for `{command}` because the test-only patch did not apply cleanly."
         ),
+        "non_discriminating" => {
+            let head_status = proof_command_outcome(receipt, "head")
+                .unwrap_or_else(|| "HEAD status unknown".to_owned());
+            let base_plus_tests_status = proof_command_outcome(receipt, "base-plus-tests")
+                .unwrap_or_else(|| "base+tests status unknown".to_owned());
+            format!(
+                "Focused red/green proof did not discriminate the patch: {head_status} and {base_plus_tests_status} for `{command}`."
+            )
+        }
         "timed_out" => format!("Focused proof timed out for `{command}`; logs are in artifacts."),
         "skipped_budget" => {
             format!(
@@ -21807,6 +21777,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Residual risk\n\n- External trust risk remains.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("residual-risk section unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Evidence gaps\n\n- Shared context hash and terminal state are available in artifacts.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -22936,7 +22915,7 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn pr_review_body_renders_specific_residual_risk_only() {
+    fn pr_review_body_omits_residual_risk_only_observations() {
         let body = render_review_body(
             "abc123",
             &test_plan(Vec::new()),
@@ -22960,8 +22939,9 @@ UB_REVIEW_HTTP_STATUS:429
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Residual risk"));
-        assert!(body.contains("FileHandle.write test was not proven"));
+        assert!(body.is_empty());
+        assert!(!body.contains("## Residual risk"));
+        assert!(!body.contains("FileHandle.write test was not proven"));
         assert!(!body.contains("A human should still inspect"));
         assert!(!body.contains("residual risk remains for human review"));
         assert!(!has_standalone_approval_line(&body));
@@ -23675,7 +23655,7 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn pr_review_body_renders_non_discriminating_proof_as_residual_risk() {
+    fn pr_review_body_renders_non_discriminating_proof_as_evidence_gap() {
         let receipt = test_red_green_proof_receipt("non_discriminating", "passed");
         let body = render_review_body(
             "abc123",
@@ -23694,7 +23674,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert!(!body.contains("## Decision"));
         assert!(!body.contains("No blocking UB finding from this pass."));
-        assert!(body.contains("## Residual risk"));
+        assert!(body.contains("## Evidence gaps"));
+        assert!(!body.contains("## Residual risk"));
         assert!(body.contains("HEAD passed (exit 0) and base+tests passed (exit 0)"));
         assert!(!body.contains("## Test proof"));
         assert!(!body.contains("Needs one residual-risk check"));
