@@ -20,12 +20,13 @@ The script installs Rust and npm-backed tools into `$UB_REVIEW_TOOL_DIR/bin`,
 where `UB_REVIEW_TOOL_DIR` defaults to `/opt/ub-review`. It uses
 `cargo install --locked --root "$UB_REVIEW_TOOL_DIR"` for Rust tools and
 `go install` for `actionlint`, so the standard image build must provide Go.
-`tokmd` defaults to version `1.11.1` because the Bun profile depends on the
-current on-diff `analyze`, `cockpit`, and `context` command surfaces.
+`tokmd` defaults to version `1.12.0` because the Bun profile depends on the
+scoped `bun-ub` preset plus the current on-diff `cockpit` and `context`
+command surfaces.
 `actionlint` defaults to `v1.7.12`:
 
 ```bash
-export UB_REVIEW_TOKMD_VERSION="1.11.1"
+export UB_REVIEW_TOKMD_VERSION="1.12.0"
 export UB_REVIEW_ACTIONLINT_VERSION="v1.7.12"
 scripts/install-review-image-tools.sh
 ```
@@ -87,29 +88,24 @@ The intended commands are:
 
 ```bash
 tokmd analyze \
-  --preset estimate \
+  --preset bun-ub \
   --effort-base-ref "$BASE_REF" \
-  --effort-head-ref "$HEAD_REF"
+  --effort-head-ref "$HEAD_REF" \
+  <existing changed paths>
 
 tokmd cockpit \
   --base "$BASE_REF" \
   --head "$HEAD_REF"
 
 tokmd context \
-  --budget 64k \
-  --mode bundle \
+  --budget 64000 \
   --output sensors/tokmd/context.md \
   <existing changed paths>
 ```
 
 `analyze` is the primary on-diff evidence packet. `cockpit` is the compact PR
-overview for summaries and metrics. `context` is bounded lane context over
-changed files only.
-
-The desired future `tokmd analyze --preset bun-ub` command should replace the
-`estimate` preset once `tokmd` exposes that preset. Until then, the runner uses
-the verified effort-delta command rather than shipping a known-failing sensor
-invocation. Upstream tracker: `EffortlessMetrics/tokmd-swarm#182`.
+overview for summaries and metrics. `context` is the token-budget receipt over
+changed files only, including charged tokens, full tokens, and inclusion policy.
 
 Warm the cache for a base tree:
 
