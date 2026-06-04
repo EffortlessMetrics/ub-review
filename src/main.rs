@@ -14618,6 +14618,10 @@ fn render_pull_request_review_body(
         .filter(|observation| {
             !is_pr_body_artifact_only_observation(observation)
                 && !is_pr_body_stale_for_current_diff_observation(observation, diff)
+                && !proof_receipts_answer_observation_test_witness_question(
+                    proof_receipts,
+                    observation,
+                )
         })
         .collect::<Vec<_>>();
     let refuted_observations = pr_observation_items
@@ -14667,6 +14671,7 @@ fn render_pull_request_review_body(
         .filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
+                && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && is_parked_follow_up(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
         })
@@ -14676,6 +14681,7 @@ fn render_pull_request_review_body(
         .filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
+                && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && !is_parked_follow_up(finding)
                 && is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
@@ -14686,6 +14692,7 @@ fn render_pull_request_review_body(
         .filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
+                && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && !is_parked_follow_up(finding)
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
@@ -14708,10 +14715,10 @@ fn render_pull_request_review_body(
     let verification_count = verification_questions.len() + verification_observations.len();
     let has_test_proof_verification = verification_questions
         .iter()
-        .any(|finding| text_is_test_proof_review_question(&finding.reason))
+        .any(summary_finding_is_test_proof_decision_question)
         || verification_observations
             .iter()
-            .any(|observation| text_is_test_proof_review_question(&observation.claim));
+            .any(observation_is_test_proof_decision_question);
     let decision_sentence = pr_decision_sentence(PrDecisionContext {
         finding_count,
         verification_count,
@@ -14880,6 +14887,130 @@ fn proof_receipt_is_missing_evidence(receipt: &ProofReceipt) -> bool {
         receipt.result.as_str(),
         "base_patch_failed" | "timed_out" | "skipped_budget" | "skipped_profile"
     )
+}
+
+fn proof_receipts_answer_summary_test_witness_question(
+    proof_receipts: &[ProofReceipt],
+    finding: &SummaryOnlyFinding,
+) -> bool {
+    if lane_is_source_route(&finding.lane) {
+        return false;
+    }
+    let text = format!("{} {}", finding.reason, finding.evidence);
+    proof_receipts_answer_test_witness_question(proof_receipts, &text)
+}
+
+fn proof_receipts_answer_observation_test_witness_question(
+    proof_receipts: &[ProofReceipt],
+    observation: &ObservationGroup,
+) -> bool {
+    if observation
+        .lanes
+        .iter()
+        .any(|lane| lane_is_source_route(lane))
+        || kind_is_source_route_gap(&observation.kind)
+    {
+        return false;
+    }
+    let text = format!("{} {}", observation.claim, observation.evidence.join(" "));
+    proof_receipts_answer_test_witness_question(proof_receipts, &text)
+}
+
+fn lane_is_source_route(lane: &str) -> bool {
+    let lane = lane.to_ascii_lowercase();
+    lane == "source-route" || lane == "source_route"
+}
+
+fn kind_is_source_route_gap(kind: &str) -> bool {
+    let kind = kind.to_ascii_lowercase();
+    kind == "source-route-gap" || kind == "source_route_gap"
+}
+
+fn proof_receipts_answer_test_witness_question(
+    proof_receipts: &[ProofReceipt],
+    text: &str,
+) -> bool {
+    proof_receipts
+        .iter()
+        .any(focused_test_proof_receipt_is_answer)
+        && text_requests_focused_test_witness(text)
+}
+
+fn focused_test_proof_receipt_is_answer(receipt: &ProofReceipt) -> bool {
+    receipt.kind == "focused-red-green"
+        && receipt.test_patch_mode == "base-plus-tests"
+        && matches!(
+            receipt.result.as_str(),
+            "discriminating"
+                | "non_discriminating"
+                | "base_patch_failed"
+                | "timed_out"
+                | "skipped_budget"
+                | "skipped_profile"
+        )
+}
+
+fn text_requests_focused_test_witness(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    let asks_for_witness = text.contains("proof")
+        || text.contains("prove")
+        || text.contains("proves")
+        || text.contains("proven")
+        || text.contains("witness")
+        || text.contains("demonstrate")
+        || text.contains("demonstrated")
+        || text.contains("run")
+        || text.contains("execute")
+        || text.contains("confirm")
+        || text.contains("attach")
+        || text.contains("pass")
+        || text.contains("fail");
+    let names_focused_test_witness = text.contains("red/green")
+        || text.contains("base+tests")
+        || text.contains("base plus tests")
+        || text.contains("old-main")
+        || text.contains("old main")
+        || text.contains("unpatched")
+        || text.contains("base witness")
+        || text.contains("red witness")
+        || text.contains("green proof")
+        || text.contains("live green")
+        || text.contains("test sensor")
+        || (text.contains("head") && text.contains("base") && text.contains("test"));
+    asks_for_witness && names_focused_test_witness
+}
+
+fn text_is_test_proof_decision_question(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    if text_requests_focused_test_witness(&text) {
+        return true;
+    }
+    let asks_for_witness = text.contains("proof")
+        || text.contains("prove")
+        || text.contains("proves")
+        || text.contains("proven")
+        || text.contains("witness")
+        || text.contains("demonstrate")
+        || text.contains("demonstrated");
+    asks_for_witness
+        && (text.contains("asan")
+            || text.contains("bad-free")
+            || text.contains("oracle")
+            || text.contains("post-gc")
+            || text.contains("memory-validity"))
+}
+
+fn summary_finding_is_test_proof_decision_question(finding: &&SummaryOnlyFinding) -> bool {
+    !lane_is_source_route(&finding.lane) && text_is_test_proof_decision_question(&finding.reason)
+}
+
+fn observation_is_test_proof_decision_question(observation: &&ObservationGroup) -> bool {
+    !(observation
+        .lanes
+        .iter()
+        .any(|lane| lane_is_source_route(lane))
+        || kind_is_source_route_gap(&observation.kind))
+        && text_is_test_proof_decision_question(&observation.claim)
 }
 
 fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
@@ -15123,18 +15254,6 @@ fn text_is_verification_question(text: &str) -> bool {
         || text.contains("prove")
         || text.contains("proves")
         || text.contains("proven")
-}
-
-fn text_is_test_proof_review_question(text: &str) -> bool {
-    let text = text.to_ascii_lowercase();
-    text.contains("proof")
-        || text.contains("prove")
-        || text.contains("proves")
-        || text.contains("proven")
-        || text.contains("red/green")
-        || text.contains("base+tests")
-        || text.contains("asan")
-        || text.contains("bad-free")
 }
 
 fn summary_finding_matches_observations(
@@ -23671,6 +23790,146 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("stderr.txt"));
         assert!(!body.contains("## Model lanes"));
         assert!(!body.contains("A human should still inspect"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_uses_proof_receipt_instead_of_duplicate_test_witness_question() {
+        let receipt = test_red_green_proof_receipt("discriminating", "failed");
+        let observations = vec![
+            test_observation(
+                "tests-oracle",
+                "The new test needs a witnessed old-main red run.",
+                "missing-evidence",
+                "open",
+                "medium",
+                "high",
+                "markdown-red-green-witness",
+            ),
+            test_observation(
+                "source-route",
+                "The red/green proof does not prove FileHandle.write reaches the patched scalar-write path; confirm the route before relying on the test.",
+                "verification-question",
+                "open",
+                "medium",
+                "medium-high",
+                "filehandle-write-route",
+            ),
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The new test needs a witnessed old-main red run.".to_owned(),
+                evidence: "duplicate lane summary".to_owned(),
+            }],
+            &observations,
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Test proof"));
+        assert!(body.contains("Focused red/green proof discriminates the patch"));
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains(
+            "Confirm the red/green proof does not prove FileHandle.write reaches the patched scalar-write path"
+        ));
+        assert!(body.contains("Needs one verification check before upstream."));
+        assert!(!body.contains("Needs one test-proof clarification before upstream."));
+        assert!(!body.contains("witnessed old-main red run"));
+        assert!(!body.contains("duplicate lane summary"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_uses_missing_proof_receipt_instead_of_duplicate_test_witness_question() {
+        let mut receipt = test_red_green_proof_receipt("timed_out", "timed_out");
+        receipt.commands[1].timed_out = true;
+        let observations = vec![test_observation(
+            "tests-oracle",
+            "The new test needs a witnessed old-main red run.",
+            "missing-evidence",
+            "open",
+            "medium",
+            "high",
+            "markdown-red-green-witness",
+        )];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The new test needs a witnessed old-main red run.".to_owned(),
+                evidence: "duplicate lane summary".to_owned(),
+            }],
+            &observations,
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Evidence gaps"));
+        assert!(body.contains("Focused proof timed out"));
+        assert!(!body.contains("## Verification questions"));
+        assert!(!body.contains("Needs one test-proof clarification before upstream."));
+        assert!(!body.contains("witnessed old-main red run"));
+        assert!(!body.contains("duplicate lane summary"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_red_green_question_after_head_only_proof_receipt() {
+        let receipt = test_proof_receipt("head_passed", "passed");
+        let observations = vec![test_observation(
+            "tests-oracle",
+            "The new test still needs a base+tests red/green witness.",
+            "verification-question",
+            "open",
+            "medium",
+            "high",
+            "markdown-red-green-witness",
+        )];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The new test still needs a base+tests red/green witness.".to_owned(),
+                evidence: "head-only proof is not a base+tests witness".to_owned(),
+            }],
+            &observations,
+            &[receipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Test proof"));
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains("Confirm the new test still needs a base+tests red/green witness."));
+        assert!(body.contains("Needs one test-proof clarification before upstream."));
         assert!(!has_standalone_approval_line(&body));
     }
 
