@@ -452,16 +452,22 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
     assert_eq!(
         metrics["run"]["concurrency_model"],
-        "instrumented-sequential-v0"
+        "three-stream-scheduler-v0"
     );
     assert_eq!(metrics["run"]["local_proof_wall_excludes_model_wait"], true);
     for pointer in [
+        "/run/elapsed_wall_ms",
+        "/run/evidence_wall_ms",
         "/run/model_wall_ms",
         "/run/local_proof_wall_ms",
         "/run/compiler_wall_ms",
         "/run/model_call_duration_ms_sum",
         "/run/proof_command_duration_ms_sum",
         "/run/model_proof_overlap_ms",
+        "/run/proof_overlap_ms",
+        "/run/loops/evidence/started_at_offset_ms",
+        "/run/loops/evidence/finished_at_offset_ms",
+        "/run/loops/evidence/wall_ms",
         "/run/loops/model/started_at_offset_ms",
         "/run/loops/model/finished_at_offset_ms",
         "/run/loops/model/wall_ms",
@@ -629,12 +635,17 @@ fn active_len_tracks_view_after_resize() {
     let event_kinds = event_kinds(&out.join("events.ndjson"))?;
     for kind in [
         "run_started",
+        "evidence_loop_started",
+        "evidence_stream_started",
+        "evidence_stream_completed",
         "model_loop_started",
         "model_loop_finished",
         "proof_loop_started",
         "proof_loop_finished",
         "compiler_loop_started",
         "compiler_loop_finished",
+        "compiler_stream_completed",
+        "terminal_state",
         "run_finished",
     ] {
         assert!(
@@ -1413,6 +1424,21 @@ path = "src/lib.rs"
             .is_some_and(|duration| duration > 0)
     );
     let event_kinds = event_kinds(&out.join("events.ndjson"))?;
+    assert!(
+        event_kinds
+            .iter()
+            .any(|kind| kind == "evidence_stream_started")
+    );
+    assert!(
+        event_kinds
+            .iter()
+            .any(|kind| kind == "model_stream_started")
+    );
+    assert!(
+        event_kinds
+            .iter()
+            .any(|kind| kind == "model_stream_completed")
+    );
     assert!(event_kinds.iter().any(|kind| kind == "model_loop_started"));
     assert!(event_kinds.iter().any(|kind| kind == "model_loop_finished"));
 

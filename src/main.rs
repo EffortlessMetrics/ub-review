@@ -1115,17 +1115,21 @@ struct ReviewMetrics {
 struct RunLoopMetrics {
     concurrency_model: String,
     local_proof_wall_excludes_model_wait: bool,
+    elapsed_wall_ms: u128,
+    evidence_wall_ms: u128,
     model_wall_ms: u128,
     local_proof_wall_ms: u128,
     compiler_wall_ms: u128,
     model_call_duration_ms_sum: u128,
     proof_command_duration_ms_sum: u128,
     model_proof_overlap_ms: u128,
+    proof_overlap_ms: u128,
     loops: RunLoopTimings,
 }
 
 #[derive(Clone, Debug, Serialize)]
 struct RunLoopTimings {
+    evidence: LoopTiming,
     model: LoopTiming,
     proof: LoopTiming,
     compiler: LoopTiming,
@@ -1976,6 +1980,7 @@ struct EventLog {
 }
 
 struct RunLoopTracker {
+    evidence: LoopAccumulator,
     model: LoopAccumulator,
     proof: LoopAccumulator,
     compiler: LoopAccumulator,
@@ -1984,6 +1989,7 @@ struct RunLoopTracker {
 impl RunLoopTracker {
     fn new() -> Self {
         Self {
+            evidence: LoopAccumulator::default(),
             model: LoopAccumulator::default(),
             proof: LoopAccumulator::default(),
             compiler: LoopAccumulator::default(),
@@ -1992,6 +1998,7 @@ impl RunLoopTracker {
 
     fn record(&mut self, loop_id: &str, interval: LoopInterval) {
         match loop_id {
+            "evidence" => self.evidence.record(interval),
             "model" => self.model.record(interval),
             "proof" => self.proof.record(interval),
             "compiler" => self.compiler.record(interval),
@@ -2000,21 +2007,44 @@ impl RunLoopTracker {
     }
 
     fn metrics(&self) -> RunLoopMetrics {
+        let model_proof_overlap_ms = overlap_ms(&self.model.intervals, &self.proof.intervals);
         RunLoopMetrics {
-            concurrency_model: "instrumented-sequential-v0".to_owned(),
+            concurrency_model: "three-stream-scheduler-v0".to_owned(),
             local_proof_wall_excludes_model_wait: true,
+            elapsed_wall_ms: self.elapsed_wall_ms(),
+            evidence_wall_ms: self.evidence.wall_ms,
             model_wall_ms: self.model.wall_ms,
             local_proof_wall_ms: self.proof.wall_ms,
             compiler_wall_ms: self.compiler.wall_ms,
             model_call_duration_ms_sum: 0,
             proof_command_duration_ms_sum: 0,
-            model_proof_overlap_ms: overlap_ms(&self.model.intervals, &self.proof.intervals),
+            model_proof_overlap_ms,
+            proof_overlap_ms: model_proof_overlap_ms,
             loops: RunLoopTimings {
+                evidence: self.evidence.timing(),
                 model: self.model.timing(),
                 proof: self.proof.timing(),
                 compiler: self.compiler.timing(),
             },
         }
+    }
+
+    fn elapsed_wall_ms(&self) -> u128 {
+        let mut started_at_offset_ms = None::<u128>;
+        let mut finished_at_offset_ms = None::<u128>;
+        for accumulator in [&self.evidence, &self.model, &self.proof, &self.compiler] {
+            if let Some(started) = accumulator.started_at_offset_ms {
+                started_at_offset_ms =
+                    Some(started_at_offset_ms.map_or(started, |existing| existing.min(started)));
+            }
+            if let Some(finished) = accumulator.finished_at_offset_ms {
+                finished_at_offset_ms =
+                    Some(finished_at_offset_ms.map_or(finished, |existing| existing.max(finished)));
+            }
+        }
+        finished_at_offset_ms
+            .unwrap_or(0)
+            .saturating_sub(started_at_offset_ms.unwrap_or(0))
     }
 }
 
@@ -2547,14 +2577,13 @@ fn start_run_loop(
     stage: &'static str,
 ) -> Result<ActiveRunLoop> {
     let started_at_offset_ms = run_started.elapsed().as_millis();
-    event_log.append(
-        &format!("{loop_id}_loop_started"),
-        serde_json::json!({
-            "loop_id": loop_id,
-            "stage": stage,
-            "started_at_offset_ms": started_at_offset_ms,
-        }),
-    )?;
+    let payload = serde_json::json!({
+        "loop_id": loop_id,
+        "stage": stage,
+        "started_at_offset_ms": started_at_offset_ms,
+    });
+    event_log.append(&format!("{loop_id}_loop_started"), payload.clone())?;
+    event_log.append(&format!("{loop_id}_stream_started"), payload)?;
     Ok(ActiveRunLoop {
         loop_id,
         stage,
@@ -2572,17 +2601,19 @@ fn finish_run_loop(
 ) -> Result<()> {
     let finished_at_offset_ms = run_started.elapsed().as_millis();
     let duration_ms = active.started_at.elapsed().as_millis();
+    let payload = serde_json::json!({
+        "loop_id": active.loop_id,
+        "stage": active.stage,
+        "started_at_offset_ms": active.started_at_offset_ms,
+        "finished_at_offset_ms": finished_at_offset_ms,
+        "duration_ms": duration_ms,
+        "status": status,
+    });
     event_log.append(
         &format!("{}_loop_finished", active.loop_id),
-        serde_json::json!({
-            "loop_id": active.loop_id,
-            "stage": active.stage,
-            "started_at_offset_ms": active.started_at_offset_ms,
-            "finished_at_offset_ms": finished_at_offset_ms,
-            "duration_ms": duration_ms,
-            "status": status,
-        }),
+        payload.clone(),
     )?;
+    event_log.append(&format!("{}_stream_completed", active.loop_id), payload)?;
     tracker.record(
         active.loop_id,
         LoopInterval {
@@ -2819,11 +2850,13 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     )?;
 
     let event_log = EventLog::open(&args.review.out.join("events.ndjson"))?;
+    let mut run_loop_tracker = RunLoopTracker::new();
     event_log.append(
         "run_started",
         serde_json::json!({"base": args.review.base, "head": args.review.head, "profile": plan.profile_name, "dry_run": args.dry_run}),
     )?;
 
+    let evidence_loop = start_run_loop(&event_log, &run_started, "evidence", "sensors-and-packet")?;
     if args.dry_run {
         write_dry_run_sensor_receipts(&args.review.root, &args.review.out, &plan, &event_log)?;
         event_log.append("run_dry", serde_json::json!({"reason": "--dry-run"}))?;
@@ -2840,6 +2873,13 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
 
     write_lane_packets(&args.review.out, &diff, &plan, &event_log)?;
+    finish_run_loop(
+        &event_log,
+        &run_started,
+        &mut run_loop_tracker,
+        evidence_loop,
+        "completed",
+    )?;
     let preliminary_summary = render_summary(&args.review.out, &plan, &diff)?;
     fs::write(
         args.review.out.join("running-summary.md"),
@@ -2856,6 +2896,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         &args,
         &event_log,
         &run_started,
+        &mut run_loop_tracker,
         run_started.elapsed(),
     )?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
@@ -4883,6 +4924,7 @@ fn write_review_artifacts(
     args: &RunArgs,
     event_log: &EventLog,
     run_started: &Instant,
+    run_loop_tracker: &mut RunLoopTracker,
     elapsed: Duration,
 ) -> Result<()> {
     let review_dir = out.join("review");
@@ -4919,7 +4961,6 @@ fn write_review_artifacts(
     let mut model_observations = Vec::new();
     let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
-    let mut run_loop_tracker = RunLoopTracker::new();
 
     let model_loop = start_run_loop(event_log, run_started, "model", "primary")?;
     if matches!(args.model_mode, ModelMode::Auto) {
@@ -4969,7 +5010,7 @@ fn write_review_artifacts(
     finish_run_loop(
         event_log,
         run_started,
-        &mut run_loop_tracker,
+        run_loop_tracker,
         model_loop,
         model_loop_status,
     )?;
@@ -4988,7 +5029,7 @@ fn write_review_artifacts(
     finish_run_loop(
         event_log,
         run_started,
-        &mut run_loop_tracker,
+        run_loop_tracker,
         proof_loop,
         "completed",
     )?;
@@ -5058,7 +5099,7 @@ fn write_review_artifacts(
     finish_run_loop(
         event_log,
         run_started,
-        &mut run_loop_tracker,
+        run_loop_tracker,
         compiler_loop,
         "completed",
     )?;
@@ -5082,7 +5123,7 @@ fn write_review_artifacts(
     finish_run_loop(
         event_log,
         run_started,
-        &mut run_loop_tracker,
+        run_loop_tracker,
         follow_up_model_loop,
         "completed",
     )?;
@@ -5153,9 +5194,16 @@ fn write_review_artifacts(
     finish_run_loop(
         event_log,
         run_started,
-        &mut run_loop_tracker,
+        run_loop_tracker,
         final_compiler_loop,
         "completed",
+    )?;
+    event_log.append(
+        "terminal_state",
+        serde_json::json!({
+            "status": review.terminal_state.status,
+            "review_payload_status": review.terminal_state.review_payload_status,
+        }),
     )?;
     let run_loop_metrics = run_loop_tracker.metrics();
     let metrics = build_review_metrics(ReviewMetricsInput {
@@ -20041,6 +20089,7 @@ UB_REVIEW_HTTP_STATUS:429
         args.model_mode = ModelMode::Off;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let run_started = Instant::now();
+        let mut run_loop_tracker = super::RunLoopTracker::new();
 
         write_review_artifacts(
             temp.path(),
@@ -20053,6 +20102,7 @@ UB_REVIEW_HTTP_STATUS:429
             &args,
             &event_log,
             &run_started,
+            &mut run_loop_tracker,
             std::time::Duration::from_secs(73),
         )?;
 
@@ -21690,15 +21740,23 @@ index 1111111..2222222 100644
 
     fn test_run_loop_metrics() -> super::RunLoopMetrics {
         super::RunLoopMetrics {
-            concurrency_model: "instrumented-sequential-v0".to_owned(),
+            concurrency_model: "three-stream-scheduler-v0".to_owned(),
             local_proof_wall_excludes_model_wait: true,
+            elapsed_wall_ms: 450,
+            evidence_wall_ms: 10,
             model_wall_ms: 300,
             local_proof_wall_ms: 80,
             compiler_wall_ms: 40,
             model_call_duration_ms_sum: 0,
             proof_command_duration_ms_sum: 0,
             model_proof_overlap_ms: 0,
+            proof_overlap_ms: 0,
             loops: super::RunLoopTimings {
+                evidence: super::LoopTiming {
+                    started_at_offset_ms: 0,
+                    finished_at_offset_ms: 10,
+                    wall_ms: 10,
+                },
                 model: super::LoopTiming {
                     started_at_offset_ms: 10,
                     finished_at_offset_ms: 310,
