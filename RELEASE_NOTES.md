@@ -1,7 +1,7 @@
 # ub-review v0 readiness notes
 
 `ub-review` has moved past the initial artifact-only scaffold. The current
-`main` branch is the pre-`v0` Bun UB review-direct line.
+`main` branch is the pre-`v0` Bun UB `review-byok` line.
 
 Current supported shape:
 

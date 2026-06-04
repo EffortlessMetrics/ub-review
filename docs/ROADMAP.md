@@ -8,7 +8,7 @@ come after the Bun profile is proven and should preserve the Bun invariants.
 The v0 gate is:
 
 - `EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6`;
-- `review-direct`;
+- `review-byok`;
 - MiniMax-only, 10 Bun lanes plus refuter;
 - one grouped Pull Request Review;
 - at most 8 inline comments;

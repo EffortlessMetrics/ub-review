@@ -197,9 +197,11 @@ enum OpenCodeEndpointKindArg {
     AnthropicMessages,
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 enum RunMode {
-    ReviewDirect,
+    #[value(alias = "review-direct")]
+    ReviewByok,
+    IntelligentCi,
     AgentInvestigate,
     AgentPatch,
 }
@@ -207,7 +209,8 @@ enum RunMode {
 impl RunMode {
     fn key(self) -> &'static str {
         match self {
-            Self::ReviewDirect => "review-direct",
+            Self::ReviewByok => "review-byok",
+            Self::IntelligentCi => "intelligent-ci",
             Self::AgentInvestigate => "agent-investigate",
             Self::AgentPatch => "agent-patch",
         }
@@ -379,11 +382,11 @@ struct RunArgs {
         env = "UB_REVIEW_POSTING"
     )]
     posting: PostingMode,
-    /// Review execution mode. Default uses direct BYOK MiniMax fanout.
+    /// Review execution mode. Default uses BYOK model lanes.
     #[arg(
         long,
         value_enum,
-        default_value = "review-direct",
+        default_value = "review-byok",
         env = "UB_REVIEW_MODE"
     )]
     mode: RunMode,
@@ -3277,7 +3280,7 @@ fn apply_depth_defaults(args: &mut RunArgs) -> Result<()> {
 
 fn ensure_supported_mode(mode: RunMode) -> Result<()> {
     match mode {
-        RunMode::ReviewDirect => Ok(()),
+        RunMode::ReviewByok | RunMode::IntelligentCi => Ok(()),
         RunMode::AgentInvestigate | RunMode::AgentPatch => bail!(
             "{} is reserved for optional leased workers and is not implemented in v0",
             mode.key()
@@ -23117,6 +23120,24 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn run_mode_accepts_product_names_and_legacy_review_direct() {
+        assert_eq!(super::RunMode::ReviewByok.key(), "review-byok");
+        assert_eq!(super::RunMode::IntelligentCi.key(), "intelligent-ci");
+        assert_eq!(
+            <super::RunMode as clap::ValueEnum>::from_str("review-byok", true),
+            Ok(super::RunMode::ReviewByok)
+        );
+        assert_eq!(
+            <super::RunMode as clap::ValueEnum>::from_str("intelligent-ci", true),
+            Ok(super::RunMode::IntelligentCi)
+        );
+        assert_eq!(
+            <super::RunMode as clap::ValueEnum>::from_str("review-direct", true),
+            Ok(super::RunMode::ReviewByok)
+        );
+    }
+
+    #[test]
     fn quick_depth_expands_to_small_lane_budget() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.depth = ReviewDepth::Quick;
@@ -25192,7 +25213,7 @@ index 1111111..2222222 100644
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
-            mode: "review-direct".to_owned(),
+            mode: "review-byok".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
             run_pass: "opened".to_owned(),
@@ -26241,7 +26262,7 @@ index 1111111..2222222 100644
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
-            mode: "review-direct".to_owned(),
+            mode: "review-byok".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
             run_pass: "manual".to_owned(),
@@ -27134,7 +27155,7 @@ index 1111111..2222222 100644
             allow_heavy: false,
             no_github_summary: true,
             posting: PostingMode::ArtifactOnly,
-            mode: RunMode::ReviewDirect,
+            mode: RunMode::ReviewByok,
             run_pass: super::RunPass::Auto,
             model_mode: ModelMode::Auto,
             selectors: SelectorArgs::default(),

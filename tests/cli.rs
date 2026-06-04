@@ -226,7 +226,7 @@ fn active_len_tracks_view_after_resize() {
     assert!(artifact_body.contains("## Model lanes"));
     let review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
-    assert_eq!(review["mode"], "review-direct");
+    assert_eq!(review["mode"], "review-byok");
     assert_eq!(review["review_profile"], "bun-ub-v0");
     assert_eq!(review["provider_policy"], "minimax-primary");
     assert_eq!(review["model_provider_policy"], "minimax-primary");

@@ -74,8 +74,8 @@ inputs:
     default: review
     required: false
   mode:
-    description: 'Execution mode: review-direct, agent-investigate, or agent-patch. Only review-direct is implemented in v0.'
-    default: review-direct
+    description: 'Execution mode: review-byok or intelligent-ci. Legacy review-direct is accepted as an alias.'
+    default: review-byok
     required: false
   run-pass:
     description: 'Run pass identity: auto, opened, ready_for_review, pull_request_other, or manual. Auto maps pull_request opened and ready_for_review to the matching pass.'

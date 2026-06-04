@@ -16,7 +16,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
     install-tools: 'true'
     tool-bundle: core
     posting: review
-    mode: review-direct
+    mode: review-byok
     github-token: ${{ github.token }}
     minimax-api-key: ${{ secrets.MINIMAX }}
     minimax-provider-kind: anthropic
