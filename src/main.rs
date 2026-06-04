@@ -811,6 +811,7 @@ enum ToolClass {
     Search,
     Workflow,
     Security,
+    Coverage,
     Test,
     Build,
     HeavyWitness,
@@ -1045,6 +1046,43 @@ struct ReviewArtifacts {
     proof_receipts: Vec<ProofReceipt>,
     resource_leases: Vec<ResourceLease>,
     body: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SharedContextCacheManifest {
+    schema: &'static str,
+    shared_context_hash: String,
+    shared_context_bytes: usize,
+    cache_block_path: &'static str,
+    hash_path: &'static str,
+    events_path: &'static str,
+    explicit_cache_provider: &'static str,
+    explicit_cache_endpoint: &'static str,
+    cache_lifetime: &'static str,
+    lanes: Vec<SharedContextCacheLane>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SharedContextCacheLane {
+    lane: String,
+    provider: String,
+    model: String,
+    endpoint_kind: String,
+    cache_mode: String,
+    shared_context_hash: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct SharedContextCacheEvent {
+    schema: &'static str,
+    kind: String,
+    shared_context_hash: String,
+    lane: Option<String>,
+    provider: Option<String>,
+    endpoint_kind: Option<String>,
+    cache_mode: String,
+    cache_creation_input_tokens: Option<u64>,
+    cache_read_input_tokens: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1442,6 +1480,11 @@ struct ModelMetrics {
     model_lane_status_counts: BTreeMap<String, usize>,
     model_lane_calls_attempted: usize,
     model_fallbacks_used: usize,
+    prompt_cache_creation_input_tokens: u64,
+    prompt_cache_read_input_tokens: u64,
+    prompt_cache_lane_hits: usize,
+    prompt_cache_lane_misses: usize,
+    prompt_cache_lane_unknown: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1463,6 +1506,8 @@ struct ModelLaneReceipt {
     http_status: Option<u16>,
     response_shape: Option<String>,
     fallback_from: Option<String>,
+    #[serde(default)]
+    cache_usage: ModelCacheUsage,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1475,6 +1520,20 @@ struct ProviderPreflightReceipt {
     duration_ms: Option<u128>,
     http_status: Option<u16>,
     response_shape: Option<String>,
+    #[serde(default)]
+    cache_usage: ModelCacheUsage,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+struct ModelCacheUsage {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_creation_input_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cache_read_input_tokens: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1650,6 +1709,8 @@ struct FollowUpResult {
     http_status: Option<u16>,
     #[serde(skip_serializing_if = "Option::is_none")]
     response_shape: Option<String>,
+    #[serde(default)]
+    cache_usage: ModelCacheUsage,
     #[serde(skip_serializing_if = "Option::is_none")]
     request_path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2209,6 +2270,7 @@ struct FollowUpRunContext<'a> {
     out: &'a Path,
     review_dir: &'a Path,
     provider_preflights: &'a [ProviderPreflightReceipt],
+    shared_context: &'a str,
     args: &'a RunArgs,
     model_calls_used: usize,
     tasks: &'a [FollowUpQuestionTask],
@@ -2298,6 +2360,7 @@ struct ModelCallOutcome<T> {
     duration_ms: u128,
     http_status: Option<u16>,
     response_shape: String,
+    cache_usage: ModelCacheUsage,
     degraded: bool,
 }
 
@@ -4148,6 +4211,7 @@ fn sensor_order(id: &str) -> u8 {
         "osv-scanner" => 8,
         "cargo-audit" => 9,
         "cargo-deny" => 10,
+        "coverage" => 11,
         _ => 50,
     }
 }
@@ -4577,6 +4641,16 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--format".to_owned(),
             "json".to_owned(),
         ],
+        "coverage" => vec![
+            "cargo".to_owned(),
+            "llvm-cov".to_owned(),
+            "--workspace".to_owned(),
+            "--all-features".to_owned(),
+            "--locked".to_owned(),
+            "--lcov".to_owned(),
+            "--output-path".to_owned(),
+            dir.join("lcov.info").display().to_string(),
+        ],
         "gitleaks" => vec![
             "gitleaks".to_owned(),
             "detect".to_owned(),
@@ -4870,6 +4944,7 @@ fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "context.md".to_owned(),
         ]),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
+        "coverage" => outputs.push("lcov.info".to_owned()),
         _ => {}
     }
     outputs
@@ -5008,6 +5083,7 @@ fn write_review_artifacts(
     let shared_context_id = sha256_hex(shared_context.as_bytes());
     let line_map = right_side_diff_lines(&diff.patch);
     let assignments = model_assignments(plan, args)?;
+    write_shared_context_cache_artifacts(out, &shared_context, &assignments, &[], &[], args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
@@ -5190,6 +5266,7 @@ fn write_review_artifacts(
             out,
             review_dir: &review_dir,
             provider_preflights: &review.provider_preflights,
+            shared_context: &shared_context,
             args,
             model_calls_used,
             tasks: &orchestrator_plan.follow_up_tasks,
@@ -5207,6 +5284,14 @@ fn write_review_artifacts(
     )?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
+    write_shared_context_cache_artifacts(
+        out,
+        &shared_context,
+        &assignments,
+        &review.model_lanes,
+        &follow_up_results,
+        args,
+    )?;
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
     write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
     append_follow_up_proof_requests(&mut review.proof_requests, &follow_up_evidence);
@@ -5745,6 +5830,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         .collect::<Vec<_>>();
     run.model_call_duration_ms_sum = model_call_duration_ms_sum(review, follow_up_results);
     run.proof_command_duration_ms_sum = proof_command_duration_ms_sum(&review.proof_receipts);
+    let prompt_cache = model_prompt_cache_metrics(review, follow_up_results);
 
     ReviewMetrics {
         schema_version: 1,
@@ -5795,6 +5881,11 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
                 .iter()
                 .filter(|receipt| receipt.fallback_from.is_some())
                 .count(),
+            prompt_cache_creation_input_tokens: prompt_cache.creation_input_tokens,
+            prompt_cache_read_input_tokens: prompt_cache.read_input_tokens,
+            prompt_cache_lane_hits: prompt_cache.lane_hits,
+            prompt_cache_lane_misses: prompt_cache.lane_misses,
+            prompt_cache_lane_unknown: prompt_cache.lane_unknown,
         },
         inline_comments: review.inline_comments.len(),
         github_review_comments: github_review.map_or(0, |review| review.comments.len()),
@@ -5863,6 +5954,65 @@ fn proof_command_duration_ms_sum(proof_receipts: &[ProofReceipt]) -> u128 {
         .flat_map(|receipt| receipt.commands.iter())
         .map(|command| command.duration_ms)
         .sum()
+}
+
+struct PromptCacheMetrics {
+    creation_input_tokens: u64,
+    read_input_tokens: u64,
+    lane_hits: usize,
+    lane_misses: usize,
+    lane_unknown: usize,
+}
+
+fn model_prompt_cache_metrics(
+    review: &ReviewArtifacts,
+    follow_up_results: &[FollowUpResult],
+) -> PromptCacheMetrics {
+    let creation_input_tokens = review
+        .model_lanes
+        .iter()
+        .filter_map(|receipt| receipt.cache_usage.cache_creation_input_tokens)
+        .chain(
+            follow_up_results
+                .iter()
+                .filter_map(|result| result.cache_usage.cache_creation_input_tokens),
+        )
+        .sum();
+    let read_input_tokens = review
+        .model_lanes
+        .iter()
+        .filter_map(|receipt| receipt.cache_usage.cache_read_input_tokens)
+        .chain(
+            follow_up_results
+                .iter()
+                .filter_map(|result| result.cache_usage.cache_read_input_tokens),
+        )
+        .sum();
+    let mut lane_hits = 0;
+    let mut lane_misses = 0;
+    let mut lane_unknown = 0;
+    for receipt in &review.model_lanes {
+        if !model_call_attempted_status(&receipt.status)
+            || model_cache_mode(&receipt.provider, &receipt.endpoint_kind)
+                != "explicit-anthropic-cache-control"
+        {
+            continue;
+        }
+        if receipt.cache_usage.cache_read_input_tokens.unwrap_or(0) > 0 {
+            lane_hits += 1;
+        } else if receipt.cache_usage.cache_creation_input_tokens.unwrap_or(0) > 0 {
+            lane_misses += 1;
+        } else {
+            lane_unknown += 1;
+        }
+    }
+    PromptCacheMetrics {
+        creation_input_tokens,
+        read_input_tokens,
+        lane_hits,
+        lane_misses,
+        lane_unknown,
+    }
 }
 
 fn combined_observations(review: &ReviewArtifacts) -> Vec<Observation> {
@@ -9249,6 +9399,184 @@ fn render_shared_context(
     Ok(text)
 }
 
+fn write_shared_context_cache_artifacts(
+    out: &Path,
+    shared_context: &str,
+    assignments: &[ModelAssignment],
+    model_lanes: &[ModelLaneReceipt],
+    follow_up_results: &[FollowUpResult],
+    args: &RunArgs,
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let shared_context_hash = sha256_hex(shared_context.as_bytes());
+    fs::write(
+        review_dir.join("shared_context_cache_block.md"),
+        shared_context,
+    )?;
+    fs::write(
+        review_dir.join("shared_context_hash.txt"),
+        format!("{shared_context_hash}\n"),
+    )?;
+
+    let lanes = shared_context_cache_lanes(
+        &shared_context_hash,
+        assignments,
+        model_lanes,
+        follow_up_results,
+        args,
+    );
+    let manifest = SharedContextCacheManifest {
+        schema: "ub-review.cache_manifest.v1",
+        shared_context_hash: shared_context_hash.clone(),
+        shared_context_bytes: shared_context.len(),
+        cache_block_path: "review/shared_context_cache_block.md",
+        hash_path: "review/shared_context_hash.txt",
+        events_path: "review/cache_events.ndjson",
+        explicit_cache_provider: "minimax",
+        explicit_cache_endpoint: "anthropic-messages",
+        cache_lifetime: "provider-ephemeral",
+        lanes,
+    };
+    fs::write(
+        review_dir.join("cache_manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+
+    let mut events = Vec::new();
+    events.push(SharedContextCacheEvent {
+        schema: "ub-review.cache_event.v1",
+        kind: "shared_context_prepared".to_owned(),
+        shared_context_hash: shared_context_hash.clone(),
+        lane: None,
+        provider: None,
+        endpoint_kind: None,
+        cache_mode: "artifact-prepared".to_owned(),
+        cache_creation_input_tokens: None,
+        cache_read_input_tokens: None,
+    });
+    for receipt in model_lanes
+        .iter()
+        .filter(|receipt| model_call_attempted_status(&receipt.status))
+    {
+        events.push(SharedContextCacheEvent {
+            schema: "ub-review.cache_event.v1",
+            kind: "model_lane_cache_usage".to_owned(),
+            shared_context_hash: shared_context_hash.clone(),
+            lane: Some(receipt.lane.clone()),
+            provider: Some(receipt.provider.clone()),
+            endpoint_kind: Some(receipt.endpoint_kind.clone()),
+            cache_mode: model_cache_mode(&receipt.provider, &receipt.endpoint_kind).to_owned(),
+            cache_creation_input_tokens: receipt.cache_usage.cache_creation_input_tokens,
+            cache_read_input_tokens: receipt.cache_usage.cache_read_input_tokens,
+        });
+    }
+    let follow_up_spec = direct_minimax_spec(args);
+    for result in follow_up_results
+        .iter()
+        .filter(|result| model_call_attempted_status(&result.status))
+    {
+        events.push(SharedContextCacheEvent {
+            schema: "ub-review.cache_event.v1",
+            kind: "follow_up_cache_usage".to_owned(),
+            shared_context_hash: shared_context_hash.clone(),
+            lane: Some(result.model_lane.clone()),
+            provider: Some(follow_up_spec.provider.key().to_owned()),
+            endpoint_kind: Some(follow_up_spec.endpoint_kind.key().to_owned()),
+            cache_mode: model_cache_mode(
+                follow_up_spec.provider.key(),
+                follow_up_spec.endpoint_kind.key(),
+            )
+            .to_owned(),
+            cache_creation_input_tokens: result.cache_usage.cache_creation_input_tokens,
+            cache_read_input_tokens: result.cache_usage.cache_read_input_tokens,
+        });
+    }
+    let mut ndjson = String::new();
+    for event in events {
+        ndjson.push_str(&serde_json::to_string(&event)?);
+        ndjson.push('\n');
+    }
+    fs::write(review_dir.join("cache_events.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn shared_context_cache_lanes(
+    shared_context_hash: &str,
+    assignments: &[ModelAssignment],
+    model_lanes: &[ModelLaneReceipt],
+    follow_up_results: &[FollowUpResult],
+    args: &RunArgs,
+) -> Vec<SharedContextCacheLane> {
+    if model_lanes.is_empty() {
+        return assignments
+            .iter()
+            .map(|assignment| {
+                shared_context_cache_lane(
+                    shared_context_hash,
+                    &assignment.lane.id,
+                    assignment.spec.provider.key(),
+                    &assignment.spec.model,
+                    assignment.spec.endpoint_kind.key(),
+                )
+            })
+            .collect();
+    }
+    let mut lanes = model_lanes
+        .iter()
+        .map(|receipt| {
+            shared_context_cache_lane(
+                shared_context_hash,
+                &receipt.lane,
+                &receipt.provider,
+                &receipt.model,
+                &receipt.endpoint_kind,
+            )
+        })
+        .collect::<Vec<_>>();
+    let follow_up_spec = direct_minimax_spec(args);
+    for result in follow_up_results
+        .iter()
+        .filter(|result| model_call_attempted_status(&result.status))
+    {
+        lanes.push(shared_context_cache_lane(
+            shared_context_hash,
+            &result.model_lane,
+            follow_up_spec.provider.key(),
+            &follow_up_spec.model,
+            follow_up_spec.endpoint_kind.key(),
+        ));
+    }
+    lanes
+}
+
+fn shared_context_cache_lane(
+    shared_context_hash: &str,
+    lane: &str,
+    provider: &str,
+    model: &str,
+    endpoint_kind: &str,
+) -> SharedContextCacheLane {
+    SharedContextCacheLane {
+        lane: lane.to_owned(),
+        provider: provider.to_owned(),
+        model: model.to_owned(),
+        endpoint_kind: endpoint_kind.to_owned(),
+        cache_mode: model_cache_mode(provider, endpoint_kind).to_owned(),
+        shared_context_hash: shared_context_hash.to_owned(),
+    }
+}
+
+fn model_cache_mode(provider: &str, endpoint_kind: &str) -> &'static str {
+    if provider == ModelProvider::MiniMaxDirect.key()
+        && endpoint_kind == ProviderEndpointKind::AnthropicMessages.key()
+    {
+        "explicit-anthropic-cache-control"
+    } else {
+        "not-supported"
+    }
+}
+
 fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadContext> {
     let mut context = PrThreadContext {
         schema: "ub-review.pr_thread_context.v1".to_owned(),
@@ -10386,6 +10714,7 @@ fn build_model_lane_receipts(
                 http_status: None,
                 response_shape: None,
                 fallback_from: None,
+                cache_usage: ModelCacheUsage::default(),
             }
         })
         .collect()
@@ -10429,6 +10758,7 @@ fn build_provider_preflight_receipts(
                 duration_ms: None,
                 http_status: None,
                 response_shape: None,
+                cache_usage: ModelCacheUsage::default(),
             }
         })
         .collect()
@@ -10554,6 +10884,7 @@ fn run_provider_preflights(
                 receipt.duration_ms = Some(outcome.duration_ms);
                 receipt.http_status = outcome.http_status;
                 receipt.response_shape = Some(outcome.response_shape);
+                receipt.cache_usage = outcome.cache_usage;
             }
             Err(err) => {
                 receipt.status = classify_model_error(&err);
@@ -10687,6 +11018,7 @@ fn run_available_model_lanes(
                     receipt.duration_ms = Some(outcome.duration_ms);
                     receipt.http_status = outcome.http_status;
                     receipt.response_shape = Some(outcome.response_shape.clone());
+                    receipt.cache_usage = outcome.cache_usage;
                     apply_model_output(
                         lane,
                         outcome.output,
@@ -10805,7 +11137,14 @@ fn run_follow_up_model_pass(
         let task_dir = context.review_dir.join("model").join(&model_lane);
         fs::create_dir_all(&task_dir)?;
         calls += 1;
-        match call_model_prompt(context.root, &task_dir, &spec, &packet.prompt, context.args) {
+        match call_model_prompt_cached(
+            context.root,
+            &task_dir,
+            &spec,
+            context.shared_context,
+            &packet.prompt,
+            context.args,
+        ) {
             Ok(outcome) => {
                 let status = if outcome.degraded { "degraded" } else { "ok" };
                 let reason = if outcome.degraded {
@@ -10835,6 +11174,7 @@ fn run_follow_up_model_pass(
                 result.duration_ms = Some(outcome.duration_ms);
                 result.http_status = outcome.http_status;
                 result.response_shape = Some(outcome.response_shape);
+                result.cache_usage = outcome.cache_usage;
                 follow_up_outputs.push(output_record);
                 follow_up_results.push(result);
             }
@@ -11036,6 +11376,7 @@ fn follow_up_result(
         duration_ms: None,
         http_status: None,
         response_shape: None,
+        cache_usage: ModelCacheUsage::default(),
         request_path: artifacts.request_path,
         response_path: artifacts.response_path,
         content_path: artifacts.content_path,
@@ -11114,6 +11455,7 @@ fn run_refuter_pass(
         http_status: None,
         response_shape: None,
         fallback_from: None,
+        cache_usage: ModelCacheUsage::default(),
     };
 
     if inline_comments.is_empty() {
@@ -11181,6 +11523,7 @@ fn run_refuter_pass(
             receipt.duration_ms = Some(outcome.duration_ms);
             receipt.http_status = outcome.http_status;
             receipt.response_shape = Some(outcome.response_shape);
+            receipt.cache_usage = outcome.cache_usage;
             apply_refuter_output(outcome.output, inline_comments, summary_only_findings);
         }
         Err(err) => {
@@ -11220,19 +11563,16 @@ fn call_model_refuter(
     inline_comments: &[ReviewInlineComment],
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<RefuterOutput>> {
-    let prompt = render_refuter_prompt(shared_context, inline_comments)?;
-    call_model_prompt_typed(root, lane_dir, spec, &prompt, args)
+    let prompt = render_refuter_prompt(inline_comments)?;
+    call_model_prompt_typed_cached(root, lane_dir, spec, shared_context, &prompt, args)
 }
 
-fn render_refuter_prompt(
-    shared_context: &str,
-    inline_comments: &[ReviewInlineComment],
-) -> Result<String> {
+fn render_refuter_prompt(inline_comments: &[ReviewInlineComment]) -> Result<String> {
     let candidates = serde_json::to_string_pretty(inline_comments)?;
     Ok(format!(
         r#"You are the final refuter for a Bun UB PR review.
 
-Use only the shared context and candidate inline comments below.
+Use only the cached shared context and candidate inline comments below.
 Do not browse. Do not infer safety from missing evidence.
 Return strict JSON only:
 {{
@@ -11255,10 +11595,7 @@ Rules:
 - Do not approve the PR and do not output LGTM language.
 
 Candidate inline comments:
-{candidates}
-
-Shared context:
-{shared_context}"#
+{candidates}"#
     ))
 }
 
@@ -11386,8 +11723,8 @@ fn call_model_lane(
     shared_context: &str,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<LaneModelOutput>> {
-    let prompt = render_lane_model_prompt(lane, spec, shared_context);
-    call_model_prompt(root, lane_dir, spec, &prompt, args)
+    let prompt = render_lane_model_task_prompt(lane, spec);
+    call_model_prompt_cached(root, lane_dir, spec, shared_context, &prompt, args)
 }
 
 fn call_model_prompt(
@@ -11397,7 +11734,7 @@ fn call_model_prompt(
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<LaneModelOutput>> {
-    let content = call_model_prompt_content(root, lane_dir, spec, prompt, args)?;
+    let content = call_model_prompt_content(root, lane_dir, spec, None, prompt, args)?;
     let (output, degraded) =
         parse_lane_model_output_or_degrade(&content.json_payload, &content.parse_path)?;
     Ok(ModelCallOutcome {
@@ -11405,21 +11742,46 @@ fn call_model_prompt(
         duration_ms: content.duration_ms,
         http_status: content.http_status,
         response_shape: content.response_shape,
+        cache_usage: content.cache_usage,
         degraded,
     })
 }
 
-fn call_model_prompt_typed<T>(
+fn call_model_prompt_cached(
     root: &Path,
     lane_dir: &Path,
     spec: &ProviderSpec,
+    cacheable_prefix: &str,
+    prompt: &str,
+    args: &RunArgs,
+) -> Result<ModelCallOutcome<LaneModelOutput>> {
+    let content =
+        call_model_prompt_content(root, lane_dir, spec, Some(cacheable_prefix), prompt, args)?;
+    let (output, degraded) =
+        parse_lane_model_output_or_degrade(&content.json_payload, &content.parse_path)?;
+    Ok(ModelCallOutcome {
+        output,
+        duration_ms: content.duration_ms,
+        http_status: content.http_status,
+        response_shape: content.response_shape,
+        cache_usage: content.cache_usage,
+        degraded,
+    })
+}
+
+fn call_model_prompt_typed_cached<T>(
+    root: &Path,
+    lane_dir: &Path,
+    spec: &ProviderSpec,
+    cacheable_prefix: &str,
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<T>>
 where
     T: DeserializeOwned,
 {
-    let content = call_model_prompt_content(root, lane_dir, spec, prompt, args)?;
+    let content =
+        call_model_prompt_content(root, lane_dir, spec, Some(cacheable_prefix), prompt, args)?;
     let parsed_output = serde_json::from_str(&content.json_payload)
         .with_context(|| format!("parse {}", content.parse_path.display()))?;
     Ok(ModelCallOutcome {
@@ -11427,6 +11789,7 @@ where
         duration_ms: content.duration_ms,
         http_status: content.http_status,
         response_shape: content.response_shape,
+        cache_usage: content.cache_usage,
         degraded: false,
     })
 }
@@ -11437,12 +11800,14 @@ struct ModelPromptContent {
     duration_ms: u128,
     http_status: Option<u16>,
     response_shape: String,
+    cache_usage: ModelCacheUsage,
 }
 
 fn call_model_prompt_content(
     root: &Path,
     lane_dir: &Path,
     spec: &ProviderSpec,
+    cacheable_prefix: Option<&str>,
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelPromptContent> {
@@ -11450,7 +11815,7 @@ fn call_model_prompt_content(
     let token = env_value(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
     let auth_header = model_auth_header(spec, &token);
-    let payload = model_request_payload(spec, prompt);
+    let payload = model_request_payload_parts(spec, cacheable_prefix, prompt);
     let request_path = lane_dir.join("request.json");
     let response_path = lane_dir.join("response.json");
     let stderr_path = lane_dir.join("stderr.txt");
@@ -11481,6 +11846,7 @@ fn call_model_prompt_content(
     let response: serde_json::Value = serde_json::from_slice(&process_output.stdout)
         .with_context(|| format!("parse {}", response_path.display()))?;
     let response_shape = model_response_shape(&response).to_owned();
+    let cache_usage = model_cache_usage(&response);
     let content = extract_model_content(&response)
         .ok_or_else(|| anyhow::anyhow!("model response did not contain assistant content"))?;
     let content_path = lane_dir.join("content.json");
@@ -11499,6 +11865,7 @@ fn call_model_prompt_content(
         duration_ms,
         http_status: process_output.http_status,
         response_shape,
+        cache_usage,
     })
 }
 
@@ -11612,7 +11979,15 @@ fn lane_output_malformed_content_observation(
     }
 }
 
+#[cfg(test)]
 fn render_lane_model_prompt(lane: &LanePlan, spec: &ProviderSpec, shared_context: &str) -> String {
+    combined_model_prompt(
+        Some(shared_context),
+        &render_lane_model_task_prompt(lane, spec),
+    )
+}
+
+fn render_lane_model_task_prompt(lane: &LanePlan, spec: &ProviderSpec) -> String {
     let lane_guidance = lane_specific_prompt_guidance(lane);
     format!(
         r#"Lane: {lane}
@@ -11623,7 +11998,7 @@ Role: {role}
 Focus: {focus}
 {lane_guidance}
 
-Use the shared context below. Return only one strict JSON object:
+Use the cached shared context. Return only one strict JSON object:
 {{
   "summary": "short lane summary, 300 chars max",
   "observations": [
@@ -11683,9 +12058,7 @@ If there is no blocker/high/medium actionable issue, use empty arrays and put th
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
-Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure does not return `None`, an empty box, or a recoverable fallback. If that objection arises, return it as a refuted false-premise failed_objection, not as a candidate finding.
-
-{shared_context}"#,
+Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure does not return `None`, an empty box, or a recoverable fallback. If that objection arises, return it as a refuted false-premise failed_objection, not as a candidate finding."#,
         lane = lane.id,
         provider = spec.provider.key(),
         model = spec.model,
@@ -11693,7 +12066,6 @@ Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure 
         role = lane.role,
         focus = lane.focus,
         lane_guidance = lane_guidance,
-        shared_context = shared_context
     )
 }
 
@@ -13541,7 +13913,16 @@ fn model_auth_header(spec: &ProviderSpec, token: &str) -> String {
     }
 }
 
+#[cfg(test)]
 fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value {
+    model_request_payload_parts(spec, None, prompt)
+}
+
+fn model_request_payload_parts(
+    spec: &ProviderSpec,
+    cacheable_prefix: Option<&str>,
+    prompt: &str,
+) -> serde_json::Value {
     match spec.endpoint_kind {
         ProviderEndpointKind::AnthropicMessages => {
             let thinking_type = if spec.provider == ModelProvider::MiniMaxDirect {
@@ -13549,6 +13930,7 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
             } else {
                 "adaptive"
             };
+            let content = anthropic_user_content(spec, cacheable_prefix, prompt);
             serde_json::json!({
                 "model": spec.model,
                 "max_tokens": model_max_tokens(spec),
@@ -13556,11 +13938,12 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
                 "thinking": {"type": thinking_type},
                 "temperature": 0.1,
                 "messages": [
-                    {"role": "user", "content": prompt}
+                    {"role": "user", "content": content}
                 ],
             })
         }
         ProviderEndpointKind::OpenAiChat if spec.provider == ModelProvider::MiniMaxDirect => {
+            let prompt = combined_model_prompt(cacheable_prefix, prompt);
             serde_json::json!({
                 "model": spec.model,
                 "messages": [
@@ -13574,15 +13957,48 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
                 "stream": false
             })
         }
-        ProviderEndpointKind::OpenAiChat => serde_json::json!({
-            "model": spec.model,
-            "messages": [
-                {"role": "system", "content": "Return strict JSON only. Do not include markdown fences."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.1,
-            "stream": false
-        }),
+        ProviderEndpointKind::OpenAiChat => {
+            let prompt = combined_model_prompt(cacheable_prefix, prompt);
+            serde_json::json!({
+                "model": spec.model,
+                "messages": [
+                    {"role": "system", "content": "Return strict JSON only. Do not include markdown fences."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.1,
+                "stream": false
+            })
+        }
+    }
+}
+
+fn anthropic_user_content(
+    spec: &ProviderSpec,
+    cacheable_prefix: Option<&str>,
+    prompt: &str,
+) -> serde_json::Value {
+    if spec.provider == ModelProvider::MiniMaxDirect
+        && let Some(cacheable_prefix) = cacheable_prefix
+    {
+        return serde_json::json!([
+            {
+                "type": "text",
+                "text": cacheable_prefix,
+                "cache_control": {"type": "ephemeral"}
+            },
+            {
+                "type": "text",
+                "text": prompt
+            }
+        ]);
+    }
+    serde_json::Value::String(combined_model_prompt(cacheable_prefix, prompt))
+}
+
+fn combined_model_prompt(cacheable_prefix: Option<&str>, prompt: &str) -> String {
+    match cacheable_prefix {
+        Some(prefix) => format!("Cached shared context:\n\n{prefix}\n\nLane task:\n\n{prompt}"),
+        None => prompt.to_owned(),
     }
 }
 
@@ -13620,6 +14036,39 @@ fn model_response_shape(response: &serde_json::Value) -> &'static str {
         "provider-flat"
     } else {
         "unknown"
+    }
+}
+
+fn model_cache_usage(response: &serde_json::Value) -> ModelCacheUsage {
+    let usage = response.get("usage");
+    ModelCacheUsage {
+        input_tokens: usage
+            .and_then(|usage| usage.get("input_tokens"))
+            .and_then(serde_json::Value::as_u64)
+            .or_else(|| {
+                usage
+                    .and_then(|usage| usage.get("prompt_tokens"))
+                    .and_then(serde_json::Value::as_u64)
+            }),
+        output_tokens: usage
+            .and_then(|usage| usage.get("output_tokens"))
+            .and_then(serde_json::Value::as_u64)
+            .or_else(|| {
+                usage
+                    .and_then(|usage| usage.get("completion_tokens"))
+                    .and_then(serde_json::Value::as_u64)
+            }),
+        cache_creation_input_tokens: usage
+            .and_then(|usage| usage.get("cache_creation_input_tokens"))
+            .and_then(serde_json::Value::as_u64),
+        cache_read_input_tokens: usage
+            .and_then(|usage| usage.get("cache_read_input_tokens"))
+            .and_then(serde_json::Value::as_u64)
+            .or_else(|| {
+                usage
+                    .and_then(|usage| usage.pointer("/prompt_tokens_details/cached_tokens"))
+                    .and_then(serde_json::Value::as_u64)
+            }),
     }
 }
 
@@ -14889,6 +15338,17 @@ fn builtin_tools() -> Vec<ToolPolicy> {
             false,
         ),
         tool(
+            "coverage",
+            "cargo",
+            ToolClass::Coverage,
+            6,
+            Trigger::Manual,
+            1_800,
+            256,
+            true,
+            false,
+        ),
+        tool(
             "osv-scanner",
             "osv-scanner",
             ToolClass::Security,
@@ -15588,6 +16048,44 @@ mod tests {
             commands
                 .iter()
                 .any(|command| command.argv.iter().any(|arg| arg.ends_with("context.md")))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_sensor_command_writes_lcov_artifact_when_enabled() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let out = root.join("out");
+        let plan = test_plan(vec![sensor_plan("coverage", "cargo", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "coverage")
+            .ok_or_else(|| anyhow::anyhow!("coverage sensor missing"))?;
+        let dir = out.join("sensors/coverage");
+        let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "cargo".to_owned(),
+                "llvm-cov".to_owned(),
+                "--workspace".to_owned(),
+                "--all-features".to_owned(),
+                "--locked".to_owned(),
+                "--lcov".to_owned(),
+                "--output-path".to_owned(),
+                dir.join("lcov.info").display().to_string(),
+            ]
+        );
+        assert_eq!(
+            super::sensor_outputs(sensor),
+            vec![
+                "stdout.txt".to_owned(),
+                "stderr.txt".to_owned(),
+                "lcov.info".to_owned()
+            ]
         );
         Ok(())
     }
@@ -19370,6 +19868,38 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn model_cache_usage_extracts_provider_token_counts() {
+        let anthropic: serde_json::Value = serde_json::json!({
+            "usage": {
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cache_creation_input_tokens": 80,
+                "cache_read_input_tokens": 40
+            }
+        });
+        let usage = super::model_cache_usage(&anthropic);
+        assert_eq!(usage.input_tokens, Some(100));
+        assert_eq!(usage.output_tokens, Some(20));
+        assert_eq!(usage.cache_creation_input_tokens, Some(80));
+        assert_eq!(usage.cache_read_input_tokens, Some(40));
+
+        let openai: serde_json::Value = serde_json::json!({
+            "usage": {
+                "prompt_tokens": 75,
+                "completion_tokens": 10,
+                "prompt_tokens_details": {
+                    "cached_tokens": 55
+                }
+            }
+        });
+        let usage = super::model_cache_usage(&openai);
+        assert_eq!(usage.input_tokens, Some(75));
+        assert_eq!(usage.output_tokens, Some(10));
+        assert_eq!(usage.cache_creation_input_tokens, None);
+        assert_eq!(usage.cache_read_input_tokens, Some(55));
+    }
+
+    #[test]
     fn model_json_payload_accepts_markdown_json_fence() -> Result<()> {
         let fenced = r#"```json
 {
@@ -19496,7 +20026,7 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn minimax_anthropic_payload_uses_messages_shape() {
+    fn minimax_anthropic_payload_uses_messages_shape() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.minimax_provider_kind = ProviderKindArg::Anthropic;
         let spec = direct_minimax_spec(&args);
@@ -19513,6 +20043,18 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(payload["messages"].is_array());
         assert!(payload["messages"][0]["content"].as_str().is_some());
         assert!(payload.get("stream").is_none());
+
+        let cached =
+            super::model_request_payload_parts(&spec, Some("shared cache block"), "lane task");
+        let content = cached["messages"][0]["content"].as_array().ok_or_else(|| {
+            anyhow::anyhow!("cached MiniMax Anthropic content should be block array")
+        })?;
+        assert_eq!(content[0]["type"], "text");
+        assert_eq!(content[0]["text"], "shared cache block");
+        assert_eq!(content[0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(content[1]["type"], "text");
+        assert_eq!(content[1]["text"], "lane task");
+        Ok(())
     }
 
     #[test]
@@ -20252,6 +20794,14 @@ UB_REVIEW_HTTP_STATUS:429
 
     #[test]
     fn review_metrics_count_efficiency_facts() {
+        let mut cached_lane = model_lane_receipt("tests-oracle", "ok");
+        cached_lane.endpoint_kind = "anthropic-messages".to_owned();
+        cached_lane.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(1_000),
+            output_tokens: Some(100),
+            cache_creation_input_tokens: Some(800),
+            cache_read_input_tokens: Some(400),
+        };
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
@@ -20281,6 +20831,7 @@ UB_REVIEW_HTTP_STATUS:429
                     duration_ms: Some(100),
                     http_status: Some(200),
                     response_shape: Some("anthropic".to_owned()),
+                    cache_usage: super::ModelCacheUsage::default(),
                 },
                 super::ProviderPreflightReceipt {
                     provider: "opencode-go".to_owned(),
@@ -20291,9 +20842,10 @@ UB_REVIEW_HTTP_STATUS:429
                     duration_ms: None,
                     http_status: None,
                     response_shape: None,
+                    cache_usage: super::ModelCacheUsage::default(),
                 },
             ],
-            model_lanes: vec![model_lane_receipt("tests-oracle", "ok")],
+            model_lanes: vec![cached_lane],
             missing_or_failed_sensor_evidence: Vec::new(),
             missing_or_failed_model_evidence: Vec::new(),
             inline_comments: Vec::new(),
@@ -20354,6 +20906,11 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.follow_up_results.status_counts["ok"], 1);
         assert_eq!(metrics.follow_up_results.status_counts["skipped_budget"], 1);
         assert_eq!(metrics.follow_up_results.calls_attempted, 1);
+        assert_eq!(metrics.models.prompt_cache_creation_input_tokens, 800);
+        assert_eq!(metrics.models.prompt_cache_read_input_tokens, 400);
+        assert_eq!(metrics.models.prompt_cache_lane_hits, 1);
+        assert_eq!(metrics.models.prompt_cache_lane_misses, 0);
+        assert_eq!(metrics.models.prompt_cache_lane_unknown, 0);
         assert_eq!(metrics.proof_requests, 0);
         assert_eq!(metrics.proof_receipts, 0);
         assert_eq!(metrics.resource_leases, 0);
@@ -20912,6 +21469,7 @@ UB_REVIEW_HTTP_STATUS:429
                 out: temp.path(),
                 review_dir: &review_dir,
                 provider_preflights: &[],
+                shared_context: "shared context",
                 args: &args,
                 model_calls_used: 0,
                 tasks: &plan.follow_up_tasks,
@@ -21824,6 +22382,7 @@ index 1111111..2222222 100644
             http_status: None,
             response_shape: None,
             fallback_from: None,
+            cache_usage: super::ModelCacheUsage::default(),
         }
     }
 
@@ -21840,6 +22399,7 @@ index 1111111..2222222 100644
             duration_ms: None,
             http_status: None,
             response_shape: None,
+            cache_usage: super::ModelCacheUsage::default(),
             request_path: None,
             response_path: None,
             content_path: None,

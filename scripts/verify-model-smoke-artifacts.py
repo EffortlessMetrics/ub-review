@@ -157,21 +157,16 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
     for key, value in expected.items():
         if models.get(key) != value:
             fail(f"metrics.models.{key} expected {value!r}, got {models.get(key)!r}")
-
-
-def require_timing(container: dict, label: str, field: str) -> None:
-    timing = container.get(field)
-    if not isinstance(timing, dict):
-        fail(f"{label} is missing")
-    for timing_field in ["started_at_offset_ms", "finished_at_offset_ms", "wall_ms"]:
-        value = timing.get(timing_field)
+    for field in [
+        "prompt_cache_creation_input_tokens",
+        "prompt_cache_read_input_tokens",
+        "prompt_cache_lane_hits",
+        "prompt_cache_lane_misses",
+        "prompt_cache_lane_unknown",
+    ]:
+        value = models.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
-            fail(f"{label}.{timing_field} is not a non-negative integer")
-    if timing["finished_at_offset_ms"] < timing["started_at_offset_ms"]:
-        fail(f"{label} finished before it started")
-    span = timing["finished_at_offset_ms"] - timing["started_at_offset_ms"]
-    if timing["wall_ms"] > span and timing["finished_at_offset_ms"] > timing["started_at_offset_ms"]:
-        fail(f"{label} wall exceeds observed span")
+            fail(f"metrics.models.{field} is not a non-negative integer")
     if models.get("provider_preflight_status_counts", {}).get("ok") != 1:
         fail("metrics did not record exactly one ok provider preflight")
     if models.get("model_lane_calls_attempted", 0) < min_ok_lanes:
@@ -186,6 +181,24 @@ def require_timing(container: dict, label: str, field: str) -> None:
             "metrics did not record enough usable ok/degraded model lanes: "
             f"expected at least {min_ok_lanes}, got {usable_lanes!r}"
         )
+
+
+def require_timing(container: dict, label: str, field: str) -> None:
+    timing = container.get(field)
+    if not isinstance(timing, dict):
+        fail(f"{label} is missing")
+    for timing_field in ["started_at_offset_ms", "finished_at_offset_ms", "wall_ms"]:
+        value = timing.get(timing_field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail(f"{label}.{timing_field} is not a non-negative integer")
+    if timing["finished_at_offset_ms"] < timing["started_at_offset_ms"]:
+        fail(f"{label} finished before it started")
+    span = timing["finished_at_offset_ms"] - timing["started_at_offset_ms"]
+    if (
+        timing["wall_ms"] > span
+        and timing["finished_at_offset_ms"] > timing["started_at_offset_ms"]
+    ):
+        fail(f"{label} wall exceeds observed span")
 
 
 def sanitize_artifact_name(value: str) -> str:
