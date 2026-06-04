@@ -422,23 +422,33 @@ def require_common_tree(root: pathlib.Path) -> None:
     for sensor in SENSORS:
         require_file(root / "sensors" / sensor / "ub-review-sensor-status.json")
 
-    plan = load_json(root / "plan.json")
-    if not isinstance(plan, dict):
-        fail("plan.json is not an object")
-    lanes = plan.get("lanes")
+    resolved_plan = load_json(root / "resolved-plan.json")
+    if not isinstance(resolved_plan, dict):
+        fail("resolved-plan.json is not an object")
+    selectors = resolved_plan.get("selectors")
+    if not isinstance(selectors, dict):
+        fail("resolved-plan.json selectors is not an object")
+    lanes = selectors.get("effective_model_lanes")
     if not isinstance(lanes, list):
-        fail("plan.json lanes is not an array")
-    for lane_item in lanes:
-        if not isinstance(lane_item, dict):
-            fail(f"plan.json lane is not an object: {lane_item!r}")
-        lane = lane_item.get("id")
+        fail("resolved-plan.json selectors.effective_model_lanes is not an array")
+    expected_lane_packets = set()
+    for lane in lanes:
         if not isinstance(lane, str) or not lane:
-            fail(f"plan.json lane missing id: {lane_item!r}")
+            fail(f"effective model lane is invalid: {lane!r}")
+        expected_lane_packets.add(f"{sanitize_artifact_name(lane)}.md")
         lane_path = require_file(root / "lanes" / f"{sanitize_artifact_name(lane)}.md")
         lane_text = read_text(lane_path)
         if f"[{lane}]" not in lane_text:
             fail(f"lane packet {lane_path} does not include [{lane}] prefix")
         no_standalone_approval_line(lane_text, lane_path)
+    actual_lane_packets = {
+        path.name for path in (root / "lanes").glob("*.md") if path.is_file()
+    }
+    if actual_lane_packets != expected_lane_packets:
+        fail(
+            "lane packet files do not match effective_model_lanes: "
+            f"expected {sorted(expected_lane_packets)!r}, got {sorted(actual_lane_packets)!r}"
+        )
 
 
 def require_events(root: pathlib.Path) -> None:
@@ -724,6 +734,13 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
         fail("metrics inline_comments does not match review.json")
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
+    resolved_plan = load_json(root / "resolved-plan.json")
+    selectors = resolved_plan.get("selectors", {})
+    effective_lanes = selectors.get("effective_model_lanes", [])
+    if not isinstance(effective_lanes, list):
+        fail("resolved-plan.json selectors.effective_model_lanes is not an array")
+    if metrics.get("lane_packets") != len(effective_lanes):
+        fail("metrics lane_packets does not match effective_model_lanes")
     require_candidate_artifacts(root, review)
     require_orchestrator_plan(root)
     if metrics.get("terminal_state") != review.get("terminal_state", {}).get("status"):
