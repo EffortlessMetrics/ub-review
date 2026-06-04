@@ -1107,6 +1107,107 @@ mod tests {
             .collect::<Vec<_>>()
     }
 
+    fn write_bun_pin_docs(root: &Path, pin: &str, pr: &str) -> Result<()> {
+        fs::create_dir_all(root.join("docs/calibration"))?;
+        fs::create_dir_all(root.join("examples/bun/.github/workflows"))?;
+
+        let action_ref = format!("EffortlessMetrics/ub-review@{pin}");
+        let proof_ref = format!("EffortlessSteven/bun#{pr}");
+        let files = [
+            (
+                "README.md",
+                format!("{action_ref}\nvalidated by `{proof_ref}`\n"),
+            ),
+            (
+                "REPO_READY.md",
+                format!("current known-good pin `{pin}` validated by `{proof_ref}`\n"),
+            ),
+            ("RELEASE_NOTES.md", format!("uses `{action_ref}`\n")),
+            (
+                "RELEASE_NOTES_GH_RUNNER.md",
+                format!("uses: {action_ref}\n"),
+            ),
+            ("docs/ACTION_CONSUMER_BUN.md", format!("pin is `{pin}`\n")),
+            (
+                "docs/GH_RUNNER_BUN.md",
+                format!("{action_ref}\nvalidated by `{proof_ref}`\n"),
+            ),
+            (
+                "docs/GH_RUNNER_SETUP.md",
+                format!("{action_ref}\nvalidated by `{proof_ref}`\n"),
+            ),
+            (
+                "docs/REPO_BOOTSTRAP.md",
+                format!("known-good pin is `{pin}`\n"),
+            ),
+            (
+                "docs/REPO_OPERATING_HANDOFF.md",
+                format!("- Bun PR #{pr}: the Bun gate is pinned to `{action_ref}`\n"),
+            ),
+            (
+                "docs/ROADMAP.md",
+                format!(
+                    "The v0 gate is `{action_ref}`.\nknown-good Bun workflow pin was advanced in `{proof_ref}` after validation.\n"
+                ),
+            ),
+            (
+                "docs/calibration/bun-ub-review-ledger.md",
+                format!(
+                    "# Bun UB Review Calibration Ledger\n\n## Current Bun gate pin\n\nPR: `#{pr}`\nPin: `{action_ref}`\nRun: `26954325725`\nArtifact: `ub-review-packet-{pr}`\n\n## Earlier item\n"
+                ),
+            ),
+            (
+                "examples/bun/.github/workflows/ub-review-packet.yml",
+                format!(
+                    "key: ub-review-gh-runner-v2-{pin}-${{{{ runner.os }}}}-rust-1.95-core\nrestore-keys: |\n  ub-review-gh-runner-v2-{pin}-${{{{ runner.os }}}}-rust-1.95-\nuses: {action_ref}\n"
+                ),
+            ),
+        ];
+
+        for (relative, text) in files {
+            let path = root.join(relative);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&path, text).with_context(|| format!("write {}", path.display()))?;
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn bun_gate_pin_policy_accepts_consistent_docs() -> Result<()> {
+        let root = temp_repo_root("bun-pin-consistent")?;
+        write_bun_pin_docs(&root, "217f123e688e42ddfce98eec5795b88bf457dd34", "45")?;
+
+        validate_bun_gate_pin(&root)?;
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn bun_gate_pin_policy_rejects_example_pin_drift() -> Result<()> {
+        let root = temp_repo_root("bun-pin-drift")?;
+        let current = "217f123e688e42ddfce98eec5795b88bf457dd34";
+        let stale = "1111111111111111111111111111111111111111";
+        write_bun_pin_docs(&root, current, "45")?;
+        let workflow = root.join("examples/bun/.github/workflows/ub-review-packet.yml");
+        let text = fs::read_to_string(&workflow)?.replacen(current, stale, 1);
+        fs::write(&workflow, text)?;
+
+        let error = match validate_bun_gate_pin(&root) {
+            Ok(()) => bail!("policy accepted a split Bun gate pin"),
+            Err(error) => error,
+        };
+        assert!(
+            error.to_string().contains("known-good Bun gate pin drift"),
+            "{error:#}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
     #[test]
     fn precommit_out_dir_starts_fresh() -> Result<()> {
         let root = temp_repo_root("precommit-out")?;
@@ -1273,8 +1374,189 @@ fn check_policy(root: &Path) -> Result<PolicyReport> {
     validate_ci_budget(&policy_dir.join("ci-budget.toml"))?;
     validate_ci_lanes(&policy_dir.join("ci-lanes.toml"), &mut report)?;
     validate_ci_risk_packs(&policy_dir.join("ci-risk-packs.toml"), &mut report)?;
+    validate_bun_gate_pin(root)?;
 
     Ok(report)
+}
+
+const BUN_GATE_PIN_FILES: &[&str] = &[
+    "README.md",
+    "REPO_READY.md",
+    "RELEASE_NOTES.md",
+    "RELEASE_NOTES_GH_RUNNER.md",
+    "docs/ACTION_CONSUMER_BUN.md",
+    "docs/GH_RUNNER_BUN.md",
+    "docs/GH_RUNNER_SETUP.md",
+    "docs/REPO_BOOTSTRAP.md",
+    "docs/REPO_OPERATING_HANDOFF.md",
+    "docs/ROADMAP.md",
+    "docs/calibration/bun-ub-review-ledger.md",
+    "examples/bun/.github/workflows/ub-review-packet.yml",
+];
+
+fn validate_bun_gate_pin(root: &Path) -> Result<()> {
+    let mut pins_by_value = BTreeMap::<String, Vec<String>>::new();
+
+    for relative in BUN_GATE_PIN_FILES {
+        let path = root.join(relative);
+        let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+        let scanned = if *relative == "docs/calibration/bun-ub-review-ledger.md" {
+            current_bun_gate_section(&text)?.to_owned()
+        } else {
+            text
+        };
+        let pins = sha40_strings(&scanned);
+        if pins.is_empty() {
+            bail!("{relative} must include the current Bun gate SHA pin");
+        }
+        for pin in pins {
+            pins_by_value
+                .entry(pin)
+                .or_default()
+                .push((*relative).to_owned());
+        }
+    }
+
+    if pins_by_value.len() != 1 {
+        let mut details = Vec::new();
+        for (pin, files) in &pins_by_value {
+            details.push(format!("{pin}: {}", files.join(", ")));
+        }
+        bail!(
+            "known-good Bun gate pin drift: expected one SHA across docs/example, found {}",
+            details.join("; ")
+        );
+    }
+
+    let pin = pins_by_value
+        .keys()
+        .next()
+        .context("known-good Bun gate pin missing")?;
+    validate_example_bun_workflow(root, pin)?;
+    validate_current_bun_gate_ledger(root, pin)?;
+    Ok(())
+}
+
+fn validate_example_bun_workflow(root: &Path, pin: &str) -> Result<()> {
+    let relative = "examples/bun/.github/workflows/ub-review-packet.yml";
+    let path = root.join(relative);
+    let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let action_ref = format!("uses: EffortlessMetrics/ub-review@{pin}");
+    if !text.contains(&action_ref) {
+        bail!("{relative} must use the current Bun gate pin in the action ref");
+    }
+    let count = count_occurrences(&text, pin);
+    if count != 3 {
+        bail!("{relative} expected current Bun gate pin exactly 3 times, found {count}");
+    }
+    Ok(())
+}
+
+fn validate_current_bun_gate_ledger(root: &Path, pin: &str) -> Result<()> {
+    let ledger_path = root.join("docs/calibration/bun-ub-review-ledger.md");
+    let text = fs::read_to_string(&ledger_path)
+        .with_context(|| format!("read {}", ledger_path.display()))?;
+    let section = current_bun_gate_section(&text)?;
+    let expected_pin = format!("Pin: `EffortlessMetrics/ub-review@{pin}`");
+    if !section.contains(&expected_pin) {
+        bail!("current Bun gate ledger pin must match adoption docs");
+    }
+
+    let pr = extract_backtick_field(section, "PR: `#")?;
+    let run = extract_backtick_field(section, "Run: `")?;
+    let artifact = extract_backtick_field(section, "Artifact: `")?;
+    if run.chars().any(|character| !character.is_ascii_digit()) {
+        bail!("current Bun gate ledger run must be a numeric GitHub run id");
+    }
+    if !artifact.starts_with("ub-review-packet-") {
+        bail!("current Bun gate ledger artifact must name the Bun packet artifact");
+    }
+
+    require_current_bun_pr_reference(root, "README.md", pr, "EffortlessSteven/bun#")?;
+    require_current_bun_pr_reference(root, "REPO_READY.md", pr, "EffortlessSteven/bun#")?;
+    require_current_bun_pr_reference(root, "docs/GH_RUNNER_BUN.md", pr, "EffortlessSteven/bun#")?;
+    require_current_bun_pr_reference(root, "docs/GH_RUNNER_SETUP.md", pr, "EffortlessSteven/bun#")?;
+    require_current_bun_pr_reference(root, "docs/REPO_OPERATING_HANDOFF.md", pr, "Bun PR #")?;
+    require_current_bun_pr_reference(root, "docs/ROADMAP.md", pr, "EffortlessSteven/bun#")?;
+    Ok(())
+}
+
+fn require_current_bun_pr_reference(
+    root: &Path,
+    relative: &str,
+    pr: &str,
+    prefix: &str,
+) -> Result<()> {
+    let path = root.join(relative);
+    let text = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
+    let expected = format!("{prefix}{pr}");
+    if !text.contains(&expected) {
+        bail!("{relative} must reference current Bun gate proof {expected}");
+    }
+    Ok(())
+}
+
+fn current_bun_gate_section(text: &str) -> Result<&str> {
+    let marker = "## Current Bun gate pin";
+    let start = text
+        .find(marker)
+        .context("docs/calibration/bun-ub-review-ledger.md missing current Bun gate section")?;
+    let rest = &text[start..];
+    let after_marker = &rest[marker.len()..];
+    if let Some(next_heading) = after_marker.find("\n## ") {
+        Ok(&rest[..marker.len() + next_heading])
+    } else {
+        Ok(rest)
+    }
+}
+
+fn extract_backtick_field<'a>(section: &'a str, prefix: &str) -> Result<&'a str> {
+    let start = section
+        .find(prefix)
+        .with_context(|| format!("current Bun gate ledger missing `{prefix}` field"))?
+        + prefix.len();
+    let tail = &section[start..];
+    let end = tail
+        .find('`')
+        .with_context(|| format!("current Bun gate ledger `{prefix}` field must close with `"))?;
+    let value = &tail[..end];
+    if value.trim().is_empty() {
+        bail!("current Bun gate ledger `{prefix}` field must not be empty");
+    }
+    Ok(value)
+}
+
+fn sha40_strings(text: &str) -> BTreeSet<String> {
+    let mut values = BTreeSet::new();
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if !bytes[index].is_ascii_hexdigit() {
+            index += 1;
+            continue;
+        }
+        let start = index;
+        while index < bytes.len() && bytes[index].is_ascii_hexdigit() {
+            index += 1;
+        }
+        if index - start == 40 {
+            values.insert(text[start..index].to_owned());
+        }
+    }
+    values
+}
+
+fn count_occurrences(text: &str, needle: &str) -> usize {
+    if needle.is_empty() {
+        return 0;
+    }
+    let mut count = 0;
+    let mut rest = text;
+    while let Some(index) = rest.find(needle) {
+        count += 1;
+        rest = &rest[index + needle.len()..];
+    }
+    count
 }
 
 fn policy_files(policy_dir: &Path) -> Result<Vec<PathBuf>> {
