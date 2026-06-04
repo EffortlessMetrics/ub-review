@@ -292,7 +292,13 @@ def is_workflow_trust_posture_review_noise(text: str) -> bool:
             or "github.token" in text
             or "malicious or compromised" in text
         )
-    ) or is_no_finding_workflow_pin_summary_noise(text)
+    ) or is_no_finding_workflow_pin_summary_noise(
+        text
+    ) or is_stale_external_bot_objection_noise(
+        text
+    ) or is_workflow_tool_status_artifact_gap_noise(
+        text
+    )
 
 
 def is_unchanged_workflow_trust_posture_noise(text: str) -> bool:
@@ -356,6 +362,66 @@ def is_no_finding_workflow_pin_summary_noise(text: str) -> bool:
         or "unchanged from prior pin" in text
     )
     return mentions_pin and (says_no_defect or says_not_current_diff)
+
+
+def is_stale_external_bot_objection_noise(text: str) -> bool:
+    mentions_bots = (
+        "cursor[bot]" in text
+        or "coderabbit" in text
+        or "stale-bot" in text
+    )
+    says_stale_false_positive = ("stale" in text or "false positive" in text) and (
+        "false positive" in text
+        or "reopens nothing" in text
+        or "not real findings" in text
+        or "current diff" in text
+        or "live diff" in text
+    )
+    mentions_pin_ref_mismatch = (
+        "claim target" in text
+        or "pin mismatch" in text
+        or "target sha" in text
+        or "current head sha" in text
+        or "pr title" in text
+        or "pr body" in text
+    )
+    return mentions_bots and says_stale_false_positive and mentions_pin_ref_mismatch
+
+
+def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
+    actionlint_ok = "actionlint" in text and (
+        "receipt is 'ok'" in text
+        or "actionlint=ok" in text
+        or "actionlint receipt ok" in text
+        or "sensor table" in text
+    )
+    not_inlined = (
+        "no per-line output" in text
+        or "not inlined" in text
+        or "central proof broker artifact" in text
+        or "sensors/actionlint" in text
+    )
+    yaml_pin = (
+        "4-line workflow pin" in text
+        or "4-line sha-swap" in text
+        or "yaml-only" in text
+        or "pin/uses ref consistent" in text
+    )
+    skipped_heavy = (
+        "build/test skipped" in text
+        or "--allow-heavy" in text
+        or "no fresh pr-build smoke" in text
+        or "heavy smoke adds limited value" in text
+    )
+    return (
+        (actionlint_ok and (not_inlined or yaml_pin))
+        or (skipped_heavy and yaml_pin)
+        or (
+            ("parked follow-up" in text or "not a blocker" in text)
+            and actionlint_ok
+            and yaml_pin
+        )
+    )
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -1354,6 +1420,8 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or ("actionlint" in text and "status=ok" in text)
         or is_unchanged_workflow_trust_posture_noise(text)
         or is_no_finding_workflow_pin_summary_noise(text)
+        or is_stale_external_bot_objection_noise(text)
+        or is_workflow_tool_status_artifact_gap_noise(text)
         or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
@@ -3609,6 +3677,36 @@ def run_self_tests() -> None:
             pathlib.Path("review/github-review.json"),
         ),
     )
+    expect_self_test_failure(
+        "stale bot refutation prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Refuted\n\n"
+                "- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... "
+                "and demand swap back; PR body, diff, and head tree all show ec8f890 "
+                "as the actual target. Their objection is a false positive against "
+                "the current diff and reopens nothing."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "workflow tool-status gap prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Evidence gaps\n\n"
+                "- actionlint receipt is 'ok' per sensor table; no per-line output "
+                "inlined into this lane packet, so re-verification of lint findings "
+                "depends on the central proof broker artifact.\n"
+                "- No fresh PR-build smoke run is available (build/test skipped, "
+                "--allow-heavy required); only tokmd/actionlint receipts are present "
+                "for this 4-line workflow pin."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
     meta_observations = [
         self_test_observation(
             "obsgrp-meta-proof",
@@ -3644,6 +3742,37 @@ def run_self_tests() -> None:
                 "the gate's SHA-pinning control remains effective."
             ),
             "false-premise",
+        ),
+        self_test_observation(
+            "obsgrp-stale-bot",
+            "stale-bot-pin",
+            (
+                "cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... "
+                "and demand swap back; PR body, diff, and head tree all show ec8f890 "
+                "as the actual target. Their objection is a false positive against "
+                "the current diff and reopens nothing."
+            ),
+            "false-premise",
+        ),
+        self_test_observation(
+            "obsgrp-actionlint-artifact",
+            "actionlint-artifact-gap",
+            (
+                "actionlint receipt is 'ok' per sensor table; no per-line output "
+                "inlined into this lane packet, so re-verification of lint findings "
+                "depends on the central proof broker artifact"
+            ),
+            "missing-evidence",
+        ),
+        self_test_observation(
+            "obsgrp-heavy-smoke",
+            "heavy-smoke-gap",
+            (
+                "No fresh PR-build smoke run is available (build/test skipped, "
+                "--allow-heavy required); only tokmd/actionlint receipts are present "
+                "for this 4-line workflow pin"
+            ),
+            "missing-evidence",
         ),
     ]
     plan = expected_orchestrator_plan([], meta_observations, [], [])
