@@ -44,8 +44,9 @@ export UB_REVIEW_STANDARD_IMAGE="true"
 do not set `UB_REVIEW_TOOL_DIR` to the `bin` directory itself.
 
 `UB_REVIEW_STANDARD_IMAGE=true` makes `ub-review doctor` fail if any core
-sensor is missing. On generic GitHub-hosted runners, missing tools remain
-missing evidence unless `install-tools=true` installs them successfully.
+sensor is missing or if `tokmd` drifts from the pinned `1.12.0` version. On
+generic GitHub-hosted runners, missing tools remain missing evidence unless
+`install-tools=true` installs them successfully.
 
 ## Cache Layers
 
@@ -143,6 +144,8 @@ For the Bun profile:
 
 - missing `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, or
   `actionlint` on the standard image is image drift and should fail `doctor`;
+- `tokmd` reporting a version other than `1.12.0` on the standard image is image
+  drift and should fail `doctor`;
 - missing tools on a generic hosted runner are missing evidence, not proof of a
   clean review;
 - sensor defects should be filed in the matching `*-swarm` repo, not hidden in

@@ -2884,6 +2884,7 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
     let profile_hash = profile_config_hash(&config)?;
     let require_core_tools = args.require_core_tools || env_flag("UB_REVIEW_STANDARD_IMAGE");
     let mut missing_required = Vec::new();
+    let mut version_mismatches = Vec::new();
     println!("Profile: {}", profile.name);
     println!("Box: {}", box_state.summary_line());
     println!("Limits: {}", profile.limits.summary_line());
@@ -2907,12 +2908,14 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
     println!();
     println!("Tools:");
     for tool in config.tools.values() {
-        let status = if command_on_path(&tool.command) {
-            "found"
+        let found = command_on_path(&tool.command);
+        let status = if found { "found" } else { "missing" };
+        let version = if found {
+            command_version(&tool.command)
         } else {
-            "missing"
+            None
         };
-        let version = command_version(&tool.command).unwrap_or_else(|| "-".to_owned());
+        let version_text = version.as_deref().unwrap_or("-");
         let rule_hit = cache_root
             .join("rules")
             .join(&tool.id)
@@ -2923,17 +2926,35 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
             tool.id,
             status,
             tool.command,
-            version,
+            version_text,
             if rule_hit { "hit" } else { "miss" }
         );
-        if require_core_tools && is_core_review_tool(&tool.id) && status == "missing" {
-            missing_required.push(tool.id.clone());
+        if require_core_tools && is_core_review_tool(&tool.id) {
+            if !found {
+                missing_required.push(tool.id.clone());
+            } else if let Some(expected) = expected_standard_image_tool_version(&tool.id) {
+                match version.as_deref() {
+                    Some(actual) if command_version_matches(actual, expected) => {}
+                    Some(actual) => version_mismatches
+                        .push(format!("{} expected {}, got {}", tool.id, expected, actual)),
+                    None => version_mismatches.push(format!(
+                        "{} expected {}, got no --version output",
+                        tool.id, expected
+                    )),
+                }
+            }
         }
     }
     if !missing_required.is_empty() {
         bail!(
             "required core review tools missing from standard image: {}",
             missing_required.join(", ")
+        );
+    }
+    if !version_mismatches.is_empty() {
+        bail!(
+            "required core review tool versions drifted from standard image pins: {}",
+            version_mismatches.join(", ")
         );
     }
     Ok(())
@@ -16766,9 +16787,23 @@ const CORE_REVIEW_TOOLS: [&str; 6] = [
     "ast-grep",
     "actionlint",
 ];
+const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)
+}
+
+fn expected_standard_image_tool_version(tool_id: &str) -> Option<&'static str> {
+    match tool_id {
+        "tokmd" => Some(STANDARD_IMAGE_TOKMD_VERSION),
+        _ => None,
+    }
+}
+
+fn command_version_matches(actual: &str, expected: &str) -> bool {
+    actual
+        .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'))
+        .any(|part| part.trim_start_matches('v') == expected)
 }
 
 fn cache_root_path(value: Option<&PathBuf>) -> PathBuf {
