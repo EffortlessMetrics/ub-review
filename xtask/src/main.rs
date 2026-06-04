@@ -148,8 +148,7 @@ struct ClippyDiagnostic {
 }
 
 fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitReport> {
-    let out_dir = root.join("target/precommit");
-    fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+    let out_dir = prepare_precommit_out_dir(root)?;
 
     let changed = changed_files(root, options.staged)?;
     let workspace = workspace_packages(root)?;
@@ -161,7 +160,7 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
     let mut receipts = Vec::new();
     let mut blocking_failures = 0;
 
-    let mut fmt = run_capture(root, "cargo", &["fmt", "--check"])?;
+    let mut fmt = run_capture(root, "cargo", &["fmt", "--all", "--", "--check"])?;
     fmt.name = "fmt".to_owned();
     write_command_artifact(&out_dir.join("fmt.md"), "fmt", &fmt)?;
     if !fmt.success {
@@ -443,6 +442,16 @@ fn all_file_lines(root: &Path, relative: &str) -> Result<BTreeSet<u64>> {
         lines.insert(number);
     }
     Ok(lines)
+}
+
+fn prepare_precommit_out_dir(root: &Path) -> Result<PathBuf> {
+    let out_dir = root.join("target/precommit");
+    if out_dir.exists() {
+        fs::remove_dir_all(&out_dir)
+            .with_context(|| format!("remove stale {}", out_dir.display()))?;
+    }
+    fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+    Ok(out_dir)
 }
 
 fn workspace_packages(root: &Path) -> Result<Vec<WorkspacePackage>> {
@@ -1096,6 +1105,24 @@ mod tests {
             .into_iter()
             .map(|package| package.name)
             .collect::<Vec<_>>()
+    }
+
+    #[test]
+    fn precommit_out_dir_starts_fresh() -> Result<()> {
+        let root = temp_repo_root("precommit-out")?;
+        let out_dir = root.join("target/precommit");
+        fs::create_dir_all(&out_dir).with_context(|| format!("create {}", out_dir.display()))?;
+        let stale = out_dir.join("stale-receipt.md");
+        fs::write(&stale, "stale receipt\n")
+            .with_context(|| format!("write {}", stale.display()))?;
+
+        let prepared = prepare_precommit_out_dir(&root)?;
+
+        assert_eq!(prepared, out_dir);
+        assert!(prepared.is_dir());
+        assert!(!stale.exists());
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
     }
 
     #[test]
