@@ -6159,40 +6159,41 @@ fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Resu
 
 fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
     let lower = body.to_ascii_lowercase();
-    [
-        "no blocking finding after",
-        "no blocking ub finding",
-        "no actionable findings",
-        "a human should still inspect",
-        "human should still review",
-        "residual risk remains for human review",
-        "bounded review",
-        "## residual risk",
-        "cached prior observation",
-        "refuter demoted inline candidate",
-        "gate proof is pending",
-        "cannot perform from cached context",
-        "commit-existence/ancestry proof",
-        "upstream commit-existence",
-        "general bot output",
-        "pr-body contract hardening",
-        "actionlint ran ok",
-        "lane transcript",
-        "lane roster",
-        "model lane roster",
-        "raw observations",
-        "provider preflight",
-        "provider status",
-        "sensor status",
-        "shared context hash",
-        "cache manifest",
-        "runtime profile",
-        "review payload status",
-        "terminal state",
-        "github-review-skip",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
+    is_workflow_trust_posture_review_noise(&lower)
+        || [
+            "no blocking finding after",
+            "no blocking ub finding",
+            "no actionable findings",
+            "a human should still inspect",
+            "human should still review",
+            "residual risk remains for human review",
+            "bounded review",
+            "## residual risk",
+            "cached prior observation",
+            "refuter demoted inline candidate",
+            "gate proof is pending",
+            "cannot perform from cached context",
+            "commit-existence/ancestry proof",
+            "upstream commit-existence",
+            "general bot output",
+            "pr-body contract hardening",
+            "actionlint ran ok",
+            "lane transcript",
+            "lane roster",
+            "model lane roster",
+            "raw observations",
+            "provider preflight",
+            "provider status",
+            "sensor status",
+            "shared context hash",
+            "cache manifest",
+            "runtime profile",
+            "review payload status",
+            "terminal state",
+            "github-review-skip",
+        ]
+        .iter()
+        .any(|needle| lower.contains(needle))
 }
 
 fn contains_successful_lane_table(body: &str) -> bool {
@@ -15078,6 +15079,7 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || (reason.contains("supply-chain tightening") && reason.contains("not widening"))
         || (reason.contains("passes core opposition tests")
             && reason.contains("remaining concerns"))
+        || is_unchanged_workflow_trust_posture_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15086,7 +15088,9 @@ fn is_pr_body_stale_for_current_diff(finding: &SummaryOnlyFinding, diff: &DiffCo
         return false;
     }
     let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
-    mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch)
+    (mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch))
+        || (mentions_standing_workflow_secret_trust(&text)
+            && diff_is_workflow_tool_pin_bump_only(&diff.patch))
 }
 
 fn is_pr_body_stale_for_current_diff_observation(
@@ -15101,6 +15105,8 @@ fn is_pr_body_stale_for_current_diff_observation(
     (mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch))
         || (mentions_pr_trigger_synchronize_scope(&text)
             && !diff_adds_pr_trigger_scope(&diff.patch))
+        || (mentions_standing_workflow_secret_trust(&text)
+            && diff_is_workflow_tool_pin_bump_only(&diff.patch))
 }
 
 fn mentions_workflow_tool_cache_path(text: &str) -> bool {
@@ -15144,6 +15150,47 @@ fn diff_adds_pr_trigger_scope(patch: &str) -> bool {
                 || line.contains("ready_for_review")
                 || line.contains("synchronize"))
     })
+}
+
+fn mentions_standing_workflow_secret_trust(text: &str) -> bool {
+    let mentions_secret_receiver = text.contains("secrets.minimax")
+        || text.contains("github.token")
+        || text.contains("secret/permission surface")
+        || text.contains("secret")
+        || text.contains("exposure surface");
+    let mentions_standing_action_trust = text.contains("upstream trust")
+        || text.contains("trust in upstream")
+        || text.contains("malicious or compromised")
+        || text.contains("would exfiltrate")
+        || text.contains("third-party action token scope")
+        || text.contains("residual trust")
+        || text.contains("standing-repo concern")
+        || text.contains("standing repo concern")
+        || text.contains("does not eliminate upstream trust");
+    mentions_secret_receiver && mentions_standing_action_trust
+}
+
+fn diff_is_workflow_tool_pin_bump_only(patch: &str) -> bool {
+    let mut saw_change = false;
+    for line in patch.lines() {
+        if !(line.starts_with('+') || line.starts_with('-'))
+            || line.starts_with("+++")
+            || line.starts_with("---")
+        {
+            continue;
+        }
+        saw_change = true;
+        let changed = line[1..].trim().to_ascii_lowercase();
+        if changed.is_empty() {
+            continue;
+        }
+        if !(changed.contains("ub-review-gh-runner-v")
+            || changed.starts_with("uses: effortlessmetrics/ub-review@"))
+        {
+            return false;
+        }
+    }
+    saw_change
 }
 
 fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
@@ -15210,6 +15257,7 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
             && (text.contains("prefix collision") || text.contains("short-prefix")))
         || (text.contains("actionlint") && text.contains("sensor reports ok"))
         || (text.contains("actionlint") && text.contains("status=ok"))
+        || is_unchanged_workflow_trust_posture_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15263,6 +15311,42 @@ fn is_pr_body_meta_review_noise(text: &str) -> bool {
             && text.contains("non-zero"))
         || (text.contains("sha were 39-hex") && text.contains("all-zero"))
         || text.contains("actionlint ran ok")
+}
+
+fn is_unchanged_workflow_trust_posture_noise(text: &str) -> bool {
+    let mentions_workflow_trust = text.contains("upstream trust")
+        || text.contains("trust in upstream")
+        || text.contains("malicious or compromised")
+        || text.contains("would exfiltrate")
+        || text.contains("reproducibly verified")
+        || text.contains("secrets.minimax")
+        || text.contains("github.token")
+        || text.contains("workflow-level permissions")
+        || text.contains("permissions block")
+        || text.contains("exposure surface");
+    let says_unchanged_or_out_of_scope = text.contains("not introduced by this")
+        || text.contains("pre-existing")
+        || text.contains("not a diff target")
+        || text.contains("identical to prior")
+        || text.contains("no widened attack surface")
+        || text.contains("zero new secret")
+        || text.contains("zero new")
+        || text.contains("no permission/trigger/pinning posture change")
+        || text.contains("no permission")
+        || text.contains("no permissions")
+        || text.contains("unchanged")
+        || text.contains("standing-repo concern")
+        || text.contains("standing repo concern");
+    mentions_workflow_trust && says_unchanged_or_out_of_scope
+}
+
+fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
+    is_unchanged_workflow_trust_posture_noise(text)
+        || ((text.contains("does not eliminate upstream trust")
+            || text.contains("trust in upstream tag"))
+            && (text.contains("secrets.minimax")
+                || text.contains("github.token")
+                || text.contains("malicious or compromised")))
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -22089,6 +22173,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Confirmed findings\n\n- Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("standing workflow trust prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Evidence gaps\n\n- Shared context hash and terminal state are available in artifacts.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -23753,6 +23846,13 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "refuter demoted inline candidate at .github/workflows/ub-review-packet.yml:56: the PR packet contains no upstream commit-existence/ancestry proof, and the PR body says 'Gate proof is pending this PR's UB evidence packet.' Confirming reachability requires an external API call that the lane cannot perform from cached context.".to_owned(),
                 evidence: "uses: EffortlessMetrics/ub-review@4dfbd9d7caeff4f506984c63cc36f248233206e6 - only local diff evidence, no upstream commit proof".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned(),
+                evidence: "The diff is an atomic ub-review SHA/cache-key bump; the with: block is unchanged.".to_owned(),
+            },
         ];
         let mut tokmd_gap = test_observation(
             "sensor-tokmd",
@@ -23773,6 +23873,24 @@ UB_REVIEW_HTTP_STATUS:429
                 "low",
                 "medium",
                 "bug:workflow-permissions",
+            ),
+            test_observation(
+                "workflow-permissions",
+                "Workflow-level permissions block on the caller workflow was not modified; perms posture remains whatever the base file declares (pre-existing, not a diff target).",
+                "verification-question",
+                "open",
+                "low",
+                "high",
+                "wf-perms-unchanged",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.",
+                "security-risk",
+                "open",
+                "medium",
+                "medium-high",
+                "wf-pin-secrets-surface",
             ),
             test_observation(
                 "orchestrator-follow-up",
@@ -23874,6 +23992,15 @@ UB_REVIEW_HTTP_STATUS:429
                 "refutation-meta",
             ),
             test_observation(
+                "workflow-opposition",
+                "Workflow posture is unsafe because the new pin dad0f23 receives secrets and is not reproducibly verified in this repo.; refuted because: False-premise at the opposition-lane level: the diff itself adds zero new secret/permission surface relative to the prior pin ccae442; pinning-by-SHA is the established control and is preserved. Trust in upstream tag is a standing-repo concern, not introduced by this 4-line bump.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "false-premise:workflow-opposition",
+            ),
+            test_observation(
                 "workflow-permissions",
                 "Actionlint ran ok; combined with disabled zizmor/gitleaks, security-relevant linting for this pin-only diff is partial but the diff class does not require them.",
                 "missing-evidence",
@@ -23914,6 +24041,10 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("Gate proof is pending"));
         assert!(!body.contains("40 hex and non-zero"));
         assert!(!body.contains("Actionlint ran ok"));
+        assert!(!body.contains("malicious or compromised"));
+        assert!(!body.contains("does not eliminate upstream trust"));
+        assert!(!body.contains("pre-existing, not a diff target"));
+        assert!(!body.contains("standing-repo concern"));
     }
 
     #[test]
