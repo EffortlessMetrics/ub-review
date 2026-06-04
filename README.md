@@ -412,6 +412,9 @@ the matching `*-swarm` repo instead of silently absorbed into `ub-review`.
 Track the next steps in [docs/ROADMAP.md](docs/ROADMAP.md). The roadmap records
 the v0 Bun smoke proof, cleanup work, PR body cleanup, profile extraction path,
 and the planned resource-aware orchestrator with proof and resource brokers.
+The PR-commentary standard is [docs/REVIEW_BODY_CONTRACT.md](docs/REVIEW_BODY_CONTRACT.md):
+use the runner for evidence, and use the PR body only for decision-changing
+signal.
 
 Use [docs/calibration/bun-ub-review-ledger.md](docs/calibration/bun-ub-review-ledger.md)
 to record acted-on findings, false premises, parked follow-ups, and review
