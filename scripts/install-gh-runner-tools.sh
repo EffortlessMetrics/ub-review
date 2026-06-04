@@ -86,7 +86,7 @@ case "$bundle" in
     echo "::notice::UB_REVIEW_TOOL_BUNDLE=none; not installing sensors"
     ;;
   core|bun-fast|full)
-    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
+    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.11.1}"
     install_cargo_bin tokmd tokmd "$tokmd_version"
     install_cargo_bin cargo-allow cargo-allow
     install_cargo_bin ripr ripr
@@ -96,7 +96,7 @@ case "$bundle" in
     ;;
   *)
     echo "::warning::unknown UB_REVIEW_TOOL_BUNDLE=$bundle; using core"
-    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
+    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.11.1}"
     install_cargo_bin tokmd tokmd "$tokmd_version"
     install_cargo_bin cargo-allow cargo-allow
     install_cargo_bin ripr ripr

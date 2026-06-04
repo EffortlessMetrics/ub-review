@@ -26,8 +26,9 @@ remaining product/tool work back to the correct lanes.
   receipts and uses workspace-wide `cargo fmt --all -- --check`.
 - PR #201: coverage sensor runs write `sensors/coverage/status.json`, and the
   verifier checks the coverage status receipt.
-- PR #203: standard-image `doctor --require-core-tools` fails when `tokmd`
-  drifts from the pinned `1.12.0` version.
+- PR #203 and follow-up pin correction: standard-image
+  `doctor --require-core-tools` fails when `tokmd` drifts from the pinned
+  published version.
 - PR #204: Bun artifact verifier rejects inline review boilerplate and CI runs
   the verifier self-test.
 - Bun PR #44: the Bun gate is pinned to

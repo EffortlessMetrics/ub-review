@@ -16802,7 +16802,7 @@ const CORE_REVIEW_TOOLS: [&str; 6] = [
     "ast-grep",
     "actionlint",
 ];
-const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
+const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.11.1";
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)

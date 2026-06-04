@@ -20,13 +20,13 @@ The script installs Rust and npm-backed tools into `$UB_REVIEW_TOOL_DIR/bin`,
 where `UB_REVIEW_TOOL_DIR` defaults to `/opt/ub-review`. It uses
 `cargo install --locked --root "$UB_REVIEW_TOOL_DIR"` for Rust tools and
 `go install` for `actionlint`, so the standard image build must provide Go.
-`tokmd` defaults to version `1.12.0` because the Bun profile depends on the
+`tokmd` defaults to version `1.11.1` because the Bun profile depends on the
 scoped `bun-ub` preset plus the current on-diff `cockpit` and `context`
 command surfaces.
 `actionlint` defaults to `v1.7.12`:
 
 ```bash
-export UB_REVIEW_TOKMD_VERSION="1.12.0"
+export UB_REVIEW_TOKMD_VERSION="1.11.1"
 export UB_REVIEW_ACTIONLINT_VERSION="v1.7.12"
 scripts/install-review-image-tools.sh
 ```
@@ -44,7 +44,7 @@ export UB_REVIEW_STANDARD_IMAGE="true"
 do not set `UB_REVIEW_TOOL_DIR` to the `bin` directory itself.
 
 `UB_REVIEW_STANDARD_IMAGE=true` makes `ub-review doctor` fail if any core
-sensor is missing or if `tokmd` drifts from the pinned `1.12.0` version. On
+sensor is missing or if `tokmd` drifts from the pinned `1.11.1` version. On
 generic GitHub-hosted runners, missing tools remain missing evidence unless
 `install-tools=true` installs them successfully.
 
@@ -144,7 +144,7 @@ For the Bun profile:
 
 - missing `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, or
   `actionlint` on the standard image is image drift and should fail `doctor`;
-- `tokmd` reporting a version other than `1.12.0` on the standard image is image
+- `tokmd` reporting a version other than `1.11.1` on the standard image is image
   drift and should fail `doctor`;
 - missing tools on a generic hosted runner are missing evidence, not proof of a
   clean review;
