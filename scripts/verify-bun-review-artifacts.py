@@ -418,6 +418,13 @@ def is_stale_external_bot_objection_noise(text: str) -> bool:
         or "current diff" in text
         or "live diff" in text
     )
+    contradicted_target_advice = (
+        "different sha" in text
+        or "targeting a different sha" in text
+        or "0 references to" in text
+        or "scripted check showing 0 references" in text
+        or "not match to gate target" in text
+    ) and ("used in the diff" in text or "current diff" in text)
     mentions_pin_ref_mismatch = (
         "claim target" in text
         or "pin mismatch" in text
@@ -426,7 +433,11 @@ def is_stale_external_bot_objection_noise(text: str) -> bool:
         or "pr title" in text
         or "pr body" in text
     )
-    return mentions_bots and says_stale_false_positive and mentions_pin_ref_mismatch
+    return (
+        mentions_bots
+        and mentions_pin_ref_mismatch
+        and (says_stale_false_positive or contradicted_target_advice)
+    )
 
 
 def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
@@ -3830,6 +3841,25 @@ def run_self_tests() -> None:
                 "and demand swap back; PR body, diff, and head tree all show ec8f890 "
                 "as the actual target. Their objection is a false positive against "
                 "the current diff and reopens nothing."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "stale bot target sha prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Confirmed findings\n\n"
+                "- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts "
+                "the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, "
+                "not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. "
+                "If that claim is correct the workflow pin does not match the upstream gate.\n\n"
+                "## Evidence gaps\n\n"
+                "- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, "
+                "scripted check showing 0 references to 892e1bb44b... in the file; "
+                "PR body and droid-ub/droid-tests receipts only confirm internal "
+                "lockstep, not match to gate target."
             ),
             pathlib.Path("review/github-review.json"),
         ),
