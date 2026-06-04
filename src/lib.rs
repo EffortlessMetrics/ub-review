@@ -25,7 +25,8 @@ const STANDARD_MODEL_CONCURRENCY: usize = 8;
 const STANDARD_MAX_MODEL_CALLS: usize = 14;
 const DEFAULT_REVIEW_PROFILE: &str = "bun-ub-v0";
 
-fn main() -> Result<()> {
+#[doc(hidden)]
+pub fn main_impl() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Init(args) => cmd_init(args),

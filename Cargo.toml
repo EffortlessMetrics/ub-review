@@ -45,4 +45,4 @@ dbg_macro = "deny"
 
 [[bin]]
 name = "ub-review"
-path = "src/main.rs"
+path = "src/bin/ub-review.rs"
