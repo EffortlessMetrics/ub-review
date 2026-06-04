@@ -31,13 +31,14 @@ In the Bun fork, add:
 ```
 
 using `examples/bun/.github/workflows/ub-review-packet.yml` from this repository.
-The first run should call:
+The Bun gate should use a verified commit SHA:
 
 ```yaml
-uses: EffortlessMetrics/ub-review@main
+uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
 ```
 
-Use `@main` until a draft Bun UB PR proves:
+The current known-good pin is `0b938918eb20d38d383dba4d588b0a97bc4591f4`.
+Move it only after a draft Bun UB PR proves:
 
 - one grouped Pull Request Review is posted or a `post-error.json` receipt explains why not;
 - `target/ub-review/running-summary.md` exists;
@@ -55,9 +56,5 @@ python scripts/verify-bun-review-artifacts.py target/ub-review \
   --require-no-model-evidence-failures
 ```
 
-After that run posts a useful review and uploads a complete packet, tag `v0` in
-this repository and switch the Bun workflow to:
-
-```yaml
-uses: EffortlessMetrics/ub-review@v0
-```
+Do not float the Bun workflow on `main`. Tags are for release rollouts; the
+daily Bun hunt should stay on the latest verified SHA.

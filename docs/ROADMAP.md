@@ -7,7 +7,7 @@ come after the Bun profile is proven and should preserve the Bun invariants.
 
 The v0 gate is:
 
-- `EffortlessMetrics/ub-review@v0`;
+- `EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4`;
 - `review-direct`;
 - MiniMax-only, 10 Bun lanes plus refuter;
 - one grouped Pull Request Review;
@@ -15,7 +15,9 @@ The v0 gate is:
 - full artifact packet;
 - missing evidence reported as missing evidence, never as clean evidence.
 
-The fork-only Bun smoke proof is PR `EffortlessSteven/bun#29`.
+The fork-only Bun smoke proof is PR `EffortlessSteven/bun#29`. The current
+known-good Bun workflow pin was advanced in `EffortlessSteven/bun#44` after
+`ub-review` PRs #203 and #204 and a successful UB evidence packet run.
 
 Verified v0 smoke evidence:
 

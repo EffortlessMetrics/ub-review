@@ -23,14 +23,15 @@ jobs:
   packet:
     name: UB evidence packet / gh-runner
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       CARGO_TARGET_DIR: /tmp/ub-review-cargo-target
       CARGO_INSTALL_JOBS: "2"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Fetch PR base ref
         run: |
@@ -51,17 +52,16 @@ jobs:
             ~/.cargo/bin/ripr
             ~/.cargo/bin/unsafe-review
             ${{ env.CARGO_TARGET_DIR }}
-          key: ub-review-gh-runner-v1-${{ runner.os }}-rust-1.95-core
+          key: ub-review-gh-runner-v2-0b938918eb20d38d383dba4d588b0a97bc4591f4-${{ runner.os }}-rust-1.95-core
           restore-keys: |
-            ub-review-gh-runner-v1-${{ runner.os }}-rust-1.95-
+            ub-review-gh-runner-v2-0b938918eb20d38d383dba4d588b0a97bc4591f4-${{ runner.os }}-rust-1.95-
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@main
+        uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
         with:
           preset: bun-ub
           profile: gh-runner
-          runtime-profile: gh-runner
           root: .
           base: origin/${{ github.base_ref }}
           head: HEAD
@@ -74,7 +74,6 @@ jobs:
           minimax-api-key: ${{ secrets.MINIMAX }}
           minimax-provider-kind: anthropic
           model-mode: auto
-          depth: standard
           provider-policy: minimax-only
           lane-width: '10'
           model-timeout-sec: '300'

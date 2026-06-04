@@ -69,12 +69,13 @@ permissions:
 jobs:
   packet:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Fetch PR base ref
         run: |
@@ -83,7 +84,7 @@ jobs:
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@main
+        uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
         with:
           preset: bun-ub
           profile: gh-runner
@@ -125,9 +126,11 @@ cutover workflow. `ub-review` does not shell out to OpenCode as an agent
 harness. GLM is skipped for v0. Missing model keys are recorded as missing review
 evidence instead of treated as a clean run.
 
-Use `EffortlessMetrics/ub-review@main` for the first Bun fork verification.
-After that run posts a useful review and uploads a complete packet, tag `v0`
-and switch the Bun workflow to `EffortlessMetrics/ub-review@v0`.
+Use a full commit SHA for the Bun gate. The current known-good Bun pin is
+`EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4`,
+validated by `EffortlessSteven/bun#44` with a successful UB evidence packet
+run and uploaded artifact. Do not float the Bun hunt on `main`; update the SHA
+only after this repo's verifier passes and the Bun consumer workflow succeeds.
 
 After downloading the first Bun artifact, verify the packet contract before
 tagging:
@@ -394,10 +397,10 @@ validates inline candidates, and submits one grouped PR review when configured.
 ## Bootstrap note
 
 With `install-mode=auto`, tagged action refs first try the Linux x64 release
-archive and fall back to a source build when the asset is unavailable. Non-tag
-refs such as `@main` use the source build path. This keeps first adoption
-token-free and mechanically simple while leaving the faster release-binary path
-available for tagged rollouts. The consuming workflow can cache Cargo registry
+archive and fall back to a source build when the asset is unavailable. Commit
+SHA refs use the source build path. This keeps first adoption token-free and
+mechanically simple while leaving the faster release-binary path available for
+tagged rollouts. The consuming workflow can cache Cargo registry
 and target directories if needed.
 
 ## Codex lane notes
