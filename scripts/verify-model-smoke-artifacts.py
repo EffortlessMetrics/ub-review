@@ -13,6 +13,15 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
+RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
+
+
+def require_run_pass(value, label: str) -> str:
+    if value not in RUN_PASS_VALUES:
+        fail(f"{label} expected one of {sorted(RUN_PASS_VALUES)!r}, got {value!r}")
+    return value
+
+
 def load_json(path: pathlib.Path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -192,6 +201,18 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
             "metrics did not record enough usable ok/degraded model lanes: "
             f"expected at least {min_ok_lanes}, got {usable_lanes!r}"
         )
+
+
+def require_run_pass_consistency(root: pathlib.Path, review: dict, metrics: dict) -> None:
+    run_pass = require_run_pass(review.get("run_pass"), "review.json run_pass")
+    if metrics.get("run_pass") != run_pass:
+        fail("metrics run_pass does not match review.json")
+    resolved_plan = load_json(root / "resolved-plan.json")
+    if resolved_plan.get("run_pass") != run_pass:
+        fail("resolved-plan.json run_pass does not match review.json")
+    selectors = resolved_plan.get("selectors", {})
+    if selectors.get("run_pass") != run_pass:
+        fail("resolved-plan.json selectors.run_pass does not match review.json")
 
 
 def require_scheduler_artifact(root: pathlib.Path, metrics: dict) -> None:
@@ -492,6 +513,7 @@ def main(argv: list[str]) -> int:
 
     preflight = require_single_ok_preflight(preflights)
     ok_lanes = require_ok_lanes(review.get("model_lanes", []), min_ok_lanes)
+    require_run_pass_consistency(root, review, metrics)
     require_metrics(metrics, min_ok_lanes)
     require_scheduler_artifact(root, metrics)
     require_events(root)
