@@ -18552,6 +18552,19 @@ mod tests {
     }
 
     #[test]
+    fn action_config_input_overrides_bundled_preset_selection() {
+        let action = include_str!("../action.yml");
+        assert!(
+            action.contains("config:")
+                && action.contains("config_path=\"${{ inputs.config }}\"")
+                && action.contains("if [[ -z \"$config_path\" ]]; then")
+                && action.contains("config_path=\"$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml\"")
+                && action.contains("--config \"$config_path\""),
+            "the action should let repo-local config paths override bundled preset selection"
+        );
+    }
+
+    #[test]
     fn bun_config_loads_with_default_lanes_enabled() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../profiles/bun-ub-v0.toml"))?;
         config.merge_defaults();

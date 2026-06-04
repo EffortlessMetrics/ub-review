@@ -1,6 +1,8 @@
 # Bun consumer workflow
 
 The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor the Rust runner.
+Non-Bun repositories can set `config: .ub-review.toml` instead of using the
+bundled `bun-ub` preset.
 
 ```yaml
 - name: Build UB review packet
