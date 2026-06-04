@@ -5,7 +5,7 @@ The first production use of `ub-review` is the Bun UB hunt.
 The Bun fork should consume this repository as a GitHub Action:
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
+- uses: EffortlessMetrics/ub-review@217f123e688e42ddfce98eec5795b88bf457dd34
   with:
     preset: bun-ub
     profile: gh-runner
@@ -14,9 +14,10 @@ The Bun fork should consume this repository as a GitHub Action:
 ```
 
 Keep the Bun workflow pinned to a verified commit SHA. The current known-good
-pin is `0b938918eb20d38d383dba4d588b0a97bc4591f4`, validated by
-`EffortlessSteven/bun#44` with a successful `UB evidence packet / gh-runner`
-run and uploaded packet artifact. Do not float the Bun gate on `main`.
+pin is `217f123e688e42ddfce98eec5795b88bf457dd34`, validated by
+`EffortlessSteven/bun#45` with a successful `UB evidence packet / gh-runner`
+run, uploaded packet artifact, `tokmd` receipts, and zero inline comments. Do
+not float the Bun gate on `main`.
 
 The action builds the packet without sensor secrets. In `posting: review` mode,
 the Bun workflow gives it the scoped `github.token` so it can submit one grouped
