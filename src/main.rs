@@ -12272,6 +12272,8 @@ Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure 
 fn lane_specific_prompt_guidance(lane: &LanePlan) -> &'static str {
     if lane.id == "tests" || lane.id.starts_with("tests-") {
         "Convergence calibration: batch every material test-oracle weakness you can substantiate in this pass; classify correctness/oracle gaps as blocker/high/medium and submaterial polish as low advisory or parked-follow-up. If the test is red/green-correct or proof receipts answer the concern, emit a resolved-check or failed_objection instead of a fresh candidate finding. Do not drip-feed one nit per pass."
+    } else if lane.id.contains("source-route") || lane.id.contains("sibling") {
+        "Sibling-path calibration: a no-match scan for one pattern or helper group is not proof that no sibling paths exist or that a fix is complete. Only claim no relevant siblings when you can cite broad meta-class coverage across entry points. Otherwise report the checked pattern/scope and emit a source-route-gap or verification question for unscanned variants."
     } else {
         ""
     }
@@ -12298,7 +12300,17 @@ fn apply_model_output(
         proof_requests,
     } = sinks;
     if let Some(summary) = output.summary {
-        if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
+        if let Some(observation) = sibling_completeness_overclaim_observation_from_text(
+            lane,
+            &summary,
+            vec!["lane model summary".to_owned()],
+            None,
+            None,
+            model_observations.len(),
+            "model-sibling-completeness-guard",
+        ) {
+            model_observations.push(observation);
+        } else if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
             lane,
             &summary,
             vec!["lane model summary".to_owned()],
@@ -12313,11 +12325,23 @@ fn apply_model_output(
         }
     }
     for candidate in output.summary_only_findings {
-        if let Some(observation) = box_from_allocation_false_premise_observation_from_summary_only(
+        if let Some(observation) = sibling_completeness_overclaim_observation_from_text(
             lane,
-            &candidate,
+            &format!("{}\n{}", candidate.reason, candidate.evidence),
+            vec![candidate.evidence.clone()],
+            None,
+            None,
             model_observations.len(),
+            "model-sibling-completeness-guard",
         ) {
+            model_observations.push(observation);
+        } else if let Some(observation) =
+            box_from_allocation_false_premise_observation_from_summary_only(
+                lane,
+                &candidate,
+                model_observations.len(),
+            )
+        {
             model_observations.push(observation);
         } else {
             summary_only_findings.push(validate_summary_only_candidate(lane, candidate));
@@ -12345,6 +12369,20 @@ fn apply_model_output(
         .into_iter()
         .chain(output.inline_comments)
     {
+        let path = normalize_repo_path(&candidate.path);
+        let path = if path.is_empty() { None } else { Some(path) };
+        if let Some(observation) = sibling_completeness_overclaim_observation_from_text(
+            lane,
+            &format!("{}\n{}", candidate.body, candidate.evidence),
+            vec![candidate.evidence.clone()],
+            path.as_ref(),
+            Some(candidate.line),
+            model_observations.len(),
+            "model-sibling-completeness-guard",
+        ) {
+            model_observations.push(observation);
+            continue;
+        }
         if let Some(observation) = box_from_allocation_false_premise_observation_from_candidate(
             lane,
             &candidate,
@@ -12425,6 +12463,17 @@ fn validate_model_observation(
         .as_deref()
         .map(normalize_repo_path)
         .filter(|path| !path.is_empty());
+    if let Some(observation) = sibling_completeness_overclaim_observation_from_text(
+        lane,
+        &format!("{claim}\n{}", evidence.join("\n")),
+        evidence.clone(),
+        path.as_ref(),
+        candidate.line,
+        index,
+        "model-sibling-completeness-guard",
+    ) {
+        return observation;
+    }
     if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
         lane,
         &format!("{claim}\n{}", evidence.join("\n")),
@@ -12468,6 +12517,17 @@ fn validate_failed_objection(
     );
     let full_claim = format!("{claim}; refuted because: {reason}");
     let evidence = non_empty_evidence(objection.evidence, "failed objection audit");
+    if let Some(observation) = sibling_completeness_overclaim_observation_from_text(
+        lane,
+        &format!("{full_claim}\n{}", evidence.join("\n")),
+        evidence.clone(),
+        None,
+        None,
+        index,
+        "model-sibling-completeness-guard",
+    ) {
+        return observation;
+    }
     if let Some(observation) = box_from_allocation_false_premise_observation_from_text(
         lane,
         &format!("{full_claim}\n{}", evidence.join("\n")),
@@ -12512,6 +12572,146 @@ fn validate_failed_objection(
         dedupe_key: None,
         source: "model-failed-objection",
     })
+}
+
+const SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY: &str = "sibling-path-completeness-overclaim";
+const SIBLING_COMPLETENESS_OVERCLAIM_CLAIM: &str = "Check sibling-path scan coverage before treating the fix as complete; a narrow no-match scan is not proof that no siblings exist.";
+
+fn sibling_completeness_overclaim_observation_from_text(
+    lane: &LanePlan,
+    text: &str,
+    evidence: Vec<String>,
+    path: Option<&String>,
+    line: Option<u32>,
+    index: usize,
+    source: &str,
+) -> Option<Observation> {
+    if !is_sibling_completeness_overclaim(&lane.id, text, &evidence) {
+        return None;
+    }
+    let mut evidence = non_empty_evidence(evidence, "sibling completeness guard");
+    let invariant = "Sibling-path calibration: narrow no-match scans must report coverage and cannot assert global sibling absence.";
+    if !evidence.iter().any(|item| item == invariant) {
+        evidence.push(invariant.to_owned());
+    }
+    let unsupported = format!(
+        "Unsupported sibling completeness claim: {}",
+        truncate_chars(text.trim(), 240)
+    );
+    if !unsupported.trim().is_empty() && !evidence.iter().any(|item| item == &unsupported) {
+        evidence.push(unsupported);
+    }
+    Some(make_observation(ObservationInput {
+        index,
+        lane: &lane.id,
+        question: "sibling-path-coverage",
+        claim: SIBLING_COMPLETENESS_OVERCLAIM_CLAIM,
+        kind: "source-route-gap",
+        status: "open",
+        severity: "medium",
+        confidence: "high",
+        path,
+        line,
+        evidence,
+        dedupe_key: Some(SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY),
+        source,
+    }))
+}
+
+fn is_sibling_completeness_overclaim(lane_id: &str, text: &str, evidence: &[String]) -> bool {
+    let lane_id = lane_id.to_ascii_lowercase();
+    let evidence_text = evidence.join("\n");
+    let combined = format!("{text}\n{evidence_text}").to_ascii_lowercase();
+    let lane_hint = lane_id.contains("source-route") || lane_id.contains("sibling");
+    let mentions_sibling = combined.contains("sibling") || combined.contains("analogous");
+    if !mentions_sibling || !lane_hint {
+        return false;
+    }
+    if has_broad_sibling_coverage_claim(&combined) {
+        return false;
+    }
+
+    let negative_scan = contains_any(
+        &combined,
+        &[
+            "no sibling",
+            "no siblings",
+            "no analogous",
+            "none widen",
+            "none of the sibling",
+            "not found",
+            "no match",
+            "no matches",
+            "nothing else",
+        ],
+    );
+    let completeness_claim = contains_any(
+        &combined,
+        &[
+            "correctly scoped",
+            "need not be broadened",
+            "does not need to be broadened",
+            "no need to broaden",
+            "complete fix",
+            "fix is complete",
+            "scope is complete",
+            "no siblings exist",
+            "no sibling paths exist",
+            "no sibling concern",
+            "no sibling gap",
+        ],
+    );
+    let scoped_no_match = has_honest_limited_sibling_scope(&combined) && !completeness_claim;
+    if scoped_no_match {
+        return false;
+    }
+    (negative_scan && completeness_claim)
+        || contains_any(
+            &combined,
+            &[
+                "no siblings exist",
+                "no sibling paths exist",
+                "no analogous sibling",
+            ],
+        )
+}
+
+fn has_broad_sibling_coverage_claim(text: &str) -> bool {
+    contains_any(
+        text,
+        &[
+            "across all",
+            "all ffi entry",
+            "all entry point",
+            "all public route",
+            "all sibling",
+            "every sibling",
+            "every ffi",
+            "exhaustive",
+            "meta-class",
+        ],
+    )
+}
+
+fn has_honest_limited_sibling_scope(text: &str) -> bool {
+    contains_any(
+        text,
+        &[
+            "checked scope",
+            "scan scope",
+            "scanned scope",
+            "limited to",
+            "did not scan",
+            "not scanned",
+            "unscanned",
+            "only checked",
+            "only scanned",
+        ],
+    )
+}
+
+fn contains_any(value: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| value.contains(needle))
 }
 
 const BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY: &str = "rust-box-from-allocation-failure";
@@ -15875,25 +16075,25 @@ mod tests {
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CommandStatus, Config,
         DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FollowUpQuestionTask,
         GitHubReview, GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
-        ModelCandidateComment, ModelCandidateFinding, ModelEvidenceIssue, ModelLaneReceipt,
-        ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext,
-        NO_LGTM_POSTURE, Observation, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
-        PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
-        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
-        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
-        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
-        apply_model_output, apply_plan_selectors, apply_refuter_output,
-        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
-        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
+        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
+        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
+        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
+        Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest,
+        ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
+        ResourceLease, ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy,
+        ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth, ReviewInlineComment,
+        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
         model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
@@ -15904,10 +16104,11 @@ mod tests {
         render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
         run_sensor, runtime_profile_from_toml, runtime_profile_override, sensor_job_count,
-        sha256_hex, split_curl_http_status, standard_minimax_lanes, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_pr_review_body_policy, validate_run_args, validate_summary_only_candidate,
-        wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
+        sha256_hex, split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
+        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
+        write_candidate_artifacts, write_follow_up_evidence_artifact,
         write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
         write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
@@ -16779,6 +16980,159 @@ mod tests {
         assert!(rejected.reason.contains("evidence_present=false"));
         assert_eq!(rejected.evidence, "model summary-only candidate guardrail");
         Ok(())
+    }
+
+    #[test]
+    fn sibling_source_route_prompt_requires_scan_boundaries() -> Result<()> {
+        let lane = default_lanes()
+            .into_iter()
+            .find(|lane| lane.id == "source-route")
+            .ok_or_else(|| anyhow::anyhow!("source-route lane missing"))?;
+
+        let guidance = super::lane_specific_prompt_guidance(&lane);
+
+        assert!(guidance.contains("no-match scan"));
+        assert!(guidance.contains("not proof that no sibling paths exist"));
+        assert!(guidance.contains("checked pattern/scope"));
+        assert!(guidance.contains("unscanned variants"));
+        Ok(())
+    }
+
+    #[test]
+    fn sibling_summary_completeness_claim_becomes_verification_observation() -> Result<()> {
+        let lane = lane_plan("sibling-paths");
+        let output = LaneModelOutput {
+            summary: Some(
+                "No analogous sibling panic paths were found, so the fix is correctly scoped and need not be broadened."
+                    .to_owned(),
+            ),
+            inline_comments: Vec::new(),
+            candidate_findings: Vec::new(),
+            summary_only_findings: Vec::new(),
+            observations: Vec::new(),
+            failed_objections: Vec::new(),
+            proof_requests: Vec::new(),
+            degraded: false,
+        };
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut observations = Vec::new();
+        let mut proof_requests = Vec::new();
+
+        apply_model_output(
+            &lane,
+            output,
+            &BTreeSet::new(),
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut observations,
+                proof_requests: &mut proof_requests,
+            },
+        );
+
+        assert!(inline_comments.is_empty());
+        assert!(summary_only_findings.is_empty());
+        assert!(proof_requests.is_empty());
+        assert_eq!(observations.len(), 1);
+        let observation = &observations[0];
+        assert_eq!(observation.question, "sibling-path-coverage");
+        assert_eq!(observation.kind, "source-route-gap");
+        assert_eq!(observation.status, "open");
+        assert_eq!(observation.severity, "medium");
+        assert_eq!(observation.confidence, "high");
+        assert_eq!(
+            observation.dedupe_key,
+            super::SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY
+        );
+        assert!(
+            observation
+                .evidence
+                .iter()
+                .any(|item| item.contains("narrow no-match scans"))
+        );
+
+        let pr_body = render_review_body(
+            "shared-context-test",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &observations,
+            &[],
+            16_384,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(pr_body.contains("## Decision"));
+        assert!(pr_body.contains("## Verification questions"));
+        assert!(pr_body.contains("Check sibling-path scan coverage"));
+        assert!(!pr_body.contains("## Refuted"));
+        assert!(!pr_body.contains("correctly scoped"));
+        assert!(!pr_body.contains("No analogous"));
+        Ok(())
+    }
+
+    #[test]
+    fn sibling_failed_objection_completeness_claim_is_not_refuted() {
+        let lane = lane_plan("source-route");
+
+        let observation = validate_failed_objection(
+            &lane,
+            ModelFailedObjection {
+                claim: "No analogous sibling panic paths were found.".to_owned(),
+                reason: "The fix is correctly scoped and need not be broadened.".to_owned(),
+                confidence: Some("high".to_owned()),
+                kind: Some("resolved-check".to_owned()),
+                evidence: vec!["single-pattern write/dispose scan".to_owned()],
+            },
+            0,
+        );
+
+        assert_eq!(observation.question, "sibling-path-coverage");
+        assert_eq!(observation.kind, "source-route-gap");
+        assert_eq!(observation.status, "open");
+        assert_ne!(observation.status, "refuted");
+        assert_eq!(
+            observation.dedupe_key,
+            super::SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY
+        );
+    }
+
+    #[test]
+    fn scoped_sibling_scan_limit_remains_coverage_limited() {
+        let lane = lane_plan("sibling-paths");
+
+        let observation = validate_model_observation(
+            &lane,
+            ModelCandidateObservation {
+                claim: "Checked write/dispose only; did not scan ptr/toBuffer or to_int64 paths."
+                    .to_owned(),
+                question: Some("sibling-paths".to_owned()),
+                kind: Some("source-route-gap".to_owned()),
+                status: Some("open".to_owned()),
+                severity: Some("medium".to_owned()),
+                confidence: Some("medium".to_owned()),
+                path: None,
+                line: None,
+                evidence: vec!["coverage-limited sibling scan".to_owned()],
+                dedupe_key: Some("coverage-limited-sibling-scan".to_owned()),
+            },
+            0,
+        );
+
+        assert_eq!(
+            observation.claim,
+            "Checked write/dispose only; did not scan ptr/toBuffer or to_int64 paths."
+        );
+        assert_eq!(observation.kind, "source-route-gap");
+        assert_eq!(observation.status, "open");
+        assert_eq!(observation.dedupe_key, "coverage-limited-sibling-scan");
+        assert_eq!(observation.source, "model-observation");
     }
 
     #[test]

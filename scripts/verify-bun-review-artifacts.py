@@ -14,6 +14,7 @@ from typing import Any
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
+SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"
 APPROVAL_LINES = {
     "lgtm",
     "looks good",
@@ -152,6 +153,97 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
     ]:
         if label in body:
             fail(f"{path} contains execution summary boilerplate: {label!r}")
+    if is_unsupported_sibling_completeness_overclaim(body):
+        fail(
+            f"unsupported sibling completeness claim leaked into {path}; "
+            "report scan coverage as a verification question instead"
+        )
+
+
+def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
+    lowered = text.lower()
+    if not ("sibling" in lowered or "analogous" in lowered):
+        return False
+    if has_broad_sibling_coverage_claim(lowered):
+        return False
+    negative_scan = contains_any(
+        lowered,
+        [
+            "no sibling",
+            "no siblings",
+            "no analogous",
+            "none widen",
+            "none of the sibling",
+            "not found",
+            "no match",
+            "no matches",
+            "nothing else",
+        ],
+    )
+    completeness_claim = contains_any(
+        lowered,
+        [
+            "correctly scoped",
+            "need not be broadened",
+            "does not need to be broadened",
+            "no need to broaden",
+            "complete fix",
+            "fix is complete",
+            "scope is complete",
+            "no siblings exist",
+            "no sibling paths exist",
+            "no sibling concern",
+            "no sibling gap",
+        ],
+    )
+    if has_honest_limited_sibling_scope(lowered) and not completeness_claim:
+        return False
+    return (negative_scan and completeness_claim) or contains_any(
+        lowered,
+        [
+            "no siblings exist",
+            "no sibling paths exist",
+            "no analogous sibling",
+        ],
+    )
+
+
+def has_broad_sibling_coverage_claim(text: str) -> bool:
+    return contains_any(
+        text,
+        [
+            "across all",
+            "all ffi entry",
+            "all entry point",
+            "all public route",
+            "all sibling",
+            "every sibling",
+            "every ffi",
+            "exhaustive",
+            "meta-class",
+        ],
+    )
+
+
+def has_honest_limited_sibling_scope(text: str) -> bool:
+    return contains_any(
+        text,
+        [
+            "checked scope",
+            "scan scope",
+            "scanned scope",
+            "limited to",
+            "did not scan",
+            "not scanned",
+            "unscanned",
+            "only checked",
+            "only scanned",
+        ],
+    )
+
+
+def contains_any(value: str, needles: list[str]) -> bool:
+    return any(needle in value for needle in needles)
 
 
 FOLLOW_UP_RESULT_STATUSES = {
@@ -2190,6 +2282,7 @@ def require_observation_group_schema(group: dict) -> None:
     line = group.get("line")
     if line is not None and (not isinstance(line, int) or line <= 0):
         fail(f"observation group line is invalid: {group!r}")
+    require_sibling_completeness_observation_policy(group)
 
 
 def require_merged_observation_schema(
@@ -2284,6 +2377,32 @@ def require_observation_schema(observation: dict) -> None:
     line = observation.get("line")
     if line is not None and (not isinstance(line, int) or line <= 0):
         fail(f"observation line is invalid: {observation!r}")
+    require_sibling_completeness_observation_policy(observation)
+
+
+def require_sibling_completeness_observation_policy(observation: dict) -> None:
+    text = "\n".join(
+        [
+            str(observation.get("claim", "")),
+            "\n".join(item for item in observation.get("evidence", []) if isinstance(item, str)),
+        ]
+    )
+    if observation.get("dedupe_key") == SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY:
+        if observation.get("kind") != "source-route-gap" or observation.get("status") != "open":
+            fail(
+                "sibling completeness guard observation is not an open source-route gap: "
+                f"{observation!r}"
+            )
+        return
+    if not is_unsupported_sibling_completeness_overclaim(text):
+        return
+    if observation.get("status") in {"refuted", "covered", "confirmed"} or observation.get(
+        "kind"
+    ) in {"resolved-check", "false-premise"}:
+        fail(
+            "resolved/refuted observation contains unsupported sibling completeness claim: "
+            f"{observation!r}"
+        )
 
 
 def require_candidate_schema(candidate: dict) -> None:
