@@ -916,6 +916,7 @@ struct Plan {
     profile_name: String,
     #[serde(default = "default_diff_class")]
     diff_class: DiffClass,
+    changed_files: Vec<String>,
     sensors: Vec<SensorPlan>,
     lanes: Vec<LanePlan>,
     docs_only: bool,
@@ -4182,6 +4183,11 @@ fn is_workflow_tooling_path(path: &str) -> bool {
         )
 }
 
+fn is_github_workflow_file(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    lower.starts_with(".github/workflows/") && (lower.ends_with(".yml") || lower.ends_with(".yaml"))
+}
+
 fn is_test_or_fixture_path(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     lower.contains("/test/")
@@ -4235,6 +4241,7 @@ fn build_plan(
         head: diff.head.clone(),
         profile_name: profile.name.clone(),
         diff_class: diff.diff_class,
+        changed_files: diff.changed_files.clone(),
         sensors,
         lanes: if config.review.enable_default_lanes {
             default_lanes_for_diff_class(diff.diff_class)
@@ -4819,11 +4826,20 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--output".to_owned(),
             dir.join("report.json").display().to_string(),
         ],
-        "actionlint" => vec![
-            "actionlint".to_owned(),
-            "-format".to_owned(),
-            "{{json .}}".to_owned(),
-        ],
+        "actionlint" => {
+            let mut argv = vec![
+                "actionlint".to_owned(),
+                "-format".to_owned(),
+                "{{json .}}".to_owned(),
+            ];
+            argv.extend(
+                plan.changed_files
+                    .iter()
+                    .filter(|path| is_github_workflow_file(path) && root.join(path).is_file())
+                    .cloned(),
+            );
+            argv
+        }
         "zizmor" => vec![
             "zizmor".to_owned(),
             ".github/workflows".to_owned(),
@@ -17163,6 +17179,38 @@ mod tests {
     }
 
     #[test]
+    fn actionlint_sensor_scopes_to_changed_workflow_files() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join(".github/workflows"))?;
+        fs::write(temp.path().join(".github/workflows/ci.yml"), "name: CI\n")?;
+        let out = temp.path().join("out");
+        let mut plan = test_plan(vec![sensor_plan("actionlint", "actionlint", true)]);
+        plan.changed_files = vec![
+            ".github/workflows/ci.yml".to_owned(),
+            ".github/actions/setup/action.yml".to_owned(),
+            "src/lib.rs".to_owned(),
+        ];
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint sensor missing"))?;
+        let dir = out.join("sensors/actionlint");
+        let argv = super::build_sensor_argv(temp.path(), &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "actionlint".to_owned(),
+                "-format".to_owned(),
+                "{{json .}}".to_owned(),
+                ".github/workflows/ci.yml".to_owned(),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn tokmd_sensor_commands_use_on_diff_analyze_cockpit_and_context() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let repo = temp.path().join("repo");
@@ -24136,6 +24184,7 @@ index 1111111..2222222 100644
             head: "HEAD".to_owned(),
             profile_name: "gh-runner".to_owned(),
             diff_class: DiffClass::SourceUb,
+            changed_files: vec!["src/lib.rs".to_owned(), "tests/lib.rs".to_owned()],
             sensors,
             lanes: vec![LanePlan {
                 id: "tests".to_owned(),
