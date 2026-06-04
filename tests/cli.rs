@@ -1014,6 +1014,34 @@ command = "ub-review-test-missing-tokmd"
 }
 
 #[test]
+fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_core_review_tools(&fake_bin, "1.11.0")?;
+    let path = prepend_to_path(&fake_bin)?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(&config, r#"profile = "gh-runner""#)?;
+
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_expect_failure_with_env(
+        temp.path(),
+        bin,
+        &[
+            "doctor",
+            "--config",
+            path_str(&config)?,
+            "--require-core-tools",
+        ],
+        &[("PATH", path.as_str())],
+    )?;
+    assert!(output.contains("required core review tool versions drifted"));
+    assert!(output.contains("tokmd expected 1.12.0"));
+    assert!(output.contains("tokmd 1.11.0"));
+    Ok(())
+}
+
+#[test]
 fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -2363,6 +2391,70 @@ exit 0
             fs::set_permissions(&script, permissions)?;
         }
     }
+    Ok(())
+}
+
+fn write_fake_core_review_tools(dir: &Path, tokmd_version: &str) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    let tools = [
+        "tokmd",
+        "cargo-allow",
+        "ripr",
+        "unsafe-review",
+        "ast-grep",
+        "actionlint",
+    ];
+
+    #[cfg(windows)]
+    {
+        let source = dir.join("fake_review_tool.rs");
+        write_file(
+            &source,
+            &format!(
+                r#"use std::{{env, path::Path}};
+
+const TOKMD_VERSION: &str = {tokmd_version:?};
+
+fn main() {{
+    let executable = env::args().next().unwrap_or_default();
+    let name = Path::new(&executable)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("review-tool");
+    let version = if name == "tokmd" {{ TOKMD_VERSION }} else {{ "0.0.0" }};
+    println!("{{name}} {{version}}");
+}}
+"#
+            ),
+        )?;
+        let exe = dir.join("fake_review_tool.exe");
+        run(dir, "rustc", &[path_str(&source)?, "-o", path_str(&exe)?])?;
+        for tool in tools {
+            fs::copy(&exe, dir.join(format!("{tool}.exe")))?;
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        for tool in tools {
+            let version = if tool == "tokmd" {
+                tokmd_version
+            } else {
+                "0.0.0"
+            };
+            let script = dir.join(tool);
+            write_file(&script, &format!("#!/bin/sh\necho \"{tool} {version}\"\n"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let mut permissions = fs::metadata(&script)?.permissions();
+                permissions.set_mode(0o755);
+                fs::set_permissions(&script, permissions)?;
+            }
+        }
+    }
+
     Ok(())
 }
 
