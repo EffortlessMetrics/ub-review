@@ -5,7 +5,7 @@ The first adoption target is the Bun UB hunt.
 The Bun fork should call:
 
 ```yaml
-uses: EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4
+uses: EffortlessMetrics/ub-review@217f123e688e42ddfce98eec5795b88bf457dd34
 ```
 
 Sensor packet generation does not require secrets. Posting one grouped Pull

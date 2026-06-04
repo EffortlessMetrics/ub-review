@@ -41,16 +41,17 @@ Parked follow-ups:
 
 Date: 2026-06-04
 Repo: `EffortlessSteven/bun`
-PR: `#44`
-Pin: `EffortlessMetrics/ub-review@0b938918eb20d38d383dba4d588b0a97bc4591f4`
-Run: `26949368771`
-Artifact: `ub-review-packet-44`
+PR: `#45`
+Pin: `EffortlessMetrics/ub-review@217f123e688e42ddfce98eec5795b88bf457dd34`
+Run: `26954325725`
+Artifact: `ub-review-packet-45`
 
 Acted on:
 
-- The Bun workflow pin advanced after `ub-review` PR #203 and PR #204.
+- The Bun workflow pin advanced after `ub-review` PR #207 and PR #208.
 - The `UB evidence packet / gh-runner` job passed on the new pin.
 - The packet artifact uploaded and was not expired at merge time.
+- The packet verifier passed with zero inline comments and `tokmd` status `ok`.
 
 Prompt/compiler follow-up:
 
