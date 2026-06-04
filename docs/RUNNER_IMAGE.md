@@ -4,6 +4,7 @@ The Bun UB gate should not discover its core sensors at review time. On the
 standard image, these binaries are part of the review optical bench:
 
 - `tokmd`
+- `cargo-allow`
 - `ripr`
 - `unsafe-review`
 - `ast-grep`
@@ -50,6 +51,7 @@ The cache has three layers:
 /var/cache/ub-review/
   rules/
     tokmd/
+    cargo-allow/
     ripr/
     unsafe-review/
     ast-grep/
@@ -58,6 +60,7 @@ The cache has three layers:
     <base-tree-sha>/
       manifest.json
       tokmd/
+      cargo-allow/
       ripr/
       unsafe-review/
       ast-grep/
@@ -139,8 +142,8 @@ Doctor reports:
 
 For the Bun profile:
 
-- missing `tokmd`, `ripr`, `unsafe-review`, `ast-grep`, or `actionlint` on the
-  standard image is image drift and should fail `doctor`;
+- missing `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, or
+  `actionlint` on the standard image is image drift and should fail `doctor`;
 - missing tools on a generic hosted runner are missing evidence, not proof of a
   clean review;
 - sensor defects should be filed in the matching `*-swarm` repo, not hidden in

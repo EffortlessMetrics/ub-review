@@ -664,7 +664,7 @@ time.
 
 Acceptance:
 
-- `tokmd`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint` are installed
+- `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint` are installed
   on the standard image and visible on `PATH`;
 - `tokmd` is versioned for the Bun profile and emits on-diff `analyze`,
   compact `cockpit`, and bounded changed-file `context` receipts;

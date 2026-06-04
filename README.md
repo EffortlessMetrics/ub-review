@@ -147,9 +147,11 @@ target/ub-review/
 
   sensors/
     tokmd/
+    cargo-allow/
     ripr/
     unsafe-review/
     ast-grep/
+    actionlint/
     */ub-review-sensor-status.json
 
   lanes/
@@ -261,9 +263,11 @@ lanes remain available later through `provider-policy: minimax-primary`,
 Default core sensors are best-effort:
 
 - `tokmd` for deterministic repository/diff packets and LLM-ready context;
+- `cargo-allow` for source-tree exception ledger drift;
 - `ripr` for Rust changed-behavior test-oracle weakness;
 - `unsafe-review` for Rust unsafe-contract reviewability;
-- `ast-grep` for cheap structural route scans.
+- `ast-grep` for cheap structural route scans;
+- `actionlint` for workflow changes.
 
 Missing sensors are recorded as missing evidence. Missing evidence is never
 reported as clean evidence.

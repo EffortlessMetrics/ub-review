@@ -72,6 +72,7 @@ case "$bundle" in
     ;;
   core|bun-fast|full)
     install_cargo_bin tokmd tokmd
+    install_cargo_bin cargo-allow cargo-allow
     install_cargo_bin ripr ripr
     install_cargo_bin unsafe-review unsafe-review
     install_npm_bin ast-grep @ast-grep/cli
@@ -80,6 +81,7 @@ case "$bundle" in
   *)
     echo "::warning::unknown UB_REVIEW_TOOL_BUNDLE=$bundle; using core"
     install_cargo_bin tokmd tokmd
+    install_cargo_bin cargo-allow cargo-allow
     install_cargo_bin ripr ripr
     install_cargo_bin unsafe-review unsafe-review
     install_npm_bin ast-grep @ast-grep/cli

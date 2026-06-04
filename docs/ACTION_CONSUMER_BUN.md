@@ -76,6 +76,12 @@ posted and `post-error-path` when posting was skipped or failed. The full packet
 still includes `review/github-review-post-payload.json`, `review/post-stdout.json`,
 and `review/post-stderr.txt` for the exact request/response trail.
 
+With `install-tools: 'true'` and `tool-bundle: core`, the hosted-runner setup
+attempts `tokmd`, `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and
+`actionlint`. On a generic hosted runner an install miss is recorded as missing
+evidence; on the standard image, `ub-review doctor --require-core-tools` should
+fail the image before a Bun packet starts.
+
 ## Trigger policy
 
 For the Bun UB hunt:
