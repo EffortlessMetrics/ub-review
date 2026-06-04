@@ -15555,21 +15555,35 @@ fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
 fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
     let mentions_pin = text.contains("pinning")
         || text.contains("sha-pinning")
+        || text.contains("sha bump")
+        || text.contains("sha swap")
+        || text.contains("mechanical sha")
+        || text.contains("action uses")
+        || text.contains("uses: ref")
+        || text.contains("cache key")
         || text.contains("per-action full-sha")
         || text.contains("40-hex")
         || text.contains("all-zero");
     let says_no_defect = text.contains("no pinning defect introduced")
         || text.contains("pinning posture preserved")
         || text.contains("sha-pinning control remains effective")
+        || text.contains("sha-pinning control is effective")
         || text.contains("old pin fully absent")
         || text.contains("pin is 40-hex non-zero")
-        || text.contains("matches expected sha-1 shape");
+        || text.contains("matches expected sha-1 shape")
+        || text.contains("pin shape valid 40-hex");
     let says_not_current_diff = text.contains("not a diff finding")
         || text.contains("not a diff-introduced")
         || text.contains("not introduced by this")
         || text.contains("identical in posture")
+        || text.contains("byte-identical")
         || text.contains("repo-level policy item")
-        || text.contains("unchanged from prior pin");
+        || text.contains("unchanged from prior pin")
+        || text.contains("net new secret/permission surface")
+        || text.contains("net new secret surface")
+        || text.contains("no new permission")
+        || text.contains("no permission, token-scope")
+        || text.contains("no blocker introduced");
     mentions_pin && (says_no_defect || says_not_current_diff)
 }
 
@@ -22617,6 +22631,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Confirmed findings\n\n- The diff is a 4-line mechanical SHA bump at the three expected sites: cache `key`, `restore-keys` prefix, and action `uses:`. No permission, trigger, or `with:` block change; net new secret/permission surface relative to the prior pin is zero.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("mechanical pin no-change prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Refuted\n\n- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -24319,6 +24342,13 @@ UB_REVIEW_HTTP_STATUS:429
                 evidence: "Per-action full-SHA pinning preserved; old pin fully removed; 3 replacement sites consistent; actionlint ok; workflow file diff is 4 lines, no perm/trigger change.".to_owned(),
             },
             SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The diff is a 4-line mechanical SHA bump (da14100 -> 88f3dcc7c344f8b54871caea2122de0b68701925) at the three expected sites: cache `key` (line 56), `restore-keys` prefix (line 58), and action `uses:` (line 62). No permission, trigger, or `with:` block change; net new secret/permission surface relative to the prior pin is zero.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
                 lane: "workflow-proof".to_owned(),
                 severity: "low".to_owned(),
                 confidence: "medium".to_owned(),
@@ -24562,6 +24592,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("standing-repo concern"));
         assert!(!body.contains("No pinning defect introduced"));
         assert!(!body.contains("repo-level policy item"));
+        assert!(!body.contains("4-line mechanical SHA bump"));
+        assert!(!body.contains("net new secret/permission surface"));
         assert!(!body.contains("Pinning format could be 39-hex"));
         assert!(!body.contains("SHA-pinning control remains effective"));
         assert!(!body.contains("cursor[bot]"));
