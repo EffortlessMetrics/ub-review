@@ -832,10 +832,14 @@ fn active_len_tracks_view_after_resize() {
     for kind in [
         "run_started",
         "evidence_loop_started",
+        "evidence_stream_started",
+        "evidence_stream_completed",
         "coordination_stream_started",
         "coordination_stream_completed",
         "model_loop_started",
         "model_loop_finished",
+        "model_stream_started",
+        "model_stream_completed",
         "investigation_stream_started",
         "investigation_stream_completed",
         "proof_loop_started",
@@ -1699,12 +1703,27 @@ path = "src/lib.rs"
     assert!(
         event_kinds
             .iter()
+            .any(|kind| kind == "evidence_stream_started")
+    );
+    assert!(
+        event_kinds
+            .iter()
             .any(|kind| kind == "investigation_stream_started")
     );
     assert!(
         event_kinds
             .iter()
+            .any(|kind| kind == "model_stream_started")
+    );
+    assert!(
+        event_kinds
+            .iter()
             .any(|kind| kind == "investigation_stream_completed")
+    );
+    assert!(
+        event_kinds
+            .iter()
+            .any(|kind| kind == "model_stream_completed")
     );
     assert!(event_kinds.iter().any(|kind| kind == "model_loop_started"));
     assert!(event_kinds.iter().any(|kind| kind == "model_loop_finished"));
@@ -2330,35 +2349,22 @@ fn write_fake_bun(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir)?;
     #[cfg(windows)]
     {
-        let source = dir.join("fake_bun.rs");
-        write_file(
-            &source,
-            r#"use std::{env, fs, process};
-
-fn main() {
-    let cwd = env::current_dir().expect("current dir");
-    let args = env::args().skip(1).collect::<Vec<_>>();
-    println!("fake bun {}", args.join(" "));
-    if let Ok(value) = env::var("FAKE_BUN_SLEEP_MS") {
-        if let Ok(ms) = value.parse::<u64>() {
-            std::thread::sleep(std::time::Duration::from_millis(ms));
+        let cache_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("target/ub-review-test-fake-bun");
+        let source = cache_dir.join("fake_bun.rs");
+        let cached_exe = cache_dir.join("bun.exe");
+        let needs_compile = !cached_exe.exists()
+            || fs::read_to_string(&source).unwrap_or_default() != FAKE_BUN_SOURCE;
+        if needs_compile {
+            fs::create_dir_all(&cache_dir)?;
+            write_file(&source, FAKE_BUN_SOURCE)?;
+            run(
+                &cache_dir,
+                "rustc",
+                &[path_str(&source)?, "-o", path_str(&cached_exe)?],
+            )?;
         }
-    }
-    let mut base_plus_tests = cwd.to_string_lossy().contains("base-plus-tests");
-    let git_file = cwd.join(".git");
-    if git_file.is_file() {
-        let text = fs::read_to_string(git_file).unwrap_or_default();
-        base_plus_tests |= text.contains("base-plus-tests");
-    }
-    if base_plus_tests {
-        eprintln!("base failure");
-        process::exit(1);
-    }
-}
-"#,
-        )?;
-        let exe = dir.join("bun.exe");
-        run(dir, "rustc", &[path_str(&source)?, "-o", path_str(&exe)?])?;
+        fs::copy(cached_exe, dir.join("bun.exe"))?;
     }
     #[cfg(not(windows))]
     {
@@ -2394,6 +2400,31 @@ exit 0
     }
     Ok(())
 }
+
+#[cfg(windows)]
+const FAKE_BUN_SOURCE: &str = r#"use std::{env, fs, process};
+
+fn main() {
+    let cwd = env::current_dir().expect("current dir");
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    println!("fake bun {}", args.join(" "));
+    if let Ok(value) = env::var("FAKE_BUN_SLEEP_MS") {
+        if let Ok(ms) = value.parse::<u64>() {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
+    }
+    let mut base_plus_tests = cwd.to_string_lossy().contains("base-plus-tests");
+    let git_file = cwd.join(".git");
+    if git_file.is_file() {
+        let text = fs::read_to_string(git_file).unwrap_or_default();
+        base_plus_tests |= text.contains("base-plus-tests");
+    }
+    if base_plus_tests {
+        eprintln!("base failure");
+        process::exit(1);
+    }
+}
+"#;
 
 fn write_fake_core_review_tools(dir: &Path, tokmd_version: &str) -> Result<()> {
     fs::create_dir_all(dir)?;
