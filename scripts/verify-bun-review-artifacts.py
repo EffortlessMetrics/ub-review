@@ -466,10 +466,16 @@ def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
     ) and (
         "disabled by config" in text or "trigger-mismatched" in text
     ) and ("workflow file" in text or "security/pinning tool" in text)
+    local_actionlint_gap = (
+        "actionlint" in text
+        and "not installed locally" in text
+        and ("local pre-push run" in text or "ub-review gate" in text)
+    )
     return (
         (actionlint_ok and (not_inlined or yaml_pin))
         or (skipped_heavy and yaml_pin)
         or disabled_workflow_tools
+        or local_actionlint_gap
         or (
             ("parked follow-up" in text or "not a blocker" in text)
             and actionlint_ok
@@ -488,6 +494,9 @@ def is_workflow_paths_ignore_no_posture_noise(text: str) -> bool:
         or "trigger activation" in text
         or "pull_request_target" in text
         or "checkout" in text
+        or "semantic skip behavior" in text
+        or "focused smoke proof" in text
+        or "workflow_run" in text
         or "droid noise" in text
     )
     says_no_posture_change = (
@@ -497,6 +506,10 @@ def is_workflow_paths_ignore_no_posture_noise(text: str) -> bool:
         or "no new persistence vector" in text
         or "not modified in this pr" in text
         or "diff only mutates a paths-ignore" in text
+        or "not proven by sensors" in text
+        or "trust rests on actionlint parse" in text
+        or ("future pr" in text and "re-trigger droid" in text)
+        or "ub gate is the authoritative review" in text
         or ("future rename" in text and "re-enable" in text)
     )
     return mentions_paths_ignore and mentions_workflow_posture and says_no_posture_change
@@ -3868,6 +3881,34 @@ def run_self_tests() -> None:
                 "shellcheck, semgrep, coverage all disabled by config or "
                 "trigger-mismatched. No security/pinning tool independently "
                 "re-validated this workflow file."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "paths-ignore smoke-proof review prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs one verification check before upstream.\n\n"
+                "## Verification questions\n\n"
+                "- Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, "
+                "or a temporary pull_request_target guard test) was executed for the "
+                "paths-ignore change. Trust rests on actionlint parse only; semantic "
+                "skip behavior on the droid lane is not proven by sensors.\n\n"
+                "## Refuted\n\n"
+                "- adding ub-review-packet.yml to paths-ignore could mask future "
+                "unpinned uses: additions in that file from Droid lane coverage; "
+                "refuted because: paths-ignore lift is per-PR: any future PR that "
+                "also touches ub-review-packet.yml will change the changed-files set "
+                "and re-trigger Droid. Droid lanes are non-blocking/auxiliary by "
+                "design; UB gate is the authoritative review.\n\n"
+                "## Evidence gaps\n\n"
+                "- PR body states actionlint is not installed locally, so the 'ok' "
+                "receipt must come from the ub-review gate's own tooling rather "
+                "than a local pre-push run; trust depends on that gate having "
+                "actually executed actionlint v1 against this ref."
             ),
             pathlib.Path("review/github-review.json"),
         ),

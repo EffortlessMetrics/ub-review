@@ -15650,9 +15650,13 @@ fn is_workflow_tool_status_artifact_gap_noise(text: &str) -> bool {
         || text.contains("coverage"))
         && (text.contains("disabled by config") || text.contains("trigger-mismatched"))
         && (text.contains("workflow file") || text.contains("security/pinning tool"));
+    let local_actionlint_gap = text.contains("actionlint")
+        && text.contains("not installed locally")
+        && (text.contains("local pre-push run") || text.contains("ub-review gate"));
     (actionlint_ok && (not_inlined || yaml_pin))
         || (skipped_heavy && yaml_pin)
         || disabled_workflow_tools
+        || local_actionlint_gap
         || ((text.contains("parked follow-up") || text.contains("not a blocker"))
             && actionlint_ok
             && yaml_pin)
@@ -15667,6 +15671,9 @@ fn is_workflow_paths_ignore_no_posture_noise(text: &str) -> bool {
         || text.contains("trigger activation")
         || text.contains("pull_request_target")
         || text.contains("checkout")
+        || text.contains("semantic skip behavior")
+        || text.contains("focused smoke proof")
+        || text.contains("workflow_run")
         || text.contains("droid noise");
     let says_no_posture_change = text.contains("only filters trigger activation")
         || text.contains("does not alter")
@@ -15674,6 +15681,10 @@ fn is_workflow_paths_ignore_no_posture_noise(text: &str) -> bool {
         || text.contains("no new persistence vector")
         || text.contains("not modified in this pr")
         || text.contains("diff only mutates a paths-ignore")
+        || text.contains("not proven by sensors")
+        || text.contains("trust rests on actionlint parse")
+        || (text.contains("future pr") && text.contains("re-trigger droid"))
+        || text.contains("ub gate is the authoritative review")
         || (text.contains("future rename") && text.contains("re-enable"));
     mentions_paths_ignore && mentions_workflow_posture && says_no_posture_change
 }
@@ -22732,6 +22743,17 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, or a temporary pull_request_target guard test) was executed for the paths-ignore change. Trust rests on actionlint parse only; semantic skip behavior on the droid lane is not proven by sensors.\n\n## Refuted\n\n- adding ub-review-packet.yml to paths-ignore could mask future unpinned uses: additions in that file from Droid lane coverage; refuted because: paths-ignore lift is per-PR: any future PR that also touches ub-review-packet.yml (i.e. adds/changes uses:) will change the changed-files set and re-trigger Droid. Droid lanes are non-blocking/auxiliary by design; UB gate is the authoritative review.\n\n## Evidence gaps\n\n- PR body states actionlint is not installed locally, so the 'ok' receipt must come from the ub-review gate's own tooling rather than a local pre-push run; trust depends on that gate having actually executed actionlint v1 against this ref.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("paths-ignore smoke-proof review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Refuted\n\n- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -24747,6 +24769,20 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "zizmor, gitleaks, osv-scanner, cargo-audit, cargo-deny, shellcheck, semgrep, coverage all disabled by config or trigger-mismatched. No security/pinning tool independently re-validated this workflow file.".to_owned(),
                 evidence: "workflow lane summary".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, or a temporary pull_request_target guard test) was executed for the paths-ignore change. Trust rests on actionlint parse only; semantic skip behavior on the droid lane is not proven by sensors.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "PR body states actionlint is not installed locally, so the 'ok' receipt must come from the ub-review gate's own tooling rather than a local pre-push run; trust depends on that gate having actually executed actionlint v1 against this ref.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
         ];
         let observations = vec![
             test_observation(
@@ -24776,6 +24812,15 @@ UB_REVIEW_HTTP_STATUS:429
                 "medium",
                 "paths-ignore-future-rename",
             ),
+            test_observation(
+                "workflow-proof",
+                "Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, or a temporary pull_request_target guard test) was executed for the paths-ignore change. Trust rests on actionlint parse only; semantic skip behavior on the droid lane is not proven by sensors.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "paths-ignore-smoke-proof-gap",
+            ),
         ];
         let body = render_review_body(
             "abc123",
@@ -24795,6 +24840,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.is_empty());
         assert!(!body.contains("checkout credential persistence"));
         assert!(!body.contains("paths-ignore"));
+        assert!(!body.contains("focused smoke proof"));
+        assert!(!body.contains("actionlint is not installed locally"));
         assert!(!body.contains("zizmor"));
         assert!(!body.contains("Droid noise"));
     }
