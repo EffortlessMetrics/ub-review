@@ -138,6 +138,16 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
     for key, value in expected.items():
         if models.get(key) != value:
             fail(f"metrics.models.{key} expected {value!r}, got {models.get(key)!r}")
+    for field in [
+        "prompt_cache_creation_input_tokens",
+        "prompt_cache_read_input_tokens",
+        "prompt_cache_lane_hits",
+        "prompt_cache_lane_misses",
+        "prompt_cache_lane_unknown",
+    ]:
+        value = models.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail(f"metrics.models.{field} is not a non-negative integer")
     if models.get("provider_preflight_status_counts", {}).get("ok") != 1:
         fail("metrics did not record exactly one ok provider preflight")
     if models.get("model_lane_calls_attempted", 0) < min_ok_lanes:

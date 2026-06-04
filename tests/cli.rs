@@ -130,6 +130,10 @@ fn active_len_tracks_view_after_resize() {
         "sensors/ast-grep/ub-review-sensor-status.json",
         "sensors/actionlint/ub-review-sensor-status.json",
         "review/shared_context.md",
+        "review/shared_context_cache_block.md",
+        "review/shared_context_hash.txt",
+        "review/cache_manifest.json",
+        "review/cache_events.ndjson",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
         "review/resolved-tools.json",
@@ -467,6 +471,29 @@ fn active_len_tracks_view_after_resize() {
     let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
     assert!(shared_context.contains("## PR Thread Context"));
     assert!(shared_context.contains("- Status: `"));
+    let shared_context_cache_block =
+        fs::read_to_string(out.join("review/shared_context_cache_block.md"))?;
+    assert_eq!(shared_context_cache_block, shared_context);
+    let shared_context_hash = fs::read_to_string(out.join("review/shared_context_hash.txt"))?;
+    let shared_context_hash = shared_context_hash.trim();
+    assert_eq!(
+        Some(shared_context_hash),
+        review["shared_context_id"].as_str()
+    );
+    let cache_manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/cache_manifest.json"))?)?;
+    assert_eq!(cache_manifest["schema"], "ub-review.cache_manifest.v1");
+    assert_eq!(cache_manifest["shared_context_hash"], shared_context_hash);
+    assert_eq!(
+        cache_manifest["cache_block_path"],
+        "review/shared_context_cache_block.md"
+    );
+    assert_eq!(
+        cache_manifest["explicit_cache_endpoint"],
+        "anthropic-messages"
+    );
+    let cache_events = fs::read_to_string(out.join("review/cache_events.ndjson"))?;
+    assert!(cache_events.contains("\"kind\":\"shared_context_prepared\""));
     let metrics: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
     let diff_context: serde_json::Value =
@@ -496,6 +523,11 @@ fn active_len_tracks_view_after_resize() {
         "/run/loops/compiler/started_at_offset_ms",
         "/run/loops/compiler/finished_at_offset_ms",
         "/run/loops/compiler/wall_ms",
+        "/models/prompt_cache_creation_input_tokens",
+        "/models/prompt_cache_read_input_tokens",
+        "/models/prompt_cache_lane_hits",
+        "/models/prompt_cache_lane_misses",
+        "/models/prompt_cache_lane_unknown",
     ] {
         assert!(
             metrics
