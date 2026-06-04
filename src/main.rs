@@ -1446,6 +1446,7 @@ struct FocusedTestTask {
     test_name: Option<String>,
     mode: FocusedProofMode,
     command_specs: Option<FocusedTestCommandSpecs>,
+    timeout_sec: Option<u64>,
     requested_by: Vec<String>,
     request_ids: Vec<String>,
 }
@@ -1461,6 +1462,7 @@ struct FocusedBuildTask {
     id: String,
     command: String,
     argv: Vec<String>,
+    timeout_sec: u64,
     requested_by: Vec<String>,
     request_ids: Vec<String>,
 }
@@ -1493,6 +1495,7 @@ struct FocusedProofPlan {
     test_file: String,
     test_name: Option<String>,
     mode: FocusedProofMode,
+    timeout_sec: u64,
     head_command: String,
     base_plus_tests_command: String,
     requested_by: Vec<String>,
@@ -1505,6 +1508,7 @@ struct FocusedProofPlan {
 struct FocusedBuildPlan {
     id: String,
     command: String,
+    timeout_sec: u64,
     requested_by: Vec<String>,
     request_ids: Vec<String>,
     status: String,
@@ -8080,8 +8084,8 @@ fn proof_task_artifact(
         ],
         value: "high".to_owned(),
         cost: "low".to_owned(),
-        timeout_sec: budget
-            .per_command_timeout_sec
+        timeout_sec: plan
+            .timeout_sec
             .saturating_mul(plan.mode.command_count())
             .min(budget.max_total_seconds),
         lease: ProofTaskLease {
@@ -8115,7 +8119,7 @@ fn focused_build_task_artifact(
         consumers: focused_build_task_consumers(&plan.requested_by),
         value: "medium".to_owned(),
         cost: "focused-build".to_owned(),
-        timeout_sec: budget.per_command_timeout_sec.min(budget.max_total_seconds),
+        timeout_sec: plan.timeout_sec.min(budget.max_total_seconds),
         lease: ProofTaskLease {
             cpu: lease_budget.cpu,
             memory_mb: lease_budget.memory_mb,
@@ -8484,6 +8488,7 @@ fn focused_proof_plans_from_diff(
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
+            let timeout_sec = focused_test_task_command_timeout(&task, budget);
             let head_command = proof_task_plan_command(&task, "head", "head");
             let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
                 proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
@@ -8495,6 +8500,7 @@ fn focused_proof_plans_from_diff(
                 test_file: task.file,
                 test_name: task.test_name,
                 mode: task.mode,
+                timeout_sec,
                 head_command,
                 base_plus_tests_command,
                 requested_by: task.requested_by,
@@ -8811,6 +8817,7 @@ where
     let mut estimated_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
+        let task_timeout_sec = focused_test_task_command_timeout(&task, budget);
         if args.dry_run {
             leases.push(focused_test_resource_lease(
                 &task,
@@ -8850,6 +8857,7 @@ where
             &executed_files,
             &task.file,
             estimated_seconds,
+            task_timeout_sec,
             task.mode.command_count(),
             budget,
         ) {
@@ -8878,31 +8886,23 @@ where
             "focused red/green proof lease granted by runtime profile",
         ));
         let receipt = match task.mode {
-            FocusedProofMode::HeadOnly => run_focused_head_proof_task(
-                root,
-                out,
-                diff,
-                &task,
-                budget.per_command_timeout_sec,
-                &mut runner,
-            )?,
+            FocusedProofMode::HeadOnly => {
+                run_focused_head_proof_task(root, out, diff, &task, task_timeout_sec, &mut runner)?
+            }
             FocusedProofMode::RedGreen => run_focused_red_green_proof_task(
                 root,
                 out,
                 diff,
                 &task,
-                budget.per_command_timeout_sec,
+                task_timeout_sec,
                 &mut runner,
                 &mut prepare_base_plus_tests,
             )?,
         };
         receipts.push(receipt);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds.saturating_add(
-            budget
-                .per_command_timeout_sec
-                .saturating_mul(task.mode.command_count()),
-        );
+        estimated_seconds = estimated_seconds
+            .saturating_add(task_timeout_sec.saturating_mul(task.mode.command_count()));
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
@@ -8940,6 +8940,7 @@ where
     let mut estimated_seconds = 0_u64;
     let lease_budget = proof_lease_budget(profile)?;
     for task in tasks {
+        let task_timeout_sec = focused_build_task_command_timeout(&task, budget);
         if args.dry_run {
             leases.push(focused_build_resource_lease(
                 &task,
@@ -8974,7 +8975,12 @@ where
             )?);
             continue;
         }
-        if !focused_build_budget_allows_next(executed_tasks, estimated_seconds, budget) {
+        if !focused_build_budget_allows_next(
+            executed_tasks,
+            estimated_seconds,
+            task_timeout_sec,
+            budget,
+        ) {
             leases.push(focused_build_resource_lease(
                 &task,
                 budget,
@@ -9003,11 +9009,11 @@ where
             out,
             diff,
             &task,
-            budget.per_command_timeout_sec,
+            task_timeout_sec,
             &mut runner,
         )?);
         executed_tasks += 1;
-        estimated_seconds = estimated_seconds.saturating_add(budget.per_command_timeout_sec);
+        estimated_seconds = estimated_seconds.saturating_add(task_timeout_sec);
     }
     Ok(ProofBrokerResult {
         proof_receipts: receipts,
@@ -9018,11 +9024,11 @@ where
 fn focused_build_budget_allows_next(
     current_tasks: usize,
     estimated_seconds: u64,
+    next_timeout_sec: u64,
     budget: ProofBudget,
 ) -> bool {
     current_tasks < budget.max_focused_tests
-        && estimated_seconds.saturating_add(budget.per_command_timeout_sec)
-            <= budget.max_total_seconds
+        && estimated_seconds.saturating_add(next_timeout_sec) <= budget.max_total_seconds
 }
 
 fn run_focused_build_proof_task<F>(
@@ -9502,22 +9508,21 @@ fn focused_test_tasks_from_diff(
     let mut files = BTreeSet::new();
     let mut estimated_seconds = 0_u64;
     for task in candidates {
+        let task_timeout_sec = focused_test_task_command_timeout(&task, budget);
         if !focused_proof_budget_allows_next(
             tasks.len(),
             &files,
             &task.file,
             estimated_seconds,
+            task_timeout_sec,
             task.mode.command_count(),
             budget,
         ) {
             return tasks;
         }
         files.insert(task.file.clone());
-        estimated_seconds = estimated_seconds.saturating_add(
-            budget
-                .per_command_timeout_sec
-                .saturating_mul(task.mode.command_count()),
-        );
+        estimated_seconds = estimated_seconds
+            .saturating_add(task_timeout_sec.saturating_mul(task.mode.command_count()));
         tasks.push(task);
     }
     tasks
@@ -9577,16 +9582,20 @@ fn focused_build_plans_from_requests(
     focused_build_candidates_from_requests(proof_requests)
         .into_iter()
         .take(budget.max_focused_tests)
-        .map(|task| FocusedBuildPlan {
-            id: task.id,
-            command: command_display(&task.argv),
-            requested_by: task.requested_by,
-            request_ids: task.request_ids,
-            status: "planned".to_owned(),
-            reason: format!(
-                "planner-only focused build target under budget: max {} command(s), {}s per command, {}s total",
-                budget.max_focused_tests, budget.per_command_timeout_sec, budget.max_total_seconds
-            ),
+        .map(|task| {
+            let timeout_sec = focused_build_task_command_timeout(&task, budget);
+            FocusedBuildPlan {
+                id: task.id,
+                command: command_display(&task.argv),
+                timeout_sec,
+                requested_by: task.requested_by,
+                request_ids: task.request_ids,
+                status: "planned".to_owned(),
+                reason: format!(
+                    "planner-only focused build target under budget: max {} command(s), {}s per command, {}s total",
+                    budget.max_focused_tests, budget.per_command_timeout_sec, budget.max_total_seconds
+                ),
+            }
         })
         .collect()
 }
@@ -9626,6 +9635,7 @@ fn merge_focused_test_request_group_tasks(
                 test_name: target.test_name,
                 mode: FocusedProofMode::RedGreen,
                 command_specs: target.command_specs,
+                timeout_sec: Some(group.timeout_sec),
                 requested_by: group.requested_by.clone(),
                 request_ids: group.request_ids.clone(),
             },
@@ -9643,6 +9653,7 @@ fn focused_build_task_from_request_group(group: &ProofRequestGroup) -> Option<Fo
         id: focused_build_task_id(&command),
         command,
         argv: spec.argv,
+        timeout_sec: group.timeout_sec,
         requested_by: group.requested_by.clone(),
         request_ids: group.request_ids.clone(),
     })
@@ -9658,6 +9669,7 @@ fn merge_focused_build_task(tasks: &mut Vec<FocusedBuildTask>, mut task: Focused
         .iter_mut()
         .find(|existing| existing.command == task.command)
     {
+        existing.timeout_sec = existing.timeout_sec.max(task.timeout_sec);
         for lane in task.requested_by.drain(..) {
             push_unique(&mut existing.requested_by, &lane);
         }
@@ -9674,6 +9686,7 @@ fn focused_proof_budget_allows_next(
     current_files: &BTreeSet<String>,
     next_file: &str,
     estimated_seconds: u64,
+    next_timeout_sec: u64,
     next_command_count: u64,
     budget: ProofBudget,
 ) -> bool {
@@ -9681,12 +9694,8 @@ fn focused_proof_budget_allows_next(
         && (current_files.contains(next_file)
             || current_files.len() < budget.max_focused_test_files)
         && estimated_seconds
-            .saturating_add(budget.per_command_timeout_sec)
-            .saturating_add(
-                budget
-                    .per_command_timeout_sec
-                    .saturating_mul(next_command_count.saturating_sub(1)),
-            )
+            .saturating_add(next_timeout_sec)
+            .saturating_add(next_timeout_sec.saturating_mul(next_command_count.saturating_sub(1)))
             <= budget.max_total_seconds
 }
 
@@ -9707,6 +9716,7 @@ fn focused_test_task_with_mode(
 ) -> FocusedTestTask {
     let mut requested_by = Vec::new();
     let mut request_ids = Vec::new();
+    let mut timeout_sec = None;
     for group in request_groups {
         if group.status == "requested"
             && group.command.contains(file)
@@ -9714,6 +9724,7 @@ fn focused_test_task_with_mode(
                 .as_ref()
                 .is_none_or(|name| group.command.contains(name))
         {
+            merge_task_timeout(&mut timeout_sec, Some(group.timeout_sec));
             for lane in &group.requested_by {
                 push_unique(&mut requested_by, lane);
             }
@@ -9731,6 +9742,7 @@ fn focused_test_task_with_mode(
         test_name,
         mode,
         command_specs: None,
+        timeout_sec,
         requested_by,
         request_ids,
     }
@@ -9779,6 +9791,7 @@ fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: FocusedTe
                 existing.command_specs.as_ref(),
             );
         }
+        merge_task_timeout(&mut existing.timeout_sec, task.timeout_sec);
         for lane in task.requested_by.drain(..) {
             push_unique(&mut existing.requested_by, &lane);
         }
@@ -9788,6 +9801,24 @@ fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: FocusedTe
         return;
     }
     tasks.push(task);
+}
+
+fn merge_task_timeout(existing: &mut Option<u64>, incoming: Option<u64>) {
+    let Some(incoming) = incoming else {
+        return;
+    };
+    *existing = Some(existing.map_or(incoming, |current| current.max(incoming)));
+}
+
+fn focused_test_task_command_timeout(task: &FocusedTestTask, budget: ProofBudget) -> u64 {
+    task.timeout_sec
+        .filter(|timeout| *timeout > 0)
+        .unwrap_or(budget.per_command_timeout_sec)
+        .min(budget.per_command_timeout_sec)
+}
+
+fn focused_build_task_command_timeout(task: &FocusedBuildTask, budget: ProofBudget) -> u64 {
+    task.timeout_sec.max(1).min(budget.per_command_timeout_sec)
 }
 
 fn focused_test_task_merge_key(task: &FocusedTestTask) -> String {
@@ -9886,8 +9917,7 @@ fn focused_test_resource_lease(
         cpu: lease_budget.cpu,
         memory_mb: lease_budget.memory_mb,
         disk_mb: lease_budget.disk_mb,
-        timeout_sec: budget
-            .per_command_timeout_sec
+        timeout_sec: focused_test_task_command_timeout(task, budget)
             .saturating_mul(task.mode.command_count())
             .min(budget.max_total_seconds),
         network: lease_budget.network,
@@ -9927,7 +9957,7 @@ fn focused_build_resource_lease(
         cpu: lease_budget.cpu,
         memory_mb: lease_budget.memory_mb,
         disk_mb: lease_budget.disk_mb,
-        timeout_sec: budget.per_command_timeout_sec.min(budget.max_total_seconds),
+        timeout_sec: focused_build_task_command_timeout(task, budget).min(budget.max_total_seconds),
         network: lease_budget.network,
         scratch: lease_budget.scratch,
         worktree: None,
@@ -19459,7 +19489,7 @@ index 1111111..2222222 100644
                 command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
                 reason: "Need green witness.".to_owned(),
                 cost: "focused-test".to_owned(),
-                timeout_sec: 300,
+                timeout_sec: 120,
                 required: false,
                 status: "requested".to_owned(),
             },
@@ -19471,7 +19501,7 @@ index 1111111..2222222 100644
                 command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
                 reason: "Confirm the same focused test.".to_owned(),
                 cost: "focused-test".to_owned(),
-                timeout_sec: 300,
+                timeout_sec: 180,
                 required: true,
                 status: "requested".to_owned(),
             },
@@ -19491,6 +19521,7 @@ index 1111111..2222222 100644
         assert_eq!(tasks.len(), 2);
         assert_eq!(tasks[0].file, "test/js/bun/md/md-edge-cases.test.ts");
         assert_eq!(tasks[0].mode, super::FocusedProofMode::RedGreen);
+        assert_eq!(tasks[0].timeout_sec, Some(180));
         assert_eq!(
             tasks[0].test_name.as_deref(),
             Some("snapshots resizable ArrayBuffer input")
@@ -19526,6 +19557,30 @@ index 1111111..2222222 100644
             Some("keeps stable bytes after getter reentry")
         );
         assert_eq!(tasks[1].mode, super::FocusedProofMode::RedGreen);
+        assert_eq!(tasks[1].timeout_sec, None);
+        let plans = super::focused_proof_plans_from_diff(
+            &diff,
+            &proof_requests,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 6,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 1_200,
+            },
+        );
+        assert_eq!(plans[0].timeout_sec, 180);
+        assert_eq!(plans[1].timeout_sec, 300);
+        let artifact = super::proof_task_artifact(
+            plans[0].clone(),
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 6,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 1_200,
+            },
+            super::proof_lease_budget(&Profile::default())?,
+        );
+        assert_eq!(artifact.timeout_sec, 360);
         let time_capped_tasks = focused_test_tasks_from_diff(
             &diff,
             &proof_requests,
@@ -19558,7 +19613,7 @@ index 1111111..2222222 100644
                     .to_owned(),
                 reason: "Run the requested focused Bun proof.".to_owned(),
                 cost: "focused-test".to_owned(),
-                timeout_sec: 300,
+                timeout_sec: 120,
                 required: false,
                 status: "requested".to_owned(),
             },
@@ -19572,7 +19627,7 @@ index 1111111..2222222 100644
                         .to_owned(),
                 reason: "Confirm the same requested focused Bun proof.".to_owned(),
                 cost: "focused-test".to_owned(),
-                timeout_sec: 300,
+                timeout_sec: 180,
                 required: true,
                 status: "requested".to_owned(),
             },
@@ -19591,6 +19646,7 @@ index 1111111..2222222 100644
         assert_eq!(tasks[0].mode, super::FocusedProofMode::RedGreen);
         assert_eq!(tasks[0].file, "test/js/bun/ffi/ffi.test.js");
         assert_eq!(tasks[0].test_name.as_deref(), Some("ffi toBuffer bad free"));
+        assert_eq!(tasks[0].timeout_sec, Some(180));
         assert_eq!(tasks[0].requested_by.len(), 2);
         assert!(
             tasks[0]
@@ -19638,7 +19694,7 @@ index 1111111..2222222 100644
                 commands.push(super::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
-                assert_eq!(timeout, 300);
+                assert_eq!(timeout, 180);
                 fs::write(
                     stdout,
                     if is_base {
@@ -19681,7 +19737,7 @@ index 1111111..2222222 100644
         assert!(out.join(&receipt.commands[1].stdout).exists());
         let lease = &proof_result.resource_leases[0];
         assert_eq!(lease.status, "granted");
-        assert_eq!(lease.timeout_sec, 600);
+        assert_eq!(lease.timeout_sec, 360);
         assert_eq!(lease.worktree, Some("base-plus-tests".to_owned()));
         assert!(lease.command.as_deref().is_some_and(
             |command| command.contains("head: cwd=") && command.contains("base+tests:")
@@ -19816,13 +19872,14 @@ index 1111111..2222222 100644
             command: "cargo check --workspace --all-targets --locked".to_owned(),
             reason: "Run the requested focused build proof.".to_owned(),
             cost: "focused-build".to_owned(),
-            timeout_sec: 300,
+            timeout_sec: 90,
             required: false,
             status: "requested".to_owned(),
         }];
         let tasks = super::focused_build_candidates_from_requests(&proof_requests);
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].command, proof_requests[0].command);
+        assert_eq!(tasks[0].timeout_sec, 90);
 
         let args = test_run_args(out.clone());
         let profile = Profile {
@@ -19849,7 +19906,7 @@ index 1111111..2222222 100644
             |_root, argv, env, timeout, stdout, stderr| {
                 commands.push(super::command_display_with_env(env, argv));
                 assert!(env.is_empty());
-                assert_eq!(timeout, 120);
+                assert_eq!(timeout, 90);
                 fs::write(stdout, b"build ok\n")?;
                 fs::write(stderr, b"")?;
                 Ok(CommandStatus {
@@ -19880,7 +19937,7 @@ index 1111111..2222222 100644
         let lease = &proof_result.resource_leases[0];
         assert_eq!(lease.kind, "focused-build");
         assert_eq!(lease.status, "granted");
-        assert_eq!(lease.timeout_sec, 120);
+        assert_eq!(lease.timeout_sec, 90);
         assert_eq!(lease.worktree, None);
         assert_eq!(
             lease.command.as_deref(),
