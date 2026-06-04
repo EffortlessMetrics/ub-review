@@ -31,7 +31,7 @@ never treated as safety.
 
 - Rust 2024 / Rust 1.95.
 - Boring explicit code; no clever async unless it earns the complexity.
-- `review-direct` is the default hot path.
+- `review-byok` is the default hot path; `intelligent-ci` is the required-gate product mode.
 - MiniMax M3 is the primary v0 provider.
 - GLM is skipped for v0; wire it only so it can be enabled after approval.
 - OpenCode Go / DeepSeek Flash may become direct provider candidate/refuter
