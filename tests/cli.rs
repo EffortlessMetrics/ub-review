@@ -347,6 +347,11 @@ fn active_len_tracks_view_after_resize() {
             .map(std::vec::Vec::len),
         Some(10)
     );
+    assert!(out.join("lanes/ub-memory-lifetime.md").exists());
+    assert!(
+        !out.join("lanes/ub.md").exists(),
+        "lane packets should reflect routed effective lanes, not stale default lanes"
+    );
     let resolved_tools: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/resolved-tools.json"))?)?;
     assert_eq!(resolved_tools["schema"], "ub-review.resolved_tools.v1");
@@ -661,7 +666,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["diff_flags"], diff_context["flags"]);
     assert_eq!(
         metrics["lane_packets"],
-        plan_json["lanes"]
+        resolved_plan["selectors"]["effective_model_lanes"]
             .as_array()
             .map(std::vec::Vec::len)
             .unwrap_or_default()
@@ -766,20 +771,17 @@ fn active_len_tracks_view_after_resize() {
     assert!(review_body.contains("## Missing or failed evidence"));
     assert!(!has_standalone_approval_line(&review_body));
 
-    for lane in [
-        "ub",
-        "source-route",
-        "tests",
-        "arch",
-        "opposition",
-        "security",
-    ] {
+    let effective_lanes = resolved_plan["selectors"]["effective_model_lanes"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("effective_model_lanes missing"))?;
+    for lane in effective_lanes.iter().filter_map(serde_json::Value::as_str) {
         let path = out.join("lanes").join(format!("{lane}.md"));
         assert!(path.exists(), "missing lane {lane}");
         let text = fs::read_to_string(path)?;
         assert!(!has_standalone_approval_line(&text));
         assert!(text.contains(&format!("[{lane}]")));
     }
+    assert!(!out.join("lanes/ub.md").exists());
 
     let summary = fs::read_to_string(out.join("running-summary.md"))?;
     assert!(!has_standalone_approval_line(&summary));

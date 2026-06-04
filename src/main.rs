@@ -3094,7 +3094,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     }
     write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
 
-    write_lane_packets(&args.review.out, &diff, &plan, &event_log)?;
+    write_lane_packets(&args.review.out, &diff, &selected_model_lanes, &event_log)?;
     finish_run_loop(
         &event_log,
         &run_started,
@@ -5250,12 +5250,12 @@ fn display_command(argv: &[String]) -> String {
 fn write_lane_packets(
     out: &Path,
     diff: &DiffContext,
-    plan: &Plan,
+    lanes: &[LanePlan],
     event_log: &EventLog,
 ) -> Result<()> {
     let lane_dir = out.join("lanes");
     fs::create_dir_all(&lane_dir)?;
-    for lane in &plan.lanes {
+    for lane in lanes {
         let mut text = String::new();
         text.push_str(&format!("# Lane: `{}`\n\n", lane.id));
         text.push_str(&format!("Model: `{}`\n\n", lane.model_display));
@@ -6225,7 +6225,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         max_inline_comments: review.max_inline_comments,
         changed_files: diff.changed_files.len(),
         diff_flags: diff.flags.clone(),
-        lane_packets: plan.lanes.len(),
+        lane_packets: lane_packet_count(out),
         sensors: SensorMetrics {
             total: plan.sensors.len(),
             planned: plan.sensors.iter().filter(|sensor| sensor.run).count(),
@@ -16139,6 +16139,75 @@ fn detect_pull_number_from_event() -> Option<u64> {
         .and_then(serde_json::Value::as_u64)
 }
 
+struct LanePacketSummaryRow {
+    id: String,
+    model_display: String,
+}
+
+fn lane_packet_summary_rows(out: &Path, plan: &Plan) -> Vec<LanePacketSummaryRow> {
+    if let Some(ids) = resolved_effective_model_lane_ids(out) {
+        return ids
+            .into_iter()
+            .map(|id| LanePacketSummaryRow {
+                model_display: lane_packet_model_display(out, &id)
+                    .or_else(|| plan_lane_model_display(plan, &id))
+                    .unwrap_or_else(|| "unknown".to_owned()),
+                id,
+            })
+            .collect();
+    }
+    plan.lanes
+        .iter()
+        .map(|lane| LanePacketSummaryRow {
+            id: lane.id.clone(),
+            model_display: lane.model_display.clone(),
+        })
+        .collect()
+}
+
+fn lane_packet_count(out: &Path) -> usize {
+    fs::read_dir(out.join("lanes"))
+        .ok()
+        .into_iter()
+        .flat_map(|entries| entries.filter_map(std::result::Result::ok))
+        .filter(|entry| {
+            entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                == Some("md")
+        })
+        .count()
+}
+
+fn resolved_effective_model_lane_ids(out: &Path) -> Option<Vec<String>> {
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-plan.json")).ok()?).ok()?;
+    let lanes = value
+        .pointer("/selectors/effective_model_lanes")?
+        .as_array()?
+        .iter()
+        .filter_map(|lane| lane.as_str().map(ToOwned::to_owned))
+        .collect::<Vec<_>>();
+    Some(lanes)
+}
+
+fn lane_packet_model_display(out: &Path, lane_id: &str) -> Option<String> {
+    let text = fs::read_to_string(out.join("lanes").join(format!("{lane_id}.md"))).ok()?;
+    text.lines().find_map(|line| {
+        line.strip_prefix("Model: `")
+            .and_then(|rest| rest.strip_suffix('`'))
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn plan_lane_model_display(plan: &Plan, lane_id: &str) -> Option<String> {
+    plan.lanes
+        .iter()
+        .find(|lane| lane.id == lane_id)
+        .map(|lane| lane.model_display.clone())
+}
+
 fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String> {
     let mut text = String::new();
     text.push_str("# UB Review Packet\n\n");
@@ -16191,7 +16260,7 @@ fn render_summary(out: &Path, plan: &Plan, diff: &DiffContext) -> Result<String>
     text.push_str("\n## Lane packets\n\n");
     text.push_str("| Lane | Model | Packet |\n");
     text.push_str("|---|---|---|\n");
-    for lane in &plan.lanes {
+    for lane in lane_packet_summary_rows(out, plan) {
         text.push_str(&format!(
             "| `{}` | `{}` | `lanes/{}.md` |\n",
             lane.id, lane.model_display, lane.id
