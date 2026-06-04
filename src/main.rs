@@ -8383,15 +8383,16 @@ fn write_resource_lease_artifacts(out: &Path, resource_leases: &[ResourceLease])
 fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGroup> {
     let mut groups = BTreeMap::<(String, String, u64), ProofRequestGroup>::new();
     for request in proof_requests {
+        let group_command = canonical_proof_request_group_command(&request.command, &request.cost);
         let key = (
-            request.command.clone(),
+            group_command.clone(),
             request.cost.clone(),
             request.timeout_sec,
         );
         let fingerprint = sha256_hex(
             format!(
                 "{}\n{}\n{}",
-                request.command, request.cost, request.timeout_sec
+                group_command, request.cost, request.timeout_sec
             )
             .as_bytes(),
         );
@@ -8425,6 +8426,21 @@ fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGrou
         group.duplicate_count += 1;
     }
     groups.into_values().collect()
+}
+
+fn canonical_proof_request_group_command(command: &str, cost: &str) -> String {
+    if cost != "focused-test" {
+        return command.to_owned();
+    }
+    let parts = command.split_whitespace().collect::<Vec<_>>();
+    let Some((file, args)) = focused_bun_request_parts(&parts) else {
+        return command.to_owned();
+    };
+    format!(
+        "focused-bun:{}:{}",
+        normalize_repo_path(file),
+        focused_test_name_arg(args).unwrap_or_default()
+    )
 }
 
 fn proof_budget(profile: &Profile) -> Result<ProofBudget> {
@@ -9844,20 +9860,16 @@ fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestR
         return None;
     }
     let parts = group.command.split_whitespace().collect::<Vec<_>>();
-    let (file, args) = match parts.as_slice() {
-        ["bun", "test", file, args @ ..] => (*file, args),
-        ["bun", "bd", "test", file, args @ ..] => (*file, args),
-        _ => {
-            let spec = focused_cargo_test_command_spec(&group.command)?;
-            return Some(FocusedTestRequestTarget {
-                file: focused_cargo_test_target_label(&spec.argv),
-                test_name: focused_cargo_test_filter_name(&spec.argv),
-                command_specs: Some(FocusedTestCommandSpecs {
-                    head: spec.clone(),
-                    base_plus_tests: spec,
-                }),
-            });
-        }
+    let Some((file, args)) = focused_bun_request_parts(&parts) else {
+        let spec = focused_cargo_test_command_spec(&group.command)?;
+        return Some(FocusedTestRequestTarget {
+            file: focused_cargo_test_target_label(&spec.argv),
+            test_name: focused_cargo_test_filter_name(&spec.argv),
+            command_specs: Some(FocusedTestCommandSpecs {
+                head: spec.clone(),
+                base_plus_tests: spec,
+            }),
+        });
     };
     if !is_bun_focused_test_file(file) {
         return None;
@@ -9867,6 +9879,15 @@ fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestR
         test_name: focused_test_name_arg(args),
         command_specs: None,
     })
+}
+
+fn focused_bun_request_parts<'a>(parts: &'a [&'a str]) -> Option<(&'a str, &'a [&'a str])> {
+    match parts {
+        ["bun", "test", file, args @ ..] => Some((*file, args)),
+        ["bun", "bd", "test", file, args @ ..] => Some((*file, args)),
+        ["USE_SYSTEM_BUN=1", "bun", "test", file, args @ ..] => Some((*file, args)),
+        _ => None,
+    }
 }
 
 fn focused_test_name_arg(args: &[&str]) -> Option<String> {
@@ -14153,10 +14174,10 @@ fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
     match cost {
         "focused-test" => {
             let parts = command.split_whitespace().collect::<Vec<_>>();
-            match parts.as_slice() {
-                ["bun", "test", file, ..] => is_bun_focused_test_file(file),
-                ["bun", "bd", "test", file, ..] => is_bun_focused_test_file(file),
-                _ => focused_cargo_test_command_spec(command).is_some(),
+            if let Some((file, _args)) = focused_bun_request_parts(&parts) {
+                is_bun_focused_test_file(file)
+            } else {
+                focused_cargo_test_command_spec(command).is_some()
             }
         }
         "focused-build" => focused_build_command_spec(command).is_some(),
@@ -19579,7 +19600,7 @@ index 1111111..2222222 100644
                 id: "proof-tests-001".to_owned(),
                 lane: "tests-oracle".to_owned(),
                 requested_by: vec!["tests-oracle".to_owned()],
-                command: "bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"
+                command: "USE_SYSTEM_BUN=1 bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"
                     .to_owned(),
                 reason: "Run the requested focused Bun proof.".to_owned(),
                 cost: "focused-test".to_owned(),
@@ -20094,6 +20115,13 @@ index 1111111..2222222 100644
         );
         assert_eq!(
             classify_proof_cost(
+                None,
+                "USE_SYSTEM_BUN=1 bun test test/js/node/fs/fs.test.ts -t route"
+            ),
+            "focused-test"
+        );
+        assert_eq!(
+            classify_proof_cost(
                 Some("slow integration test"),
                 "bun test test/js/node/fs/fs.test.ts"
             ),
@@ -20147,6 +20175,19 @@ index 1111111..2222222 100644
                 &lane,
                 super::ModelProofRequest {
                     command:
+                        "USE_SYSTEM_BUN=1 bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'"
+                            .to_owned(),
+                    reason: "Confirm the old-main red side shape exactly.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                2,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command:
                         "cargo test --locked -p ub-review proof_request_status_enforces_v0_focused_allowlist -- --exact"
                             .to_owned(),
                     reason: "Run the focused Cargo regression test.".to_owned(),
@@ -20154,7 +20195,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                2,
+                3,
             ),
             super::validate_proof_request(
                 &lane,
@@ -20166,7 +20207,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                3,
+                4,
             ),
             super::validate_proof_request(
                 &lane,
@@ -20177,7 +20218,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                4,
+                5,
             ),
             super::validate_proof_request(
                 &lane,
@@ -20188,7 +20229,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                5,
+                6,
             ),
             super::validate_proof_request(
                 &lane,
@@ -20199,7 +20240,30 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                6,
+                7,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "FOO=1 bun test test/js/bun/md/md-edge-cases.test.ts".to_owned(),
+                    reason: "Arbitrary env assignment should not be brokered.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                8,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "USE_SYSTEM_BUN=2 bun test test/js/bun/md/md-edge-cases.test.ts"
+                        .to_owned(),
+                    reason: "Only exact USE_SYSTEM_BUN=1 is allowed.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                9,
             ),
             super::validate_proof_request(
                 &lane,
@@ -20211,7 +20275,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                7,
+                10,
             ),
             super::validate_proof_request(
                 &lane,
@@ -20222,7 +20286,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                8,
+                11,
             ),
         ];
 
@@ -20232,20 +20296,42 @@ index 1111111..2222222 100644
         assert_eq!(requests[1].cost, "focused-test");
         assert_eq!(requests[2].status, "requested");
         assert_eq!(requests[2].cost, "focused-test");
-        assert_eq!(requests[3].status, "unsupported");
+        assert_eq!(requests[3].status, "requested");
+        assert_eq!(requests[3].cost, "focused-test");
         assert_eq!(requests[4].status, "unsupported");
-        assert_eq!(requests[5].status, "requested");
-        assert_eq!(requests[5].cost, "focused-build");
-        assert_eq!(requests[6].status, "unsupported");
+        assert_eq!(requests[5].status, "unsupported");
+        assert_eq!(requests[6].status, "requested");
+        assert_eq!(requests[6].cost, "focused-build");
         assert_eq!(requests[7].status, "unsupported");
-        assert_eq!(requests[8].status, "invalid");
-        assert_eq!(requests[8].command, "<missing command>");
+        assert_eq!(requests[8].status, "unsupported");
+        assert_eq!(requests[9].status, "unsupported");
+        assert_eq!(requests[10].status, "unsupported");
+        assert_eq!(requests[11].status, "invalid");
+        assert_eq!(requests[11].command, "<missing command>");
 
         let groups = super::proof_request_groups(&requests);
-        assert_eq!(groups.len(), 9);
+        assert_eq!(groups.len(), 10);
         assert!(groups.iter().any(|group| group.status == "requested"));
         assert!(groups.iter().any(|group| group.status == "unsupported"));
         assert!(groups.iter().any(|group| group.status == "invalid"));
+        let bun_group = groups
+            .iter()
+            .find(|group| {
+                group
+                    .request_ids
+                    .iter()
+                    .any(|request_id| request_id == &requests[2].id)
+            })
+            .ok_or_else(|| anyhow::anyhow!("missing grouped Bun proof request"))?;
+        assert_eq!(bun_group.duplicate_count, 3);
+        assert_eq!(
+            bun_group.request_ids,
+            vec![
+                requests[0].id.clone(),
+                requests[1].id.clone(),
+                requests[2].id.clone()
+            ]
+        );
 
         let task = super::focused_test_task(
             "test/js/bun/md/md-edge-cases.test.ts",
@@ -20253,9 +20339,10 @@ index 1111111..2222222 100644
             &groups,
         );
         assert_eq!(task.requested_by, vec!["tests-oracle".to_owned()]);
-        assert_eq!(task.request_ids.len(), 2);
+        assert_eq!(task.request_ids.len(), 3);
         assert!(task.request_ids.contains(&requests[0].id));
         assert!(task.request_ids.contains(&requests[1].id));
+        assert!(task.request_ids.contains(&requests[2].id));
         let focused_test_tasks = super::focused_test_candidates_from_requests(&requests);
         assert_eq!(focused_test_tasks.len(), 2);
         let cargo_test_task = focused_test_tasks
@@ -20269,7 +20356,7 @@ index 1111111..2222222 100644
             cargo_test_task.test_name.as_deref(),
             Some("proof_request_status_enforces_v0_focused_allowlist")
         );
-        assert_eq!(cargo_test_task.request_ids, vec![requests[2].id.clone()]);
+        assert_eq!(cargo_test_task.request_ids, vec![requests[3].id.clone()]);
         let build_tasks = super::focused_build_candidates_from_requests(&requests);
         assert_eq!(build_tasks.len(), 1);
         assert_eq!(
@@ -20277,7 +20364,7 @@ index 1111111..2222222 100644
             "cargo check --workspace --all-targets --locked"
         );
         assert_eq!(build_tasks[0].requested_by, vec!["tests-oracle".to_owned()]);
-        assert_eq!(build_tasks[0].request_ids, vec![requests[5].id.clone()]);
+        assert_eq!(build_tasks[0].request_ids, vec![requests[6].id.clone()]);
         Ok(())
     }
 
