@@ -6126,6 +6126,9 @@ fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Resu
     if has_forbidden_pr_review_boilerplate(trimmed) {
         bail!("github review body contains artifact-only boilerplate");
     }
+    if is_refuted_only_pr_body(trimmed) {
+        bail!("github review body contains refuted-only artifact note");
+    }
     if !policy.include_successful_lane_table && contains_successful_lane_table(trimmed) {
         bail!("github review body contains successful lane table");
     }
@@ -6198,6 +6201,23 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
         ]
         .iter()
         .any(|needle| lower.contains(needle))
+}
+
+fn is_refuted_only_pr_body(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    lower.contains("## refuted")
+        && ![
+            "## decision",
+            "## confirmed findings",
+            "## verification questions",
+            "## test proof",
+            "## proof results",
+            "## parked follow-ups",
+            "## evidence gaps",
+            "## missing evidence",
+        ]
+        .iter()
+        .any(|heading| lower.contains(heading))
 }
 
 fn contains_successful_lane_table(body: &str) -> bool {
@@ -14870,7 +14890,6 @@ fn render_pull_request_review_body(
     });
     let has_decision_item = decision_sentence.is_some();
     let has_reviewer_value_item = has_decision_item
-        || !refuted_observations.is_empty()
         || !proof_result_receipts.is_empty()
         || !parked.is_empty()
         || !parked_observations.is_empty()
@@ -22515,6 +22534,16 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body =
+            "## Refuted\n\n- A prior objection was false, and no finding remains.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("refuted-only body unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("refuted-only artifact note"),
+            "{err:#}"
+        );
+
         review.body = "## Evidence gaps\n\n- actionlint receipt is 'ok' per sensor table; no per-line output inlined into this lane packet, so re-verification of lint findings depends on the central proof broker artifact.\n- No fresh PR-build smoke run is available (build/test skipped, --allow-heavy required); only tokmd/actionlint receipts are present for this 4-line workflow pin.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -23857,10 +23886,11 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn compiler_surface_promotes_follow_up_observation_to_final_review() -> Result<()> {
+    fn compiler_surface_keeps_refuted_only_follow_up_artifact_only() -> Result<()> {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
         let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("workflow-opposition", "ok")];
         let follow_up_observation = test_observation(
             "orchestrator-follow-up-route",
             "The source-route concern was refuted by the routed proof receipt.",
@@ -23877,7 +23907,7 @@ UB_REVIEW_HTTP_STATUS:429
             args: &args,
             plan: &plan,
             diff: &diff,
-            model_lanes: &[],
+            model_lanes: &model_lanes,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             inline_comments: &[],
@@ -23886,16 +23916,10 @@ UB_REVIEW_HTTP_STATUS:429
             proof_receipts: &[],
         })?;
 
-        assert!(surface.should_prepare_github_review);
-        assert_eq!(surface.review_payload_status, "prepared");
-        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
-        assert!(surface.github_review.body.contains("## Refuted"));
-        assert!(
-            surface
-                .github_review
-                .body
-                .contains("source-route concern was refuted")
-        );
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
         Ok(())
     }
@@ -24454,6 +24478,36 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("central proof broker artifact"));
         assert!(!body.contains("No fresh PR-build smoke"));
         assert!(!body.contains("--allow-heavy"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_refuted_only_observations_artifact_only() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[test_observation(
+                "workflow-opposition",
+                "This diff widens the workflow permission/secret surface; refuted because the changed hunk only updates an already pinned action ref.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "refuted-only-workflow-posture",
+            )],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("## Refuted"));
+        assert!(!body.contains("widens the workflow permission"));
     }
 
     #[test]

@@ -207,6 +207,8 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
     lowered = body.lower()
     if is_workflow_trust_posture_review_noise(lowered):
         fail(f"{path} contains artifact-only workflow trust posture prose")
+    if is_refuted_only_pr_body(lowered):
+        fail(f"{path} contains refuted-only artifact note")
     for phrase in [
         "no blocking finding after",
         "no blocking ub finding",
@@ -298,6 +300,22 @@ def is_workflow_trust_posture_review_noise(text: str) -> bool:
         text
     ) or is_workflow_tool_status_artifact_gap_noise(
         text
+    )
+
+
+def is_refuted_only_pr_body(text: str) -> bool:
+    return "## refuted" in text and not any(
+        heading in text
+        for heading in [
+            "## decision",
+            "## confirmed findings",
+            "## verification questions",
+            "## test proof",
+            "## proof results",
+            "## parked follow-ups",
+            "## evidence gaps",
+            "## missing evidence",
+        ]
     )
 
 
@@ -3688,6 +3706,14 @@ def run_self_tests() -> None:
                 "as the actual target. Their objection is a false positive against "
                 "the current diff and reopens nothing."
             ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "refuted-only PR body",
+        "refuted-only artifact note",
+        lambda: require_pr_review_body_policy(
+            "## Refuted\n\n- A prior objection was false, and no finding remains.",
             pathlib.Path("review/github-review.json"),
         ),
     )
