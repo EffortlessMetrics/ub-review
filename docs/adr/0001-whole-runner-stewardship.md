@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-ub-review is an evidence-first CI review gate. It uses the whole runner to turn a PR into proof-backed review feedback.
+ub-review is a targeted CI runner with review judgment automation built in. It uses the whole runner to decide what evidence a PR needs, run the relevant proof, and turn the result into proof-backed review feedback.
 
 CI review has a short-lived but powerful execution environment: CPU, disk, memory, I/O, model budget, and wall-clock time are all available only while the runner is live. Model calls are remote network I/O and run concurrently with local proof work; provider wait does not lock the device or consume the local CPU budget. Spending runner resources on repeated checkout, duplicated repo navigation, disconnected model work, or verbose posting reduces the evidence available to the human reviewer.
 
@@ -39,8 +39,8 @@ models    reason over prepared evidence over the network while proof runs locall
 time      gives local proof the full runner lease instead of treating model wait as unavailable
 ```
 
-ub-review prepares evidence, runs focused investigation lanes, proves what it
-can, and reports only what changes the reviewer's decision.
+ub-review prepares evidence, reasons about it, proves what it can, and
+reports only what changes the reviewer's decision.
 
 ## Architecture rule
 
