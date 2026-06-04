@@ -142,6 +142,8 @@ fn active_len_tracks_view_after_resize() {
             "HEAD",
             "--out",
             path_str(&out)?,
+            "--run-pass",
+            "opened",
             "--no-github-summary",
         ],
     )?;
@@ -217,6 +219,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(github_skip["status"], "skipped");
     assert_eq!(github_skip["review_payload_status"], "skipped_empty_smoke");
     assert_eq!(github_skip["terminal_state"], "artifact-only");
+    assert_eq!(github_skip["run_pass"], "opened");
     let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
     assert!(artifact_body.contains("## Confirmed findings"));
     assert!(artifact_body.contains("## Missing or failed evidence"));
@@ -228,6 +231,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(review["provider_policy"], "minimax-primary");
     assert_eq!(review["model_provider_policy"], "minimax-primary");
     assert_eq!(review["runtime_profile"], "gh-runner");
+    assert_eq!(review["run_pass"], "opened");
     assert_eq!(review["depth"], "standard");
     assert_eq!(review["lane_width"], 10);
     assert_eq!(review["model_concurrency"], 8);
@@ -300,6 +304,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["review_profile"], "bun-ub-v0");
     assert_eq!(resolved_plan["profile_name"], "gh-runner");
     assert_eq!(resolved_plan["runtime_profile"], "gh-runner");
+    assert_eq!(resolved_plan["run_pass"], "opened");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
     assert_eq!(
         resolved_plan["language_mix"]["languages"],
@@ -343,6 +348,7 @@ fn active_len_tracks_view_after_resize() {
         serde_json::json!("on_failure")
     );
     assert_eq!(resolved_plan["limits"]["sensor_jobs"], 4);
+    assert_eq!(resolved_plan["selectors"]["run_pass"], "opened");
     assert_eq!(resolved_plan["selectors"]["depth"], "standard");
     assert_eq!(resolved_plan["selectors"]["lane_width"], 10);
     assert_eq!(resolved_plan["selectors"]["model_concurrency"], 8);
@@ -472,6 +478,8 @@ fn active_len_tracks_view_after_resize() {
             path_str(&capped_out)?,
             "--runtime-profile",
             "cx23",
+            "--run-pass",
+            "ready_for_review",
             "--model-concurrency",
             "99",
             "--model-mode",
@@ -482,10 +490,12 @@ fn active_len_tracks_view_after_resize() {
     let capped_review: serde_json::Value =
         serde_json::from_slice(&fs::read(capped_out.join("review/review.json"))?)?;
     assert_eq!(capped_review["runtime_profile"], "cx23");
+    assert_eq!(capped_review["run_pass"], "ready_for_review");
     assert_eq!(capped_review["model_concurrency"], 12);
     let capped_resolved_plan: serde_json::Value =
         serde_json::from_slice(&fs::read(capped_out.join("resolved-plan.json"))?)?;
     assert_eq!(capped_resolved_plan["runtime_profile"], "cx23");
+    assert_eq!(capped_resolved_plan["run_pass"], "ready_for_review");
     assert_eq!(capped_resolved_plan["limits"]["llm_in_flight"], 12);
     assert_eq!(capped_resolved_plan["limits"]["sensor_jobs"], 2);
     assert_eq!(
@@ -496,6 +506,10 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(capped_resolved_plan["budgets"]["proof_memory_mb"], 1024);
     assert_eq!(capped_resolved_plan["budgets"]["hard_timeout_sec"], 3600);
     assert_eq!(capped_resolved_plan["selectors"]["model_concurrency"], 12);
+    assert_eq!(
+        capped_resolved_plan["selectors"]["run_pass"],
+        "ready_for_review"
+    );
     let full_out = temp.path().join("packet-full-profile");
     run(
         temp.path(),
@@ -687,6 +701,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["review_profile"], "bun-ub-v0");
     assert_eq!(metrics["profile_name"], "gh-runner");
     assert_eq!(metrics["runtime_profile"], "gh-runner");
+    assert_eq!(metrics["run_pass"], review["run_pass"]);
     assert_eq!(metrics["depth"], "standard");
     assert_eq!(
         metrics["changed_files"],
@@ -829,6 +844,12 @@ fn active_len_tracks_view_after_resize() {
     assert!(summary.contains("MiniMax-M3"));
     assert!(summary.contains("## Lane packets"));
     let event_kinds = event_kinds(&out.join("events.ndjson"))?;
+    let events = event_records(&out.join("events.ndjson"))?;
+    let run_started = events
+        .iter()
+        .find(|event| event["kind"] == "run_started")
+        .ok_or_else(|| anyhow::anyhow!("missing run_started event"))?;
+    assert_eq!(run_started["payload"]["run_pass"], "opened");
     for kind in [
         "run_started",
         "evidence_loop_started",
@@ -2771,6 +2792,14 @@ fn json_str_field<'a>(value: &'a serde_json::Value, field: &str) -> Result<&'a s
 }
 
 fn event_kinds(path: &Path) -> Result<Vec<String>> {
+    let events = event_records(path)?;
+    Ok(events
+        .iter()
+        .filter_map(|event| event["kind"].as_str().map(str::to_owned))
+        .collect())
+}
+
+fn event_records(path: &Path) -> Result<Vec<serde_json::Value>> {
     let file = fs::File::open(path)?;
     let reader = BufReader::new(file);
     let mut kinds = Vec::new();
@@ -2788,7 +2817,8 @@ fn event_kinds(path: &Path) -> Result<Vec<String>> {
         let kind = event["kind"]
             .as_str()
             .ok_or_else(|| anyhow::anyhow!("event missing kind: {event}"))?;
-        kinds.push(kind.to_owned());
+        assert!(!kind.is_empty(), "event kind is empty: {event}");
+        kinds.push(event);
     }
     Ok(kinds)
 }

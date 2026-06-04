@@ -214,6 +214,40 @@ impl RunMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RunPass {
+    Auto,
+    Opened,
+    ReadyForReview,
+    PullRequestOther,
+    Manual,
+}
+
+impl RunPass {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Opened => "opened",
+            Self::ReadyForReview => "ready_for_review",
+            Self::PullRequestOther => "pull_request_other",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+fn parse_run_pass(value: &str) -> std::result::Result<RunPass, String> {
+    match value.trim() {
+        "auto" => Ok(RunPass::Auto),
+        "opened" => Ok(RunPass::Opened),
+        "ready_for_review" | "ready-for-review" => Ok(RunPass::ReadyForReview),
+        "pull_request_other" | "pull-request-other" => Ok(RunPass::PullRequestOther),
+        "manual" => Ok(RunPass::Manual),
+        other => Err(format!(
+            "unsupported run pass `{other}`; expected auto, opened, ready_for_review, pull_request_other, or manual"
+        )),
+    }
+}
+
 #[derive(Clone, Debug, Args)]
 struct ReviewArgs {
     /// Repository root.
@@ -353,6 +387,9 @@ struct RunArgs {
         env = "UB_REVIEW_MODE"
     )]
     mode: RunMode,
+    /// Review pass identity. `auto` maps pull_request opened/ready_for_review to the matching pass.
+    #[arg(long = "run-pass", value_parser = parse_run_pass, default_value = "auto", env = "UB_REVIEW_RUN_PASS")]
+    run_pass: RunPass,
     /// Model execution mode.
     #[arg(long, value_enum, default_value = "auto", env = "UB_REVIEW_MODEL_MODE")]
     model_mode: ModelMode,
@@ -583,6 +620,7 @@ struct GitHubReviewSkipReceipt {
     review_payload_status: String,
     terminal_state: String,
     github_review_json: String,
+    run_pass: String,
     model_mode: String,
     inline_comments: usize,
     summary_only_findings: usize,
@@ -1033,6 +1071,7 @@ struct ReviewArtifacts {
     mode: String,
     posting: String,
     runtime_profile: String,
+    run_pass: String,
     model_mode: String,
     depth: String,
     provider_policy: String,
@@ -1126,6 +1165,7 @@ struct ReviewMetrics {
     runtime_profile: String,
     mode: String,
     posting: String,
+    run_pass: String,
     model_mode: String,
     depth: String,
     provider_policy: String,
@@ -3116,6 +3156,7 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
 fn cmd_run(args: RunArgs) -> Result<()> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
+    let run_pass = resolved_run_pass(args.run_pass);
     let (config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
     let profile = config.selected_profile()?;
@@ -3139,7 +3180,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     let mut run_loop_tracker = RunLoopTracker::new();
     event_log.append(
         "run_started",
-        serde_json::json!({"base": args.review.base, "head": args.review.head, "profile": plan.profile_name, "dry_run": args.dry_run}),
+        serde_json::json!({"base": args.review.base, "head": args.review.head, "profile": plan.profile_name, "dry_run": args.dry_run, "run_pass": run_pass.key()}),
     )?;
 
     let evidence_loop = start_run_loop(
@@ -3238,6 +3279,49 @@ fn ensure_supported_mode(mode: RunMode) -> Result<()> {
             mode.key()
         ),
     }
+}
+
+fn resolved_run_pass(run_pass: RunPass) -> RunPass {
+    if run_pass != RunPass::Auto {
+        return run_pass;
+    }
+    resolve_run_pass_from_event(
+        std::env::var("GITHUB_EVENT_NAME").ok().as_deref(),
+        github_event_action().as_deref(),
+    )
+}
+
+fn resolve_run_pass_from_event(event_name: Option<&str>, event_action: Option<&str>) -> RunPass {
+    match event_name {
+        Some("pull_request" | "pull_request_target") => match event_action {
+            Some("opened") => RunPass::Opened,
+            Some("ready_for_review") => RunPass::ReadyForReview,
+            _ => RunPass::PullRequestOther,
+        },
+        _ => RunPass::Manual,
+    }
+}
+
+fn github_event_action() -> Option<String> {
+    for name in ["UB_REVIEW_GITHUB_EVENT_ACTION", "GITHUB_EVENT_ACTION"] {
+        if let Ok(value) = std::env::var(name) {
+            let value = value.trim();
+            if !value.is_empty() {
+                return Some(value.to_owned());
+            }
+        }
+    }
+    github_event_action_from_path()
+}
+
+fn github_event_action_from_path() -> Option<String> {
+    let path = std::env::var_os("GITHUB_EVENT_PATH")?;
+    let text = fs::read_to_string(path).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    value
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_owned)
 }
 
 fn validate_run_args(args: &RunArgs) -> Result<()> {
@@ -3763,10 +3847,14 @@ fn resolved_plan_artifact(
     selectors: &SelectorArgs,
     effective_model_lanes: Option<&[LanePlan]>,
 ) -> serde_json::Value {
+    let run_pass = run_args
+        .map(|args| resolved_run_pass(args.run_pass).key())
+        .unwrap_or("plan-default");
     serde_json::json!({
         "schema": "ub-review.resolved_plan.v1",
         "base": &plan.base,
         "head": &plan.head,
+        "run_pass": run_pass,
         "diff_class": diff.diff_class.key(),
         "language_mix": classify_language_mix(&diff.changed_files),
         "review_profile": &config.review_profile,
@@ -3799,6 +3887,7 @@ fn resolved_selector_artifact(
         .unwrap_or_default();
     if let Some(args) = run_args {
         serde_json::json!({
+            "run_pass": resolved_run_pass(args.run_pass).key(),
             "depth": args.depth.key(),
             "lane_width": args.lane_width,
             "model_concurrency": args.model_concurrency,
@@ -3812,6 +3901,7 @@ fn resolved_selector_artifact(
         })
     } else {
         serde_json::json!({
+            "run_pass": "plan-default",
             "depth": ReviewDepth::Standard.key(),
             "lane_width": STANDARD_LANE_WIDTH,
             "model_concurrency": STANDARD_MODEL_CONCURRENCY,
@@ -5663,6 +5753,7 @@ fn write_review_artifacts(
         mode: args.mode.key().to_owned(),
         posting: args.posting.key().to_owned(),
         runtime_profile: profile.name.clone(),
+        run_pass: resolved_run_pass(args.run_pass).key().to_owned(),
         model_mode: args.model_mode.key().to_owned(),
         depth: args.depth.key().to_owned(),
         provider_policy: args.provider_policy.key().to_owned(),
@@ -6314,6 +6405,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         runtime_profile: review.runtime_profile.clone(),
         mode: review.mode.clone(),
         posting: review.posting.clone(),
+        run_pass: review.run_pass.clone(),
         model_mode: review.model_mode.clone(),
         depth: review.depth.clone(),
         provider_policy: review.provider_policy.clone(),
@@ -10660,6 +10752,7 @@ fn build_github_review_skip_receipt(
         review_payload_status: review.terminal_state.review_payload_status.clone(),
         terminal_state: review.terminal_state.status.clone(),
         github_review_json: "review/github-review.json".to_owned(),
+        run_pass: review.run_pass.clone(),
         model_mode: args.model_mode.key().to_owned(),
         inline_comments: review.inline_comments.len(),
         summary_only_findings: review.summary_only_findings.len(),
@@ -17826,6 +17919,7 @@ mod tests {
     #[test]
     fn action_smoke_workflow_matches_trusted_repo_trigger_contract() {
         let workflow = include_str!("../.github/workflows/action-smoke.yml");
+        let action = include_str!("../action.yml");
         assert!(
             workflow.contains("types: [opened, ready_for_review, labeled]"),
             "action smoke should run default passes on opened/ready_for_review and keep labeled for explicit model smoke"
@@ -17843,6 +17937,12 @@ mod tests {
                 "if: github.event_name != 'pull_request' || github.event.action != 'labeled'"
             ),
             "the local smoke job should skip label-only model-smoke opt-in events"
+        );
+        assert!(
+            action.contains("run-pass:")
+                && action.contains("UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}")
+                && action.contains("--run-pass \"${{ inputs['run-pass'] }}\""),
+            "the action should pass event action and resolved pass input into ub-review run"
         );
     }
 
@@ -22093,6 +22193,46 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn auto_run_pass_maps_pull_request_actions() {
+        assert_eq!(
+            super::resolve_run_pass_from_event(Some("pull_request"), Some("opened")),
+            super::RunPass::Opened
+        );
+        assert_eq!(
+            super::resolve_run_pass_from_event(Some("pull_request"), Some("ready_for_review")),
+            super::RunPass::ReadyForReview
+        );
+        assert_eq!(
+            super::resolve_run_pass_from_event(Some("pull_request"), Some("synchronize")),
+            super::RunPass::PullRequestOther
+        );
+        assert_eq!(
+            super::resolve_run_pass_from_event(Some("workflow_dispatch"), None),
+            super::RunPass::Manual
+        );
+    }
+
+    #[test]
+    fn run_pass_parser_accepts_github_action_spelling() {
+        assert_eq!(super::parse_run_pass("auto"), Ok(super::RunPass::Auto));
+        assert_eq!(super::parse_run_pass("opened"), Ok(super::RunPass::Opened));
+        assert_eq!(
+            super::parse_run_pass("ready_for_review"),
+            Ok(super::RunPass::ReadyForReview)
+        );
+        assert_eq!(
+            super::parse_run_pass("ready-for-review"),
+            Ok(super::RunPass::ReadyForReview)
+        );
+        assert_eq!(
+            super::parse_run_pass("pull_request_other"),
+            Ok(super::RunPass::PullRequestOther)
+        );
+        assert_eq!(super::parse_run_pass("manual"), Ok(super::RunPass::Manual));
+        assert!(super::parse_run_pass("draft").is_err());
+    }
+
+    #[test]
     fn quick_depth_expands_to_small_lane_budget() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.depth = ReviewDepth::Quick;
@@ -23662,6 +23802,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(skip["status"], "skipped");
         assert_eq!(skip["review_payload_status"], "skipped_empty_smoke");
         assert_eq!(skip["terminal_state"], "artifact-only");
+        assert_eq!(skip["run_pass"], "manual");
         assert_eq!(metrics["wall_clock_seconds"], 73);
         assert_eq!(metrics["wall_clock_ms"], 73_000);
         assert_eq!(metrics["terminal_state"], "artifact-only");
@@ -23698,6 +23839,7 @@ UB_REVIEW_HTTP_STATUS:429
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
+            run_pass: "opened".to_owned(),
             model_mode: "auto".to_owned(),
             depth: "standard".to_owned(),
             provider_policy: "minimax-only".to_owned(),
@@ -23790,6 +23932,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(metrics.provider_evidence_failures, 1);
         assert_eq!(metrics.review_payload_status, "prepared");
         assert_eq!(metrics.post_status, "not_attempted_by_run");
+        assert_eq!(metrics.run_pass, "opened");
         assert_eq!(metrics.terminal_state, "needs-reviewer-attention");
         assert_eq!(metrics.observations, 0);
         assert_eq!(metrics.follow_up_results.total, 2);
@@ -24718,6 +24861,7 @@ index 1111111..2222222 100644
             mode: "review-direct".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
+            run_pass: "manual".to_owned(),
             model_mode: "auto".to_owned(),
             depth: "standard".to_owned(),
             provider_policy: "minimax-only".to_owned(),
@@ -25608,6 +25752,7 @@ index 1111111..2222222 100644
             no_github_summary: true,
             posting: PostingMode::ArtifactOnly,
             mode: RunMode::ReviewDirect,
+            run_pass: super::RunPass::Auto,
             model_mode: ModelMode::Auto,
             selectors: SelectorArgs::default(),
             depth: ReviewDepth::Standard,
