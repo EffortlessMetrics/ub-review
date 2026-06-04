@@ -15155,6 +15155,8 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
             && reason.contains("remaining concerns"))
         || is_unchanged_workflow_trust_posture_noise(&text)
         || is_no_finding_workflow_pin_summary_noise(&text)
+        || is_stale_external_bot_objection_noise(&text)
+        || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15334,6 +15336,8 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || (text.contains("actionlint") && text.contains("status=ok"))
         || is_unchanged_workflow_trust_posture_noise(&text)
         || is_no_finding_workflow_pin_summary_noise(&text)
+        || is_stale_external_bot_objection_noise(&text)
+        || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15429,6 +15433,8 @@ fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
                 || text.contains("github.token")
                 || text.contains("malicious or compromised")))
         || is_no_finding_workflow_pin_summary_noise(text)
+        || is_stale_external_bot_objection_noise(text)
+        || is_workflow_tool_status_artifact_gap_noise(text)
 }
 
 fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
@@ -15450,6 +15456,49 @@ fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
         || text.contains("repo-level policy item")
         || text.contains("unchanged from prior pin");
     mentions_pin && (says_no_defect || says_not_current_diff)
+}
+
+fn is_stale_external_bot_objection_noise(text: &str) -> bool {
+    let mentions_bots =
+        text.contains("cursor[bot]") || text.contains("coderabbit") || text.contains("stale-bot");
+    let says_stale_false_positive = (text.contains("stale") || text.contains("false positive"))
+        && (text.contains("false positive")
+            || text.contains("reopens nothing")
+            || text.contains("not real findings")
+            || text.contains("current diff")
+            || text.contains("live diff"));
+    let mentions_pin_ref_mismatch = text.contains("claim target")
+        || text.contains("pin mismatch")
+        || text.contains("target sha")
+        || text.contains("current head sha")
+        || text.contains("pr title")
+        || text.contains("pr body");
+    mentions_bots && says_stale_false_positive && mentions_pin_ref_mismatch
+}
+
+fn is_workflow_tool_status_artifact_gap_noise(text: &str) -> bool {
+    let actionlint_ok = text.contains("actionlint")
+        && (text.contains("receipt is 'ok'")
+            || text.contains("actionlint=ok")
+            || text.contains("actionlint receipt ok")
+            || text.contains("sensor table"));
+    let not_inlined = text.contains("no per-line output")
+        || text.contains("not inlined")
+        || text.contains("central proof broker artifact")
+        || text.contains("sensors/actionlint");
+    let yaml_pin = text.contains("4-line workflow pin")
+        || text.contains("4-line sha-swap")
+        || text.contains("yaml-only")
+        || text.contains("pin/uses ref consistent");
+    let skipped_heavy = text.contains("build/test skipped")
+        || text.contains("--allow-heavy")
+        || text.contains("no fresh pr-build smoke")
+        || text.contains("heavy smoke adds limited value");
+    (actionlint_ok && (not_inlined || yaml_pin))
+        || (skipped_heavy && yaml_pin)
+        || ((text.contains("parked follow-up") || text.contains("not a blocker"))
+            && actionlint_ok
+            && yaml_pin)
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -22389,6 +22438,24 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Refuted\n\n- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("stale bot refutation prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Evidence gaps\n\n- actionlint receipt is 'ok' per sensor table; no per-line output inlined into this lane packet, so re-verification of lint findings depends on the central proof broker artifact.\n- No fresh PR-build smoke run is available (build/test skipped, --allow-heavy required); only tokmd/actionlint receipts are present for this 4-line workflow pin.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("workflow tool-status gap prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Evidence gaps\n\n- Shared context hash and terminal state are available in artifacts.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -24067,6 +24134,20 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "No pinning defect introduced. The only standing concern is upstream SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical in posture to the prior pin and is a repo-level policy item, not a diff finding.".to_owned(),
                 evidence: "Per-action full-SHA pinning preserved; old pin fully removed; 3 replacement sites consistent; actionlint ok; workflow file diff is 4 lines, no perm/trigger change.".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow-proof lane: actionlint receipt ok; no Rust/source surface touched (yaml-only). Pin/uses ref consistent at 3x ec8f890; old da14100 absent. Strongest failed objection: actionlint proof receipt not inlined for me to re-verify, and no fresh PR-build smoke. cursor/coderabbit stale SHA mismatch is a false positive (cites e76ccbc while PR targets ec8f890).".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "actionlint 'ok' status is reported by the sensor table but the underlying lint output is not inlined into the workflow-proof lane packet; trust in 'no workflow lint findings' therefore depends on the central proof broker artifact at sensors/actionlint/. For a 4-line SHA-swap with consistent 40-hex pin and unchanged permissions/trigger, this is a parked follow-up, not a blocker.".to_owned(),
+                evidence: "sensor table: actionlint=ok; receipt path sensors/actionlint/; yaml-only diff; pin 40-hex non-zero".to_owned(),
+            },
         ];
         let mut tokmd_gap = test_observation(
             "sensor-tokmd",
@@ -24114,6 +24195,33 @@ UB_REVIEW_HTTP_STATUS:429
                 "low",
                 "high",
                 "false-premise:workflow-pinning",
+            ),
+            test_observation(
+                "workflow-permissions",
+                "cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "wf-perms-stale-cursor-coderabbit",
+            ),
+            test_observation(
+                "workflow-proof",
+                "actionlint receipt is 'ok' per sensor table; no per-line output inlined into this lane packet, so re-verification of lint findings depends on the central proof broker artifact",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "wf-proof:actionlint-receipt-inlined?",
+            ),
+            test_observation(
+                "workflow-proof",
+                "No fresh PR-build smoke run is available (build/test skipped, --allow-heavy required); only tokmd/actionlint receipts are present for this 4-line workflow pin",
+                "missing-evidence",
+                "open",
+                "low",
+                "high",
+                "missing-evidence:.github/workflows/ub-review-packet.yml:62",
             ),
             test_observation(
                 "orchestrator-follow-up",
@@ -24272,6 +24380,12 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("repo-level policy item"));
         assert!(!body.contains("Pinning format could be 39-hex"));
         assert!(!body.contains("SHA-pinning control remains effective"));
+        assert!(!body.contains("cursor[bot]"));
+        assert!(!body.contains("coderabbit"));
+        assert!(!body.contains("stale-bot false positives"));
+        assert!(!body.contains("central proof broker artifact"));
+        assert!(!body.contains("No fresh PR-build smoke"));
+        assert!(!body.contains("--allow-heavy"));
     }
 
     #[test]
