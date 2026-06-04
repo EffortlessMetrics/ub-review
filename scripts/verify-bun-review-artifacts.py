@@ -853,6 +853,17 @@ def require_run_loop_metrics(metrics: dict) -> None:
         fail("metrics.run.investigation_wall_ms does not match metrics.run.streams.investigation.wall_ms")
     if run.get("proof_wall_ms") != streams["proof"].get("wall_ms"):
         fail("metrics.run.proof_wall_ms does not match metrics.run.streams.proof.wall_ms")
+    scheduler_roles = run.get("scheduler_roles")
+    if not isinstance(scheduler_roles, dict):
+        fail("metrics.run.scheduler_roles is missing")
+    for role_name in ["evidence", "model", "proof"]:
+        require_timing(scheduler_roles, f"metrics.run.scheduler_roles.{role_name}", role_name)
+    if run.get("evidence_wall_ms") != scheduler_roles["evidence"].get("wall_ms"):
+        fail("metrics.run.evidence_wall_ms does not match metrics.run.scheduler_roles.evidence.wall_ms")
+    if run.get("model_wall_ms") != scheduler_roles["model"].get("wall_ms"):
+        fail("metrics.run.model_wall_ms does not match metrics.run.scheduler_roles.model.wall_ms")
+    if run.get("local_proof_wall_ms") != scheduler_roles["proof"].get("wall_ms"):
+        fail("metrics.run.local_proof_wall_ms does not match metrics.run.scheduler_roles.proof.wall_ms")
     loops = run.get("loops")
     if not isinstance(loops, dict):
         fail("metrics.run.loops is missing")
@@ -882,6 +893,8 @@ def require_scheduler_artifact(root: pathlib.Path, metrics: dict) -> None:
             fail(f"review/scheduler.json {field} does not match metrics.run")
     if scheduler.get("streams") != run.get("streams"):
         fail("review/scheduler.json streams do not match metrics.run.streams")
+    if scheduler.get("scheduler_roles") != run.get("scheduler_roles"):
+        fail("review/scheduler.json scheduler_roles do not match metrics.run.scheduler_roles")
     if scheduler.get("loops") != run.get("loops"):
         fail("review/scheduler.json loops do not match metrics.run.loops")
     overlaps = scheduler.get("overlaps")

@@ -598,6 +598,10 @@ fn active_len_tracks_view_after_resize() {
         scheduler["overlaps"]["investigation_proof_overlap_ms"],
         metrics["run"]["investigation_proof_overlap_ms"]
     );
+    assert_eq!(
+        scheduler["scheduler_roles"],
+        metrics["run"]["scheduler_roles"]
+    );
     assert!(
         scheduler["phases"]
             .as_array()
@@ -635,6 +639,15 @@ fn active_len_tracks_view_after_resize() {
         "/run/investigation_proof_overlap_ms",
         "/run/model_proof_overlap_ms",
         "/run/proof_overlap_ms",
+        "/run/scheduler_roles/evidence/started_at_offset_ms",
+        "/run/scheduler_roles/evidence/finished_at_offset_ms",
+        "/run/scheduler_roles/evidence/wall_ms",
+        "/run/scheduler_roles/model/started_at_offset_ms",
+        "/run/scheduler_roles/model/finished_at_offset_ms",
+        "/run/scheduler_roles/model/wall_ms",
+        "/run/scheduler_roles/proof/started_at_offset_ms",
+        "/run/scheduler_roles/proof/finished_at_offset_ms",
+        "/run/scheduler_roles/proof/wall_ms",
         "/run/streams/coordination/started_at_offset_ms",
         "/run/streams/coordination/finished_at_offset_ms",
         "/run/streams/coordination/wall_ms",
@@ -1784,6 +1797,10 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert_eq!(
         scheduler["overlaps"]["investigation_proof_overlap_ms"],
         metrics["run"]["investigation_proof_overlap_ms"]
+    );
+    assert_eq!(
+        scheduler["scheduler_roles"],
+        metrics["run"]["scheduler_roles"]
     );
     let phases = scheduler["phases"]
         .as_array()
