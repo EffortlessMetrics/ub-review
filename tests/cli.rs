@@ -319,6 +319,22 @@ fn active_len_tracks_view_after_resize() {
                 })
         })
     }));
+    assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
+        tools.iter().any(|tool| {
+            tool["id"] == "coverage"
+                && tool["class"] == "coverage"
+                && tool["enabled"] == false
+                && tool["required_if"] == "manual"
+                && tool["planned_run"] == false
+                && tool["plan_reason"] == "disabled by config"
+                && tool["requires_lease"] == true
+                && tool["artifact_paths"].as_array().is_some_and(|paths| {
+                    paths
+                        .iter()
+                        .any(|path| path == "sensors/coverage/lcov.info")
+                })
+        })
+    }));
     let tool_status: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/tool-status.json"))?)?;
     assert_eq!(tool_status["schema"], "ub-review.tool_status.v1");
@@ -328,6 +344,15 @@ fn active_len_tracks_view_after_resize() {
                 && tool["planned_run"] == true
                 && tool["status"] == "skipped"
                 && tool["reason"] == "dry-run; sensor not executed"
+        })
+    }));
+    assert!(tool_status["tools"].as_array().is_some_and(|tools| {
+        tools.iter().any(|tool| {
+            tool["id"] == "coverage"
+                && tool["class"] == "coverage"
+                && tool["planned_run"] == false
+                && tool["status"] == "skipped"
+                && tool["reason"] == "disabled by config"
         })
     }));
     let root_resolved_tools: serde_json::Value =

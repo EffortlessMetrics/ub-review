@@ -811,6 +811,7 @@ enum ToolClass {
     Search,
     Workflow,
     Security,
+    Coverage,
     Test,
     Build,
     HeavyWitness,
@@ -4047,6 +4048,7 @@ fn sensor_order(id: &str) -> u8 {
         "osv-scanner" => 8,
         "cargo-audit" => 9,
         "cargo-deny" => 10,
+        "coverage" => 11,
         _ => 50,
     }
 }
@@ -4476,6 +4478,16 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--format".to_owned(),
             "json".to_owned(),
         ],
+        "coverage" => vec![
+            "cargo".to_owned(),
+            "llvm-cov".to_owned(),
+            "--workspace".to_owned(),
+            "--all-features".to_owned(),
+            "--locked".to_owned(),
+            "--lcov".to_owned(),
+            "--output-path".to_owned(),
+            dir.join("lcov.info").display().to_string(),
+        ],
         "gitleaks" => vec![
             "gitleaks".to_owned(),
             "detect".to_owned(),
@@ -4769,6 +4781,7 @@ fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "context.md".to_owned(),
         ]),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
+        "coverage" => outputs.push("lcov.info".to_owned()),
         _ => {}
     }
     outputs
@@ -14730,6 +14743,17 @@ fn builtin_tools() -> Vec<ToolPolicy> {
             false,
         ),
         tool(
+            "coverage",
+            "cargo",
+            ToolClass::Coverage,
+            6,
+            Trigger::Manual,
+            1_800,
+            256,
+            true,
+            false,
+        ),
+        tool(
             "osv-scanner",
             "osv-scanner",
             ToolClass::Security,
@@ -15429,6 +15453,44 @@ mod tests {
             commands
                 .iter()
                 .any(|command| command.argv.iter().any(|arg| arg.ends_with("context.md")))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_sensor_command_writes_lcov_artifact_when_enabled() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let out = root.join("out");
+        let plan = test_plan(vec![sensor_plan("coverage", "cargo", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "coverage")
+            .ok_or_else(|| anyhow::anyhow!("coverage sensor missing"))?;
+        let dir = out.join("sensors/coverage");
+        let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "cargo".to_owned(),
+                "llvm-cov".to_owned(),
+                "--workspace".to_owned(),
+                "--all-features".to_owned(),
+                "--locked".to_owned(),
+                "--lcov".to_owned(),
+                "--output-path".to_owned(),
+                dir.join("lcov.info").display().to_string(),
+            ]
+        );
+        assert_eq!(
+            super::sensor_outputs(sensor),
+            vec![
+                "stdout.txt".to_owned(),
+                "stderr.txt".to_owned(),
+                "lcov.info".to_owned()
+            ]
         );
         Ok(())
     }
