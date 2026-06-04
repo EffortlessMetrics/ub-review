@@ -14820,38 +14820,31 @@ fn render_pull_request_review_body(
                 && !is_verification_observation(observation)
         })
         .collect::<Vec<_>>();
-    let parked = summary_only_findings
-        .iter()
-        .filter(|finding| {
-            !is_pr_body_artifact_only_finding(finding)
-                && !is_pr_body_stale_for_current_diff(finding, diff)
-                && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
-                && is_parked_follow_up(finding)
-                && !summary_finding_matches_observations(finding, &observation_items)
-        })
-        .collect::<Vec<_>>();
-    let verification_questions = summary_only_findings
-        .iter()
-        .filter(|finding| {
+    let parked = unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
+        !is_pr_body_artifact_only_finding(finding)
+            && !is_pr_body_stale_for_current_diff(finding, diff)
+            && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+            && is_parked_follow_up(finding)
+            && !summary_finding_matches_observations(finding, &observation_items)
+    }));
+    let verification_questions =
+        unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && !is_parked_follow_up(finding)
                 && is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
-        })
-        .collect::<Vec<_>>();
-    let summary_concerns = summary_only_findings
-        .iter()
-        .filter(|finding| {
+        }));
+    let summary_concerns =
+        unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && !is_parked_follow_up(finding)
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
-        })
-        .collect::<Vec<_>>();
+        }));
     let has_specific_missing_evidence = !missing_observations.is_empty()
         || proof_receipts.iter().any(proof_receipt_is_missing_evidence);
     let proof_result_receipts = proof_receipts
@@ -15295,7 +15288,7 @@ fn diff_is_workflow_tool_pin_bump_only(patch: &str) -> bool {
 }
 
 fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
-    let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
+    let text = finding.reason.to_ascii_lowercase();
     text.contains("verify")
         || text.contains("verification")
         || text.contains("confirm")
@@ -15579,6 +15572,43 @@ fn text_is_verification_question(text: &str) -> bool {
         || text.contains("prove")
         || text.contains("proves")
         || text.contains("proven")
+}
+
+fn unique_summary_review_findings<'a>(
+    findings: impl IntoIterator<Item = &'a SummaryOnlyFinding>,
+) -> Vec<&'a SummaryOnlyFinding> {
+    let mut unique = Vec::<&SummaryOnlyFinding>::new();
+    let mut indexes = BTreeMap::<String, usize>::new();
+
+    for finding in findings {
+        let key = summary_finding_review_dedupe_key(finding);
+        if let Some(index) = indexes.get(&key).copied() {
+            if summary_finding_rank(finding) > summary_finding_rank(unique[index]) {
+                unique[index] = finding;
+            }
+        } else {
+            indexes.insert(key, unique.len());
+            unique.push(finding);
+        }
+    }
+
+    unique
+}
+
+fn summary_finding_review_dedupe_key(finding: &SummaryOnlyFinding) -> String {
+    let normalized = normalized_review_text(&reviewer_facing_pr_text(&finding.reason));
+    if normalized.chars().count() >= 24 {
+        normalized
+    } else {
+        format!("{}:{normalized}", finding.lane)
+    }
+}
+
+fn summary_finding_rank(finding: &SummaryOnlyFinding) -> (u8, u8) {
+    (
+        severity_rank(&finding.severity),
+        confidence_rank(&finding.confidence),
+    )
 }
 
 fn summary_finding_matches_observations(
@@ -24621,6 +24651,56 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("Needs one test-proof clarification before upstream."));
         assert!(!body.contains("witnessed old-main red run"));
         assert!(!body.contains("duplicate lane summary"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_dedupes_duplicate_summary_findings() {
+        let duplicate_reason = "The bare toThrow assertion is non-discriminating for the changed FFI offset path; strengthen it with the expected TypeError message.";
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: duplicate_reason.to_owned(),
+                evidence: "oracle lane transcript".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: duplicate_reason.to_owned(),
+                evidence: "red/green lane transcript".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "sibling-paths".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "Parked follow-up: sweep sibling FFI offset entry points for the same expect-to-error conversion.".to_owned(),
+                evidence: "sibling lane transcript".to_owned(),
+            },
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert_eq!(body.matches("bare toThrow assertion").count(), 1);
+        assert!(body.contains("## Confirmed findings"));
+        assert!(body.contains("## Parked follow-ups"));
+        assert!(body.contains("sweep sibling FFI offset entry points"));
+        assert!(!body.contains("oracle lane transcript"));
+        assert!(!body.contains("red/green lane transcript"));
         assert!(!has_standalone_approval_line(&body));
     }
 
