@@ -16019,6 +16019,29 @@ mod tests {
     }
 
     #[test]
+    fn action_smoke_workflow_matches_trusted_repo_trigger_contract() {
+        let workflow = include_str!("../.github/workflows/action-smoke.yml");
+        assert!(
+            workflow.contains("types: [opened, ready_for_review, labeled]"),
+            "action smoke should run default passes on opened/ready_for_review and keep labeled for explicit model smoke"
+        );
+        assert!(
+            !workflow.contains("synchronize"),
+            "action smoke must not spend a default pass on synchronize"
+        );
+        assert!(
+            !workflow.contains("reopened"),
+            "action smoke default trigger should match trusted repo pass triggers"
+        );
+        assert!(
+            workflow.contains(
+                "if: github.event_name != 'pull_request' || github.event.action != 'labeled'"
+            ),
+            "the local smoke job should skip label-only model-smoke opt-in events"
+        );
+    }
+
+    #[test]
     fn bun_config_loads_with_default_lanes_enabled() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../profiles/bun-ub-v0.toml"))?;
         config.merge_defaults();
@@ -16037,7 +16060,7 @@ mod tests {
             .get("cargo-allow")
             .ok_or_else(|| anyhow::anyhow!("cargo-allow tool policy missing"))?;
         assert!(cargo_allow.enabled);
-        assert_eq!(cargo_allow.default, Trigger::SourceExceptionChanged);
+        assert_eq!(cargo_allow.default, super::Trigger::SourceExceptionChanged);
         Ok(())
     }
 
