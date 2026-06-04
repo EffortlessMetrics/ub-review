@@ -6168,6 +6168,15 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
         "residual risk remains for human review",
         "bounded review",
         "## residual risk",
+        "cached prior observation",
+        "refuter demoted inline candidate",
+        "gate proof is pending",
+        "cannot perform from cached context",
+        "commit-existence/ancestry proof",
+        "upstream commit-existence",
+        "general bot output",
+        "pr-body contract hardening",
+        "actionlint ran ok",
         "lane transcript",
         "lane roster",
         "model lane roster",
@@ -15050,6 +15059,7 @@ fn observation_is_test_proof_decision_question(observation: &&ObservationGroup) 
 fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
     let reason = finding.reason.to_ascii_lowercase();
     let evidence = finding.evidence.to_ascii_lowercase();
+    let text = format!("{reason} {evidence}");
     reason.starts_with("inline guard rejected ")
         || reason.contains("severity_allowed=")
         || reason.contains("confidence_allowed=")
@@ -15068,6 +15078,7 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || (reason.contains("supply-chain tightening") && reason.contains("not widening"))
         || (reason.contains("passes core opposition tests")
             && reason.contains("remaining concerns"))
+        || is_pr_body_meta_review_noise(&text)
 }
 
 fn is_pr_body_stale_for_current_diff(finding: &SummaryOnlyFinding, diff: &DiffContext) -> bool {
@@ -15199,6 +15210,7 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
             && (text.contains("prefix collision") || text.contains("short-prefix")))
         || (text.contains("actionlint") && text.contains("sensor reports ok"))
         || (text.contains("actionlint") && text.contains("status=ok"))
+        || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
                 || (text.contains("cache key") && text.contains("full 40-hex"))
@@ -15224,7 +15236,7 @@ fn is_missing_evidence_observation(observation: &ObservationGroup) -> bool {
 }
 
 fn is_tool_status_only_gap(text: &str) -> bool {
-    (text.contains("sensor `") || text.contains(" sensor "))
+    (text.contains("sensor `") || text.contains(" sensor ") || text.contains("sensors:"))
         && (text.contains("missing")
             || text.contains("command not found")
             || text.contains("disabled"))
@@ -15232,6 +15244,25 @@ fn is_tool_status_only_gap(text: &str) -> bool {
         && !text.contains("red/green")
         && !text.contains("regression test")
         && !text.contains("changed-line coverage")
+}
+
+fn is_pr_body_meta_review_noise(text: &str) -> bool {
+    text.contains("cached prior observation")
+        || text.contains("refuter demoted inline candidate")
+        || text.contains("gate proof is pending")
+        || text.contains("cannot perform from cached context")
+        || text.contains("commit-existence/ancestry proof")
+        || text.contains("upstream commit-existence")
+        || text.contains("general bot output")
+        || (text.contains("the refutation claiming")
+            && text.contains("still matches current evidence"))
+        || (text.contains("pr-body contract hardening")
+            && text.contains("not verifiable from the repo diff"))
+        || (text.contains("cache key/uses ref")
+            && text.contains("40 hex")
+            && text.contains("non-zero"))
+        || (text.contains("sha were 39-hex") && text.contains("all-zero"))
+        || text.contains("actionlint ran ok")
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -22049,6 +22080,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Verification questions\n\n- Confirm the cached prior observation still matches; the refuter demoted inline candidate because Gate proof is pending.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("meta review prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Evidence gaps\n\n- Shared context hash and terminal state are available in artifacts.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -23706,6 +23746,13 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "Pin of EffortlessMetrics/ub-review to a specific commit SHA is supply-chain tightening and inherits that repo's default GITHUB_TOKEN scope; no new scope is requested in the workflow itself. Worth a one-line note for future audits that third-party action token scope is not visible here.".to_owned(),
                 evidence: "uses: EffortlessMetrics/ub-review@4dfbd9d7caeff4f506984c63cc36f248233206e6 with preset/profile inputs only; no permissions: override.".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "refuter demoted inline candidate at .github/workflows/ub-review-packet.yml:56: the PR packet contains no upstream commit-existence/ancestry proof, and the PR body says 'Gate proof is pending this PR's UB evidence packet.' Confirming reachability requires an external API call that the lane cannot perform from cached context.".to_owned(),
+                evidence: "uses: EffortlessMetrics/ub-review@4dfbd9d7caeff4f506984c63cc36f248233206e6 - only local diff evidence, no upstream commit proof".to_owned(),
+            },
         ];
         let mut tokmd_gap = test_observation(
             "sensor-tokmd",
@@ -23790,6 +23837,51 @@ UB_REVIEW_HTTP_STATUS:429
                 "high",
                 "cursor-trigger-stale",
             ),
+            test_observation(
+                "workflow-proof",
+                "PR-body contract hardening claimed for ccae442 is not verifiable from the repo diff itself; trust depends on upstream tag of EffortlessMetrics/ub-review@ccae442.",
+                "verification-question",
+                "open",
+                "medium",
+                "medium",
+                "pr-body-contract-meta",
+            ),
+            test_observation(
+                "workflow-opposition",
+                "Cache key/uses ref must be a single coherent bump; if SHA were 39-hex or all-zero the gate would be unsafe. Ccae442de05bb9330e5d45bbbebfd64c6c39ee93 is 40 hex and non-zero.",
+                "verification-question",
+                "open",
+                "medium",
+                "medium",
+                "sha-format-meta",
+            ),
+            test_observation(
+                "orchestrator-follow-up",
+                "The cached prior observation still matches the current PR evidence and is not reopened by the diff.",
+                "bug",
+                "open",
+                "low",
+                "medium",
+                "cached-prior-meta",
+            ),
+            test_observation(
+                "orchestrator-follow-up",
+                "The refutation claiming this PR is a benign SHA pin bump with no workflow posture impact still matches current evidence.",
+                "bug",
+                "open",
+                "low",
+                "medium",
+                "refutation-meta",
+            ),
+            test_observation(
+                "workflow-permissions",
+                "Actionlint ran ok; combined with disabled zizmor/gitleaks, security-relevant linting for this pin-only diff is partial but the diff class does not require them.",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "tool-status-only-gap",
+            ),
             tokmd_gap,
         ];
         let body = render_review_body(
@@ -23817,6 +23909,11 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("third-party action"));
         assert!(!body.contains("prefix collision"));
         assert!(!body.contains("tokmd"));
+        assert!(!body.contains("cached prior observation"));
+        assert!(!body.contains("refuter demoted inline candidate"));
+        assert!(!body.contains("Gate proof is pending"));
+        assert!(!body.contains("40 hex and non-zero"));
+        assert!(!body.contains("Actionlint ran ok"));
     }
 
     #[test]
