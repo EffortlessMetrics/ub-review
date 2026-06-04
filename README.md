@@ -380,6 +380,29 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `fail-on-post-error` | `false` | Fail the action when PR review posting fails. |
 | `github-summary` | `true` | Append running summary to job summary. |
 
+## Repo Config Proof Policy
+
+Custom configs can require proof in `intelligent-ci` mode. Matched requests are
+still routed through the central proof broker allowlist and runtime budget.
+
+```toml
+review_profile = "bun-ub-v0"
+profile = "gh-runner"
+
+[repo]
+kind = "rust"
+
+[[proof.required]]
+id = "cargo-check"
+languages = ["rust"]
+diff_classes = ["source-general", "source-ub"]
+command = "cargo check --workspace --locked"
+reason = "Required Rust workspace check for intelligent CI."
+cost = "focused-build"
+timeout_sec = 300
+required = true
+```
+
 ## Outputs
 
 | Output | Meaning |
