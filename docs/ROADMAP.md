@@ -670,7 +670,7 @@ Acceptance:
   on the standard image and visible on `PATH`;
 - `tokmd` is versioned for the Bun profile and emits on-diff `analyze`,
   compact `cockpit`, and bounded changed-file `context` receipts;
-- `tokmd analyze --preset bun-ub` is used for scoped on-diff analyze receipts;
+- `tokmd analyze --preset risk` is used for scoped on-diff analyze receipts;
 - `ub-review doctor --require-core-tools` fails image drift early;
 - `ub-review cache warm` writes a base-tree manifest keyed by base tree SHA,
   profile hash, and tool versions;
