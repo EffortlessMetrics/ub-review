@@ -219,6 +219,7 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(github_skip["status"], "skipped");
     assert_eq!(github_skip["review_payload_status"], "skipped_empty_smoke");
     assert_eq!(github_skip["terminal_state"], "artifact-only");
+    assert!(github_skip["github_review_json"].is_null());
     assert_eq!(github_skip["run_pass"], "opened");
     let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
     assert!(artifact_body.contains("## Confirmed findings"));
