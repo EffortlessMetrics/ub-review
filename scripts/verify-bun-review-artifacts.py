@@ -616,39 +616,57 @@ def require_run_loop_metrics(metrics: dict) -> None:
     run = metrics.get("run")
     if not isinstance(run, dict):
         fail("metrics.run is missing")
-    if run.get("concurrency_model") != "instrumented-sequential-v0":
+    if run.get("concurrency_model") != "profiled-stream-scheduler-v0":
         fail(f"metrics.run.concurrency_model is invalid: {run.get('concurrency_model')!r}")
+    if run.get("scheduler_profile") != "default-three-stream-v0":
+        fail(f"metrics.run.scheduler_profile is invalid: {run.get('scheduler_profile')!r}")
     if run.get("local_proof_wall_excludes_model_wait") is not True:
         fail("metrics.run.local_proof_wall_excludes_model_wait must be true")
     for field in [
+        "elapsed_wall_ms",
+        "coordination_wall_ms",
+        "investigation_wall_ms",
+        "proof_wall_ms",
+        "evidence_wall_ms",
         "model_wall_ms",
         "local_proof_wall_ms",
         "compiler_wall_ms",
         "model_call_duration_ms_sum",
         "proof_command_duration_ms_sum",
+        "investigation_proof_overlap_ms",
         "model_proof_overlap_ms",
+        "proof_overlap_ms",
     ]:
         require_non_negative_int(run, f"metrics.run.{field}", field)
+    streams = run.get("streams")
+    if not isinstance(streams, dict):
+        fail("metrics.run.streams is missing")
+    for stream_name in ["coordination", "investigation", "proof"]:
+        require_timing(streams, f"metrics.run.streams.{stream_name}", stream_name)
+    if run.get("coordination_wall_ms") != streams["coordination"].get("wall_ms"):
+        fail("metrics.run.coordination_wall_ms does not match metrics.run.streams.coordination.wall_ms")
+    if run.get("investigation_wall_ms") != streams["investigation"].get("wall_ms"):
+        fail("metrics.run.investigation_wall_ms does not match metrics.run.streams.investigation.wall_ms")
+    if run.get("proof_wall_ms") != streams["proof"].get("wall_ms"):
+        fail("metrics.run.proof_wall_ms does not match metrics.run.streams.proof.wall_ms")
     loops = run.get("loops")
     if not isinstance(loops, dict):
         fail("metrics.run.loops is missing")
-    for loop_name in ["model", "proof", "compiler"]:
-        loop = loops.get(loop_name)
-        if not isinstance(loop, dict):
-            fail(f"metrics.run.loops.{loop_name} is missing")
-        started = require_non_negative_int(
-            loop, f"metrics.run.loops.{loop_name}.started_at_offset_ms", "started_at_offset_ms"
-        )
-        finished = require_non_negative_int(
-            loop, f"metrics.run.loops.{loop_name}.finished_at_offset_ms", "finished_at_offset_ms"
-        )
-        wall = require_non_negative_int(
-            loop, f"metrics.run.loops.{loop_name}.wall_ms", "wall_ms"
-        )
-        if finished < started:
-            fail(f"metrics.run.loops.{loop_name} finished before it started")
-        if wall > finished - started and finished > started:
-            fail(f"metrics.run.loops.{loop_name} wall exceeds observed span")
+    for loop_name in ["evidence", "model", "proof", "compiler"]:
+        require_timing(loops, f"metrics.run.loops.{loop_name}", loop_name)
+
+
+def require_timing(container: dict, label: str, field: str) -> None:
+    timing = container.get(field)
+    if not isinstance(timing, dict):
+        fail(f"{label} is missing")
+    started = require_non_negative_int(timing, f"{label}.started_at_offset_ms", "started_at_offset_ms")
+    finished = require_non_negative_int(timing, f"{label}.finished_at_offset_ms", "finished_at_offset_ms")
+    wall = require_non_negative_int(timing, f"{label}.wall_ms", "wall_ms")
+    if finished < started:
+        fail(f"{label} finished before it started")
+    if wall > finished - started and finished > started:
+        fail(f"{label} wall exceeds observed span")
 
 
 def require_non_negative_int(container: dict, label: str, field: str) -> int:
