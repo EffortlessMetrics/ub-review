@@ -292,16 +292,18 @@ def is_workflow_trust_posture_review_noise(text: str) -> bool:
             or "github.token" in text
             or "malicious or compromised" in text
         )
-    )
+    ) or is_no_finding_workflow_pin_summary_noise(text)
 
 
 def is_unchanged_workflow_trust_posture_noise(text: str) -> bool:
     mentions_workflow_trust = (
         "upstream trust" in text
+        or "upstream sha trust" in text
         or "trust in upstream" in text
         or "malicious or compromised" in text
         or "would exfiltrate" in text
         or "reproducibly verified" in text
+        or "repo-level policy item" in text
         or "secrets.minimax" in text
         or "github.token" in text
         or "workflow-level permissions" in text
@@ -313,9 +315,12 @@ def is_unchanged_workflow_trust_posture_noise(text: str) -> bool:
         or "pre-existing" in text
         or "not a diff target" in text
         or "identical to prior" in text
+        or "identical in posture" in text
         or "no widened attack surface" in text
         or "zero new secret" in text
         or "zero new" in text
+        or "not a diff finding" in text
+        or "not a diff-introduced" in text
         or "no permission/trigger/pinning posture change" in text
         or "no permission" in text
         or "no permissions" in text
@@ -324,6 +329,33 @@ def is_unchanged_workflow_trust_posture_noise(text: str) -> bool:
         or "standing repo concern" in text
     )
     return mentions_workflow_trust and says_unchanged_or_out_of_scope
+
+
+def is_no_finding_workflow_pin_summary_noise(text: str) -> bool:
+    mentions_pin = (
+        "pinning" in text
+        or "sha-pinning" in text
+        or "per-action full-sha" in text
+        or "40-hex" in text
+        or "all-zero" in text
+    )
+    says_no_defect = (
+        "no pinning defect introduced" in text
+        or "pinning posture preserved" in text
+        or "sha-pinning control remains effective" in text
+        or "old pin fully absent" in text
+        or "pin is 40-hex non-zero" in text
+        or "matches expected sha-1 shape" in text
+    )
+    says_not_current_diff = (
+        "not a diff finding" in text
+        or "not a diff-introduced" in text
+        or "not introduced by this" in text
+        or "identical in posture" in text
+        or "repo-level policy item" in text
+        or "unchanged from prior pin" in text
+    )
+    return mentions_pin and (says_no_defect or says_not_current_diff)
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -1321,6 +1353,7 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or ("actionlint" in text and "sensor reports ok" in text)
         or ("actionlint" in text and "status=ok" in text)
         or is_unchanged_workflow_trust_posture_noise(text)
+        or is_no_finding_workflow_pin_summary_noise(text)
         or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
@@ -3562,6 +3595,20 @@ def run_self_tests() -> None:
             pathlib.Path("review/github-review.json"),
         ),
     )
+    expect_self_test_failure(
+        "no-defect pinning posture prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Confirmed findings\n\n"
+                "- No pinning defect introduced. The only standing concern is upstream "
+                "SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical "
+                "in posture to the prior pin and is a repo-level policy item, not a "
+                "diff finding."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
     meta_observations = [
         self_test_observation(
             "obsgrp-meta-proof",
@@ -3586,6 +3633,17 @@ def run_self_tests() -> None:
             "actionlint-status",
             "Actionlint ran ok; no reviewer-value change remains.",
             "missing-evidence",
+        ),
+        self_test_observation(
+            "obsgrp-pinning-format",
+            "pinning-format-refuted",
+            (
+                "Pinning format could be 39-hex or all-zero making the gate unsafe.; "
+                "refuted because: e76ccbcbe94258fd03cf6ddb4e1536833cad610d "
+                "is 40 hex characters, non-zero, and matches expected SHA-1 shape; "
+                "the gate's SHA-pinning control remains effective."
+            ),
+            "false-premise",
         ),
     ]
     plan = expected_orchestrator_plan([], meta_observations, [], [])

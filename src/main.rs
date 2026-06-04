@@ -15154,6 +15154,7 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || (reason.contains("passes core opposition tests")
             && reason.contains("remaining concerns"))
         || is_unchanged_workflow_trust_posture_noise(&text)
+        || is_no_finding_workflow_pin_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15332,6 +15333,7 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || (text.contains("actionlint") && text.contains("sensor reports ok"))
         || (text.contains("actionlint") && text.contains("status=ok"))
         || is_unchanged_workflow_trust_posture_noise(&text)
+        || is_no_finding_workflow_pin_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15389,10 +15391,12 @@ fn is_pr_body_meta_review_noise(text: &str) -> bool {
 
 fn is_unchanged_workflow_trust_posture_noise(text: &str) -> bool {
     let mentions_workflow_trust = text.contains("upstream trust")
+        || text.contains("upstream sha trust")
         || text.contains("trust in upstream")
         || text.contains("malicious or compromised")
         || text.contains("would exfiltrate")
         || text.contains("reproducibly verified")
+        || text.contains("repo-level policy item")
         || text.contains("secrets.minimax")
         || text.contains("github.token")
         || text.contains("workflow-level permissions")
@@ -15402,9 +15406,12 @@ fn is_unchanged_workflow_trust_posture_noise(text: &str) -> bool {
         || text.contains("pre-existing")
         || text.contains("not a diff target")
         || text.contains("identical to prior")
+        || text.contains("identical in posture")
         || text.contains("no widened attack surface")
         || text.contains("zero new secret")
         || text.contains("zero new")
+        || text.contains("not a diff finding")
+        || text.contains("not a diff-introduced")
         || text.contains("no permission/trigger/pinning posture change")
         || text.contains("no permission")
         || text.contains("no permissions")
@@ -15421,6 +15428,28 @@ fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
             && (text.contains("secrets.minimax")
                 || text.contains("github.token")
                 || text.contains("malicious or compromised")))
+        || is_no_finding_workflow_pin_summary_noise(text)
+}
+
+fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
+    let mentions_pin = text.contains("pinning")
+        || text.contains("sha-pinning")
+        || text.contains("per-action full-sha")
+        || text.contains("40-hex")
+        || text.contains("all-zero");
+    let says_no_defect = text.contains("no pinning defect introduced")
+        || text.contains("pinning posture preserved")
+        || text.contains("sha-pinning control remains effective")
+        || text.contains("old pin fully absent")
+        || text.contains("pin is 40-hex non-zero")
+        || text.contains("matches expected sha-1 shape");
+    let says_not_current_diff = text.contains("not a diff finding")
+        || text.contains("not a diff-introduced")
+        || text.contains("not introduced by this")
+        || text.contains("identical in posture")
+        || text.contains("repo-level policy item")
+        || text.contains("unchanged from prior pin");
+    mentions_pin && (says_no_defect || says_not_current_diff)
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -22351,6 +22380,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Confirmed findings\n\n- No pinning defect introduced. The only standing concern is upstream SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical in posture to the prior pin and is a repo-level policy item, not a diff finding.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("no-defect pinning prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Evidence gaps\n\n- Shared context hash and terminal state are available in artifacts.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -24022,6 +24060,13 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned(),
                 evidence: "The diff is an atomic ub-review SHA/cache-key bump; the with: block is unchanged.".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "No pinning defect introduced. The only standing concern is upstream SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical in posture to the prior pin and is a repo-level policy item, not a diff finding.".to_owned(),
+                evidence: "Per-action full-SHA pinning preserved; old pin fully removed; 3 replacement sites consistent; actionlint ok; workflow file diff is 4 lines, no perm/trigger change.".to_owned(),
+            },
         ];
         let mut tokmd_gap = test_observation(
             "sensor-tokmd",
@@ -24060,6 +24105,15 @@ UB_REVIEW_HTTP_STATUS:429
                 "medium",
                 "medium-high",
                 "wf-pin-secrets-surface",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "Pinning format could be 39-hex or all-zero making the gate unsafe.; refuted because: e76ccbcbe94258fd03cf6ddb4e1536833cad610d is 40 hex characters, non-zero, and matches expected SHA-1 shape; the gate's SHA-pinning control remains effective.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "false-premise:workflow-pinning",
             ),
             test_observation(
                 "orchestrator-follow-up",
@@ -24214,6 +24268,10 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("does not eliminate upstream trust"));
         assert!(!body.contains("pre-existing, not a diff target"));
         assert!(!body.contains("standing-repo concern"));
+        assert!(!body.contains("No pinning defect introduced"));
+        assert!(!body.contains("repo-level policy item"));
+        assert!(!body.contains("Pinning format could be 39-hex"));
+        assert!(!body.contains("SHA-pinning control remains effective"));
     }
 
     #[test]
