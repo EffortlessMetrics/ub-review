@@ -5902,7 +5902,11 @@ fn write_review_artifacts(
         &observations,
         &review.proof_receipts,
     );
-    append_follow_up_evidence_witnesses(&mut witnesses, &follow_up_evidence);
+    append_follow_up_evidence_witnesses(
+        &mut witnesses,
+        &follow_up_evidence,
+        &review.proof_receipts,
+    );
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -6969,6 +6973,7 @@ fn build_witness_records(
 fn append_follow_up_evidence_witnesses(
     witnesses: &mut Vec<WitnessRecord>,
     evidence: &FollowUpEvidenceArtifact,
+    proof_receipts: &[ProofReceipt],
 ) {
     for comment in &evidence.inline_comments {
         witnesses.push(witness_record(WitnessRecordInput {
@@ -7025,20 +7030,39 @@ fn append_follow_up_evidence_witnesses(
         }));
     }
     for request in &evidence.proof_requests {
+        let matched_receipt = proof_receipt_for_request(proof_receipts, &request.id);
+        let (status, mut request_evidence, proof_receipt_id) = match matched_receipt {
+            Some(receipt) => (
+                witness_status_for_proof_receipt(receipt),
+                proof_receipt_witness_evidence(receipt),
+                Some(receipt.id.clone()),
+            ),
+            None => ("needs-witness", vec![request.command.clone()], None),
+        };
+        request_evidence.insert(0, format!("Follow-up proof request: {}", request.command));
         witnesses.push(witness_record(WitnessRecordInput {
-            status: "needs-witness",
+            status,
             kind: "proof-request",
             source: "follow-up-proof-request",
             claim: &request.reason,
             dedupe_key: &format!("follow-up-proof-request:{}", request.id),
-            evidence: vec![request.command.clone()],
+            evidence: request_evidence,
             lane: Some(request.lane.clone()),
             path: None,
             line: None,
             observation_id: None,
-            proof_receipt_id: None,
+            proof_receipt_id,
         }));
     }
+}
+
+fn proof_receipt_for_request<'a>(
+    proof_receipts: &'a [ProofReceipt],
+    request_id: &str,
+) -> Option<&'a ProofReceipt> {
+    proof_receipts
+        .iter()
+        .find(|receipt| receipt.request_ids.iter().any(|id| id == request_id))
 }
 
 fn build_candidate_records(
@@ -25592,7 +25616,7 @@ index 1111111..2222222 100644
         append_follow_up_proof_requests(&mut canonical_proof_requests, &evidence);
         assert_eq!(canonical_proof_requests.len(), 1);
         let mut witnesses = Vec::new();
-        append_follow_up_evidence_witnesses(&mut witnesses, &evidence);
+        append_follow_up_evidence_witnesses(&mut witnesses, &evidence, &[]);
         assert_eq!(witnesses.len(), 5);
         assert!(witnesses.iter().any(|witness| {
             witness.source == "follow-up-inline-comment"
@@ -25623,6 +25647,30 @@ index 1111111..2222222 100644
                     .iter()
                     .any(|item| item.contains("bun test test/js/bun/fs/fs.write.test.ts"))
         }));
+
+        let mut receipt = test_red_green_proof_receipt("discriminating", "failed");
+        receipt.request_ids = vec![evidence.proof_requests[0].id.clone()];
+        let mut linked_witnesses = Vec::new();
+        append_follow_up_evidence_witnesses(&mut linked_witnesses, &evidence, &[receipt.clone()]);
+        let linked_request_witness = linked_witnesses
+            .iter()
+            .find(|witness| witness.source == "follow-up-proof-request")
+            .ok_or_else(|| anyhow::anyhow!("missing linked follow-up proof request witness"))?;
+        assert_eq!(linked_request_witness.status, "tool-confirmed");
+        assert_eq!(
+            linked_request_witness.proof_receipt_id.as_deref(),
+            Some(receipt.id.as_str())
+        );
+        assert!(linked_request_witness.evidence.iter().any(|item| {
+            item.contains("Follow-up proof request")
+                && item.contains("bun test test/js/bun/fs/fs.write.test.ts")
+        }));
+        assert!(
+            linked_request_witness
+                .evidence
+                .iter()
+                .any(|item| item.contains("base-plus-tests"))
+        );
 
         write_follow_up_output_artifacts(temp.path(), &outputs)?;
         write_follow_up_evidence_artifact(temp.path(), &evidence)?;
