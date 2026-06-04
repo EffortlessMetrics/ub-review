@@ -10,15 +10,30 @@ bundle="${UB_REVIEW_TOOL_BUNDLE:-core}"
 install_cargo_bin() {
   local bin="$1"
   local crate="$2"
+  local version="${3:-}"
   if command -v "$bin" >/dev/null 2>&1; then
-    echo "::notice::$bin already available"
-    return 0
+    if [[ -n "$version" ]]; then
+      local current_version
+      current_version="$("$bin" --version 2>/dev/null || true)"
+      if [[ "$current_version" == *"$version"* ]]; then
+        echo "::notice::$bin $version already available"
+        return 0
+      fi
+      echo "::notice::$bin is available but not $version; reinstalling $crate $version"
+    else
+      echo "::notice::$bin already available"
+      return 0
+    fi
   fi
-  echo "::group::cargo install $crate"
-  if cargo install "$crate" --locked; then
+  local install_args=("$crate" "--locked")
+  if [[ -n "$version" ]]; then
+    install_args+=("--version" "$version" "--force")
+  fi
+  echo "::group::cargo install ${install_args[*]}"
+  if cargo install "${install_args[@]}"; then
     echo "::notice::installed $bin"
   else
-    echo "::warning::could not install $crate; $bin sensor will be skipped"
+    echo "::warning::could not install $crate${version:+ $version}; $bin sensor will be skipped"
   fi
   echo "::endgroup::"
 }
@@ -71,7 +86,8 @@ case "$bundle" in
     echo "::notice::UB_REVIEW_TOOL_BUNDLE=none; not installing sensors"
     ;;
   core|bun-fast|full)
-    install_cargo_bin tokmd tokmd
+    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
+    install_cargo_bin tokmd tokmd "$tokmd_version"
     install_cargo_bin cargo-allow cargo-allow
     install_cargo_bin ripr ripr
     install_cargo_bin unsafe-review unsafe-review
@@ -80,7 +96,8 @@ case "$bundle" in
     ;;
   *)
     echo "::warning::unknown UB_REVIEW_TOOL_BUNDLE=$bundle; using core"
-    install_cargo_bin tokmd tokmd
+    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
+    install_cargo_bin tokmd tokmd "$tokmd_version"
     install_cargo_bin cargo-allow cargo-allow
     install_cargo_bin ripr ripr
     install_cargo_bin unsafe-review unsafe-review
