@@ -14781,6 +14781,7 @@ fn render_pull_request_review_body(
                     proof_receipts,
                     observation,
                 )
+                && !diff_structurally_answers_observation_test_witness_question(diff, observation)
         })
         .collect::<Vec<_>>();
     let refuted_observations = pr_observation_items
@@ -14824,6 +14825,7 @@ fn render_pull_request_review_body(
         !is_pr_body_artifact_only_finding(finding)
             && !is_pr_body_stale_for_current_diff(finding, diff)
             && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+            && !diff_structurally_answers_summary_test_witness_question(diff, finding)
             && is_parked_follow_up(finding)
             && !summary_finding_matches_observations(finding, &observation_items)
     }));
@@ -14832,6 +14834,7 @@ fn render_pull_request_review_body(
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+                && !diff_structurally_answers_summary_test_witness_question(diff, finding)
                 && !is_parked_follow_up(finding)
                 && is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
@@ -14841,6 +14844,7 @@ fn render_pull_request_review_body(
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+                && !diff_structurally_answers_summary_test_witness_question(diff, finding)
                 && !is_parked_follow_up(finding)
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
@@ -15049,6 +15053,80 @@ fn proof_receipts_answer_observation_test_witness_question(
     }
     let text = format!("{} {}", observation.claim, observation.evidence.join(" "));
     proof_receipts_answer_test_witness_question(proof_receipts, &text)
+}
+
+fn diff_structurally_answers_summary_test_witness_question(
+    diff: &DiffContext,
+    finding: &SummaryOnlyFinding,
+) -> bool {
+    if lane_is_source_route(&finding.lane) {
+        return false;
+    }
+    let text = format!("{} {}", finding.reason, finding.evidence);
+    diff_structurally_answers_test_witness_question(diff, &text)
+}
+
+fn diff_structurally_answers_observation_test_witness_question(
+    diff: &DiffContext,
+    observation: &ObservationGroup,
+) -> bool {
+    if observation
+        .lanes
+        .iter()
+        .any(|lane| lane_is_source_route(lane))
+        || kind_is_source_route_gap(&observation.kind)
+    {
+        return false;
+    }
+    if !matches!(
+        observation.kind.as_str(),
+        "missing-evidence" | "verification-question" | "test-gap"
+    ) {
+        return false;
+    }
+    let text = format!("{} {}", observation.claim, observation.evidence.join(" "));
+    diff_structurally_answers_test_witness_question(diff, &text)
+}
+
+fn diff_structurally_answers_test_witness_question(diff: &DiffContext, text: &str) -> bool {
+    text_requests_focused_test_witness(text)
+        && diff_replaces_abort_with_recoverable_error(&diff.patch)
+}
+
+fn diff_replaces_abort_with_recoverable_error(patch: &str) -> bool {
+    let mut removed_abort_path = false;
+    let mut added_recoverable_error_path = false;
+
+    for line in patch.lines() {
+        if line.starts_with("---") || line.starts_with("+++") {
+            continue;
+        }
+        if let Some(removed) = line.strip_prefix('-') {
+            removed_abort_path |= line_mentions_abort_path(removed);
+        } else if let Some(added) = line.strip_prefix('+') {
+            added_recoverable_error_path |= line_mentions_recoverable_error_path(added);
+        }
+    }
+
+    removed_abort_path && added_recoverable_error_path
+}
+
+fn line_mentions_abort_path(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    line.contains(".expect(")
+        || line.contains("panic!(")
+        || line.contains("abort(")
+        || line.contains("unreachable!(")
+}
+
+fn line_mentions_recoverable_error_path(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    line.contains("map_err")
+        || line.contains("throw")
+        || line.contains("typeerror")
+        || line.contains("jserror")
+        || line.contains("return err")
+        || line.contains("return error")
 }
 
 fn lane_is_source_route(lane: &str) -> bool {
@@ -24741,6 +24819,89 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.contains("## Verification questions"));
         assert!(body.contains("Confirm the new test still needs a base+tests red/green witness."));
         assert!(body.contains("Needs one test-proof clarification before upstream."));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_drops_structurally_answered_red_green_question() {
+        let mut diff = test_diff();
+        diff.patch = "\
+diff --git a/src/ffi.rs b/src/ffi.rs
+index 1111111..2222222 100644
+--- a/src/ffi.rs
++++ b/src/ffi.rs
+@@ -1,3 +1,3 @@
+-let offset = usize::try_from(raw_offset).expect(\"offset must fit\");
++let offset = usize::try_from(raw_offset).map_err(|_| TypeError::new(\"offset must fit\"))?;
+"
+        .to_owned();
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "tests-red-green".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason:
+                "The added regression still needs base+tests red/green proof; old code was not run."
+                    .to_owned(),
+            evidence: "lane transcript".to_owned(),
+        }];
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty(), "{body}");
+    }
+
+    #[test]
+    fn structural_red_green_does_not_answer_source_route_question() {
+        let mut diff = test_diff();
+        diff.patch = "\
+diff --git a/src/ffi.rs b/src/ffi.rs
+index 1111111..2222222 100644
+--- a/src/ffi.rs
++++ b/src/ffi.rs
+@@ -1,3 +1,3 @@
+-let offset = usize::try_from(raw_offset).expect(\"offset must fit\");
++let offset = usize::try_from(raw_offset).map_err(|_| TypeError::new(\"offset must fit\"))?;
+"
+        .to_owned();
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "source-route".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Confirm the base+tests red/green proof reaches the patched FFI offset route."
+                .to_owned(),
+            evidence: "route lane transcript".to_owned(),
+        }];
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains("Confirm the base+tests red/green proof reaches"));
         assert!(!has_standalone_approval_line(&body));
     }
 
