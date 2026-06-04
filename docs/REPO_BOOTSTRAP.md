@@ -34,10 +34,10 @@ using `examples/bun/.github/workflows/ub-review-packet.yml` from this repository
 The Bun gate should use a verified commit SHA:
 
 ```yaml
-uses: EffortlessMetrics/ub-review@7b969e53b58d7b2a32db9006f1f2f43916fc2134
+uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
 ```
 
-The current known-good pin is `7b969e53b58d7b2a32db9006f1f2f43916fc2134`.
+The current known-good pin is `da14100f862610477e27948719bf5f0d222d27e6`.
 Move it only after a draft Bun UB PR proves:
 
 - one grouped Pull Request Review is posted or a `post-error.json` receipt explains why not;

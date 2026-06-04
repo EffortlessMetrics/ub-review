@@ -4,7 +4,7 @@
 repositories.
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@7b969e53b58d7b2a32db9006f1f2f43916fc2134
+- uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
   with:
     preset: bun-ub
     profile: gh-runner
@@ -13,8 +13,8 @@ repositories.
 ```
 
 Use a full commit SHA for the Bun gate. The current known-good pin is
-`7b969e53b58d7b2a32db9006f1f2f43916fc2134`, validated by
-`EffortlessSteven/bun#46`. Tagged action refs use `install-mode: auto` to try
+`da14100f862610477e27948719bf5f0d222d27e6`, validated by
+`EffortlessSteven/bun#47`. Tagged action refs use `install-mode: auto` to try
 the Linux x64 release asset `ub-review-x86_64-unknown-linux-gnu.tar.gz` first,
 then fall back to a source build when the asset is not available. Pushing a
 `v*` tag in this repository builds and publishes that archive plus its `.sha256`
