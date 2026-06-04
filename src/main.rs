@@ -23769,6 +23769,7 @@ UB_REVIEW_HTTP_STATUS:429
         let plan = test_plan(Vec::new());
         let diff = test_diff();
         let mut args = test_run_args(out.clone());
+        args.run_pass = super::RunPass::Manual;
         args.model_mode = ModelMode::Off;
         let event_log = EventLog::open(&out.join("events.ndjson"))?;
         let run_started = Instant::now();
