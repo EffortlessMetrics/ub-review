@@ -5164,6 +5164,22 @@ fn write_review_artifacts(
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
     write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
     append_follow_up_proof_requests(&mut review.proof_requests, &follow_up_evidence);
+    let follow_up_proof_result = run_follow_up_proof_broker_v0(
+        root,
+        out,
+        diff,
+        profile,
+        &follow_up_evidence.proof_requests,
+        &review.proof_receipts,
+        &review.resource_leases,
+        args,
+    )?;
+    review
+        .proof_receipts
+        .extend(follow_up_proof_result.proof_receipts);
+    review
+        .resource_leases
+        .extend(follow_up_proof_result.resource_leases);
     let mut compiler_summary_only_findings = review.summary_only_findings.clone();
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
     let mut compiler_observations = review.observations.clone();
@@ -7726,6 +7742,124 @@ fn run_proof_broker_v0(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
 )]
+fn run_follow_up_proof_broker_v0(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+    existing_receipts: &[ProofReceipt],
+    existing_leases: &[ResourceLease],
+    args: &RunArgs,
+) -> Result<ProofBrokerResult> {
+    let budget = remaining_focused_proof_budget(proof_budget(profile)?, existing_leases);
+    let tasks = unreceipted_focused_test_tasks(
+        focused_test_candidates_from_requests(proof_requests),
+        existing_receipts,
+    );
+    run_follow_up_proof_broker_v0_with_runner(
+        root,
+        out,
+        diff,
+        profile,
+        args,
+        budget,
+        tasks,
+        run_command_to_files,
+        prepare_base_plus_tests_worktree,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
+fn run_follow_up_proof_broker_v0_with_runner<F, G>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    args: &RunArgs,
+    budget: ProofBudget,
+    tasks: Vec<FocusedTestTask>,
+    runner: F,
+    prepare_base_plus_tests: G,
+) -> Result<ProofBrokerResult>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
+{
+    run_focused_red_green_proof_tasks_with_runner(
+        root,
+        out,
+        diff,
+        profile,
+        args,
+        budget,
+        tasks,
+        runner,
+        prepare_base_plus_tests,
+    )
+}
+
+fn remaining_focused_proof_budget(
+    mut budget: ProofBudget,
+    existing_leases: &[ResourceLease],
+) -> ProofBudget {
+    let focused_leases = existing_leases
+        .iter()
+        .filter(|lease| lease.kind == "focused-test")
+        .collect::<Vec<_>>();
+    if focused_leases
+        .iter()
+        .any(|lease| lease.status == "exhausted")
+    {
+        budget.max_focused_test_files = 0;
+        budget.max_focused_tests = 0;
+        budget.max_total_seconds = 0;
+        return budget;
+    }
+
+    let granted = focused_leases
+        .iter()
+        .filter(|lease| lease.status == "granted")
+        .count();
+    let granted_seconds = focused_leases
+        .iter()
+        .filter(|lease| lease.status == "granted")
+        .map(|lease| lease.timeout_sec)
+        .sum::<u64>();
+    budget.max_focused_tests = budget.max_focused_tests.saturating_sub(granted);
+    budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted);
+    budget.max_total_seconds = budget.max_total_seconds.saturating_sub(granted_seconds);
+    budget
+}
+
+fn unreceipted_focused_test_tasks(
+    tasks: Vec<FocusedTestTask>,
+    existing_receipts: &[ProofReceipt],
+) -> Vec<FocusedTestTask> {
+    let existing_ids = existing_receipts
+        .iter()
+        .map(|receipt| receipt.id.clone())
+        .collect::<BTreeSet<_>>();
+    tasks
+        .into_iter()
+        .filter(|task| !existing_ids.contains(&task.id))
+        .collect()
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn run_focused_red_green_proof_tasks_with_runner<F, G>(
     root: &Path,
     out: &Path,
@@ -8269,12 +8403,27 @@ fn focused_test_candidates_from_diff(
             }
         }
     }
-    for group in &request_groups {
+    merge_focused_test_request_group_tasks(&mut tasks, &request_groups);
+    tasks
+}
+
+fn focused_test_candidates_from_requests(proof_requests: &[ProofRequest]) -> Vec<FocusedTestTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
+    merge_focused_test_request_group_tasks(&mut tasks, &request_groups);
+    tasks
+}
+
+fn merge_focused_test_request_group_tasks(
+    tasks: &mut Vec<FocusedTestTask>,
+    request_groups: &[ProofRequestGroup],
+) {
+    for group in request_groups {
         let Some(target) = focused_test_request_target(group) else {
             continue;
         };
         merge_focused_test_task(
-            &mut tasks,
+            tasks,
             FocusedTestTask {
                 id: focused_test_task_id(
                     &target.file,
@@ -8289,7 +8438,6 @@ fn focused_test_candidates_from_diff(
             },
         );
     }
-    tasks
 }
 
 fn focused_proof_budget_allows_next(
@@ -11773,11 +11921,10 @@ Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure 
 }
 
 fn lane_specific_prompt_guidance(lane: &LanePlan) -> &'static str {
-    match lane.id.as_str() {
-        "tests" | "tests-oracle" => {
-            "Convergence calibration: batch every material test-oracle weakness you can substantiate in this pass; classify correctness/oracle gaps as blocker/high/medium and submaterial polish as low advisory or parked-follow-up. If the test is red/green-correct or proof receipts answer the concern, emit a resolved-check or failed_objection instead of a fresh candidate finding. Do not drip-feed one nit per pass."
-        }
-        _ => "",
+    if lane.id == "tests" || lane.id.starts_with("tests-") {
+        "Convergence calibration: batch every material test-oracle weakness you can substantiate in this pass; classify correctness/oracle gaps as blocker/high/medium and submaterial polish as low advisory or parked-follow-up. If the test is red/green-correct or proof receipts answer the concern, emit a resolved-check or failed_objection instead of a fresh candidate finding. Do not drip-feed one nit per pass."
+    } else {
+        ""
     }
 }
 
@@ -15340,19 +15487,19 @@ mod tests {
         build_witness_records, builtin_profiles, cap_review_body, classify_diff,
         classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
         collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, default_lanes, direct_minimax_spec,
-        extract_model_content, focused_test_tasks_from_diff, follow_up_evidence_from_outputs,
-        follow_up_model_lane_id, follow_up_output_record, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, model_api_url, model_assignments,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_budget, proof_lease_budget,
-        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
+        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
+        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
         right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
         run_sensor, runtime_profile_from_toml, runtime_profile_override, sensor_job_count,
-        sha256_hex, split_curl_http_status, validate_github_review_payload,
+        sha256_hex, split_curl_http_status, standard_minimax_lanes, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate,
         validate_pr_review_body_policy, validate_run_args, validate_summary_only_candidate,
         wait_for_child_output_files, write_candidate_artifacts, write_follow_up_evidence_artifact,
@@ -15449,19 +15596,26 @@ mod tests {
 
     #[test]
     fn tests_oracle_prompt_batches_oracle_critique_and_convergence() -> Result<()> {
-        let lane = default_lanes()
-            .into_iter()
-            .find(|lane| lane.id == "tests")
-            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let spec = direct_minimax_spec(&args);
-        let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
+        for lane in [
+            standard_minimax_lanes()
+                .into_iter()
+                .find(|lane| lane.id == "tests-oracle")
+                .ok_or_else(|| anyhow::anyhow!("tests-oracle lane missing"))?,
+            deep_minimax_lanes()
+                .into_iter()
+                .find(|lane| lane.id == "tests-oracle-strength")
+                .ok_or_else(|| anyhow::anyhow!("tests-oracle-strength lane missing"))?,
+        ] {
+            let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
 
-        assert!(prompt.contains("batch every material test-oracle weakness"));
-        assert!(prompt.contains("submaterial polish as low advisory or parked-follow-up"));
-        assert!(prompt.contains("red/green-correct or proof receipts answer the concern"));
-        assert!(prompt.contains("resolved-check or failed_objection"));
-        assert!(prompt.contains("Do not drip-feed one nit per pass"));
+            assert!(prompt.contains("batch every material test-oracle weakness"));
+            assert!(prompt.contains("submaterial polish as low advisory or parked-follow-up"));
+            assert!(prompt.contains("red/green-correct or proof receipts answer the concern"));
+            assert!(prompt.contains("resolved-check or failed_objection"));
+            assert!(prompt.contains("Do not drip-feed one nit per pass"));
+        }
         Ok(())
     }
 
@@ -17374,6 +17528,191 @@ index 1111111..2222222 100644
         );
         assert!(proof_plan.contains("result=`discriminating`"));
         assert!(!proof_plan.contains("No proof broker commands were executed"));
+        Ok(())
+    }
+
+    #[test]
+    fn follow_up_proof_broker_executes_request_only_focused_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,2 +1,3 @@
+ pub fn route() {}
++pub fn patched_route() {}
+"
+            .to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::SourceGeneral,
+        };
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-follow-up-001".to_owned(),
+            lane: "orchestrator-follow-up-route-proof".to_owned(),
+            requested_by: vec!["orchestrator-follow-up-route-proof".to_owned()],
+            command: "bun test test/js/bun/fs/fs.write.test.ts -t route".to_owned(),
+            reason: "Follow-up asked for a route witness.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+        let tasks = super::focused_test_candidates_from_requests(&proof_requests);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].file, "test/js/bun/fs/fs.write.test.ts");
+        assert_eq!(tasks[0].request_ids, vec!["proof-follow-up-001"]);
+
+        let args = test_run_args(out.clone());
+        let prepared_base_root = base_root.clone();
+        let mut commands = Vec::<String>::new();
+        let proof_result = super::run_follow_up_proof_broker_v0_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, argv, env, _timeout, stdout, stderr| {
+                commands.push(command_display(argv));
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(if is_base { 1 } else { 0 }),
+                    timed_out: false,
+                    success: !is_base,
+                    reason: "completed".to_owned(),
+                    duration_ms: 42,
+                })
+            },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
+        )?;
+
+        assert_eq!(commands.len(), 2);
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        assert_eq!(proof_result.resource_leases[0].status, "granted");
+        let receipt = &proof_result.proof_receipts[0];
+        assert_eq!(receipt.kind, "focused-red-green");
+        assert_eq!(receipt.result, "discriminating");
+        assert_eq!(
+            receipt.requested_by,
+            vec!["orchestrator-follow-up-route-proof".to_owned()]
+        );
+        assert_eq!(receipt.request_ids, vec!["proof-follow-up-001"]);
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[1].status, "failed");
+        Ok(())
+    }
+
+    #[test]
+    fn follow_up_proof_broker_uses_remaining_focused_proof_budget() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-follow-up-002".to_owned(),
+            lane: "orchestrator-follow-up-tests-proof".to_owned(),
+            requested_by: vec!["orchestrator-follow-up-tests-proof".to_owned()],
+            command: "bun test test/js/bun/md/md-edge-cases.test.ts -t snapshots".to_owned(),
+            reason: "Follow-up asked for a second proof.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+        let existing_leases = vec![ResourceLease {
+            schema: "ub-review.resource_lease.v1".to_owned(),
+            id: "lease-proof-red-green-existing".to_owned(),
+            kind: "focused-test".to_owned(),
+            consumer: "proof-red-green-existing".to_owned(),
+            status: "granted".to_owned(),
+            reason: "focused red/green proof lease granted by runtime profile".to_owned(),
+            cpu: 2,
+            memory_mb: 2048,
+            disk_mb: 1024,
+            timeout_sec: 600,
+            network: false,
+            scratch: true,
+            worktree: Some("base-plus-tests".to_owned()),
+            command: Some("head: bun bd test existing; base+tests: bun test existing".to_owned()),
+        }];
+        let remaining = super::remaining_focused_proof_budget(
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 1,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            &existing_leases,
+        );
+        assert_eq!(remaining.max_focused_tests, 0);
+        assert_eq!(remaining.max_focused_test_files, 2);
+        assert_eq!(remaining.max_total_seconds, 0);
+
+        let args = test_run_args(out.clone());
+        let tasks = super::focused_test_candidates_from_requests(&proof_requests);
+        let mut commands = Vec::<String>::new();
+        let proof_result = super::run_follow_up_proof_broker_v0_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            remaining,
+            tasks,
+            |_root, argv, _env, _timeout, _stdout, _stderr| {
+                commands.push(command_display(argv));
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "should not run".to_owned(),
+                    duration_ms: 0,
+                })
+            },
+            |_root, _out, _diff| {
+                unreachable!("base+tests worktree should not be prepared after budget is spent")
+            },
+        )?;
+
+        assert!(commands.is_empty());
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        assert_eq!(proof_result.proof_receipts[0].result, "skipped_budget");
+        assert_eq!(
+            proof_result.proof_receipts[0].request_ids,
+            vec!["proof-follow-up-002"]
+        );
+        assert_eq!(proof_result.resource_leases[0].status, "exhausted");
+        assert_eq!(
+            proof_result.resource_leases[0].reason,
+            "focused red/green proof lease budget exhausted by runtime profile"
+        );
         Ok(())
     }
 
