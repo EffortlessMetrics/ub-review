@@ -14754,11 +14754,17 @@ fn diff_adds_workflow_tool_cache_path(patch: &str) -> bool {
 }
 
 fn mentions_pr_trigger_synchronize_scope(text: &str) -> bool {
-    text.contains("ready_for_review")
-        && (text.contains("synchronize")
-            || text.contains("pushes to skip")
-            || text.contains("push-not-synchronize")
-            || text.contains("skip re-running"))
+    text.contains("push-not-synchronize")
+        || (text.contains("cursor")
+            && text.contains("pull_request")
+            && (text.contains("synchronize") || text.contains("ready_for_review")))
+        || (text.contains("ready_for_review")
+            && (text.contains("synchronize")
+                || text.contains("pushes to skip")
+                || text.contains("skip re-running")
+                || text.contains("do not re-run")
+                || text.contains("does not re-run")
+                || text.contains("evidence can stale")))
 }
 
 fn diff_adds_pr_trigger_scope(patch: &str) -> bool {
@@ -14826,11 +14832,24 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || text.contains("confidence_allowed=")
         || (text.contains("no permissions")
             && (text.contains("no new auth surface") || text.contains("no new token scope")))
+        || (text.contains("no permissions block") && text.contains("no pull_request_target"))
         || (text.contains("supply-chain tightening") && text.contains("no new scope"))
+        || (text.contains("out-of-hunk")
+            && (text.contains("cursor")
+                || text.contains("push-not-synchronize")
+                || text.contains("pull_request")))
+        || (text.contains("full 40-hex")
+            && (text.contains("prefix collision") || text.contains("short-prefix")))
+        || (text.contains("actionlint") && text.contains("sensor reports ok"))
+        || (text.contains("actionlint") && text.contains("status=ok"))
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
                 || (text.contains("cache key") && text.contains("full 40-hex"))
-                || (text.contains("supply-chain") && text.contains("sha pin"))))
+                || (text.contains("supply-chain") && text.contains("sha pin"))
+                || text.contains("floating @v0.1")
+                || text.contains("pinning to a sha")
+                || text.contains("pinning to immutable commit sha")
+                || (text.contains("scope change") && text.contains("supply-chain tightening"))))
         || (is_missing_evidence_observation(observation) && is_tool_status_only_gap(&text))
 }
 
@@ -23145,6 +23164,42 @@ UB_REVIEW_HTTP_STATUS:429
                 "high",
                 "sha-prefix-refuted",
             ),
+            test_observation(
+                "workflow-permissions",
+                "third-party action EffortlessMetrics/ub-review@4fdab02 may inherit broader token scope and widen permissions; refuted because no permissions key changed, and pinning to a SHA is supply-chain tightening not a scope change.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "third-party-token-scope-refuted",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "Floating @v0.1 tag is a supply-chain widening risk that this PR fails to close; refuted because pinning to immutable commit SHA is strict supply-chain tightening.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "floating-tag-refuted",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "Cache key/restore-keys embedded with full 40-hex SHA prefix; prior 7-char prefix collision objection is now resolved by using the entire SHA.",
+                "residual-risk",
+                "parked",
+                "low",
+                "high",
+                "full-sha-prefix-resolved",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "pull_request trigger scoped to [opened, ready_for_review] means new pushes on an open PR do not re-run the UB packet; reviewer evidence can stale as HEAD advances (cursor bug 40e40af3).",
+                "residual-risk",
+                "open",
+                "low",
+                "high",
+                "cursor-trigger-stale",
+            ),
             tokmd_gap,
         ];
         let body = render_review_body(
@@ -23168,6 +23223,9 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("workflow-permissions lane"));
         assert!(!body.contains("ready_for_review"));
         assert!(!body.contains("actionlint install step"));
+        assert!(!body.contains("Floating @v0.1"));
+        assert!(!body.contains("third-party action"));
+        assert!(!body.contains("prefix collision"));
         assert!(!body.contains("tokmd"));
     }
 
