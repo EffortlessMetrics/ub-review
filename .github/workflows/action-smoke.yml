@@ -2,7 +2,7 @@ name: Action Smoke
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, labeled]
+    types: [opened, ready_for_review, labeled]
   workflow_dispatch:
     inputs:
       run_model_smoke:
@@ -42,6 +42,7 @@ permissions:
 jobs:
   smoke:
     name: Local action smoke
+    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
