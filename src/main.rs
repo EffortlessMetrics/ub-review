@@ -14185,7 +14185,7 @@ fn render_review_body(
 fn render_pull_request_review_body(
     _shared_context_id: &str,
     _plan: &Plan,
-    _diff: &DiffContext,
+    diff: &DiffContext,
     _missing_or_failed_sensor_evidence: &[SensorEvidenceIssue],
     _missing_or_failed_model_evidence: &[ModelEvidenceIssue],
     inline_comments: &[ReviewInlineComment],
@@ -14246,6 +14246,7 @@ fn render_pull_request_review_body(
         .iter()
         .filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
+                && !is_pr_body_stale_for_current_diff(finding, diff)
                 && is_parked_follow_up(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
         })
@@ -14254,6 +14255,7 @@ fn render_pull_request_review_body(
         .iter()
         .filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
+                && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !is_parked_follow_up(finding)
                 && is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
@@ -14263,6 +14265,7 @@ fn render_pull_request_review_body(
         .iter()
         .filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
+                && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !is_parked_follow_up(finding)
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
@@ -14468,6 +14471,36 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || reason.contains("body_present=")
         || reason.contains("evidence_present=")
         || reason.contains("repo_relative=")
+        || reason.contains("lane is clean")
+        || (reason.contains("no token-scope") && reason.contains("no new"))
+        || (reason.contains("no permissions") && reason.contains("no new attack surface"))
+        || (reason.contains("supply-chain tightening") && reason.contains("not widening"))
+}
+
+fn is_pr_body_stale_for_current_diff(finding: &SummaryOnlyFinding, diff: &DiffContext) -> bool {
+    if diff.diff_class != DiffClass::WorkflowTooling {
+        return false;
+    }
+    let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
+    mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch)
+}
+
+fn mentions_workflow_tool_cache_path(text: &str) -> bool {
+    text.contains("~/go/bin/actionlint")
+        || text.contains("~/.cargo/bin/cargo-allow")
+        || ((text.contains("actionlint") || text.contains("cargo-allow"))
+            && (text.contains("cache path")
+                || text.contains("cache paths")
+                || text.contains("cached binary")
+                || text.contains("cached-binary")))
+}
+
+fn diff_adds_workflow_tool_cache_path(patch: &str) -> bool {
+    patch.lines().any(|line| {
+        line.starts_with('+')
+            && !line.starts_with("+++")
+            && (line.contains("~/go/bin/actionlint") || line.contains("~/.cargo/bin/cargo-allow"))
+    })
 }
 
 fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
@@ -22570,6 +22603,84 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("## Confirmed findings"));
         assert!(!body.contains("## Verification questions"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_clean_lane_summary_artifact_only() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow-permissions lane: no token-scope, permissions, pull_request_target, or fork-vector change. Lane is clean.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            }],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Lane is clean"));
+    }
+
+    #[test]
+    fn pr_review_body_drops_stale_workflow_cache_path_summary() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![".github/workflows/ub-review-packet.yml".to_owned()];
+        diff.patch =
+            "+ key: ub-review-gh-runner-v2-c52b0e4403384cc7836e162a54df005cbcab968d\n".to_owned();
+        let finding = SummaryOnlyFinding {
+            lane: "workflow-proof".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "actionlint sensor ran ok, but the diff adds '~/go/bin/actionlint' to the cache path block and prior seeded reviews failed; attach a fresh actionlint proof.".to_owned(),
+            evidence: "cache path '~/go/bin/actionlint' added in hunk with no install step visible.".to_owned(),
+        };
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            std::slice::from_ref(&finding),
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("actionlint"));
+
+        diff.patch.push_str("+            ~/go/bin/actionlint\n");
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[finding],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("actionlint"));
     }
 
     #[test]
