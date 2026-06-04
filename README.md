@@ -343,6 +343,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | Input | Default | Meaning |
 |---|---|---|
 | `preset` | `bun-ub` | Repo preset. |
+| `config` | empty | Optional repo-local or absolute TOML config path; overrides `preset` when set. |
 | `profile` | `gh-runner` | Box profile. |
 | `base` | `origin/main` | Base ref. |
 | `head` | `HEAD` | Head ref. |
