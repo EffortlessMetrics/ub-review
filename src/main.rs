@@ -15276,6 +15276,7 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || is_no_finding_workflow_pin_summary_noise(&text)
         || is_stale_external_bot_objection_noise(&text)
         || is_workflow_tool_status_artifact_gap_noise(&text)
+        || is_workflow_paths_ignore_no_posture_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15457,6 +15458,7 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || is_no_finding_workflow_pin_summary_noise(&text)
         || is_stale_external_bot_objection_noise(&text)
         || is_workflow_tool_status_artifact_gap_noise(&text)
+        || is_workflow_paths_ignore_no_posture_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15509,7 +15511,18 @@ fn is_pr_body_meta_review_noise(text: &str) -> bool {
             && text.contains("40 hex")
             && text.contains("non-zero"))
         || (text.contains("sha were 39-hex") && text.contains("all-zero"))
+        || is_checkout_persistence_no_change_noise(text)
         || text.contains("actionlint ran ok")
+}
+
+fn is_checkout_persistence_no_change_noise(text: &str) -> bool {
+    (text.contains("checkout credential persistence")
+        || text.contains("checkout config")
+        || text.contains("persist-credentials"))
+        && (text.contains("did not change checkout")
+            || text.contains("does not change checkout")
+            || text.contains("no new persistence vector")
+            || text.contains("read-only github_token"))
 }
 
 fn is_unchanged_workflow_trust_posture_noise(text: &str) -> bool {
@@ -15627,11 +15640,42 @@ fn is_workflow_tool_status_artifact_gap_noise(text: &str) -> bool {
         || text.contains("--allow-heavy")
         || text.contains("no fresh pr-build smoke")
         || text.contains("heavy smoke adds limited value");
+    let disabled_workflow_tools = (text.contains("zizmor")
+        || text.contains("gitleaks")
+        || text.contains("osv-scanner")
+        || text.contains("cargo-audit")
+        || text.contains("cargo-deny")
+        || text.contains("shellcheck")
+        || text.contains("semgrep")
+        || text.contains("coverage"))
+        && (text.contains("disabled by config") || text.contains("trigger-mismatched"))
+        && (text.contains("workflow file") || text.contains("security/pinning tool"));
     (actionlint_ok && (not_inlined || yaml_pin))
         || (skipped_heavy && yaml_pin)
+        || disabled_workflow_tools
         || ((text.contains("parked follow-up") || text.contains("not a blocker"))
             && actionlint_ok
             && yaml_pin)
+}
+
+fn is_workflow_paths_ignore_no_posture_noise(text: &str) -> bool {
+    let mentions_paths_ignore = text.contains("paths-ignore") || text.contains("path-ignore");
+    let mentions_workflow_posture = text.contains("token scopes")
+        || text.contains("permissions block")
+        || text.contains("permission expansion")
+        || text.contains("job-level security context")
+        || text.contains("trigger activation")
+        || text.contains("pull_request_target")
+        || text.contains("checkout")
+        || text.contains("droid noise");
+    let says_no_posture_change = text.contains("only filters trigger activation")
+        || text.contains("does not alter")
+        || text.contains("no new trigger")
+        || text.contains("no new persistence vector")
+        || text.contains("not modified in this pr")
+        || text.contains("diff only mutates a paths-ignore")
+        || (text.contains("future rename") && text.contains("re-enable"));
+    mentions_paths_ignore && mentions_workflow_posture && says_no_posture_change
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -22679,6 +22723,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm checkout credential persistence: workflows using pull_request from forks receive a read-only GITHUB_TOKEN; this lane did not change checkout config, so no new persistence vector is introduced. Actionlint receipt 'ok' supports no syntactic regression.\n\n## Refuted\n\n- Adding a workflow file to paths-ignore could grant implicit permission expansion; refuted because: paths-ignore only filters trigger activation; it does not alter token scopes, permissions blocks, or any job-level security context.\n\n## Parked follow-ups\n\n- paths-ignore is a literal substring/glob match; a future rename of ub-review-packet.yml silently re-enables Droid noise.\n\n## Evidence gaps\n\n- zizmor, gitleaks, osv-scanner, cargo-audit, cargo-deny, shellcheck, semgrep, coverage all disabled by config or trigger-mismatched. No security/pinning tool independently re-validated this workflow file.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("paths-ignore no-posture review unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Refuted\n\n- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -24659,6 +24712,91 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("central proof broker artifact"));
         assert!(!body.contains("No fresh PR-build smoke"));
         assert!(!body.contains("--allow-heavy"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_paths_ignore_no_posture_review_artifact_only() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![".github/workflows/droid-focused-review.yml".to_owned()];
+        diff.patch = concat!(
+            " pull_request:\n",
+            "   paths-ignore:\n",
+            "+    - \".github/workflows/ub-review-packet.yml\"\n",
+        )
+        .to_owned();
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm checkout credential persistence: workflows using pull_request from forks receive a read-only GITHUB_TOKEN; this lane did not change checkout config, so no new persistence vector is introduced. Actionlint receipt 'ok' supports no syntactic regression.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Adding a workflow file to paths-ignore could grant implicit permission expansion; refuted because: paths-ignore only filters trigger activation; it does not alter token scopes, permissions blocks, or any job-level security context.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "zizmor, gitleaks, osv-scanner, cargo-audit, cargo-deny, shellcheck, semgrep, coverage all disabled by config or trigger-mismatched. No security/pinning tool independently re-validated this workflow file.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+        ];
+        let observations = vec![
+            test_observation(
+                "workflow-permissions",
+                "Confirm checkout credential persistence: workflows using pull_request from forks receive a read-only GITHUB_TOKEN; this lane did not change checkout config, so no new persistence vector is introduced. Actionlint receipt 'ok' supports no syntactic regression.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "checkout-persistence-no-change",
+            ),
+            test_observation(
+                "workflow-opposition",
+                "Adding a workflow file to paths-ignore could grant implicit permission expansion; refuted because: paths-ignore only filters trigger activation; it does not alter token scopes, permissions blocks, or any job-level security context.",
+                "false-premise",
+                "refuted",
+                "low",
+                "medium",
+                "paths-ignore-permission-refuted",
+            ),
+            test_observation(
+                "workflow-proof",
+                "paths-ignore is a literal substring/glob match; a future rename of ub-review-packet.yml silently re-enables Droid noise.",
+                "parked-follow-up",
+                "parked",
+                "low",
+                "medium",
+                "paths-ignore-future-rename",
+            ),
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &observations,
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("checkout credential persistence"));
+        assert!(!body.contains("paths-ignore"));
+        assert!(!body.contains("zizmor"));
+        assert!(!body.contains("Droid noise"));
     }
 
     #[test]
