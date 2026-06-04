@@ -406,7 +406,10 @@ fn active_len_tracks_view_after_resize() {
                 && tool["artifact_paths"].as_array().is_some_and(|paths| {
                     paths
                         .iter()
-                        .any(|path| path == "sensors/coverage/lcov.info")
+                        .any(|path| path == "sensors/coverage/status.json")
+                        && paths
+                            .iter()
+                            .any(|path| path == "sensors/coverage/lcov.info")
                 })
         })
     }));
