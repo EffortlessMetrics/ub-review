@@ -23,17 +23,65 @@ APPROVAL_LINES = {
     "no actionable findings",
     "no actionable",
 }
-SECRET_MARKERS = [
-    "Authorization:",
-    "Bearer ",
-    "X-Api-Key:",
-    "X-API-Key:",
+SECRET_VALUE_NAMES = [
     "github_token",
     "GITHUB_TOKEN",
+    "MINIMAX_API_KEY",
+    "OPENCODE_API_KEY",
     "UB_REVIEW_GITHUB_TOKEN",
     "UB_REVIEW_MINIMAX_API_KEY",
     "UB_REVIEW_OPENCODE_API_KEY",
 ]
+SECRET_VALUE_PREFIXES = (
+    "ghp_",
+    "gho_",
+    "ghu_",
+    "ghs_",
+    "ghr_",
+    "github_pat_",
+    "sk-",
+    "sk_",
+)
+SECRET_HEADER_PATTERNS = [
+    (
+        "Authorization header",
+        re.compile(
+            r"(?im)\bAuthorization\s*:\s*(?:Bearer\s+)?"
+            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+        ),
+    ),
+    (
+        "Bearer token",
+        re.compile(
+            r"(?im)\bBearer\s+"
+            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+        ),
+    ),
+    (
+        "API key header",
+        re.compile(
+            r"(?im)\bX-API-Key\s*:\s*"
+            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+        ),
+    ),
+]
+SECRET_ASSIGNMENT_PATTERN = re.compile(
+    r"(?im)\b("
+    + "|".join(re.escape(name) for name in SECRET_VALUE_NAMES)
+    + r")\b\s*[:=]\s*([\"']?)([^\s,;}\])]+)"
+)
+SAFE_SECRET_VALUE_WORDS = {
+    "",
+    "false",
+    "masked",
+    "missing",
+    "none",
+    "null",
+    "present",
+    "redacted",
+    "true",
+    "unset",
+}
 
 
 def fail(message: str) -> None:
@@ -48,6 +96,33 @@ def read_text(path: pathlib.Path) -> str:
         fail(f"missing {path}")
     except UnicodeDecodeError as error:
         fail(f"invalid UTF-8 in {path}: {error}")
+
+
+def looks_like_secret_assignment_value(value: str) -> bool:
+    value = value.strip().strip("\"'")
+    if value.lower() in SAFE_SECRET_VALUE_WORDS:
+        return False
+    if value.startswith(("$", "${{", "%", "<", "[", "`")):
+        return False
+    lowered = value.lower()
+    if lowered.startswith(SECRET_VALUE_PREFIXES):
+        return True
+    compact = re.sub(r"[^A-Za-z0-9]", "", value)
+    return (
+        len(compact) >= 16
+        and any(character.isalpha() for character in compact)
+        and any(character.isdigit() for character in compact)
+    )
+
+
+def secret_leak_marker(text: str) -> str | None:
+    for label, pattern in SECRET_HEADER_PATTERNS:
+        if pattern.search(text):
+            return label
+    for match in SECRET_ASSIGNMENT_PATTERN.finditer(text):
+        if looks_like_secret_assignment_value(match.group(3)):
+            return match.group(1)
+    return None
 
 
 def load_json(path: pathlib.Path) -> Any:
@@ -2253,6 +2328,7 @@ def require_observation_schema(observation: dict) -> None:
         "missing-evidence",
         "test-gap",
         "source-route-gap",
+        "residual-risk",
         "security-risk",
         "false-premise",
         "parked-follow-up",
@@ -2768,9 +2844,9 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         if not path.exists() or path.is_dir():
             continue
         text = read_text(path)
-        for marker in SECRET_MARKERS:
-            if marker in text:
-                fail(f"secret marker {marker!r} found in {path}")
+        marker = secret_leak_marker(text)
+        if marker is not None:
+            fail(f"secret marker {marker!r} found in {path}")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
