@@ -10015,11 +10015,85 @@ fn focused_test_names_for_file(patch: &str, file: &str) -> Vec<String> {
 
 fn extract_focused_test_name(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
-    for prefix in ["test(", "it(", "describe("] {
-        if let Some(rest) = trimmed.strip_prefix(prefix)
-            && let Some(name) = parse_js_string_literal(rest.trim_start())
+    for callee in ["test", "it", "describe"] {
+        if let Some(rest) = trimmed.strip_prefix(callee)
+            && let Some(call_args) = strip_focused_test_callee_prefix(rest)
+            && let Some(name) = parse_js_string_literal(call_args.trim_start())
         {
             return Some(name);
+        }
+    }
+    None
+}
+
+fn strip_focused_test_callee_prefix(mut rest: &str) -> Option<&str> {
+    loop {
+        let trimmed = rest.trim_start();
+        if let Some(call_args) = trimmed.strip_prefix('(') {
+            return Some(call_args);
+        }
+        let after_dot = trimmed.strip_prefix('.')?;
+        let (modifier, after_modifier) = parse_js_identifier(after_dot)?;
+        if is_simple_test_modifier(modifier) {
+            rest = after_modifier;
+            continue;
+        }
+        if is_parameterized_test_modifier(modifier) {
+            rest = strip_balanced_js_call(after_modifier.trim_start())?;
+            continue;
+        }
+        return None;
+    }
+}
+
+fn parse_js_identifier(text: &str) -> Option<(&str, &str)> {
+    let end = text
+        .char_indices()
+        .take_while(|(_, ch)| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '$')
+        .map(|(index, ch)| index + ch.len_utf8())
+        .last()?;
+    Some((&text[..end], &text[end..]))
+}
+
+fn is_simple_test_modifier(value: &str) -> bool {
+    matches!(
+        value,
+        "only" | "skip" | "todo" | "failing" | "concurrent" | "serial"
+    )
+}
+
+fn is_parameterized_test_modifier(value: &str) -> bool {
+    matches!(value, "each")
+}
+
+fn strip_balanced_js_call(text: &str) -> Option<&str> {
+    if !text.starts_with('(') {
+        return None;
+    }
+    let mut depth = 0_u32;
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, ch) in text.char_indices() {
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '"' | '\'' | '`' => quote = Some(ch),
+            '(' => depth = depth.saturating_add(1),
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(&text[index + ch.len_utf8()..]);
+                }
+            }
+            _ => {}
         }
     }
     None
@@ -19615,6 +19689,101 @@ index 1111111..2222222 100644
         );
         assert_eq!(time_capped_tasks.len(), 1);
         assert_eq!(proof_budget(&Profile::default())?.max_focused_tests, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn focused_proof_tasks_detect_modified_bun_test_callees() -> Result<()> {
+        assert_eq!(
+            super::extract_focused_test_name("test.only(\"bad free witness\", () => {})")
+                .as_deref(),
+            Some("bad free witness")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "it.skip('parked until runtime supports it', () => {})"
+            )
+            .as_deref(),
+            Some("parked until runtime supports it")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "test.concurrent.failing('racy callback path', () => {})"
+            )
+            .as_deref(),
+            Some("racy callback path")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "test.each([[\"arraybuffer\"]])('table case %s', () => {})"
+            )
+            .as_deref(),
+            Some("table case %s")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "describe.each([{ name: \"ffi\" }])('ownership %s', () => {})"
+            )
+            .as_deref(),
+            Some("ownership %s")
+        );
+        assert!(super::extract_focused_test_name("testHelper('not a test', () => {})").is_none());
+        assert!(
+            super::extract_focused_test_name("test.unknown('not brokered', () => {})").is_none()
+        );
+
+        let patch = "\
+diff --git a/test/js/bun/ffi/ffi.test.js b/test/js/bun/ffi/ffi.test.js
+index 1111111..2222222 100644
+--- a/test/js/bun/ffi/ffi.test.js
++++ b/test/js/bun/ffi/ffi.test.js
+@@ -1,2 +1,7 @@
+ import { test, describe } from 'bun:test';
++test.only(\"bad free witness\", () => {});
++it.skip('parked until runtime supports it', () => {});
++test.concurrent.failing('racy callback path', () => {});
++test.each([[\"arraybuffer\"]])('table case %s', () => {});
++describe.each([{ name: \"ffi\" }])('ownership %s', () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["test/js/bun/ffi/ffi.test.js".to_owned()],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+
+        let tasks = focused_test_tasks_from_diff(
+            &diff,
+            &[],
+            ProofBudget {
+                max_focused_test_files: 2,
+                max_focused_tests: 8,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 4_800,
+            },
+        );
+        let names = tasks
+            .iter()
+            .map(|task| task.test_name.as_deref().unwrap_or_default())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "bad free witness",
+                "parked until runtime supports it",
+                "racy callback path",
+                "table case %s",
+                "ownership %s",
+            ]
+        );
+        assert!(
+            tasks
+                .iter()
+                .all(|task| task.mode == super::FocusedProofMode::RedGreen)
+        );
         Ok(())
     }
 
