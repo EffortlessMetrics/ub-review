@@ -125,6 +125,7 @@ fn active_len_tracks_view_after_resize() {
         "tool-status.json",
         "running-summary.md",
         "sensors/tokmd/ub-review-sensor-status.json",
+        "sensors/cargo-allow/ub-review-sensor-status.json",
         "sensors/ripr/ub-review-sensor-status.json",
         "sensors/unsafe-review/ub-review-sensor-status.json",
         "sensors/ast-grep/ub-review-sensor-status.json",
@@ -325,6 +326,24 @@ fn active_len_tracks_view_after_resize() {
     }));
     assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
         tools.iter().any(|tool| {
+            tool["id"] == "cargo-allow"
+                && tool["class"] == "static"
+                && tool["required_if"] == "source-exception-changed"
+                && tool["required_reason"] == "source-tree exception surface changed"
+                && tool["planned_run"] == true
+                && tool["plan_reason"] == "source-tree exception surface changed"
+                && tool["artifact_paths"].as_array().is_some_and(|paths| {
+                    paths
+                        .iter()
+                        .any(|path| path == "sensors/cargo-allow/cargo-allow.receipt.json")
+                        && paths
+                            .iter()
+                            .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
+                })
+        })
+    }));
+    assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
+        tools.iter().any(|tool| {
             tool["id"] == "coverage"
                 && tool["class"] == "coverage"
                 && tool["enabled"] == false
@@ -345,6 +364,14 @@ fn active_len_tracks_view_after_resize() {
     assert!(tool_status["tools"].as_array().is_some_and(|tools| {
         tools.iter().any(|tool| {
             tool["id"] == "ripr"
+                && tool["planned_run"] == true
+                && tool["status"] == "skipped"
+                && tool["reason"] == "dry-run; sensor not executed"
+        })
+    }));
+    assert!(tool_status["tools"].as_array().is_some_and(|tools| {
+        tools.iter().any(|tool| {
+            tool["id"] == "cargo-allow"
                 && tool["planned_run"] == true
                 && tool["status"] == "skipped"
                 && tool["reason"] == "dry-run; sensor not executed"
@@ -792,12 +819,19 @@ fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
             .as_array()
             .map(std::vec::Vec::len)
             .unwrap_or_default(),
-        5
+        6
     );
 
     let base_dir = cache.join("bases").join(base_tree_sha);
     assert!(base_dir.join("manifest.json").exists());
-    for tool in ["tokmd", "ripr", "unsafe-review", "ast-grep", "actionlint"] {
+    for tool in [
+        "tokmd",
+        "cargo-allow",
+        "ripr",
+        "unsafe-review",
+        "ast-grep",
+        "actionlint",
+    ] {
         assert!(
             cache
                 .join("rules")
