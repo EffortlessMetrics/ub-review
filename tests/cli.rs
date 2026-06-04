@@ -1218,6 +1218,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert_eq!(proof_tasks.len(), 1);
     assert_eq!(proof_tasks[0]["schema"], "ub-review.proof_task.v1");
     assert_eq!(proof_tasks[0]["kind"], "focused-test");
+    assert_eq!(proof_tasks[0]["status"], "planned");
     assert_eq!(proof_tasks[0]["mode"], "red-green");
     assert_eq!(proof_tasks[0]["lease"]["cpu"], 2);
     assert_eq!(proof_tasks[0]["lease"]["network"], false);

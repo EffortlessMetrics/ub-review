@@ -1352,8 +1352,15 @@ struct FocusedTestTask {
     file: String,
     test_name: Option<String>,
     mode: FocusedProofMode,
+    command_specs: Option<FocusedTestCommandSpecs>,
     requested_by: Vec<String>,
     request_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+struct FocusedTestCommandSpecs {
+    head: ProofCommandSpec,
+    base_plus_tests: ProofCommandSpec,
 }
 
 #[derive(Clone, Debug)]
@@ -1444,6 +1451,7 @@ struct ProofTaskArtifact {
     schema: &'static str,
     id: String,
     kind: String,
+    status: String,
     command: String,
     head_command: String,
     base_plus_tests_command: Option<String>,
@@ -7695,6 +7703,7 @@ fn proof_task_artifact(
         schema: "ub-review.proof_task.v1",
         id: plan.id,
         kind: "focused-test".to_owned(),
+        status: plan.status,
         command,
         head_command: plan.head_command,
         base_plus_tests_command,
@@ -7733,6 +7742,7 @@ fn focused_build_task_artifact(
         schema: "ub-review.proof_task.v1",
         id: plan.id,
         kind: "focused-build".to_owned(),
+        status: plan.status,
         command: plan.command.clone(),
         head_command: plan.command.clone(),
         base_plus_tests_command: None,
@@ -9019,6 +9029,7 @@ struct ProofCommandPaths {
     stderr_rel: String,
 }
 
+#[derive(Clone, Debug)]
 struct ProofCommandSpec {
     argv: Vec<String>,
     env: BTreeMap<String, String>,
@@ -9173,14 +9184,16 @@ fn merge_focused_test_request_group_tasks(
         merge_focused_test_task(
             tasks,
             FocusedTestTask {
-                id: focused_test_task_id(
+                id: focused_test_task_id_for_target(
                     &target.file,
                     target.test_name.as_deref(),
                     FocusedProofMode::RedGreen,
+                    target.command_specs.as_ref(),
                 ),
                 file: target.file,
                 test_name: target.test_name,
                 mode: FocusedProofMode::RedGreen,
+                command_specs: target.command_specs,
                 requested_by: group.requested_by.clone(),
                 request_ids: group.request_ids.clone(),
             },
@@ -9285,9 +9298,22 @@ fn focused_test_task_with_mode(
         file: file.to_owned(),
         test_name,
         mode,
+        command_specs: None,
         requested_by,
         request_ids,
     }
+}
+
+fn focused_test_task_id_for_target(
+    file: &str,
+    test_name: Option<&str>,
+    mode: FocusedProofMode,
+    command_specs: Option<&FocusedTestCommandSpecs>,
+) -> String {
+    if let Some(command_specs) = command_specs {
+        return focused_test_command_task_id(&command_display(&command_specs.head.argv), mode);
+    }
+    focused_test_task_id(file, test_name, mode)
 }
 
 fn focused_test_task_id(file: &str, test_name: Option<&str>, mode: FocusedProofMode) -> String {
@@ -9299,15 +9325,27 @@ fn focused_test_task_id(file: &str, test_name: Option<&str>, mode: FocusedProofM
     format!("{prefix}-{}", &fingerprint[..12])
 }
 
+fn focused_test_command_task_id(command: &str, mode: FocusedProofMode) -> String {
+    let fingerprint = sha256_hex(command.as_bytes());
+    let prefix = match mode {
+        FocusedProofMode::HeadOnly => "proof-head",
+        FocusedProofMode::RedGreen => "proof-red-green",
+    };
+    format!("{prefix}-{}", &fingerprint[..12])
+}
+
 fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: FocusedTestTask) {
-    if let Some(existing) = tasks
-        .iter_mut()
-        .find(|existing| existing.file == task.file && existing.test_name == task.test_name)
-    {
+    if let Some(existing) = tasks.iter_mut().find(|existing| {
+        focused_test_task_merge_key(existing) == focused_test_task_merge_key(&task)
+    }) {
         if existing.mode == FocusedProofMode::HeadOnly && task.mode == FocusedProofMode::RedGreen {
             existing.mode = FocusedProofMode::RedGreen;
-            existing.id =
-                focused_test_task_id(&existing.file, existing.test_name.as_deref(), existing.mode);
+            existing.id = focused_test_task_id_for_target(
+                &existing.file,
+                existing.test_name.as_deref(),
+                existing.mode,
+                existing.command_specs.as_ref(),
+            );
         }
         for lane in task.requested_by.drain(..) {
             push_unique(&mut existing.requested_by, &lane);
@@ -9320,10 +9358,22 @@ fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: FocusedTe
     tasks.push(task);
 }
 
+fn focused_test_task_merge_key(task: &FocusedTestTask) -> String {
+    if let Some(command_specs) = &task.command_specs {
+        return format!("command:{}", command_display(&command_specs.head.argv));
+    }
+    format!(
+        "bun:{}:{}",
+        task.file,
+        task.test_name.as_deref().unwrap_or_default()
+    )
+}
+
 #[derive(Clone, Debug)]
 struct FocusedTestRequestTarget {
     file: String,
     test_name: Option<String>,
+    command_specs: Option<FocusedTestCommandSpecs>,
 }
 
 fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestRequestTarget> {
@@ -9334,7 +9384,17 @@ fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestR
     let (file, args) = match parts.as_slice() {
         ["bun", "test", file, args @ ..] => (*file, args),
         ["bun", "bd", "test", file, args @ ..] => (*file, args),
-        _ => return None,
+        _ => {
+            let spec = focused_cargo_test_command_spec(&group.command)?;
+            return Some(FocusedTestRequestTarget {
+                file: focused_cargo_test_target_label(&spec.argv),
+                test_name: focused_cargo_test_filter_name(&spec.argv),
+                command_specs: Some(FocusedTestCommandSpecs {
+                    head: spec.clone(),
+                    base_plus_tests: spec,
+                }),
+            });
+        }
     };
     if !is_bun_focused_test_file(file) {
         return None;
@@ -9342,6 +9402,7 @@ fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestR
     Some(FocusedTestRequestTarget {
         file: normalize_repo_path(file),
         test_name: focused_test_name_arg(args),
+        command_specs: None,
     })
 }
 
@@ -9515,6 +9576,13 @@ fn is_bun_focused_test_file(path: &str) -> bool {
 }
 
 fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSpec {
+    if let Some(command_specs) = &task.command_specs {
+        return if side == "head" {
+            command_specs.head.clone()
+        } else {
+            command_specs.base_plus_tests.clone()
+        };
+    }
     let mut env = BTreeMap::new();
     let mut argv = if side == "head" {
         vec![
@@ -9532,6 +9600,201 @@ fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSp
         argv.push(name.clone());
     }
     ProofCommandSpec { argv, env }
+}
+
+fn focused_cargo_test_command_spec(command: &str) -> Option<ProofCommandSpec> {
+    if has_shell_control_token(command) {
+        return None;
+    }
+    let argv = command
+        .split_whitespace()
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    let [program, subcommand, args @ ..] = argv.as_slice() else {
+        return None;
+    };
+    if program != "cargo" || subcommand != "test" {
+        return None;
+    }
+    if !args.iter().any(|arg| arg == "--locked") {
+        return None;
+    }
+    if !focused_cargo_test_args_allowed(args) {
+        return None;
+    }
+    if !focused_cargo_test_has_focus(&argv) {
+        return None;
+    }
+    Some(ProofCommandSpec {
+        argv,
+        env: BTreeMap::new(),
+    })
+}
+
+fn focused_cargo_test_args_allowed(args: &[String]) -> bool {
+    let mut index = 0;
+    let mut passthrough = false;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        if !passthrough && arg == "--" {
+            passthrough = true;
+            index += 1;
+            continue;
+        }
+        if passthrough {
+            match arg {
+                "--exact" | "--nocapture" | "--show-output" | "--ignored" | "--include-ignored" => {
+                    index += 1;
+                }
+                "--test-threads" => {
+                    let Some(value) = args.get(index + 1) else {
+                        return false;
+                    };
+                    if value.parse::<u16>().is_err() {
+                        return false;
+                    }
+                    index += 2;
+                }
+                _ => return false,
+            }
+            continue;
+        }
+        match arg {
+            "--locked"
+            | "--workspace"
+            | "--all-targets"
+            | "--all-features"
+            | "--no-default-features"
+            | "--tests"
+            | "--lib"
+            | "--bins"
+            | "--examples"
+            | "--doc"
+            | "--offline"
+            | "--frozen" => {
+                index += 1;
+            }
+            "-p" | "--package" | "--features" | "--target" | "--test" | "--bin" | "--example" => {
+                let Some(value) = args.get(index + 1) else {
+                    return false;
+                };
+                if !safe_cargo_build_arg_value(value) {
+                    return false;
+                }
+                index += 2;
+            }
+            _ if arg.starts_with("--package=")
+                || arg.starts_with("--features=")
+                || arg.starts_with("--target=")
+                || arg.starts_with("--test=")
+                || arg.starts_with("--bin=")
+                || arg.starts_with("--example=") =>
+            {
+                let Some((_, value)) = arg.split_once('=') else {
+                    return false;
+                };
+                if value.is_empty() || !safe_cargo_build_arg_value(value) {
+                    return false;
+                }
+                index += 1;
+            }
+            _ => {
+                if !safe_cargo_test_filter_value(arg) {
+                    return false;
+                }
+                index += 1;
+            }
+        }
+    }
+    true
+}
+
+fn focused_cargo_test_has_focus(argv: &[String]) -> bool {
+    cargo_arg_value(argv, "--test").is_some()
+        || focused_cargo_test_filter_name(argv)
+            .as_deref()
+            .is_some_and(safe_cargo_test_filter_value)
+}
+
+fn safe_cargo_test_filter_value(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && value.chars().all(|ch| {
+            ch.is_ascii_alphanumeric()
+                || matches!(ch, '_' | '-' | '.' | '/' | ':' | ',' | '+' | '=')
+        })
+}
+
+fn focused_cargo_test_target_label(argv: &[String]) -> String {
+    if let Some(target) = cargo_arg_value(argv, "--test") {
+        return format!("cargo-test:{target}");
+    }
+    if let Some(package) =
+        cargo_arg_value(argv, "--package").or_else(|| cargo_arg_value(argv, "-p"))
+    {
+        return format!("cargo-package:{package}");
+    }
+    "cargo-test".to_owned()
+}
+
+fn focused_cargo_test_filter_name(argv: &[String]) -> Option<String> {
+    let mut index = 2;
+    while index < argv.len() {
+        let arg = argv[index].as_str();
+        if arg == "--" {
+            return None;
+        }
+        if matches!(
+            arg,
+            "-p" | "--package" | "--features" | "--target" | "--test" | "--bin" | "--example"
+        ) {
+            index += 2;
+            continue;
+        }
+        if arg.starts_with("--package=")
+            || arg.starts_with("--features=")
+            || arg.starts_with("--target=")
+            || arg.starts_with("--test=")
+            || arg.starts_with("--bin=")
+            || arg.starts_with("--example=")
+            || matches!(
+                arg,
+                "--locked"
+                    | "--workspace"
+                    | "--all-targets"
+                    | "--all-features"
+                    | "--no-default-features"
+                    | "--tests"
+                    | "--lib"
+                    | "--bins"
+                    | "--examples"
+                    | "--doc"
+                    | "--offline"
+                    | "--frozen"
+            )
+        {
+            index += 1;
+            continue;
+        }
+        return Some(arg.to_owned());
+    }
+    None
+}
+
+fn cargo_arg_value<'a>(argv: &'a [String], name: &str) -> Option<&'a str> {
+    let equals_prefix = format!("{name}=");
+    let mut index = 0;
+    while index < argv.len() {
+        let arg = argv[index].as_str();
+        if arg == name {
+            return argv.get(index + 1).map(String::as_str);
+        }
+        if let Some(value) = arg.strip_prefix(&equals_prefix) {
+            return Some(value);
+        }
+        index += 1;
+    }
+    None
 }
 
 fn focused_build_command_spec_for_task(task: &FocusedBuildTask) -> ProofCommandSpec {
@@ -13430,7 +13693,7 @@ fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
             match parts.as_slice() {
                 ["bun", "test", file, ..] => is_bun_focused_test_file(file),
                 ["bun", "bd", "test", file, ..] => is_bun_focused_test_file(file),
-                _ => false,
+                _ => focused_cargo_test_command_spec(command).is_some(),
             }
         }
         "focused-build" => focused_build_command_spec(command).is_some(),
@@ -18607,6 +18870,120 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn proof_broker_v0_executes_allowlisted_cargo_test_request_as_red_green_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let diff = test_diff();
+        let command =
+            "cargo test --locked -p ub-review cargo_focused_red_green -- --exact".to_owned();
+        let proof_requests = vec![
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-tests-001".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: command.clone(),
+                reason: "Run the requested focused Cargo proof.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "proof-opposition-001".to_owned(),
+                lane: "opposition".to_owned(),
+                requested_by: vec!["opposition".to_owned()],
+                command: command.clone(),
+                reason: "Confirm the same requested focused Cargo proof.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 300,
+                required: true,
+                status: "requested".to_owned(),
+            },
+        ];
+        let tasks = super::focused_test_candidates_from_requests(&proof_requests);
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].mode, super::FocusedProofMode::RedGreen);
+        assert_eq!(tasks[0].file, "cargo-package:ub-review");
+        assert_eq!(
+            tasks[0].test_name.as_deref(),
+            Some("cargo_focused_red_green")
+        );
+        assert!(tasks[0].command_specs.is_some());
+        assert_eq!(tasks[0].requested_by.len(), 2);
+        assert_eq!(tasks[0].request_ids.len(), 2);
+
+        let args = test_run_args(out.clone());
+        let mut commands = Vec::<String>::new();
+        let prepared_base_root = base_root.clone();
+        let proof_result = super::run_focused_red_green_proof_tasks_with_runner(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            &args,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 2,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 600,
+            },
+            tasks,
+            |_root, argv, env, timeout, stdout, stderr| {
+                commands.push(super::command_display_with_env(env, argv));
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                assert!(env.is_empty());
+                assert_eq!(timeout, 300);
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(if is_base { 1 } else { 0 }),
+                    timed_out: false,
+                    success: !is_base,
+                    reason: "completed".to_owned(),
+                    duration_ms: 21,
+                })
+            },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
+        )?;
+
+        assert_eq!(commands, vec![command.clone(), command]);
+        assert_eq!(proof_result.proof_receipts.len(), 1);
+        assert_eq!(proof_result.resource_leases.len(), 1);
+        let receipt = &proof_result.proof_receipts[0];
+        assert_eq!(receipt.kind, "focused-red-green");
+        assert_eq!(receipt.test_patch_mode, "base-plus-tests");
+        assert_eq!(receipt.result, "discriminating");
+        assert_eq!(
+            receipt.requested_by,
+            vec!["tests-oracle".to_owned(), "opposition".to_owned()]
+        );
+        assert_eq!(receipt.commands.len(), 2);
+        assert_eq!(receipt.commands[0].side, "head");
+        assert_eq!(receipt.commands[0].status, "passed");
+        assert_eq!(receipt.commands[1].side, "base-plus-tests");
+        assert_eq!(receipt.commands[1].status, "failed");
+        assert!(out.join(&receipt.commands[0].stdout).exists());
+        assert!(out.join(&receipt.commands[1].stdout).exists());
+        let lease = &proof_result.resource_leases[0];
+        assert_eq!(lease.kind, "focused-test");
+        assert_eq!(lease.status, "granted");
+        assert_eq!(lease.timeout_sec, 600);
+        assert_eq!(lease.worktree, Some("base-plus-tests".to_owned()));
+        Ok(())
+    }
+
+    #[test]
     fn proof_broker_v0_executes_allowlisted_focused_build_request() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -18886,7 +19263,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn proof_request_status_enforces_v0_bun_test_allowlist() {
+    fn proof_request_status_enforces_v0_focused_allowlist() -> Result<()> {
         let lane = model_lane(
             "tests-oracle",
             "Tests oracle",
@@ -18922,13 +19299,49 @@ index 1111111..2222222 100644
             super::validate_proof_request(
                 &lane,
                 super::ModelProofRequest {
+                    command:
+                        "cargo test --locked -p ub-review proof_request_status_enforces_v0_focused_allowlist -- --exact"
+                            .to_owned(),
+                    reason: "Run the focused Cargo regression test.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                2,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "cargo test --workspace --all-targets --locked".to_owned(),
+                    reason: "Broad cargo test should not be brokered as focused proof."
+                        .to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                3,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
+                    command: "cargo test --workspace".to_owned(),
+                    reason: "Unlocked cargo test should not be brokered.".to_owned(),
+                    cost: Some("focused-test".to_owned()),
+                    timeout_sec: Some(300),
+                    required: Some(false),
+                },
+                4,
+            ),
+            super::validate_proof_request(
+                &lane,
+                super::ModelProofRequest {
                     command: "cargo check --workspace --all-targets --locked".to_owned(),
                     reason: "Compile the workspace.".to_owned(),
                     cost: Some("focused-build".to_owned()),
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                2,
+                5,
             ),
             super::validate_proof_request(
                 &lane,
@@ -18939,7 +19352,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                3,
+                6,
             ),
             super::validate_proof_request(
                 &lane,
@@ -18951,7 +19364,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                4,
+                7,
             ),
             super::validate_proof_request(
                 &lane,
@@ -18962,7 +19375,7 @@ index 1111111..2222222 100644
                     timeout_sec: Some(300),
                     required: Some(false),
                 },
-                5,
+                8,
             ),
         ];
 
@@ -18971,14 +19384,18 @@ index 1111111..2222222 100644
         assert_eq!(requests[1].status, "requested");
         assert_eq!(requests[1].cost, "focused-test");
         assert_eq!(requests[2].status, "requested");
-        assert_eq!(requests[2].cost, "focused-build");
+        assert_eq!(requests[2].cost, "focused-test");
         assert_eq!(requests[3].status, "unsupported");
         assert_eq!(requests[4].status, "unsupported");
-        assert_eq!(requests[5].status, "invalid");
-        assert_eq!(requests[5].command, "<missing command>");
+        assert_eq!(requests[5].status, "requested");
+        assert_eq!(requests[5].cost, "focused-build");
+        assert_eq!(requests[6].status, "unsupported");
+        assert_eq!(requests[7].status, "unsupported");
+        assert_eq!(requests[8].status, "invalid");
+        assert_eq!(requests[8].command, "<missing command>");
 
         let groups = super::proof_request_groups(&requests);
-        assert_eq!(groups.len(), 6);
+        assert_eq!(groups.len(), 9);
         assert!(groups.iter().any(|group| group.status == "requested"));
         assert!(groups.iter().any(|group| group.status == "unsupported"));
         assert!(groups.iter().any(|group| group.status == "invalid"));
@@ -18992,6 +19409,20 @@ index 1111111..2222222 100644
         assert_eq!(task.request_ids.len(), 2);
         assert!(task.request_ids.contains(&requests[0].id));
         assert!(task.request_ids.contains(&requests[1].id));
+        let focused_test_tasks = super::focused_test_candidates_from_requests(&requests);
+        assert_eq!(focused_test_tasks.len(), 2);
+        let cargo_test_task = focused_test_tasks
+            .iter()
+            .find(|task| task.command_specs.is_some())
+            .ok_or_else(|| {
+                anyhow::anyhow!("safe cargo test proof request should become a focused test task")
+            })?;
+        assert_eq!(cargo_test_task.file, "cargo-package:ub-review");
+        assert_eq!(
+            cargo_test_task.test_name.as_deref(),
+            Some("proof_request_status_enforces_v0_focused_allowlist")
+        );
+        assert_eq!(cargo_test_task.request_ids, vec![requests[2].id.clone()]);
         let build_tasks = super::focused_build_candidates_from_requests(&requests);
         assert_eq!(build_tasks.len(), 1);
         assert_eq!(
@@ -18999,7 +19430,8 @@ index 1111111..2222222 100644
             "cargo check --workspace --all-targets --locked"
         );
         assert_eq!(build_tasks[0].requested_by, vec!["tests-oracle".to_owned()]);
-        assert_eq!(build_tasks[0].request_ids, vec![requests[2].id.clone()]);
+        assert_eq!(build_tasks[0].request_ids, vec![requests[5].id.clone()]);
+        Ok(())
     }
 
     #[test]
