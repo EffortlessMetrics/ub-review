@@ -21,8 +21,7 @@ where `UB_REVIEW_TOOL_DIR` defaults to `/opt/ub-review`. It uses
 `cargo install --locked --root "$UB_REVIEW_TOOL_DIR"` for Rust tools and
 `go install` for `actionlint`, so the standard image build must provide Go.
 `tokmd` defaults to version `1.11.1` because the Bun profile depends on the
-scoped `bun-ub` preset plus the current on-diff `cockpit` and `context`
-command surfaces.
+current on-diff `risk`, `cockpit`, and `context` command surfaces.
 `actionlint` defaults to `v1.7.12`:
 
 ```bash
@@ -92,7 +91,7 @@ The intended commands are:
 
 ```bash
 tokmd analyze \
-  --preset bun-ub \
+  --preset risk \
   --effort-base-ref "$BASE_REF" \
   --effort-head-ref "$HEAD_REF" \
   <existing changed paths>
