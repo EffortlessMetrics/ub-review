@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
+use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -24,6 +25,7 @@ fn gh_runner_tool_installer_pins_tokmd_for_bun_ub_sensor() -> Result<()> {
 
 #[test]
 fn plan_and_dry_run_write_expected_packet_tree() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(repo.join("src"))?;
@@ -821,6 +823,7 @@ fn active_len_tracks_view_after_resize() {
 
 #[test]
 fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(&repo)?;
@@ -924,6 +927,7 @@ fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
 
 #[test]
 fn doctor_require_core_tools_fails_missing_standard_image_tool() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
     write_file(
@@ -953,6 +957,7 @@ command = "ub-review-test-missing-tokmd"
 
 #[test]
 fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(repo.join("src"))?;
@@ -1051,6 +1056,7 @@ path = "src/lib.rs"
 
 #[test]
 fn run_with_pr_thread_context_seeds_shared_context() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(repo.join("src"))?;
@@ -1162,6 +1168,7 @@ path = "src/lib.rs"
 
 #[test]
 fn run_executes_focused_proof_and_writes_receipts() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(&repo)?;
@@ -1379,6 +1386,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
 
 #[test]
 fn model_auto_run_hits_fake_minimax_provider_and_writes_artifacts() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(repo.join("src"))?;
@@ -1625,6 +1633,7 @@ path = "src/lib.rs"
 
 #[test]
 fn model_auto_run_overlaps_initial_diff_proof_with_model_lanes() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(&repo)?;
@@ -1660,8 +1669,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     write_fake_bun(&fake_bin)?;
     let path = prepend_to_path(&fake_bin)?;
     let dummy_key = "dummy-minimax-key-for-overlap-test";
-    let (provider_url, provider) =
-        spawn_fake_openai_provider_with_delay(2, Duration::from_millis(250))?;
+    let (provider_url, provider) = spawn_fake_openai_provider(2)?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
@@ -1768,6 +1776,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
 
 #[test]
 fn model_auto_run_preserves_contentful_non_json_lane_output_as_degraded() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     fs::create_dir_all(repo.join("src"))?;
@@ -2381,31 +2390,12 @@ fn spawn_fake_openai_provider(
 fn spawn_fake_openai_provider_with_contents(
     contents: Vec<String>,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
-    spawn_fake_openai_provider_with_contents_and_delay(contents, Duration::ZERO)
-}
-
-fn spawn_fake_openai_provider_with_delay(
-    expected_requests: usize,
-    response_delay: Duration,
-) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
-    spawn_fake_openai_provider_with_contents_and_delay(
-        (0..expected_requests)
-            .map(|_| fake_openai_lane_content())
-            .collect(),
-        response_delay,
-    )
-}
-
-fn spawn_fake_openai_provider_with_contents_and_delay(
-    contents: Vec<String>,
-    response_delay: Duration,
-) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
         let expected_requests = contents.len();
-        let deadline = Instant::now() + Duration::from_secs(120);
+        let mut deadline = Instant::now() + Duration::from_secs(120);
         let mut requests = Vec::new();
         while requests.len() < expected_requests {
             match listener.accept() {
@@ -2413,10 +2403,8 @@ fn spawn_fake_openai_provider_with_contents_and_delay(
                     let content = contents
                         .get(requests.len())
                         .ok_or_else(|| anyhow::anyhow!("fake provider response missing"))?;
-                    if !response_delay.is_zero() {
-                        thread::sleep(response_delay);
-                    }
                     requests.push(handle_fake_openai_request(stream, content)?);
+                    deadline = Instant::now() + Duration::from_secs(120);
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     if Instant::now() >= deadline {
@@ -2434,6 +2422,14 @@ fn spawn_fake_openai_provider_with_contents_and_delay(
         Ok(requests)
     });
     Ok((url, handle))
+}
+
+fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
+    static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    CLI_SUBPROCESS_TEST_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .map_err(|_| anyhow::anyhow!("CLI subprocess test lock poisoned"))
 }
 
 fn fake_openai_lane_content() -> String {
