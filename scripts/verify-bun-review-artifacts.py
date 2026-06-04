@@ -445,15 +445,52 @@ def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
         or "no fresh pr-build smoke" in text
         or "heavy smoke adds limited value" in text
     )
+    disabled_workflow_tools = (
+        "zizmor" in text
+        or "gitleaks" in text
+        or "osv-scanner" in text
+        or "cargo-audit" in text
+        or "cargo-deny" in text
+        or "shellcheck" in text
+        or "semgrep" in text
+        or "coverage" in text
+    ) and (
+        "disabled by config" in text or "trigger-mismatched" in text
+    ) and ("workflow file" in text or "security/pinning tool" in text)
     return (
         (actionlint_ok and (not_inlined or yaml_pin))
         or (skipped_heavy and yaml_pin)
+        or disabled_workflow_tools
         or (
             ("parked follow-up" in text or "not a blocker" in text)
             and actionlint_ok
             and yaml_pin
         )
     )
+
+
+def is_workflow_paths_ignore_no_posture_noise(text: str) -> bool:
+    mentions_paths_ignore = "paths-ignore" in text or "path-ignore" in text
+    mentions_workflow_posture = (
+        "token scopes" in text
+        or "permissions block" in text
+        or "permission expansion" in text
+        or "job-level security context" in text
+        or "trigger activation" in text
+        or "pull_request_target" in text
+        or "checkout" in text
+        or "droid noise" in text
+    )
+    says_no_posture_change = (
+        "only filters trigger activation" in text
+        or "does not alter" in text
+        or "no new trigger" in text
+        or "no new persistence vector" in text
+        or "not modified in this pr" in text
+        or "diff only mutates a paths-ignore" in text
+        or ("future rename" in text and "re-enable" in text)
+    )
+    return mentions_paths_ignore and mentions_workflow_posture and says_no_posture_change
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -1470,6 +1507,7 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or is_no_finding_workflow_pin_summary_noise(text)
         or is_stale_external_bot_objection_noise(text)
         or is_workflow_tool_status_artifact_gap_noise(text)
+        or is_workflow_paths_ignore_no_posture_noise(text)
         or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
@@ -1529,7 +1567,21 @@ def is_pr_body_meta_review_noise(text: str) -> bool:
         )
         or ("cache key/uses ref" in text and "40 hex" in text and "non-zero" in text)
         or ("sha were 39-hex" in text and "all-zero" in text)
+        or is_checkout_persistence_no_change_noise(text)
         or "actionlint ran ok" in text
+    )
+
+
+def is_checkout_persistence_no_change_noise(text: str) -> bool:
+    return (
+        "checkout credential persistence" in text
+        or "checkout config" in text
+        or "persist-credentials" in text
+    ) and (
+        "did not change checkout" in text
+        or "does not change checkout" in text
+        or "no new persistence vector" in text
+        or "read-only github_token" in text
     )
 
 
@@ -3774,6 +3826,33 @@ def run_self_tests() -> None:
                 "- No fresh PR-build smoke run is available (build/test skipped, "
                 "--allow-heavy required); only tokmd/actionlint receipts are present "
                 "for this 4-line workflow pin."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "paths-ignore no-posture review prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs one verification check before upstream.\n\n"
+                "## Verification questions\n\n"
+                "- Confirm checkout credential persistence: workflows using "
+                "pull_request from forks receive a read-only GITHUB_TOKEN; this "
+                "lane did not change checkout config, so no new persistence "
+                "vector is introduced. Actionlint receipt 'ok' supports no "
+                "syntactic regression.\n\n"
+                "## Refuted\n\n"
+                "- Adding a workflow file to paths-ignore could grant implicit "
+                "permission expansion; refuted because: paths-ignore only "
+                "filters trigger activation; it does not alter token scopes, "
+                "permissions blocks, or any job-level security context.\n\n"
+                "## Evidence gaps\n\n"
+                "- zizmor, gitleaks, osv-scanner, cargo-audit, cargo-deny, "
+                "shellcheck, semgrep, coverage all disabled by config or "
+                "trigger-mismatched. No security/pinning tool independently "
+                "re-validated this workflow file."
             ),
             pathlib.Path("review/github-review.json"),
         ),
