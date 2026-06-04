@@ -868,6 +868,14 @@ struct DiffFlags {
     unsafe_or_native_risk: bool,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+struct LanguageMix {
+    languages: Vec<String>,
+    primary_language: Option<String>,
+    mixed_language: bool,
+    surfaces: Vec<String>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 enum DiffClass {
     #[serde(rename = "source-ub")]
@@ -3600,6 +3608,7 @@ fn resolved_plan_artifact(
         "base": &plan.base,
         "head": &plan.head,
         "diff_class": diff.diff_class.key(),
+        "language_mix": classify_language_mix(&diff.changed_files),
         "review_profile": &config.review_profile,
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
@@ -3889,8 +3898,7 @@ fn classify_diff(files: &[String], patch: &str) -> DiffFlags {
     };
     for path in files {
         let lower = path.to_ascii_lowercase();
-        let is_doc = lower.ends_with(".md") || lower.starts_with("docs/");
-        flags.docs_only &= is_doc;
+        flags.docs_only &= is_doc_path(&lower);
         flags.source_changed |= is_source_path(&lower);
         flags.rust_changed |= lower.ends_with(".rs");
         flags.rust_tests_changed |=
@@ -3909,6 +3917,48 @@ fn classify_diff(files: &[String], patch: &str) -> DiffFlags {
         flags.unsafe_or_native_risk = true;
     }
     flags
+}
+
+fn classify_language_mix(files: &[String]) -> LanguageMix {
+    let mut language_counts = BTreeMap::<&'static str, usize>::new();
+    let mut surfaces = BTreeSet::<&'static str>::new();
+
+    for path in files {
+        let lower = path.to_ascii_lowercase();
+        if let Some(language) = language_for_path(&lower) {
+            *language_counts.entry(language).or_default() += 1;
+        }
+        for surface in surfaces_for_path(&lower) {
+            surfaces.insert(surface);
+        }
+    }
+
+    let languages = language_counts
+        .keys()
+        .map(|language| (*language).to_owned())
+        .collect::<Vec<_>>();
+    let primary_language = language_counts
+        .iter()
+        .fold(
+            None::<(&'static str, usize)>,
+            |best, (language, count)| match best {
+                Some((best_language, best_count))
+                    if best_count > *count
+                        || (best_count == *count && best_language <= *language) =>
+                {
+                    Some((best_language, best_count))
+                }
+                _ => Some((*language, *count)),
+            },
+        )
+        .map(|(language, _count)| language.to_owned());
+
+    LanguageMix {
+        mixed_language: languages.len() > 1,
+        languages,
+        primary_language,
+        surfaces: surfaces.into_iter().map(str::to_owned).collect::<Vec<_>>(),
+    }
 }
 
 fn classify_diff_class(files: &[String], flags: &DiffFlags) -> DiffClass {
@@ -3932,10 +3982,94 @@ fn classify_diff_class(files: &[String], flags: &DiffFlags) -> DiffClass {
 
 fn is_source_path(path: &str) -> bool {
     [
-        ".rs", ".zig", ".cpp", ".cc", ".c", ".h", ".hpp", ".ts", ".tsx", ".js", ".jsx",
+        ".rs", ".zig", ".cpp", ".cc", ".c", ".h", ".hpp", ".ts", ".tsx", ".js", ".jsx", ".go",
+        ".py",
     ]
     .iter()
     .any(|suffix| path.ends_with(suffix))
+}
+
+fn language_for_path(path: &str) -> Option<&'static str> {
+    if path.ends_with(".rs") {
+        Some("rust")
+    } else if path.ends_with(".ts") || path.ends_with(".tsx") {
+        Some("typescript")
+    } else if path.ends_with(".js")
+        || path.ends_with(".jsx")
+        || path.ends_with(".mjs")
+        || path.ends_with(".cjs")
+    {
+        Some("javascript")
+    } else if is_cpp_path(path) {
+        Some("c-cpp")
+    } else if path.ends_with(".zig") {
+        Some("zig")
+    } else if path.ends_with(".go") {
+        Some("go")
+    } else if path.ends_with(".py") {
+        Some("python")
+    } else if path.ends_with(".sh") {
+        Some("shell")
+    } else if path.ends_with(".yml") || path.ends_with(".yaml") {
+        Some("yaml")
+    } else if path.ends_with(".toml") {
+        Some("toml")
+    } else if path.ends_with(".json") {
+        Some("json")
+    } else if path.ends_with(".md") {
+        Some("markdown")
+    } else {
+        None
+    }
+}
+
+fn surfaces_for_path(path: &str) -> Vec<&'static str> {
+    let mut surfaces = Vec::new();
+    if is_doc_path(path) {
+        surfaces.push("docs");
+    }
+    if is_dependency_path(path) {
+        surfaces.push("dependencies");
+    }
+    if path.starts_with(".github/workflows/") {
+        surfaces.push("workflow");
+    }
+    if path.starts_with(".github/actions/")
+        || path.ends_with("action.yml")
+        || path.ends_with("action.yaml")
+    {
+        surfaces.push("action");
+    }
+    if path.contains("/fixtures/") || path.starts_with("fixtures/") {
+        surfaces.push("fixtures");
+    }
+    if path.contains("/test/")
+        || path.contains("/tests/")
+        || path.starts_with("test/")
+        || path.starts_with("tests/")
+        || path.ends_with(".test.ts")
+        || path.ends_with(".test.js")
+        || path.ends_with("_test.rs")
+    {
+        surfaces.push("tests");
+    }
+    if path.ends_with(".sh") || path.starts_with("scripts/") {
+        surfaces.push("scripts");
+    }
+    if path.starts_with("configs/") {
+        surfaces.push("config");
+    }
+    if is_source_path(path) && !surfaces.contains(&"tests") {
+        surfaces.push("source");
+    }
+    if surfaces.is_empty() {
+        surfaces.push("other");
+    }
+    surfaces
+}
+
+fn is_doc_path(path: &str) -> bool {
+    path.ends_with(".md") || path.starts_with("docs/")
 }
 
 fn is_cpp_path(path: &str) -> bool {
@@ -9383,6 +9517,26 @@ fn render_shared_context(
         diff.changed_files.len()
     ));
     text.push_str(&format!("- Diff class: `{}`\n", diff.diff_class.key()));
+    let language_mix = classify_language_mix(&diff.changed_files);
+    let languages = if language_mix.languages.is_empty() {
+        "none".to_owned()
+    } else {
+        language_mix.languages.join(", ")
+    };
+    let surfaces = if language_mix.surfaces.is_empty() {
+        "none".to_owned()
+    } else {
+        language_mix.surfaces.join(", ")
+    };
+    text.push_str(&format!("- Changed languages: `{languages}`\n"));
+    text.push_str(&format!("- Changed surfaces: `{surfaces}`\n"));
+    if let Some(primary_language) = &language_mix.primary_language {
+        text.push_str(&format!("- Primary language: `{primary_language}`\n"));
+    }
+    text.push_str(&format!(
+        "- Mixed-language diff: `{}`\n",
+        language_mix.mixed_language
+    ));
     text.push_str(&format!(
         "- Unsafe/native risk touched: `{}`\n",
         diff.flags.unsafe_or_native_risk
@@ -15787,6 +15941,38 @@ mod tests {
         let lanes = review_lanes_for_args(&plan, &test_run_args(PathBuf::from("out")));
         assert!(lanes.iter().all(|lane| !lane.id.starts_with("ub-")));
         assert!(!lanes.iter().any(|lane| lane.id == "ub"));
+    }
+
+    #[test]
+    fn mixed_language_diff_records_language_mix_without_ub_routing() {
+        let files = vec![
+            "cmd/server/main.go".to_owned(),
+            "scripts/score.py".to_owned(),
+            "web/routes.ts".to_owned(),
+            "tests/routes.test.ts".to_owned(),
+        ];
+        let flags = classify_diff(&files, "+ handler();\n");
+        let language_mix = super::classify_language_mix(&files);
+
+        assert!(flags.source_changed);
+        assert!(!flags.unsafe_or_native_risk);
+        assert_eq!(
+            classify_diff_class(&files, &flags),
+            DiffClass::SourceGeneral
+        );
+        assert_eq!(
+            language_mix.languages,
+            vec![
+                "go".to_owned(),
+                "python".to_owned(),
+                "typescript".to_owned()
+            ]
+        );
+        assert_eq!(language_mix.primary_language.as_deref(), Some("typescript"));
+        assert!(language_mix.mixed_language);
+        assert!(language_mix.surfaces.contains(&"source".to_owned()));
+        assert!(language_mix.surfaces.contains(&"scripts".to_owned()));
+        assert!(language_mix.surfaces.contains(&"tests".to_owned()));
     }
 
     #[test]

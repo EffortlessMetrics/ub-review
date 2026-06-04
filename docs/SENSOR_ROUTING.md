@@ -16,6 +16,13 @@ Do not give every lane every artifact. Route evidence by job.
 
 The summary reducer sees everything. Individual lanes receive the evidence that sharpens their specialty.
 
+## Diff language mix
+
+`resolved-plan.json` and the shared lane context record the changed language
+families and surfaces for the diff. This is a routing input, not a finding:
+profiles can use it later to choose language-appropriate sensors and lanes
+without assuming every repository is Bun/Rust-only.
+
 ## Sensor issue escalation
 
 Sensors are receipts, not local subsystems to fork inside `ub-review`. If a

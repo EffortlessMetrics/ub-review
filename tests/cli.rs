@@ -268,6 +268,26 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(resolved_plan["profile_name"], "gh-runner");
     assert_eq!(resolved_plan["runtime_profile"], "gh-runner");
     assert_eq!(resolved_plan["diff_class"], "source-ub");
+    assert_eq!(
+        resolved_plan["language_mix"]["languages"],
+        serde_json::json!(["rust"])
+    );
+    assert_eq!(
+        resolved_plan["language_mix"]["primary_language"],
+        serde_json::json!("rust")
+    );
+    assert_eq!(
+        resolved_plan["language_mix"]["mixed_language"],
+        serde_json::json!(false)
+    );
+    assert!(
+        resolved_plan["language_mix"]["surfaces"]
+            .as_array()
+            .is_some_and(|surfaces| {
+                surfaces.iter().any(|surface| surface == "source")
+                    && surfaces.iter().any(|surface| surface == "tests")
+            })
+    );
     assert_eq!(resolved_plan["budgets"]["default_timeout_sec"], 1800);
     assert_eq!(resolved_plan["budgets"]["hard_timeout_sec"], 3600);
     assert_eq!(resolved_plan["budgets"]["proof_max_focused_tests"], 1);
@@ -496,6 +516,10 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(terminal_state["schema"], "ub-review.terminal_state.v1");
     assert_eq!(terminal_state["status"], "artifact-only");
     let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+    assert!(shared_context.contains("- Changed languages: `rust`"));
+    assert!(shared_context.contains("- Changed surfaces: `source, tests`"));
+    assert!(shared_context.contains("- Primary language: `rust`"));
+    assert!(shared_context.contains("- Mixed-language diff: `false`"));
     assert!(shared_context.contains("## PR Thread Context"));
     assert!(shared_context.contains("- Status: `"));
     let shared_context_cache_block =
