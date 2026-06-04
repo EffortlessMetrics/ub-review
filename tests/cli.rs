@@ -24,6 +24,21 @@ fn gh_runner_tool_installer_pins_tokmd_for_bun_ub_sensor() -> Result<()> {
 }
 
 #[test]
+fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
+    let script = fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
+    )?;
+    assert!(script.contains("prefix=\"${UB_REVIEW_TOOL_DIR:-/opt/ub-review}\""));
+    assert!(script.contains("export PATH=\"$prefix/bin:\\$PATH\""));
+    assert!(script.contains("export UB_REVIEW_TOOL_DIR=\"$prefix\""));
+    assert!(
+        !script.contains("export UB_REVIEW_TOOL_DIR=\"$prefix/bin\""),
+        "UB_REVIEW_TOOL_DIR is the install prefix; PATH points at its bin directory"
+    );
+    Ok(())
+}
+
+#[test]
 fn plan_and_dry_run_write_expected_packet_tree() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -949,6 +964,31 @@ command = "ub-review-test-missing-tokmd"
             path_str(&config)?,
             "--require-core-tools",
         ],
+    )?;
+    assert!(output.contains("required core review tools missing from standard image"));
+    assert!(output.contains("tokmd"));
+    Ok(())
+}
+
+#[test]
+fn doctor_standard_image_env_requires_core_tools() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(
+        &config,
+        r#"profile = "gh-runner"
+
+[tools.tokmd]
+id = "tokmd"
+command = "ub-review-test-missing-tokmd"
+"#,
+    )?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_expect_failure_with_env(
+        temp.path(),
+        bin,
+        &["doctor", "--config", path_str(&config)?],
+        &[("UB_REVIEW_STANDARD_IMAGE", "true")],
     )?;
     assert!(output.contains("required core review tools missing from standard image"));
     assert!(output.contains("tokmd"));
@@ -2529,6 +2569,28 @@ fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)])
 
 fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
     let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    if !output.status.success() {
+        return Ok(format!(
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+    bail!("{program} {args:?} unexpectedly succeeded");
+}
+
+fn run_expect_failure_with_env(
+    cwd: &Path,
+    program: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> Result<String> {
+    let mut command = Command::new(program);
+    command.args(args).current_dir(cwd);
+    for (name, value) in envs {
+        command.env(name, value);
+    }
+    let output = command.output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",

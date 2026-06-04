@@ -45,7 +45,7 @@ ub-review image tools installed.
 
 Add this to the runner image environment:
   export PATH="$prefix/bin:\$PATH"
-  export UB_REVIEW_TOOL_DIR="$prefix/bin"
+  export UB_REVIEW_TOOL_DIR="$prefix"
   export UB_REVIEW_CACHE_DIR="/var/cache/ub-review"
   export UB_REVIEW_STANDARD_IMAGE="true"
 EOF
