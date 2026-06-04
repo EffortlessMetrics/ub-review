@@ -1,13 +1,16 @@
 # ub-review
 
-GitHub-runner-first evidence packet and grouped PR review builder for
-UB/native-boundary PR review.
+Targeted CI runner with review judgment automation for UB/native-boundary PR
+review.
 
-This is **not** another generic PR-commenting bot. It builds deterministic
-evidence packets, runs bounded BYOK model lanes when configured, validates
-inline comments, and submits one grouped Pull Request Review. It is optimized
-for cheap CI usage: one GitHub-hosted runner prepares shared context and
-advisory receipts once, then cheap model lanes reason over the packet.
+`ub-review` is an intelligent PR CI gate: it decides what evidence a PR needs,
+runs the relevant proof, and turns the result into one concise review decision.
+It is **not** another generic PR-commenting bot and it is not fixed-job CI. It
+builds deterministic evidence packets, runs bounded BYOK model lanes when
+configured, validates inline comments, and submits one grouped Pull Request
+Review. It is optimized for cheap CI usage: one GitHub-hosted runner prepares
+shared context and advisory receipts once, then model lanes reason over the
+packet while local proof runs centrally.
 
 First production preset:
 
@@ -30,18 +33,20 @@ PR diff -> one generic LLM -> comments
 
 ```text
 PR diff
-  -> deterministic packet
-  -> cheap sensors once
+  -> targeted evidence plan
+  -> relevant sensors/tools/tests
   -> lane-specific evidence packets
   -> MiniMax M3 review lanes by default
+  -> proof receipts
   -> validated inline comments
   -> one grouped PR Review
   -> full artifacts
 ```
 
 LLM tokens are cheap. CI runner time, disk, local analyzer fanout, and reviewer
-attention are the constraints. This action keeps CI doing packet work, not long
-model orchestration.
+attention are the constraints. This action keeps CI doing the work traditional
+CI would do, but chooses it like a reviewer: plan evidence from the diff, run
+proof that can change the decision, and keep boilerplate in artifacts.
 
 ## Copy/paste Bun setup
 

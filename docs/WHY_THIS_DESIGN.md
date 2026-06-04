@@ -1,16 +1,21 @@
 # Why this design
 
-`ub-review` is not meant to beat generic review bots by commenting more.
+`ub-review` is not meant to beat generic review bots by commenting more, and it
+is not meant to imitate fixed-job CI.
 
 It is meant to be better for UB/native-boundary work because it changes the
-shape of the work:
+shape of the work: the runner decides what the PR needs proven, runs the
+relevant evidence streams, and posts only the review decision that follows from
+the receipts.
 
 ```text
 PR diff
-  -> one deterministic packet
-  -> cheap sensors once
+  -> targeted evidence plan
+  -> deterministic shared packet
+  -> relevant sensors once
   -> lane-specific packets
   -> bounded MiniMax/OpenCode Go direct provider lanes
+  -> focused proof receipts
   -> validated inline comments
   -> one serious Pull Request Review
   -> running summary
@@ -18,9 +23,8 @@ PR diff
 ```
 
 The scarce resource is CI, not tokens. The runner should build shared evidence
-once, run bounded high-capability model lanes over that shared context, validate
-comments against the diff, and post one grouped review rather than many lane
-comments.
+once, overlap model investigation with local proof, validate comments against
+the diff, and post one grouped review rather than many lane comments.
 
 ## Design bets
 
@@ -31,6 +35,8 @@ comments.
 5. No finding is not approval.
 6. Heavy witnesses require explicit policy.
 7. Posting is one grouped PR Review compiled from grounded findings.
+8. The runner does the work traditional CI would do, but chooses it like a
+   reviewer.
 
 ## First wedge
 
