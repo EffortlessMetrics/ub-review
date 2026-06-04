@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
+RUN_MODE_VALUES = {"review-byok", "intelligent-ci"}
 RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"
@@ -97,6 +98,14 @@ def require_run_pass(value: Any, label: str) -> str:
     if value not in RUN_PASS_VALUES:
         fail(
             f"{label} expected one of {sorted(RUN_PASS_VALUES)!r}, got {value!r}"
+        )
+    return value
+
+
+def require_run_mode(value: Any, label: str) -> str:
+    if value not in RUN_MODE_VALUES:
+        fail(
+            f"{label} expected one of {sorted(RUN_MODE_VALUES)!r}, got {value!r}"
         )
     return value
 
@@ -828,8 +837,7 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         r"[0-9a-f]{64}", shared_context_id
     ):
         fail("review.json shared_context_id is not a 64-character hex digest")
-    if review.get("mode") != "review-byok":
-        fail(f"review.json mode expected review-byok, got {review.get('mode')!r}")
+    require_run_mode(review.get("mode"), "review.json mode")
     if review.get("review_profile") != "bun-ub-v0":
         fail(
             "review.json review_profile expected bun-ub-v0, "
@@ -3598,6 +3606,13 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
 
 
 def run_self_tests() -> None:
+    require_run_mode("review-byok", "self-test review-byok mode")
+    require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
+    expect_self_test_failure(
+        "legacy run mode artifact",
+        "expected one of",
+        lambda: require_run_mode("review-direct", "self-test legacy mode"),
+    )
     require_github_comment(
         {
             "path": "src/lib.rs",
