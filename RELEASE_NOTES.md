@@ -17,7 +17,7 @@ Current supported shape:
 - full packet artifacts, including `review/post-result.json` or `review/post-error.json`
 - standard-image doctor fails missing core tools and stale `tokmd` versions
 - Bun consumer workflow example using
-  `EffortlessMetrics/ub-review@217f123e688e42ddfce98eec5795b88bf457dd34`
+  `EffortlessMetrics/ub-review@7b969e53b58d7b2a32db9006f1f2f43916fc2134`
 
 Before tagging `v0`, prove the same commit on:
 
