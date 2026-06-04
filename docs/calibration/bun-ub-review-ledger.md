@@ -41,19 +41,20 @@ Parked follow-ups:
 
 Date: 2026-06-04
 Repo: `EffortlessSteven/bun`
-PR: `#46`
-Pin: `EffortlessMetrics/ub-review@7b969e53b58d7b2a32db9006f1f2f43916fc2134`
-Run: `26957379285`
-Artifact: `ub-review-packet-46`
+PR: `#47`
+Pin: `EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6`
+Run: `26959434377`
+Artifact: `ub-review-packet-47`
 
 Acted on:
 
-- The Bun workflow pin advanced after `ub-review` PR #209 and PR #211.
+- The Bun workflow pin advanced after `ub-review` PR #212 and PR #214.
 - The `UB evidence packet / gh-runner` job passed on the new pin.
 - The packet artifact uploaded and was not expired at merge time.
 - The packet verifier passed with zero inline comments and `tokmd` status `ok`.
 - The packet includes `evidence_stream_started` for the role-stream event
   contract.
+- The packet records `run_pass` as `opened` in review and metrics artifacts.
 
 Prompt/compiler follow-up:
 
