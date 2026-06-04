@@ -2752,6 +2752,18 @@ fn finish_run_loop(
     active: ActiveRunLoop,
     status: &str,
 ) -> Result<()> {
+    let loop_id = active.loop_id;
+    let interval = finish_run_loop_interval(event_log, run_started, active, status)?;
+    tracker.record(loop_id, interval);
+    Ok(())
+}
+
+fn finish_run_loop_interval(
+    event_log: &EventLog,
+    run_started: &Instant,
+    active: ActiveRunLoop,
+    status: &str,
+) -> Result<LoopInterval> {
     let finished_at_offset_ms = run_started.elapsed().as_millis();
     let duration_ms = active.started_at.elapsed().as_millis();
     let payload = serde_json::json!({
@@ -2768,15 +2780,11 @@ fn finish_run_loop(
         payload.clone(),
     )?;
     event_log.append(&format!("{}_stream_completed", active.stream_id), payload)?;
-    tracker.record(
-        active.loop_id,
-        LoopInterval {
-            started_at_offset_ms: active.started_at_offset_ms,
-            finished_at_offset_ms,
-            duration_ms,
-        },
-    );
-    Ok(())
+    Ok(LoopInterval {
+        started_at_offset_ms: active.started_at_offset_ms,
+        finished_at_offset_ms,
+        duration_ms,
+    })
 }
 
 fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
@@ -5319,68 +5327,116 @@ fn write_review_artifacts(
     let mut model_observations = Vec::new();
     let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
+    let profile = config.selected_profile()?;
 
-    let model_loop = start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
+    let mut proof_result = ProofBrokerResult::default();
     if matches!(args.model_mode, ModelMode::Auto) {
-        run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
-        append_preflight_evidence_issues(
-            &provider_preflights,
-            &mut missing_or_failed_model_evidence,
-        );
-        model_calls_used = run_available_model_lanes(
-            ModelRunContext {
-                root,
-                review_dir: &review_dir,
-                assignments: &assignments,
-                provider_preflights: &provider_preflights,
-                shared_context: &shared_context,
-                args,
-                line_map: &line_map,
-            },
-            &mut model_lanes,
-            &mut missing_or_failed_model_evidence,
-            &mut inline_comments,
-            &mut summary_only_findings,
-            &mut model_observations,
-            &mut proof_requests,
+        let initial_proof_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "initial-diff-broker",
         )?;
-        dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
-        model_calls_used += run_refuter_pass(
-            RefuterRunContext {
-                root,
-                review_dir: &review_dir,
-                provider_preflights: &provider_preflights,
-                shared_context: &shared_context,
-                args,
-                model_calls_used,
-            },
-            &mut model_lanes,
-            &mut missing_or_failed_model_evidence,
-            &mut inline_comments,
-            &mut summary_only_findings,
+        thread::scope(|scope| -> Result<()> {
+            let initial_proof_handle = scope.spawn(move || {
+                let broker_result =
+                    run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
+                let status = if broker_result.is_ok() {
+                    "completed"
+                } else {
+                    "failed"
+                };
+                let interval =
+                    finish_run_loop_interval(event_log, run_started, initial_proof_loop, status)?;
+                broker_result.map(|proof_result| (proof_result, interval))
+            });
+
+            let model_loop =
+                start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
+            run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
+            append_preflight_evidence_issues(
+                &provider_preflights,
+                &mut missing_or_failed_model_evidence,
+            );
+            model_calls_used = run_available_model_lanes(
+                ModelRunContext {
+                    root,
+                    review_dir: &review_dir,
+                    assignments: &assignments,
+                    provider_preflights: &provider_preflights,
+                    shared_context: &shared_context,
+                    args,
+                    line_map: &line_map,
+                },
+                &mut model_lanes,
+                &mut missing_or_failed_model_evidence,
+                &mut inline_comments,
+                &mut summary_only_findings,
+                &mut model_observations,
+                &mut proof_requests,
+            )?;
+            dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+            model_calls_used += run_refuter_pass(
+                RefuterRunContext {
+                    root,
+                    review_dir: &review_dir,
+                    provider_preflights: &provider_preflights,
+                    shared_context: &shared_context,
+                    args,
+                    model_calls_used,
+                },
+                &mut model_lanes,
+                &mut missing_or_failed_model_evidence,
+                &mut inline_comments,
+                &mut summary_only_findings,
+            )?;
+            finish_run_loop(
+                event_log,
+                run_started,
+                run_loop_tracker,
+                model_loop,
+                "completed",
+            )?;
+
+            let (initial_result, proof_interval) = initial_proof_handle
+                .join()
+                .map_err(|_| anyhow::anyhow!("initial diff proof thread panicked"))??;
+            run_loop_tracker.record("proof", proof_interval);
+            proof_result = initial_result;
+            Ok(())
+        })?;
+    } else {
+        let model_loop =
+            start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
+        finish_run_loop(
+            event_log,
+            run_started,
+            run_loop_tracker,
+            model_loop,
+            "skipped_model_mode_off",
+        )?;
+        let initial_proof_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "initial-diff-broker",
+        )?;
+        proof_result = run_initial_diff_proof_broker_v0(root, out, diff, profile, args)?;
+        finish_run_loop(
+            event_log,
+            run_started,
+            run_loop_tracker,
+            initial_proof_loop,
+            "completed",
         )?;
     }
-    let model_loop_status = if matches!(args.model_mode, ModelMode::Auto) {
-        "completed"
-    } else {
-        "skipped_model_mode_off"
-    };
-    finish_run_loop(
-        event_log,
-        run_started,
-        run_loop_tracker,
-        model_loop,
-        model_loop_status,
-    )?;
-
-    let profile = config.selected_profile()?;
-    let proof_loop = start_run_loop(
-        event_log,
-        run_started,
-        "proof",
-        "proof",
-        "planner-and-broker",
-    )?;
+    attach_request_metadata_to_focused_receipts(
+        diff,
+        &proof_requests,
+        &mut proof_result.proof_receipts,
+    );
     write_proof_planner_artifacts(
         out,
         diff,
@@ -5389,14 +5445,38 @@ fn write_review_artifacts(
         &pr_thread_context,
         &proof_requests,
     )?;
-    let proof_result = run_proof_broker_v0(root, out, diff, profile, &proof_requests, args)?;
-    finish_run_loop(
-        event_log,
-        run_started,
-        run_loop_tracker,
-        proof_loop,
-        "completed",
-    )?;
+    if !proof_requests.is_empty() {
+        let request_proof_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "model-request-broker",
+        )?;
+        let request_proof_result = run_request_proof_broker_v0(
+            root,
+            out,
+            diff,
+            profile,
+            &proof_requests,
+            &proof_result.proof_receipts,
+            &proof_result.resource_leases,
+            args,
+        )?;
+        proof_result
+            .proof_receipts
+            .extend(request_proof_result.proof_receipts);
+        proof_result
+            .resource_leases
+            .extend(request_proof_result.resource_leases);
+        finish_run_loop(
+            event_log,
+            run_started,
+            run_loop_tracker,
+            request_proof_loop,
+            "completed",
+        )?;
+    }
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
     let compiler_loop = start_run_loop(
@@ -8163,17 +8243,49 @@ fn focused_proof_plans_from_diff(
         .collect()
 }
 
-fn run_proof_broker_v0(
+fn run_initial_diff_proof_broker_v0(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    args: &RunArgs,
+) -> Result<ProofBrokerResult> {
+    let budget = proof_budget(profile)?;
+    let tasks = focused_test_candidates_from_diff(diff, &[]);
+    run_focused_red_green_proof_tasks_with_runner(
+        root,
+        out,
+        diff,
+        profile,
+        args,
+        budget,
+        tasks,
+        run_command_to_files,
+        prepare_base_plus_tests_worktree,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "primary request proof broker mirrors follow-up broker inputs"
+)]
+fn run_request_proof_broker_v0(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
     profile: &Profile,
     proof_requests: &[ProofRequest],
+    existing_receipts: &[ProofReceipt],
+    existing_leases: &[ResourceLease],
     args: &RunArgs,
 ) -> Result<ProofBrokerResult> {
-    let budget = proof_budget(profile)?;
-    let tasks = focused_test_candidates_from_diff(diff, proof_requests);
-    let mut result = run_focused_red_green_proof_tasks_with_runner(
+    let total_budget = proof_budget(profile)?;
+    let budget = remaining_focused_proof_budget(total_budget, existing_leases);
+    let tasks = unreceipted_focused_test_tasks(
+        focused_test_candidates_from_requests(proof_requests),
+        existing_receipts,
+    );
+    let mut result = run_follow_up_proof_broker_v0_with_runner(
         root,
         out,
         diff,
@@ -8184,8 +8296,16 @@ fn run_proof_broker_v0(
         run_command_to_files,
         prepare_base_plus_tests_worktree,
     )?;
-    let remaining_budget = remaining_focused_proof_budget(budget, &result.resource_leases);
+    let mut consumed_leases = existing_leases.to_vec();
+    consumed_leases.extend(result.resource_leases.clone());
+    let remaining_budget = remaining_focused_proof_budget(total_budget, &consumed_leases);
+    let existing_and_new_receipts = existing_receipts
+        .iter()
+        .chain(result.proof_receipts.iter())
+        .cloned()
+        .collect::<Vec<_>>();
     let build_tasks = focused_build_candidates_from_requests(proof_requests);
+    let build_tasks = unreceipted_focused_build_tasks(build_tasks, &existing_and_new_receipts);
     let build_result = run_focused_build_proof_tasks_with_runner(
         root,
         out,
@@ -8333,6 +8453,32 @@ fn remaining_focused_proof_budget(
 
 fn focused_proof_lease_counts_budget(kind: &str) -> bool {
     matches!(kind, "focused-test" | "focused-build")
+}
+
+fn attach_request_metadata_to_focused_receipts(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    proof_receipts: &mut [ProofReceipt],
+) {
+    if proof_requests.is_empty() || proof_receipts.is_empty() {
+        return;
+    }
+    let request_metadata = focused_test_candidates_from_diff(diff, proof_requests)
+        .into_iter()
+        .filter(|task| !task.request_ids.is_empty())
+        .map(|task| (task.id, (task.requested_by, task.request_ids)))
+        .collect::<BTreeMap<_, _>>();
+    for receipt in proof_receipts {
+        let Some((requested_by, request_ids)) = request_metadata.get(&receipt.id) else {
+            continue;
+        };
+        for lane in requested_by {
+            push_unique(&mut receipt.requested_by, lane);
+        }
+        for request_id in request_ids {
+            push_unique(&mut receipt.request_ids, request_id);
+        }
+    }
 }
 
 fn unreceipted_focused_test_tasks(
@@ -9051,6 +9197,7 @@ struct ProofCommandSpec {
     env: BTreeMap<String, String>,
 }
 
+#[derive(Default)]
 struct ProofBrokerResult {
     proof_receipts: Vec<ProofReceipt>,
     resource_leases: Vec<ResourceLease>,
@@ -19917,6 +20064,98 @@ index 1111111..2222222 100644
             "focused red/green proof lease budget exhausted by runtime profile"
         );
         Ok(())
+    }
+
+    #[test]
+    fn initial_diff_receipt_absorbs_matching_lane_request_metadata() {
+        let patch = "\
+diff --git a/test/js/bun/md/md-edge-cases.test.ts b/test/js/bun/md/md-edge-cases.test.ts
+index 1111111..2222222 100644
+--- a/test/js/bun/md/md-edge-cases.test.ts
++++ b/test/js/bun/md/md-edge-cases.test.ts
+@@ -1,2 +1,3 @@
+ import { test } from 'bun:test';
++test(\"snapshots resizable ArrayBuffer input\", () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+        let initial_tasks = super::focused_test_candidates_from_diff(&diff, &[]);
+        assert_eq!(initial_tasks.len(), 1);
+        let mut receipts = vec![super::focused_red_green_receipt(
+            &diff,
+            &initial_tasks[0],
+            Vec::new(),
+            "discriminating".to_owned(),
+            "HEAD passed; base+tests failed".to_owned(),
+        )];
+        assert_eq!(receipts[0].requested_by, vec!["proof-broker"]);
+        assert!(receipts[0].request_ids.is_empty());
+
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-md-001".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned(), "opposition".to_owned()],
+            command: "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots resizable ArrayBuffer input'".to_owned(),
+            reason: "Need md red/green witness.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+
+        super::attach_request_metadata_to_focused_receipts(&diff, &proof_requests, &mut receipts);
+        assert_eq!(
+            receipts[0].requested_by,
+            vec![
+                "proof-broker".to_owned(),
+                "tests-oracle".to_owned(),
+                "opposition".to_owned()
+            ]
+        );
+        assert_eq!(receipts[0].request_ids, vec!["proof-md-001"]);
+        let remaining_tasks = super::unreceipted_focused_test_tasks(
+            super::focused_test_candidates_from_requests(&proof_requests),
+            &receipts,
+        );
+        assert!(
+            remaining_tasks.is_empty(),
+            "matching model request should not rerun initial diff proof"
+        );
+    }
+
+    #[test]
+    fn run_loop_metrics_count_actual_model_proof_overlap() {
+        let mut tracker = super::RunLoopTracker::new();
+        tracker.record(
+            "model",
+            super::LoopInterval {
+                started_at_offset_ms: 10,
+                finished_at_offset_ms: 110,
+                duration_ms: 100,
+            },
+        );
+        tracker.record(
+            "proof",
+            super::LoopInterval {
+                started_at_offset_ms: 50,
+                finished_at_offset_ms: 80,
+                duration_ms: 30,
+            },
+        );
+
+        let metrics = tracker.metrics();
+        assert_eq!(metrics.model_wall_ms, 100);
+        assert_eq!(metrics.local_proof_wall_ms, 30);
+        assert_eq!(metrics.investigation_proof_overlap_ms, 30);
+        assert_eq!(metrics.model_proof_overlap_ms, 30);
+        assert_eq!(metrics.proof_overlap_ms, 30);
     }
 
     #[test]
