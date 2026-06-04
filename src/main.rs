@@ -13217,6 +13217,7 @@ fn render_refuter_prompt(inline_comments: &[ReviewInlineComment]) -> Result<Stri
 
 Use only the cached shared context and candidate inline comments below.
 Do not browse. Do not infer safety from missing evidence.
+Do not post, mutate files, or run shell commands. The refuter only classifies candidates.
 Return strict JSON only:
 {{
   "decisions": [
@@ -18149,16 +18150,17 @@ mod tests {
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
-        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, runtime_profile_from_toml, runtime_profile_override, sensor_job_count,
-        sha256_hex, split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_from_toml,
+        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
+        standard_minimax_lanes, validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -22200,6 +22202,27 @@ index 1111111..2222222 100644
                 .reason
                 .contains("duplicate inline candidate merged into src/lib.rs:2")
         );
+    }
+
+    #[test]
+    fn refuter_prompt_keeps_execution_out_of_model_turn() -> Result<()> {
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
+            evidence: "ripr excerpt".to_owned(),
+        }];
+
+        let prompt = render_refuter_prompt(&inline_comments)?;
+
+        assert!(prompt.contains("Do not post, mutate files, or run shell commands"));
+        assert!(prompt.contains("The refuter only classifies candidates"));
+        assert!(prompt.contains("Use only the cached shared context"));
+        Ok(())
     }
 
     #[test]
