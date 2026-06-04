@@ -22,11 +22,11 @@ Pull Request Review. MiniMax M3 lanes use `secrets.MINIMAX`; GLM is skipped for
 v0. The calling workflow still owns uploading `target/ub-review` as the durable
 artifact.
 
-The `core` hosted-runner tool bundle attempts `tokmd`, `cargo-allow`, `ripr`,
-`unsafe-review`, `ast-grep`, and `actionlint`. Missing tools on a generic
-hosted runner are evidence gaps in the packet. Missing tools on the standard
-ub-review image are image drift and should fail `ub-review doctor
---require-core-tools`.
+The `core` hosted-runner tool bundle attempts `tokmd` `1.12.0`,
+`cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint`. Missing
+tools on a generic hosted runner are evidence gaps in the packet. Missing tools
+on the standard ub-review image are image drift and should fail `ub-review
+doctor --require-core-tools`.
 
 ## Copy-ready workflow
 
