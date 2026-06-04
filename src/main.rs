@@ -15799,13 +15799,21 @@ fn is_stale_external_bot_objection_noise(text: &str) -> bool {
             || text.contains("not real findings")
             || text.contains("current diff")
             || text.contains("live diff"));
+    let contradicted_target_advice = (text.contains("different sha")
+        || text.contains("targeting a different sha")
+        || text.contains("0 references to")
+        || text.contains("scripted check showing 0 references")
+        || text.contains("not match to gate target"))
+        && (text.contains("used in the diff") || text.contains("current diff"));
     let mentions_pin_ref_mismatch = text.contains("claim target")
         || text.contains("pin mismatch")
         || text.contains("target sha")
         || text.contains("current head sha")
         || text.contains("pr title")
         || text.contains("pr body");
-    mentions_bots && says_stale_false_positive && mentions_pin_ref_mismatch
+    mentions_bots
+        && mentions_pin_ref_mismatch
+        && (says_stale_false_positive || contradicted_target_advice)
 }
 
 fn is_workflow_tool_status_artifact_gap_noise(text: &str) -> bool {
@@ -23022,6 +23030,15 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("stale bot target-SHA prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Refuted\n\n- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -25051,6 +25068,13 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "PR body states actionlint is not installed locally, so the 'ok' receipt must come from the ub-review gate's own tooling rather than a local pre-push run; trust depends on that gate having actually executed actionlint v1 against this ref.".to_owned(),
                 evidence: "workflow lane summary".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate and the packet will be filtered/no-posture.".to_owned(),
+                evidence: "CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned(),
+            },
         ];
         let observations = vec![
             test_observation(
@@ -25110,6 +25134,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("paths-ignore"));
         assert!(!body.contains("focused smoke proof"));
         assert!(!body.contains("actionlint is not installed locally"));
+        assert!(!body.contains("CodeRabbit"));
+        assert!(!body.contains("892e1bb"));
         assert!(!body.contains("zizmor"));
         assert!(!body.contains("Droid noise"));
     }
