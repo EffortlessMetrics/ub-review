@@ -363,6 +363,8 @@ def require_common_tree(root: pathlib.Path) -> None:
         "plan.json",
         "resolved-profile.json",
         "resolved-plan.json",
+        "resolved-tools.json",
+        "tool-status.json",
         "running-summary.md",
         "review/shared_context.md",
         "review/shared_context_cache_block.md",
@@ -371,6 +373,8 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/cache_events.ndjson",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
+        "review/resolved-tools.json",
+        "review/tool-status.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/scheduler.json",
@@ -3000,6 +3004,75 @@ def require_sensor_receipts(root: pathlib.Path) -> None:
             fail(f"{sensor} receipt missing reason")
 
 
+def require_tool_registry_artifacts(root: pathlib.Path) -> None:
+    resolved_tools = load_json(root / "resolved-tools.json")
+    review_resolved_tools = load_json(root / "review/resolved-tools.json")
+    if resolved_tools != review_resolved_tools:
+        fail("resolved-tools.json does not match review/resolved-tools.json")
+    if resolved_tools.get("schema") != "ub-review.resolved_tools.v1":
+        fail("resolved-tools.json has wrong schema")
+
+    tool_status = load_json(root / "tool-status.json")
+    review_tool_status = load_json(root / "review/tool-status.json")
+    if tool_status != review_tool_status:
+        fail("tool-status.json does not match review/tool-status.json")
+    if tool_status.get("schema") != "ub-review.tool_status.v1":
+        fail("tool-status.json has wrong schema")
+
+    runtime_profile = resolved_tools.get("runtime_profile")
+    if not isinstance(runtime_profile, str) or not runtime_profile:
+        fail("resolved-tools.json runtime_profile is invalid")
+    if tool_status.get("runtime_profile") != runtime_profile:
+        fail("tool-status.json runtime_profile does not match resolved-tools.json")
+
+    resolved_by_id = require_tool_entries(resolved_tools, "resolved-tools.json")
+    status_by_id = require_tool_entries(tool_status, "tool-status.json")
+    missing_status = sorted(set(resolved_by_id) - set(status_by_id))
+    if missing_status:
+        fail(f"tool-status.json missing resolved tools: {', '.join(missing_status)}")
+
+    for sensor in SENSORS:
+        if sensor not in resolved_by_id:
+            fail(f"resolved-tools.json missing core tool {sensor}")
+        if sensor not in status_by_id:
+            fail(f"tool-status.json missing core tool {sensor}")
+        status_entry = status_by_id[sensor]
+        receipt = load_json(root / "sensors" / sensor / "ub-review-sensor-status.json")
+        if status_entry.get("status") != receipt.get("status"):
+            fail(f"tool-status.json status for {sensor} does not match sensor receipt")
+        if status_entry.get("reason") != receipt.get("reason"):
+            fail(f"tool-status.json reason for {sensor} does not match sensor receipt")
+        expected_status_path = f"sensors/{sensor}/ub-review-sensor-status.json"
+        paths = status_entry.get("artifact_paths", [])
+        if expected_status_path not in paths:
+            fail(f"tool-status.json {sensor} missing status artifact path")
+
+
+def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
+    tools = artifact.get("tools")
+    if not isinstance(tools, list) or not tools:
+        fail(f"{path} tools is not a non-empty array")
+    by_id: dict[str, dict] = {}
+    for entry in tools:
+        if not isinstance(entry, dict):
+            fail(f"{path} tool entry is not an object: {entry!r}")
+        tool_id = entry.get("id")
+        if not isinstance(tool_id, str) or not tool_id:
+            fail(f"{path} tool entry missing id: {entry!r}")
+        if tool_id in by_id:
+            fail(f"{path} duplicate tool id {tool_id}")
+        for field in ["class", "command", "required_if", "required_reason", "runtime_profile"]:
+            if not isinstance(entry.get(field), str) or not entry[field]:
+                fail(f"{path} {tool_id} missing string field {field}: {entry!r}")
+        artifact_paths = entry.get("artifact_paths")
+        if not isinstance(artifact_paths, list) or not all(
+            isinstance(item, str) and item for item in artifact_paths
+        ):
+            fail(f"{path} {tool_id} artifact_paths is not a string array")
+        by_id[tool_id] = entry
+    return by_id
+
+
 def require_model_receipts(review: dict, metrics: dict, min_ok_model_lanes: int) -> None:
     if min_ok_model_lanes <= 0:
         return
@@ -3120,6 +3193,7 @@ def main(argv: list[str]) -> int:
     require_summary(root)
     require_profile_artifacts(root)
     require_sensor_receipts(root)
+    require_tool_registry_artifacts(root)
     review = require_review(root, args.max_inline_comments)
     metrics = require_metrics(root, review)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
