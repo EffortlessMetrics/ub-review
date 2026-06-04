@@ -3344,7 +3344,7 @@ fn prepare_plan(
     let profile = config.selected_profile()?;
     let box_state = BoxState::detect()?;
     let diff = DiffContext::from_git(&args.root, &args.base, &args.head)?;
-    let mut plan = build_plan(&config, profile, &box_state, &diff, allow_heavy);
+    let mut plan = build_plan(&config, profile, &box_state, &diff, &args.root, allow_heavy);
     apply_plan_selectors(&mut plan, selectors)?;
     Ok((config, diff, box_state, plan))
 }
@@ -4182,6 +4182,7 @@ fn build_plan(
     profile: &Profile,
     box_state: &BoxState,
     diff: &DiffContext,
+    root: &Path,
     allow_heavy: bool,
 ) -> Plan {
     let mut notes = Vec::new();
@@ -4189,7 +4190,7 @@ fn build_plan(
     let mut sensors = config
         .tools
         .values()
-        .map(|tool| plan_tool(tool, profile, diff, guard_ok, allow_heavy))
+        .map(|tool| plan_tool(tool, profile, diff, root, guard_ok, allow_heavy))
         .collect::<Vec<_>>();
     sensors.sort_by_key(|sensor| sensor_order(&sensor.id));
     if diff.flags.docs_only {
@@ -4230,6 +4231,7 @@ fn plan_tool(
     tool: &ToolPolicy,
     profile: &Profile,
     diff: &DiffContext,
+    root: &Path,
     guard_ok: bool,
     allow_heavy: bool,
 ) -> SensorPlan {
@@ -4249,18 +4251,29 @@ fn plan_tool(
         return skipped(tool, "box guard failed; only packet generation is allowed");
     }
     match trigger_match(tool.default, &diff.flags) {
-        Some(reason) => SensorPlan {
-            id: tool.id.clone(),
-            command: tool.command.clone(),
-            run: true,
-            reason,
-            timeout_sec: tool.timeout_sec.min(profile.budgets.default_timeout_sec),
-            class: tool.class,
-            weight: tool.weight,
-            requires_lease: tool.requires_lease,
-        },
+        Some(reason) => {
+            if tool.id == "cargo-allow" && !cargo_allow_policy_config_exists(root) {
+                return skipped(tool, "cargo-allow policy config not found");
+            }
+            SensorPlan {
+                id: tool.id.clone(),
+                command: tool.command.clone(),
+                run: true,
+                reason,
+                timeout_sec: tool.timeout_sec.min(profile.budgets.default_timeout_sec),
+                class: tool.class,
+                weight: tool.weight,
+                requires_lease: tool.requires_lease,
+            }
+        }
         None => skipped(tool, "trigger did not match this diff"),
     }
+}
+
+fn cargo_allow_policy_config_exists(root: &Path) -> bool {
+    ["policy/allow.toml", "cargo-allow.toml", ".cargo-allow.toml"]
+        .iter()
+        .any(|path| root.join(path).is_file())
 }
 
 fn skipped(tool: &ToolPolicy, reason: &str) -> SensorPlan {
@@ -4790,7 +4803,7 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
         "actionlint" => vec![
             "actionlint".to_owned(),
             "-format".to_owned(),
-            "json".to_owned(),
+            "{{json .}}".to_owned(),
         ],
         "zizmor" => vec![
             "zizmor".to_owned(),
@@ -16509,6 +16522,67 @@ mod tests {
                 "stderr.txt".to_owned(),
                 "cargo-allow.md".to_owned(),
                 "cargo-allow.receipt.json".to_owned(),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cargo_allow_sensor_skips_without_policy_config() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut diff = test_diff();
+        diff.flags.source_changed = false;
+        diff.flags.workflow_changed = true;
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![".github/workflows/ub-review-packet.yml".to_owned()];
+        let tool = super::ToolPolicy {
+            id: "cargo-allow".to_owned(),
+            command: "cargo-allow".to_owned(),
+            default: super::Trigger::SourceExceptionChanged,
+            ..super::ToolPolicy::default()
+        };
+
+        let skipped = super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
+
+        assert!(!skipped.run);
+        assert_eq!(skipped.reason, "cargo-allow policy config not found");
+
+        diff.flags.workflow_changed = false;
+        let not_matched =
+            super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
+
+        assert!(!not_matched.run);
+        assert_eq!(not_matched.reason, "trigger did not match this diff");
+
+        diff.flags.workflow_changed = true;
+        fs::create_dir_all(temp.path().join("policy"))?;
+        fs::write(temp.path().join("policy/allow.toml"), "schema = 1\n")?;
+        let planned = super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
+
+        assert!(planned.run);
+        assert_eq!(planned.reason, "source-tree exception surface changed");
+        Ok(())
+    }
+
+    #[test]
+    fn actionlint_sensor_uses_json_template_format() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let plan = test_plan(vec![sensor_plan("actionlint", "actionlint", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint sensor missing"))?;
+        let dir = out.join("sensors/actionlint");
+        let argv = super::build_sensor_argv(temp.path(), &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "actionlint".to_owned(),
+                "-format".to_owned(),
+                "{{json .}}".to_owned(),
             ]
         );
         Ok(())

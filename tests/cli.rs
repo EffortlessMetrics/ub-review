@@ -364,8 +364,8 @@ fn active_len_tracks_view_after_resize() {
                 && tool["class"] == "static"
                 && tool["required_if"] == "source-exception-changed"
                 && tool["required_reason"] == "source-tree exception surface changed"
-                && tool["planned_run"] == true
-                && tool["plan_reason"] == "source-tree exception surface changed"
+                && tool["planned_run"] == false
+                && tool["plan_reason"] == "cargo-allow policy config not found"
                 && tool["artifact_paths"].as_array().is_some_and(|paths| {
                     paths
                         .iter()
@@ -406,9 +406,9 @@ fn active_len_tracks_view_after_resize() {
     assert!(tool_status["tools"].as_array().is_some_and(|tools| {
         tools.iter().any(|tool| {
             tool["id"] == "cargo-allow"
-                && tool["planned_run"] == true
+                && tool["planned_run"] == false
                 && tool["status"] == "skipped"
-                && tool["reason"] == "dry-run; sensor not executed"
+                && tool["reason"] == "cargo-allow policy config not found"
         })
     }));
     assert!(tool_status["tools"].as_array().is_some_and(|tools| {
