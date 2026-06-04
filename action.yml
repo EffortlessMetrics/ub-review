@@ -77,6 +77,10 @@ inputs:
     description: 'Execution mode: review-direct, agent-investigate, or agent-patch. Only review-direct is implemented in v0.'
     default: review-direct
     required: false
+  run-pass:
+    description: 'Run pass identity: auto, opened, ready_for_review, pull_request_other, or manual. Auto maps pull_request opened and ready_for_review to the matching pass.'
+    default: auto
+    required: false
   github-token:
     description: GitHub token used to seed PR-thread context and, when posting=review, submit the grouped PR review.
     default: ''
@@ -447,6 +451,7 @@ runs:
         UB_REVIEW_MINIMAX_API_URL: ${{ inputs['minimax-api-url'] }}
         UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
         UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
+        UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}
       run: |
         set -euo pipefail
         extra=()
@@ -480,6 +485,7 @@ runs:
           --out "${{ inputs.out }}" \
           --posting "${{ inputs.posting }}" \
           --mode "${{ inputs.mode }}" \
+          --run-pass "${{ inputs['run-pass'] }}" \
           --model-mode "${{ inputs['model-mode'] }}" \
           --depth "${{ inputs.depth }}" \
           --lanes "${{ inputs.lanes }}" \

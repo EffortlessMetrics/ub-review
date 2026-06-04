@@ -15,6 +15,7 @@ from typing import Any, Callable
 
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
+RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"
 APPROVAL_LINES = {
@@ -90,6 +91,14 @@ SAFE_SECRET_VALUE_WORDS = {
 def fail(message: str) -> None:
     print(f"verify-bun-review-artifacts: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def require_run_pass(value: Any, label: str) -> str:
+    if value not in RUN_PASS_VALUES:
+        fail(
+            f"{label} expected one of {sorted(RUN_PASS_VALUES)!r}, got {value!r}"
+        )
+    return value
 
 
 def expect_self_test_failure(
@@ -638,6 +647,7 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         )
     if review.get("posting") not in {"review", "artifact-only"}:
         fail(f"review.json posting has unexpected value {review.get('posting')!r}")
+    review_run_pass = require_run_pass(review.get("run_pass"), "review.json run_pass")
     if not isinstance(review.get("model_lanes"), list):
         fail("review.json model_lanes is not an array")
     if "## UB Ledger Context" not in shared_context:
@@ -726,6 +736,8 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
             )
         if skip.get("terminal_state") != review.get("terminal_state", {}).get("status"):
             fail("github-review-skip.json terminal_state does not match review.json")
+        if skip.get("run_pass") != review_run_pass:
+            fail("github-review-skip.json run_pass does not match review.json")
 
     return review
 
@@ -760,6 +772,9 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_scheduler_artifact(root, metrics)
     if metrics.get("mode") != review.get("mode"):
         fail("metrics mode does not match review.json")
+    review_run_pass = require_run_pass(review.get("run_pass"), "review.json run_pass")
+    if metrics.get("run_pass") != review_run_pass:
+        fail("metrics run_pass does not match review.json")
     if metrics.get("review_profile") != review.get("review_profile"):
         fail("metrics review_profile does not match review.json")
     if metrics.get("provider_policy") != review.get("provider_policy"):
@@ -769,7 +784,11 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if metrics.get("summary_only_findings") != len(review.get("summary_only_findings", [])):
         fail("metrics summary_only_findings does not match review.json")
     resolved_plan = load_json(root / "resolved-plan.json")
+    if resolved_plan.get("run_pass") != review_run_pass:
+        fail("resolved-plan.json run_pass does not match review.json")
     selectors = resolved_plan.get("selectors", {})
+    if selectors.get("run_pass") != review_run_pass:
+        fail("resolved-plan.json selectors.run_pass does not match review.json")
     effective_lanes = selectors.get("effective_model_lanes", [])
     if not isinstance(effective_lanes, list):
         fail("resolved-plan.json selectors.effective_model_lanes is not an array")
