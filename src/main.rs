@@ -622,7 +622,7 @@ struct GitHubReviewSkipReceipt {
     reason: String,
     review_payload_status: String,
     terminal_state: String,
-    github_review_json: String,
+    github_review_json: Option<String>,
     run_pass: String,
     model_mode: String,
     inline_comments: usize,
@@ -10933,7 +10933,7 @@ fn build_github_review_skip_receipt(
         reason: review.terminal_state.reason.clone(),
         review_payload_status: review.terminal_state.review_payload_status.clone(),
         terminal_state: review.terminal_state.status.clone(),
-        github_review_json: "review/github-review.json".to_owned(),
+        github_review_json: None,
         run_pass: review.run_pass.clone(),
         model_mode: args.model_mode.key().to_owned(),
         inline_comments: review.inline_comments.len(),
@@ -25179,6 +25179,7 @@ index 1111111..2222222 100644
         assert_eq!(skip["status"], "skipped");
         assert_eq!(skip["review_payload_status"], "skipped_empty_smoke");
         assert_eq!(skip["terminal_state"], "artifact-only");
+        assert!(skip["github_review_json"].is_null());
         assert_eq!(skip["run_pass"], "manual");
         assert_eq!(metrics["wall_clock_seconds"], 73);
         assert_eq!(metrics["wall_clock_ms"], 73_000);

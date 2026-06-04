@@ -928,8 +928,24 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
             fail("github-review-skip.json terminal_state does not match review.json")
         if skip.get("run_pass") != review_run_pass:
             fail("github-review-skip.json run_pass does not match review.json")
+        require_skipped_payload_contract(skip, root, github_skip_path)
 
     return review
+
+
+def require_skipped_payload_contract(receipt: dict, root: pathlib.Path, path: pathlib.Path) -> None:
+    declared = receipt.get("github_review_json")
+    if declared is None:
+        return
+    if not isinstance(declared, str) or not declared:
+        fail(f"{path} github_review_json must be null or a non-empty string")
+    if "\\" in declared:
+        fail(f"{path} github_review_json must use artifact-relative POSIX paths")
+    declared_path = pathlib.PurePosixPath(declared)
+    if declared_path.is_absolute() or ".." in declared_path.parts:
+        fail(f"{path} github_review_json is not artifact-relative: {declared!r}")
+    if not (root / declared_path).exists():
+        fail(f"{path} github_review_json points at missing artifact: {declared}")
 
 
 def require_github_comment(comment: dict, index: int) -> None:
@@ -3529,6 +3545,7 @@ def require_post_receipt(root: pathlib.Path) -> None:
         if receipt.get("status") == "skipped":
             if receipt.get("review_payload_status") != "skipped_empty_smoke":
                 fail("post-result.json skipped receipt has wrong review_payload_status")
+            require_skipped_payload_contract(receipt, root, post_result)
             return
         if receipt.get("status") != "ok":
             fail(f"post-result.json status expected ok or skipped, got {receipt.get('status')!r}")
@@ -3833,6 +3850,20 @@ def run_self_tests() -> None:
     if plan["follow_up_tasks"]:
         fail("artifact-only meta observations created follow-up tasks in self-test")
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
+    require_skipped_payload_contract(
+        {"github_review_json": None},
+        pathlib.Path("__missing_empty_artifact_dir__"),
+        pathlib.Path("review/github-review-skip.json"),
+    )
+    expect_self_test_failure(
+        "skip receipt missing payload path",
+        "points at missing artifact",
+        lambda: require_skipped_payload_contract(
+            {"github_review_json": "review/github-review.json"},
+            pathlib.Path("__missing_empty_artifact_dir__"),
+            pathlib.Path("review/github-review-skip.json"),
+        ),
+    )
     print("Bun review artifact verifier self-test passed")
 
 
