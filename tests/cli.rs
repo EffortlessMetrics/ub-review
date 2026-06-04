@@ -452,19 +452,36 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
     assert_eq!(
         metrics["run"]["concurrency_model"],
-        "three-stream-scheduler-v0"
+        "profiled-stream-scheduler-v0"
+    );
+    assert_eq!(
+        metrics["run"]["scheduler_profile"],
+        "default-three-stream-v0"
     );
     assert_eq!(metrics["run"]["local_proof_wall_excludes_model_wait"], true);
     for pointer in [
         "/run/elapsed_wall_ms",
+        "/run/coordination_wall_ms",
+        "/run/investigation_wall_ms",
+        "/run/proof_wall_ms",
         "/run/evidence_wall_ms",
         "/run/model_wall_ms",
         "/run/local_proof_wall_ms",
         "/run/compiler_wall_ms",
         "/run/model_call_duration_ms_sum",
         "/run/proof_command_duration_ms_sum",
+        "/run/investigation_proof_overlap_ms",
         "/run/model_proof_overlap_ms",
         "/run/proof_overlap_ms",
+        "/run/streams/coordination/started_at_offset_ms",
+        "/run/streams/coordination/finished_at_offset_ms",
+        "/run/streams/coordination/wall_ms",
+        "/run/streams/investigation/started_at_offset_ms",
+        "/run/streams/investigation/finished_at_offset_ms",
+        "/run/streams/investigation/wall_ms",
+        "/run/streams/proof/started_at_offset_ms",
+        "/run/streams/proof/finished_at_offset_ms",
+        "/run/streams/proof/wall_ms",
         "/run/loops/evidence/started_at_offset_ms",
         "/run/loops/evidence/finished_at_offset_ms",
         "/run/loops/evidence/wall_ms",
@@ -627,7 +644,8 @@ fn active_len_tracks_view_after_resize() {
     assert!(summary.contains("## Model lane status"));
     assert!(summary.contains("## Missing or failed model evidence"));
     assert!(summary.contains("## Review efficiency"));
-    assert!(summary.contains("Run loops:"));
+    assert!(summary.contains("Run streams:"));
+    assert!(summary.contains("Loop detail:"));
     assert!(summary.contains("Follow-up results:"));
     assert!(summary.contains("`ub-memory-lifetime`"));
     assert!(summary.contains("MiniMax-M3"));
@@ -636,15 +654,18 @@ fn active_len_tracks_view_after_resize() {
     for kind in [
         "run_started",
         "evidence_loop_started",
-        "evidence_stream_started",
-        "evidence_stream_completed",
+        "coordination_stream_started",
+        "coordination_stream_completed",
         "model_loop_started",
         "model_loop_finished",
+        "investigation_stream_started",
+        "investigation_stream_completed",
         "proof_loop_started",
         "proof_loop_finished",
+        "proof_stream_started",
+        "proof_stream_completed",
         "compiler_loop_started",
         "compiler_loop_finished",
-        "compiler_stream_completed",
         "terminal_state",
         "run_finished",
     ] {
@@ -1169,6 +1190,7 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
             .as_u64()
             .is_some_and(|wall| wall >= proof_command_duration_sum)
     );
+    assert_eq!(metrics["run"]["investigation_proof_overlap_ms"], 0);
     assert_eq!(metrics["run"]["model_proof_overlap_ms"], 0);
     assert_eq!(metrics["run"]["local_proof_wall_excludes_model_wait"], true);
 
@@ -1427,17 +1449,17 @@ path = "src/lib.rs"
     assert!(
         event_kinds
             .iter()
-            .any(|kind| kind == "evidence_stream_started")
+            .any(|kind| kind == "coordination_stream_started")
     );
     assert!(
         event_kinds
             .iter()
-            .any(|kind| kind == "model_stream_started")
+            .any(|kind| kind == "investigation_stream_started")
     );
     assert!(
         event_kinds
             .iter()
-            .any(|kind| kind == "model_stream_completed")
+            .any(|kind| kind == "investigation_stream_completed")
     );
     assert!(event_kinds.iter().any(|kind| kind == "model_loop_started"));
     assert!(event_kinds.iter().any(|kind| kind == "model_loop_finished"));

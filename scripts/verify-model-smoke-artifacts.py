@@ -114,21 +114,40 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
     run = metrics.get("run")
     if not isinstance(run, dict):
         fail("metrics.run is missing")
-    if run.get("concurrency_model") != "instrumented-sequential-v0":
+    if run.get("concurrency_model") != "profiled-stream-scheduler-v0":
         fail("metrics.run.concurrency_model is invalid")
+    if run.get("scheduler_profile") != "default-three-stream-v0":
+        fail("metrics.run.scheduler_profile is invalid")
     if run.get("local_proof_wall_excludes_model_wait") is not True:
         fail("metrics.run.local_proof_wall_excludes_model_wait must be true")
     for field in [
+        "elapsed_wall_ms",
+        "coordination_wall_ms",
+        "investigation_wall_ms",
+        "proof_wall_ms",
+        "evidence_wall_ms",
         "model_wall_ms",
         "local_proof_wall_ms",
         "compiler_wall_ms",
         "model_call_duration_ms_sum",
         "proof_command_duration_ms_sum",
+        "investigation_proof_overlap_ms",
         "model_proof_overlap_ms",
+        "proof_overlap_ms",
     ]:
         value = run.get(field)
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             fail(f"metrics.run.{field} is not a non-negative integer")
+    streams = run.get("streams")
+    if not isinstance(streams, dict):
+        fail("metrics.run.streams is missing")
+    for stream_name in ["coordination", "investigation", "proof"]:
+        require_timing(streams, f"metrics.run.streams.{stream_name}", stream_name)
+    loops = run.get("loops")
+    if not isinstance(loops, dict):
+        fail("metrics.run.loops is missing")
+    for loop_name in ["evidence", "model", "proof", "compiler"]:
+        require_timing(loops, f"metrics.run.loops.{loop_name}", loop_name)
     models = metrics.get("models", {})
     expected = {
         "provider_preflights": 1,
@@ -138,6 +157,21 @@ def require_metrics(metrics, min_ok_lanes: int) -> None:
     for key, value in expected.items():
         if models.get(key) != value:
             fail(f"metrics.models.{key} expected {value!r}, got {models.get(key)!r}")
+
+
+def require_timing(container: dict, label: str, field: str) -> None:
+    timing = container.get(field)
+    if not isinstance(timing, dict):
+        fail(f"{label} is missing")
+    for timing_field in ["started_at_offset_ms", "finished_at_offset_ms", "wall_ms"]:
+        value = timing.get(timing_field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            fail(f"{label}.{timing_field} is not a non-negative integer")
+    if timing["finished_at_offset_ms"] < timing["started_at_offset_ms"]:
+        fail(f"{label} finished before it started")
+    span = timing["finished_at_offset_ms"] - timing["started_at_offset_ms"]
+    if timing["wall_ms"] > span and timing["finished_at_offset_ms"] > timing["started_at_offset_ms"]:
+        fail(f"{label} wall exceeds observed span")
     if models.get("provider_preflight_status_counts", {}).get("ok") != 1:
         fail("metrics did not record exactly one ok provider preflight")
     if models.get("model_lane_calls_attempted", 0) < min_ok_lanes:

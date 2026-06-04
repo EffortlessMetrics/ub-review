@@ -1114,17 +1114,30 @@ struct ReviewMetrics {
 #[derive(Clone, Debug, Serialize)]
 struct RunLoopMetrics {
     concurrency_model: String,
+    scheduler_profile: String,
     local_proof_wall_excludes_model_wait: bool,
     elapsed_wall_ms: u128,
+    coordination_wall_ms: u128,
+    investigation_wall_ms: u128,
+    proof_wall_ms: u128,
     evidence_wall_ms: u128,
     model_wall_ms: u128,
     local_proof_wall_ms: u128,
     compiler_wall_ms: u128,
     model_call_duration_ms_sum: u128,
     proof_command_duration_ms_sum: u128,
+    investigation_proof_overlap_ms: u128,
     model_proof_overlap_ms: u128,
     proof_overlap_ms: u128,
+    streams: RunStreamTimings,
     loops: RunLoopTimings,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct RunStreamTimings {
+    coordination: LoopTiming,
+    investigation: LoopTiming,
+    proof: LoopTiming,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2007,19 +2020,33 @@ impl RunLoopTracker {
     }
 
     fn metrics(&self) -> RunLoopMetrics {
-        let model_proof_overlap_ms = overlap_ms(&self.model.intervals, &self.proof.intervals);
+        let coordination_timing = combined_timing(&[&self.evidence, &self.compiler]);
+        let investigation_timing = self.model.timing();
+        let proof_timing = self.proof.timing();
+        let investigation_proof_overlap_ms =
+            overlap_ms(&self.model.intervals, &self.proof.intervals);
         RunLoopMetrics {
-            concurrency_model: "three-stream-scheduler-v0".to_owned(),
+            concurrency_model: "profiled-stream-scheduler-v0".to_owned(),
+            scheduler_profile: "default-three-stream-v0".to_owned(),
             local_proof_wall_excludes_model_wait: true,
             elapsed_wall_ms: self.elapsed_wall_ms(),
+            coordination_wall_ms: coordination_timing.wall_ms,
+            investigation_wall_ms: investigation_timing.wall_ms,
+            proof_wall_ms: proof_timing.wall_ms,
             evidence_wall_ms: self.evidence.wall_ms,
             model_wall_ms: self.model.wall_ms,
             local_proof_wall_ms: self.proof.wall_ms,
             compiler_wall_ms: self.compiler.wall_ms,
             model_call_duration_ms_sum: 0,
             proof_command_duration_ms_sum: 0,
-            model_proof_overlap_ms,
-            proof_overlap_ms: model_proof_overlap_ms,
+            investigation_proof_overlap_ms,
+            model_proof_overlap_ms: investigation_proof_overlap_ms,
+            proof_overlap_ms: investigation_proof_overlap_ms,
+            streams: RunStreamTimings {
+                coordination: coordination_timing,
+                investigation: investigation_timing,
+                proof: proof_timing,
+            },
             loops: RunLoopTimings {
                 evidence: self.evidence.timing(),
                 model: self.model.timing(),
@@ -2045,6 +2072,28 @@ impl RunLoopTracker {
         finished_at_offset_ms
             .unwrap_or(0)
             .saturating_sub(started_at_offset_ms.unwrap_or(0))
+    }
+}
+
+fn combined_timing(accumulators: &[&LoopAccumulator]) -> LoopTiming {
+    let mut started_at_offset_ms = None::<u128>;
+    let mut finished_at_offset_ms = None::<u128>;
+    let mut wall_ms = 0_u128;
+    for accumulator in accumulators {
+        if let Some(started) = accumulator.started_at_offset_ms {
+            started_at_offset_ms =
+                Some(started_at_offset_ms.map_or(started, |existing| existing.min(started)));
+        }
+        if let Some(finished) = accumulator.finished_at_offset_ms {
+            finished_at_offset_ms =
+                Some(finished_at_offset_ms.map_or(finished, |existing| existing.max(finished)));
+        }
+        wall_ms = wall_ms.saturating_add(accumulator.wall_ms);
+    }
+    LoopTiming {
+        started_at_offset_ms: started_at_offset_ms.unwrap_or(0),
+        finished_at_offset_ms: finished_at_offset_ms.unwrap_or(0),
+        wall_ms,
     }
 }
 
@@ -2092,6 +2141,7 @@ struct LoopInterval {
 
 struct ActiveRunLoop {
     loop_id: &'static str,
+    stream_id: &'static str,
     stage: &'static str,
     started_at: Instant,
     started_at_offset_ms: u128,
@@ -2574,18 +2624,21 @@ fn start_run_loop(
     event_log: &EventLog,
     run_started: &Instant,
     loop_id: &'static str,
+    stream_id: &'static str,
     stage: &'static str,
 ) -> Result<ActiveRunLoop> {
     let started_at_offset_ms = run_started.elapsed().as_millis();
     let payload = serde_json::json!({
         "loop_id": loop_id,
+        "stream_id": stream_id,
         "stage": stage,
         "started_at_offset_ms": started_at_offset_ms,
     });
     event_log.append(&format!("{loop_id}_loop_started"), payload.clone())?;
-    event_log.append(&format!("{loop_id}_stream_started"), payload)?;
+    event_log.append(&format!("{stream_id}_stream_started"), payload)?;
     Ok(ActiveRunLoop {
         loop_id,
+        stream_id,
         stage,
         started_at: Instant::now(),
         started_at_offset_ms,
@@ -2603,6 +2656,7 @@ fn finish_run_loop(
     let duration_ms = active.started_at.elapsed().as_millis();
     let payload = serde_json::json!({
         "loop_id": active.loop_id,
+        "stream_id": active.stream_id,
         "stage": active.stage,
         "started_at_offset_ms": active.started_at_offset_ms,
         "finished_at_offset_ms": finished_at_offset_ms,
@@ -2613,7 +2667,7 @@ fn finish_run_loop(
         &format!("{}_loop_finished", active.loop_id),
         payload.clone(),
     )?;
-    event_log.append(&format!("{}_stream_completed", active.loop_id), payload)?;
+    event_log.append(&format!("{}_stream_completed", active.stream_id), payload)?;
     tracker.record(
         active.loop_id,
         LoopInterval {
@@ -2856,7 +2910,13 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         serde_json::json!({"base": args.review.base, "head": args.review.head, "profile": plan.profile_name, "dry_run": args.dry_run}),
     )?;
 
-    let evidence_loop = start_run_loop(&event_log, &run_started, "evidence", "sensors-and-packet")?;
+    let evidence_loop = start_run_loop(
+        &event_log,
+        &run_started,
+        "evidence",
+        "coordination",
+        "sensors-and-packet",
+    )?;
     if args.dry_run {
         write_dry_run_sensor_receipts(&args.review.root, &args.review.out, &plan, &event_log)?;
         event_log.append("run_dry", serde_json::json!({"reason": "--dry-run"}))?;
@@ -4962,7 +5022,7 @@ fn write_review_artifacts(
     let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
 
-    let model_loop = start_run_loop(event_log, run_started, "model", "primary")?;
+    let model_loop = start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
     if matches!(args.model_mode, ModelMode::Auto) {
         run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
         append_preflight_evidence_issues(
@@ -5016,7 +5076,13 @@ fn write_review_artifacts(
     )?;
 
     let profile = config.selected_profile()?;
-    let proof_loop = start_run_loop(event_log, run_started, "proof", "planner-and-broker")?;
+    let proof_loop = start_run_loop(
+        event_log,
+        run_started,
+        "proof",
+        "proof",
+        "planner-and-broker",
+    )?;
     write_proof_planner_artifacts(
         out,
         diff,
@@ -5035,7 +5101,13 @@ fn write_review_artifacts(
     )?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
-    let compiler_loop = start_run_loop(event_log, run_started, "compiler", "preliminary")?;
+    let compiler_loop = start_run_loop(
+        event_log,
+        run_started,
+        "compiler",
+        "coordination",
+        "preliminary",
+    )?;
     let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
     write_candidate_artifacts(out, &candidates)?;
     let candidates = read_candidate_records(out)?;
@@ -5105,7 +5177,13 @@ fn write_review_artifacts(
     )?;
     let mut follow_up_results = Vec::new();
     let mut follow_up_outputs = Vec::new();
-    let follow_up_model_loop = start_run_loop(event_log, run_started, "model", "follow-up")?;
+    let follow_up_model_loop = start_run_loop(
+        event_log,
+        run_started,
+        "model",
+        "investigation",
+        "follow-up",
+    )?;
     run_follow_up_model_pass(
         FollowUpRunContext {
             root,
@@ -5127,12 +5205,13 @@ fn write_review_artifacts(
         follow_up_model_loop,
         "completed",
     )?;
-    let final_compiler_loop = start_run_loop(event_log, run_started, "compiler", "final")?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
     let follow_up_evidence = follow_up_evidence_from_outputs(&follow_up_outputs);
     write_follow_up_evidence_artifact(out, &follow_up_evidence)?;
     append_follow_up_proof_requests(&mut review.proof_requests, &follow_up_evidence);
+    let follow_up_proof_loop =
+        start_run_loop(event_log, run_started, "proof", "proof", "follow-up-broker")?;
     let follow_up_proof_result = run_follow_up_proof_broker_v0(
         root,
         out,
@@ -5149,6 +5228,15 @@ fn write_review_artifacts(
     review
         .resource_leases
         .extend(follow_up_proof_result.resource_leases);
+    finish_run_loop(
+        event_log,
+        run_started,
+        run_loop_tracker,
+        follow_up_proof_loop,
+        "completed",
+    )?;
+    let final_compiler_loop =
+        start_run_loop(event_log, run_started, "compiler", "coordination", "final")?;
     let mut compiler_summary_only_findings = review.summary_only_findings.clone();
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
     let mut compiler_observations = review.observations.clone();
@@ -14140,6 +14228,21 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .get("terminal_state")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("unknown");
+    let coordination_wall = metrics
+        .pointer("/run/coordination_wall_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let investigation_wall = metrics
+        .pointer("/run/investigation_wall_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
+    let proof_stream_wall = metrics
+        .pointer("/run/proof_wall_ms")
+        .and_then(serde_json::Value::as_u64)
+        .map(format_millis)
+        .unwrap_or_else(|| "unknown".to_owned());
     let model_wall = metrics
         .pointer("/run/model_wall_ms")
         .and_then(serde_json::Value::as_u64)
@@ -14156,7 +14259,8 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .map(format_millis)
         .unwrap_or_else(|| "unknown".to_owned());
     let overlap = metrics
-        .pointer("/run/model_proof_overlap_ms")
+        .pointer("/run/investigation_proof_overlap_ms")
+        .or_else(|| metrics.pointer("/run/model_proof_overlap_ms"))
         .and_then(serde_json::Value::as_u64)
         .map(format_millis)
         .unwrap_or_else(|| "unknown".to_owned());
@@ -14164,11 +14268,18 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         .pointer("/run/concurrency_model")
         .and_then(serde_json::Value::as_str)
         .unwrap_or("unknown");
+    let scheduler_profile = metrics
+        .pointer("/run/scheduler_profile")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("unknown");
 
     text.push_str("\n## Review efficiency\n\n");
     text.push_str(&format!("- Runtime: `{runtime}`\n"));
     text.push_str(&format!(
-        "- Run loops: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`, model/proof overlap `{overlap}` (`{concurrency_model}`)\n"
+        "- Run streams: coordination `{coordination_wall}`, investigation `{investigation_wall}`, proof `{proof_stream_wall}`, investigation/proof overlap `{overlap}` (`{scheduler_profile}` via `{concurrency_model}`)\n"
+    ));
+    text.push_str(&format!(
+        "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
     text.push_str(&format!(
@@ -21740,17 +21851,39 @@ index 1111111..2222222 100644
 
     fn test_run_loop_metrics() -> super::RunLoopMetrics {
         super::RunLoopMetrics {
-            concurrency_model: "three-stream-scheduler-v0".to_owned(),
+            concurrency_model: "profiled-stream-scheduler-v0".to_owned(),
+            scheduler_profile: "default-three-stream-v0".to_owned(),
             local_proof_wall_excludes_model_wait: true,
             elapsed_wall_ms: 450,
+            coordination_wall_ms: 50,
+            investigation_wall_ms: 300,
+            proof_wall_ms: 80,
             evidence_wall_ms: 10,
             model_wall_ms: 300,
             local_proof_wall_ms: 80,
             compiler_wall_ms: 40,
             model_call_duration_ms_sum: 0,
             proof_command_duration_ms_sum: 0,
+            investigation_proof_overlap_ms: 0,
             model_proof_overlap_ms: 0,
             proof_overlap_ms: 0,
+            streams: super::RunStreamTimings {
+                coordination: super::LoopTiming {
+                    started_at_offset_ms: 0,
+                    finished_at_offset_ms: 450,
+                    wall_ms: 50,
+                },
+                investigation: super::LoopTiming {
+                    started_at_offset_ms: 10,
+                    finished_at_offset_ms: 310,
+                    wall_ms: 300,
+                },
+                proof: super::LoopTiming {
+                    started_at_offset_ms: 320,
+                    finished_at_offset_ms: 400,
+                    wall_ms: 80,
+                },
+            },
             loops: super::RunLoopTimings {
                 evidence: super::LoopTiming {
                     started_at_offset_ms: 0,
