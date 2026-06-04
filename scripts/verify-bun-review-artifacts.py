@@ -184,6 +184,10 @@ def require_common_tree(root: pathlib.Path) -> None:
         "resolved-plan.json",
         "running-summary.md",
         "review/shared_context.md",
+        "review/shared_context_cache_block.md",
+        "review/shared_context_hash.txt",
+        "review/cache_manifest.json",
+        "review/cache_events.ndjson",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
         "review/provider-preflight-status.json",
@@ -218,6 +222,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "resource_leases.ndjson",
     ]:
         require_file(root / path)
+    require_cache_artifacts(root)
     require_events(root)
     if not (root / "review/github-review.json").exists() and not (
         root / "review/github-review-skip.json"
@@ -272,6 +277,72 @@ def require_events(root: pathlib.Path) -> None:
     for required in ["run_started", "run_finished"]:
         if required not in kinds:
             fail(f"events.ndjson missing {required}")
+
+
+def require_cache_artifacts(root: pathlib.Path) -> None:
+    shared_context = read_text(root / "review/shared_context.md")
+    cache_block = read_text(root / "review/shared_context_cache_block.md")
+    if cache_block != shared_context:
+        fail("shared_context_cache_block.md does not match shared_context.md")
+    shared_context_hash = read_text(root / "review/shared_context_hash.txt").strip()
+    if not shared_context_hash:
+        fail("shared_context_hash.txt is empty")
+    manifest = load_json(root / "review/cache_manifest.json")
+    if manifest.get("schema") != "ub-review.cache_manifest.v1":
+        fail("cache_manifest.json has wrong schema")
+    if manifest.get("shared_context_hash") != shared_context_hash:
+        fail("cache_manifest shared_context_hash does not match shared_context_hash.txt")
+    if manifest.get("cache_block_path") != "review/shared_context_cache_block.md":
+        fail("cache_manifest cache_block_path is invalid")
+    if manifest.get("hash_path") != "review/shared_context_hash.txt":
+        fail("cache_manifest hash_path is invalid")
+    if manifest.get("events_path") != "review/cache_events.ndjson":
+        fail("cache_manifest events_path is invalid")
+    if manifest.get("explicit_cache_provider") != "minimax":
+        fail("cache_manifest explicit_cache_provider is invalid")
+    if manifest.get("explicit_cache_endpoint") != "anthropic-messages":
+        fail("cache_manifest explicit_cache_endpoint is invalid")
+    lanes = manifest.get("lanes")
+    if not isinstance(lanes, list):
+        fail("cache_manifest lanes is not an array")
+    for lane in lanes:
+        if not isinstance(lane, dict):
+            fail(f"cache_manifest lane is not an object: {lane!r}")
+        for field in [
+            "lane",
+            "provider",
+            "model",
+            "endpoint_kind",
+            "cache_mode",
+            "shared_context_hash",
+        ]:
+            if not isinstance(lane.get(field), str) or not lane[field]:
+                fail(f"cache_manifest lane missing string field {field}: {lane!r}")
+        if lane["shared_context_hash"] != shared_context_hash:
+            fail(f"cache_manifest lane hash does not match shared context hash: {lane!r}")
+    cache_events = []
+    for index, line in enumerate(
+        read_text(root / "review/cache_events.ndjson").splitlines(), start=1
+    ):
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid cache_events.ndjson line {index}: {error}")
+        if not isinstance(event, dict):
+            fail(f"cache event line {index} is not an object")
+        if event.get("schema") != "ub-review.cache_event.v1":
+            fail(f"cache event has wrong schema: {event!r}")
+        if event.get("shared_context_hash") != shared_context_hash:
+            fail(f"cache event shared_context_hash mismatch: {event!r}")
+        if not isinstance(event.get("kind"), str) or not event["kind"]:
+            fail(f"cache event missing kind: {event!r}")
+        cache_events.append(event)
+    if not cache_events:
+        fail("cache_events.ndjson is empty")
+    if not any(event.get("kind") == "shared_context_prepared" for event in cache_events):
+        fail("cache_events.ndjson missing shared_context_prepared")
 
 
 def require_summary(root: pathlib.Path) -> None:
@@ -526,7 +597,19 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     models = metrics.get("models")
     if not isinstance(models, dict):
         fail("metrics.models is missing")
+    require_model_cache_metrics(models)
     return metrics
+
+
+def require_model_cache_metrics(models: dict) -> None:
+    for field in [
+        "prompt_cache_creation_input_tokens",
+        "prompt_cache_read_input_tokens",
+        "prompt_cache_lane_hits",
+        "prompt_cache_lane_misses",
+        "prompt_cache_lane_unknown",
+    ]:
+        require_non_negative_int(models, f"metrics.models.{field}", field)
 
 
 def require_run_loop_metrics(metrics: dict) -> None:
