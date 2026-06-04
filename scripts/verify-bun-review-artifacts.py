@@ -828,8 +828,8 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         r"[0-9a-f]{64}", shared_context_id
     ):
         fail("review.json shared_context_id is not a 64-character hex digest")
-    if review.get("mode") != "review-direct":
-        fail(f"review.json mode expected review-direct, got {review.get('mode')!r}")
+    if review.get("mode") != "review-byok":
+        fail(f"review.json mode expected review-byok, got {review.get('mode')!r}")
     if review.get("review_profile") != "bun-ub-v0":
         fail(
             "review.json review_profile expected bun-ub-v0, "

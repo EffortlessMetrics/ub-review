@@ -95,7 +95,7 @@ jobs:
           install-tools: 'true'
           tool-bundle: core
           posting: review
-          mode: review-direct
+          mode: review-byok
           github-token: ${{ github.token }}
           minimax-api-key: ${{ secrets.MINIMAX }}
           minimax-provider-kind: anthropic
@@ -356,7 +356,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `release-asset` | `ub-review-x86_64-unknown-linux-gnu.tar.gz` | Linux x64 release archive asset. |
 | `allow-heavy` | `false` | Permit heavy witness classes. |
 | `posting` | `review` | `review` posts one Pull Request Review; `artifact-only` only writes files. |
-| `mode` | `review-direct` | Direct BYOK MiniMax fanout; agent modes are reserved for later. |
+| `mode` | `review-byok` | BYOK grouped review mode. `intelligent-ci` selects the required-gate product mode; legacy `review-direct` is accepted as an alias. |
 | `github-token` | empty | Scoped token for `posting=review`. |
 | `minimax-api-key` | empty | MiniMax M3 lane key. |
 | `minimax-api-url` | empty | Optional MiniMax API URL override. |
