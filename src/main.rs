@@ -7465,7 +7465,7 @@ fn append_follow_up_proof_requests(
 }
 
 fn post_broker_follow_up_proof_reason(reason: &str) -> String {
-    const NOTE: &str = "Follow-up proof request arrived after proof broker v0 execution; retained for next broker scheduling pass.";
+    const NOTE: &str = "Follow-up proof request arrived after primary proof execution; routed to the follow-up broker scheduling pass.";
     if reason.contains(NOTE) {
         return reason.to_owned();
     }
@@ -25611,7 +25611,12 @@ index 1111111..2222222 100644
         assert!(
             canonical_proof_requests[0]
                 .reason
-                .contains("Follow-up proof request arrived after proof broker v0 execution")
+                .contains("routed to the follow-up broker scheduling pass")
+        );
+        assert!(
+            !canonical_proof_requests[0]
+                .reason
+                .contains("retained for next broker scheduling pass")
         );
         append_follow_up_proof_requests(&mut canonical_proof_requests, &evidence);
         assert_eq!(canonical_proof_requests.len(), 1);
@@ -25718,10 +25723,8 @@ index 1111111..2222222 100644
         assert_eq!(proof_request_file, serde_json::to_value(&proof_json[0])?);
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
         assert_eq!(proof_ndjson.lines().count(), 1);
-        assert!(
-            proof_ndjson
-                .contains("Follow-up proof request arrived after proof broker v0 execution")
-        );
+        assert!(proof_ndjson.contains("routed to the follow-up broker scheduling pass"));
+        assert!(!proof_ndjson.contains("retained for next broker scheduling pass"));
         let witness_json: Vec<super::WitnessRecord> =
             serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
         assert_eq!(witness_json.len(), 5);
