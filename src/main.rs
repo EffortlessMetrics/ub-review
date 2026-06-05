@@ -666,6 +666,7 @@ struct Config {
     repo: RepoConfig,
     review: ReviewConfig,
     review_body: ReviewBodyPolicy,
+    gate: GateConfig,
     proof: ProofPolicyConfig,
     profiles: BTreeMap<String, Profile>,
     tools: BTreeMap<String, ToolPolicy>,
@@ -690,6 +691,16 @@ struct ReviewConfig {
     require_zero_finding_audit: bool,
     enable_default_lanes: bool,
     github_summary: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+struct GateConfig {
+    required_check: String,
+    target_minutes: u64,
+    hard_timeout_minutes: u64,
+    post_review_on: Vec<String>,
+    synchronize_mode: String,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -867,6 +878,8 @@ struct ToolPolicy {
     artifact_budget_mb: u64,
     requires_lease: bool,
     enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gate: Option<ToolGatePolicy>,
     #[serde(skip)]
     provided: ToolPolicyProvided,
 }
@@ -883,6 +896,7 @@ struct ToolPolicyProvided {
     artifact_budget_mb: bool,
     requires_lease: bool,
     enabled: bool,
+    gate: bool,
 }
 
 #[derive(Default, Deserialize)]
@@ -897,6 +911,16 @@ struct ToolPolicyInput {
     artifact_budget_mb: Option<u64>,
     requires_lease: Option<bool>,
     enabled: Option<bool>,
+    gate: Option<ToolGatePolicy>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+struct ToolGatePolicy {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_new_unsuppressed: Option<u64>,
 }
 
 impl ToolPolicyProvided {
@@ -912,6 +936,7 @@ impl ToolPolicyProvided {
             artifact_budget_mb: true,
             requires_lease: true,
             enabled: true,
+            gate: true,
         }
     }
 }
@@ -934,6 +959,7 @@ impl<'de> Deserialize<'de> for ToolPolicy {
             artifact_budget_mb: input.artifact_budget_mb.is_some(),
             requires_lease: input.requires_lease.is_some(),
             enabled: input.enabled.is_some(),
+            gate: input.gate.is_some(),
         };
         Ok(Self {
             id: input.id.unwrap_or(defaults.id),
@@ -948,6 +974,7 @@ impl<'de> Deserialize<'de> for ToolPolicy {
                 .unwrap_or(defaults.artifact_budget_mb),
             requires_lease: input.requires_lease.unwrap_or(defaults.requires_lease),
             enabled: input.enabled.unwrap_or(defaults.enabled),
+            gate: input.gate.or(defaults.gate),
             provided,
         })
     }
@@ -1085,6 +1112,8 @@ struct SensorPlan {
     class: ToolClass,
     weight: u32,
     requires_lease: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gate: Option<ToolGatePolicy>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1109,6 +1138,8 @@ struct ResolvedToolEntry {
     timeout_sec: u64,
     artifact_budget_mb: u64,
     requires_lease: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gate: Option<ToolGatePolicy>,
     artifact_paths: Vec<String>,
 }
 
@@ -1133,6 +1164,8 @@ struct ToolStatusEntry {
     reason: String,
     exit_code: Option<i32>,
     timed_out: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gate: Option<ToolGatePolicy>,
     artifact_paths: Vec<String>,
 }
 
@@ -2768,6 +2801,7 @@ impl Default for Config {
             repo: RepoConfig::default(),
             review: ReviewConfig::default(),
             review_body: ReviewBodyPolicy::default(),
+            gate: GateConfig::default(),
             proof: ProofPolicyConfig::default(),
             profiles,
             tools,
@@ -2796,6 +2830,18 @@ impl Default for ReviewConfig {
             require_zero_finding_audit: true,
             enable_default_lanes: true,
             github_summary: true,
+        }
+    }
+}
+
+impl Default for GateConfig {
+    fn default() -> Self {
+        Self {
+            required_check: "ub-review/gate".to_owned(),
+            target_minutes: 30,
+            hard_timeout_minutes: 60,
+            post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
+            synchronize_mode: "gate-only".to_owned(),
         }
     }
 }
@@ -2919,6 +2965,7 @@ impl Default for ToolPolicy {
             artifact_budget_mb: 64,
             requires_lease: false,
             enabled: true,
+            gate: None,
             provided: ToolPolicyProvided::default(),
         }
     }
@@ -2980,6 +3027,9 @@ impl Config {
                     }
                     if !tool.provided.enabled {
                         tool.enabled = default_tool.enabled;
+                    }
+                    if !tool.provided.gate {
+                        tool.gate = default_tool.gate;
                     }
                 }
                 None => {
@@ -3927,6 +3977,7 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
         "repo": &config.repo,
         "review": &config.review,
         "review_body": &config.review_body,
+        "gate": &config.gate,
         "proof": &config.proof,
         "review_profile": {
             "name": &config.review_profile,
@@ -3987,6 +4038,7 @@ fn resolved_tools_artifact(
                     .unwrap_or(tool.timeout_sec),
                 artifact_budget_mb: tool.artifact_budget_mb,
                 requires_lease: tool.requires_lease,
+                gate: tool.gate.clone(),
                 artifact_paths: tool_artifact_paths(&tool.id),
             }
         })
@@ -4062,6 +4114,7 @@ fn tool_status_artifact(
                     .unwrap_or_else(|| "not present in resolved plan".to_owned()),
                 exit_code: receipt.as_ref().and_then(|receipt| receipt.exit_code),
                 timed_out: receipt.as_ref().is_some_and(|receipt| receipt.timed_out),
+                gate: tool.gate.clone(),
                 artifact_paths: tool_artifact_paths(&tool.id),
             }
         })
@@ -4084,6 +4137,7 @@ fn tool_artifact_paths(id: &str) -> Vec<String> {
         class: ToolClass::Static,
         weight: 0,
         requires_lease: false,
+        gate: None,
     };
     let mut paths = vec![format!("sensors/{id}/ub-review-sensor-status.json")];
     paths.extend(
@@ -4141,6 +4195,7 @@ fn resolved_plan_artifact(
         "limits": &profile.limits,
         "posting": &config.review,
         "review_body": &config.review_body,
+        "gate": &config.gate,
         "selectors": resolved_selector_artifact(run_args, selectors, effective_model_lanes),
         "sensors": &plan.sensors,
         "lanes": &plan.lanes,
@@ -4864,6 +4919,7 @@ fn plan_tool(
                 class: tool.class,
                 weight: tool.weight,
                 requires_lease: tool.requires_lease,
+                gate: tool.gate.clone(),
             }
         }
         None => skipped(tool, "trigger did not match this diff", false),
@@ -4891,6 +4947,7 @@ fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
         class: tool.class,
         weight: tool.weight,
         requires_lease: tool.requires_lease,
+        gate: tool.gate.clone(),
     }
 }
 
@@ -5733,7 +5790,7 @@ fn write_sensor_status(
     let dir = out.join("sensors").join(&sensor.id);
     fs::create_dir_all(&dir)?;
     ensure_sensor_text_receipts(&dir)?;
-    let value = serde_json::json!({
+    let mut value = serde_json::json!({
         "sensor": sensor.id,
         "status": fields.status,
         "command": display_command(fields.argv),
@@ -5747,6 +5804,9 @@ fn write_sensor_status(
         "requires_lease": sensor.requires_lease,
         "required": sensor.required,
     });
+    if let Some(gate) = &sensor.gate {
+        value["gate"] = serde_json::to_value(gate)?;
+    }
     fs::write(
         dir.join("ub-review-sensor-status.json"),
         serde_json::to_vec_pretty(&value)?,
@@ -19781,6 +19841,7 @@ fn tool(
         artifact_budget_mb,
         requires_lease,
         enabled,
+        gate: None,
         provided: ToolPolicyProvided::all(),
     }
 }
@@ -20406,6 +20467,14 @@ mod tests {
         config.merge_defaults();
         assert_eq!(config.review_profile, "ub-review-self");
         assert_eq!(config.profile, "gh-runner-full");
+        assert_eq!(config.gate.required_check, "ub-review/gate");
+        assert_eq!(config.gate.target_minutes, 30);
+        assert_eq!(config.gate.hard_timeout_minutes, 60);
+        assert_eq!(
+            config.gate.post_review_on,
+            vec!["opened".to_owned(), "ready_for_review".to_owned()]
+        );
+        assert_eq!(config.gate.synchronize_mode, "gate-only");
         for id in [
             "cargo-fmt",
             "cargo-check",
@@ -20433,6 +20502,16 @@ mod tests {
             !coverage.enabled,
             "coverage is a leased heavy witness and should not run in the default self gate"
         );
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("missing self-profile ripr tool"))?;
+        let ripr_gate = ripr
+            .gate
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("missing self-profile ripr gate policy"))?;
+        assert_eq!(ripr_gate.scope.as_deref(), Some("on-diff"));
+        assert_eq!(ripr_gate.max_new_unsuppressed, Some(0));
         let plan = super::build_plan(
             &config,
             config.selected_profile()?,
@@ -20466,6 +20545,42 @@ mod tests {
                 "{id} should be a required self gate sensor"
             );
         }
+        let ripr_sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("missing planned ripr sensor"))?;
+        assert_eq!(ripr_sensor.gate, ripr.gate);
+        let resolved_tools =
+            super::resolved_tools_artifact(&config, config.selected_profile()?, &plan);
+        let resolved_ripr = resolved_tools
+            .tools
+            .iter()
+            .find(|tool| tool.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("missing resolved ripr tool"))?;
+        assert_eq!(resolved_ripr.gate, ripr.gate);
+        let temp = tempfile::tempdir()?;
+        let tool_status =
+            super::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
+        let status_ripr = tool_status
+            .tools
+            .iter()
+            .find(|tool| tool.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("missing status ripr tool"))?;
+        assert_eq!(status_ripr.gate, ripr.gate);
+        let resolved_profile =
+            super::resolved_profile_artifact(&config, config.selected_profile()?);
+        assert_eq!(resolved_profile["gate"]["required_check"], "ub-review/gate");
+        let resolved_plan = super::resolved_plan_artifact(
+            &config,
+            config.selected_profile()?,
+            &test_diff(),
+            &plan,
+            None,
+            &SelectorArgs::default(),
+            None,
+        );
+        assert_eq!(resolved_plan["gate"], resolved_profile["gate"]);
         Ok(())
     }
 
@@ -20896,6 +21011,51 @@ enabled = false
         assert!(actionlint.requires_lease);
         assert!(!actionlint.enabled);
         Ok(())
+    }
+
+    #[test]
+    fn example_config_preserves_gate_policy() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../configs/ub-review.example.toml"))?;
+        config.merge_defaults();
+        assert_eq!(config.gate.required_check, "ub-review/gate");
+        assert_eq!(config.gate.target_minutes, 30);
+        assert_eq!(config.gate.hard_timeout_minutes, 60);
+        assert_eq!(
+            config.gate.post_review_on,
+            vec!["opened".to_owned(), "ready_for_review".to_owned()]
+        );
+        assert_eq!(config.gate.synchronize_mode, "gate-only");
+
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("example config missing ripr tool"))?;
+        let ripr_gate = ripr
+            .gate
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("example config missing ripr gate policy"))?;
+        assert_eq!(ripr_gate.scope.as_deref(), Some("on-diff"));
+        assert_eq!(ripr_gate.max_new_unsuppressed, Some(0));
+        Ok(())
+    }
+
+    #[test]
+    fn gate_config_rejects_unknown_fields() {
+        let top_level = toml::from_str::<Config>(
+            r#"
+[gate]
+target_minutez = 30
+"#,
+        );
+        assert!(top_level.is_err());
+
+        let tool_gate = toml::from_str::<Config>(
+            r#"
+[tools.ripr.gate]
+max_new_unsuppressed_findings = 0
+"#,
+        );
+        assert!(tool_gate.is_err());
     }
 
     #[test]
@@ -30253,6 +30413,7 @@ index 1111111..2222222 100644
             class: ToolClass::Static,
             weight: 1,
             requires_lease: false,
+            gate: None,
         }
     }
 
