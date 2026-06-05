@@ -11,6 +11,7 @@ import json
 import pathlib
 import re
 import sys
+import tempfile
 from typing import Any, Callable
 
 
@@ -1453,24 +1454,28 @@ def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
         fail("review/candidates.json does not match review candidate surfaces")
 
     candidate_dir = root / "candidates"
-    if not candidate_dir.is_dir():
-        fail("missing candidates directory")
     expected_files = {
         f"{sanitize_artifact_name(candidate['id'])}.json": candidate
         for candidate in candidates
     }
-    actual_files = []
-    for path in candidate_dir.iterdir():
-        if not path.is_file():
-            fail(f"unexpected candidates entry: {path.name}")
-        actual_files.append(path.name)
-    actual_files.sort()
-    if actual_files != sorted(expected_files):
-        fail("candidates directory entries do not match review/candidates.json")
-    for name, expected_candidate in expected_files.items():
-        parsed = load_json(candidate_dir / name)
-        if parsed != expected_candidate:
-            fail(f"candidates/{name} does not match review/candidates.json")
+    if not candidate_dir.exists():
+        if expected_files:
+            fail("missing candidates directory")
+    elif not candidate_dir.is_dir():
+        fail("candidates path is not a directory")
+    else:
+        actual_files = []
+        for path in candidate_dir.iterdir():
+            if not path.is_file():
+                fail(f"unexpected candidates entry: {path.name}")
+            actual_files.append(path.name)
+        actual_files.sort()
+        if actual_files != sorted(expected_files):
+            fail("candidates directory entries do not match review/candidates.json")
+        for name, expected_candidate in expected_files.items():
+            parsed = load_json(candidate_dir / name)
+            if parsed != expected_candidate:
+                fail(f"candidates/{name} does not match review/candidates.json")
 
     ndjson_path = root / "candidates.ndjson"
     lines = [line for line in read_text(ndjson_path).splitlines() if line.strip()]
@@ -3960,6 +3965,47 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
             fail(f"secret marker {marker!r} found in {path}")
 
 
+def write_self_test_json(path: pathlib.Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def self_test_empty_candidate_artifacts_without_dir() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        review = {"inline_comments": [], "summary_only_findings": []}
+        write_self_test_json(root / "review/candidates.json", [])
+        (root / "candidates.ndjson").write_text("", encoding="utf-8")
+        require_candidate_artifacts(root, review)
+
+
+def self_test_missing_nonempty_candidate_dir_fails() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        review = {
+            "inline_comments": [
+                {
+                    "lane": "tests-oracle",
+                    "severity": "medium",
+                    "confidence": "high",
+                    "path": "src/main.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "body": "Confirm the focused proof reaches the changed branch.",
+                    "evidence": "self-test candidate fixture",
+                }
+            ],
+            "summary_only_findings": [],
+        }
+        candidates = expected_candidate_records(review)
+        write_self_test_json(root / "review/candidates.json", candidates)
+        (root / "candidates.ndjson").write_text(
+            "\n".join(json.dumps(candidate) for candidate in candidates) + "\n",
+            encoding="utf-8",
+        )
+        require_candidate_artifacts(root, review)
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
@@ -4378,6 +4424,12 @@ def run_self_tests() -> None:
     plan = expected_orchestrator_plan([], meta_observations, [], [])
     if plan["follow_up_tasks"]:
         fail("artifact-only meta observations created follow-up tasks in self-test")
+    self_test_empty_candidate_artifacts_without_dir()
+    expect_self_test_failure(
+        "non-empty candidate artifacts without directory",
+        "missing candidates directory",
+        self_test_missing_nonempty_candidate_dir_fails,
+    )
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     require_skipped_payload_contract(
         {"github_review_json": None},
