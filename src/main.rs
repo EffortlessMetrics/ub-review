@@ -1109,6 +1109,7 @@ struct SensorPlan {
     reason: String,
     required: bool,
     timeout_sec: u64,
+    artifact_budget_mb: u64,
     class: ToolClass,
     weight: u32,
     requires_lease: bool,
@@ -4134,6 +4135,7 @@ fn tool_artifact_paths(id: &str) -> Vec<String> {
         reason: String::new(),
         required: false,
         timeout_sec: 0,
+        artifact_budget_mb: 0,
         class: ToolClass::Static,
         weight: 0,
         requires_lease: false,
@@ -4916,6 +4918,7 @@ fn plan_tool(
                 reason,
                 required,
                 timeout_sec: tool.timeout_sec.min(profile.budgets.default_timeout_sec),
+                artifact_budget_mb: tool.artifact_budget_mb,
                 class: tool.class,
                 weight: tool.weight,
                 requires_lease: tool.requires_lease,
@@ -4944,6 +4947,7 @@ fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
         reason: reason.to_owned(),
         required,
         timeout_sec: tool.timeout_sec,
+        artifact_budget_mb: tool.artifact_budget_mb,
         class: tool.class,
         weight: tool.weight,
         requires_lease: tool.requires_lease,
@@ -6260,6 +6264,7 @@ fn write_review_artifacts(
     write_proof_planner_artifacts(
         out,
         diff,
+        plan,
         profile,
         box_state,
         &pr_thread_context,
@@ -9157,6 +9162,7 @@ fn build_proof_planner_output(
 fn write_proof_planner_artifacts(
     out: &Path,
     diff: &DiffContext,
+    plan: &Plan,
     profile: &Profile,
     box_state: &BoxState,
     pr_thread_context: &PrThreadContext,
@@ -9181,7 +9187,7 @@ fn write_proof_planner_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("proof_tasks.ndjson"), ndjson)?;
-    write_work_queue_artifacts(out, &output.proof_tasks)?;
+    write_work_queue_artifacts(out, plan, &output.proof_tasks)?;
     Ok(())
 }
 
@@ -9277,11 +9283,17 @@ fn focused_build_task_artifact(
     }
 }
 
-fn write_work_queue_artifacts(out: &Path, proof_tasks: &[ProofTaskArtifact]) -> Result<()> {
-    let tasks = proof_tasks
+fn write_work_queue_artifacts(
+    out: &Path,
+    plan: &Plan,
+    proof_tasks: &[ProofTaskArtifact],
+) -> Result<()> {
+    let mut tasks = plan
+        .sensors
         .iter()
-        .map(work_queue_task_from_proof_task)
+        .map(work_queue_task_from_sensor)
         .collect::<Vec<_>>();
+    tasks.extend(proof_tasks.iter().map(work_queue_task_from_proof_task));
     let queue = WorkQueueArtifact {
         schema: "ub-review.work_queue.v1",
         initial_packet_deadline_sec: DEFAULT_INITIAL_PACKET_DEADLINE_SEC,
@@ -9315,6 +9327,25 @@ fn write_work_queue_artifacts(out: &Path, proof_tasks: &[ProofTaskArtifact]) -> 
     Ok(())
 }
 
+fn work_queue_task_from_sensor(sensor: &SensorPlan) -> WorkQueueTaskArtifact {
+    WorkQueueTaskArtifact {
+        schema: "ub-review.work_queue_task.v1",
+        id: format!("sensor-{}", sensor.id),
+        kind: "sensor".to_owned(),
+        source: "tool-registry".to_owned(),
+        priority: work_queue_sensor_priority(sensor),
+        packet_policy: work_queue_sensor_packet_policy(sensor),
+        deadline_sec: work_queue_sensor_deadline(sensor),
+        consumers: work_queue_sensor_consumers(&sensor.id),
+        gate_policy: work_queue_sensor_gate_policy(sensor),
+        dedupe_key: format!("tool-registry:sensor:{}", sensor.id),
+        lease: work_queue_sensor_lease(sensor),
+        receipt_path: format!("sensors/{}/ub-review-sensor-status.json", sensor.id),
+        status: if sensor.run { "planned" } else { "skipped" }.to_owned(),
+        task_path: "resolved-tools.json".to_owned(),
+    }
+}
+
 fn work_queue_task_from_proof_task(task: &ProofTaskArtifact) -> WorkQueueTaskArtifact {
     WorkQueueTaskArtifact {
         schema: "ub-review.work_queue_task.v1",
@@ -9331,6 +9362,75 @@ fn work_queue_task_from_proof_task(task: &ProofTaskArtifact) -> WorkQueueTaskArt
         receipt_path: "review/proof_receipts.json".to_owned(),
         status: task.status.clone(),
         task_path: "proof_tasks.ndjson".to_owned(),
+    }
+}
+
+fn work_queue_sensor_priority(sensor: &SensorPlan) -> String {
+    if sensor.required {
+        "high".to_owned()
+    } else if sensor.run {
+        "medium".to_owned()
+    } else {
+        "low".to_owned()
+    }
+}
+
+fn work_queue_sensor_packet_policy(sensor: &SensorPlan) -> String {
+    if sensor.required {
+        "must-run".to_owned()
+    } else if sensor.run {
+        "include-if-ready".to_owned()
+    } else {
+        "artifact-only".to_owned()
+    }
+}
+
+fn work_queue_sensor_deadline(sensor: &SensorPlan) -> u64 {
+    if sensor.run { sensor.timeout_sec } else { 0 }
+}
+
+fn work_queue_sensor_consumers(id: &str) -> Vec<String> {
+    let consumers: &[&str] = match id {
+        "ripr" => &["tests-oracle", "proof-planner", "compiler"],
+        "coverage" => &["tests-oracle", "source-route", "compiler"],
+        "unsafe-review" => &["ub-memory-lifetime", "security", "compiler"],
+        "actionlint" => &[
+            "workflow-permissions",
+            "workflow-pinning",
+            "workflow-proof",
+            "workflow-opposition",
+            "compiler",
+        ],
+        "ast-grep" => &["source-route", "compiler"],
+        "tokmd" => &["all-lanes", "compiler"],
+        "cargo-allow" => &["security", "compiler"],
+        _ => &["compiler"],
+    };
+    consumers
+        .iter()
+        .map(|consumer| (*consumer).to_owned())
+        .collect()
+}
+
+fn work_queue_sensor_gate_policy(sensor: &SensorPlan) -> String {
+    if sensor.required {
+        "gate-required".to_owned()
+    } else if sensor.gate.is_some() {
+        "trust-affecting".to_owned()
+    } else if sensor.run {
+        "review-context".to_owned()
+    } else {
+        "artifact-only".to_owned()
+    }
+}
+
+fn work_queue_sensor_lease(sensor: &SensorPlan) -> ProofTaskLease {
+    ProofTaskLease {
+        cpu: u32::from(sensor.run),
+        memory_mb: 0,
+        disk_mb: sensor.artifact_budget_mb,
+        network: false,
+        timeout_sec: work_queue_sensor_deadline(sensor),
     }
 }
 
@@ -20666,6 +20766,65 @@ mod tests {
     }
 
     #[test]
+    fn work_queue_includes_baseline_sensor_packet_policies() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let temp = tempfile::tempdir()?;
+        super::write_work_queue_artifacts(temp.path(), &plan, &[])?;
+        let queue: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("work_queue.json"))?)?;
+        let tasks = queue["tasks"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("work queue tasks missing"))?;
+        assert_eq!(tasks.len(), plan.sensors.len());
+
+        let cargo_fmt = tasks
+            .iter()
+            .find(|task| task["id"] == "sensor-cargo-fmt")
+            .ok_or_else(|| anyhow::anyhow!("cargo-fmt queue task missing"))?;
+        assert_eq!(cargo_fmt["kind"], "sensor");
+        assert_eq!(cargo_fmt["source"], "tool-registry");
+        assert_eq!(cargo_fmt["packet_policy"], "must-run");
+        assert_eq!(cargo_fmt["gate_policy"], "gate-required");
+        assert_eq!(cargo_fmt["status"], "planned");
+        assert_eq!(
+            cargo_fmt["receipt_path"],
+            "sensors/cargo-fmt/ub-review-sensor-status.json"
+        );
+
+        let tokmd = tasks
+            .iter()
+            .find(|task| task["id"] == "sensor-tokmd")
+            .ok_or_else(|| anyhow::anyhow!("tokmd queue task missing"))?;
+        assert_eq!(tokmd["packet_policy"], "include-if-ready");
+        assert_eq!(tokmd["gate_policy"], "review-context");
+
+        let semgrep = tasks
+            .iter()
+            .find(|task| task["id"] == "sensor-semgrep")
+            .ok_or_else(|| anyhow::anyhow!("semgrep queue task missing"))?;
+        assert_eq!(semgrep["packet_policy"], "artifact-only");
+        assert_eq!(semgrep["status"], "skipped");
+        assert_eq!(semgrep["deadline_sec"], 0);
+        assert_eq!(semgrep["lease"]["timeout_sec"], semgrep["deadline_sec"]);
+        Ok(())
+    }
+
+    #[test]
     fn baseline_gate_sensor_argvs_match_required_matrix() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
         config.merge_defaults();
@@ -30553,6 +30712,7 @@ index 1111111..2222222 100644
             reason: "test reason".to_owned(),
             required: false,
             timeout_sec: 1,
+            artifact_budget_mb: 1,
             class: ToolClass::Static,
             weight: 1,
             requires_lease: false,

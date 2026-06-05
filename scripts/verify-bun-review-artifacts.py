@@ -2199,6 +2199,10 @@ def require_proof_task_schema(task: dict) -> None:
 
 
 def require_work_queue_artifacts(root: pathlib.Path, proof_tasks: list[dict]) -> None:
+    tool_status = load_json(root / "tool-status.json")
+    tools = tool_status.get("tools")
+    if not isinstance(tools, list):
+        fail("tool-status.json tools is not an array")
     queue = load_json(root / "work_queue.json")
     if queue.get("schema") != "ub-review.work_queue.v1":
         fail("work_queue.json has wrong schema")
@@ -2209,11 +2213,27 @@ def require_work_queue_artifacts(root: pathlib.Path, proof_tasks: list[dict]) ->
     tasks = queue.get("tasks")
     if not isinstance(tasks, list):
         fail("work_queue.json tasks is not an array")
-    if len(tasks) != len(proof_tasks):
-        fail("work_queue.json task count does not match proof planner output")
+    if len(tasks) != len(tools) + len(proof_tasks):
+        fail("work_queue.json task count does not match tool status plus proof planner output")
 
-    for index, task in enumerate(tasks):
-        require_work_queue_task_schema(task, proof_tasks[index])
+    sensor_queue_tasks = tasks[: len(tools)]
+    sensor_tasks_by_id: dict[str, dict] = {}
+    for task in sensor_queue_tasks:
+        task_id = task.get("id")
+        if not isinstance(task_id, str) or not task_id:
+            fail(f"sensor work queue task id is invalid: {task!r}")
+        if task_id in sensor_tasks_by_id:
+            fail(f"duplicate sensor work queue task id: {task_id}")
+        sensor_tasks_by_id[task_id] = task
+    for tool in tools:
+        tool_id = tool.get("id")
+        task = sensor_tasks_by_id.get(f"sensor-{tool_id}")
+        if task is None:
+            fail(f"missing sensor work queue task for tool {tool_id!r}")
+        require_sensor_work_queue_task_schema(task, tool)
+    proof_queue_tasks = tasks[len(tools) :]
+    for index, task in enumerate(proof_queue_tasks):
+        require_proof_work_queue_task_schema(task, proof_tasks[index])
 
     lines = [line for line in read_text(root / "work_events.ndjson").splitlines() if line.strip()]
     if len(lines) != len(tasks):
@@ -2226,11 +2246,61 @@ def require_work_queue_artifacts(root: pathlib.Path, proof_tasks: list[dict]) ->
         require_work_event_schema(event, tasks[index])
 
 
-def require_work_queue_task_schema(task: dict, proof_task: dict) -> None:
-    if not isinstance(task, dict):
-        fail(f"work queue task is not an object: {task!r}")
-    if task.get("schema") != "ub-review.work_queue_task.v1":
-        fail(f"work queue task has wrong schema: {task!r}")
+def require_sensor_work_queue_task_schema(task: dict, tool: dict) -> None:
+    require_work_queue_task_base_schema(task)
+    tool_id = tool.get("id")
+    if not isinstance(tool_id, str) or not tool_id:
+        fail(f"tool status id is invalid: {tool!r}")
+    expected = {
+        "id": f"sensor-{tool_id}",
+        "kind": "sensor",
+        "source": "tool-registry",
+        "packet_policy": "must-run"
+        if tool.get("required") is True
+        else "include-if-ready"
+        if tool.get("planned_run") is True
+        else "artifact-only",
+        "deadline_sec": tool.get("timeout_sec") if tool.get("planned_run") is True else 0,
+        "receipt_path": f"sensors/{tool_id}/ub-review-sensor-status.json",
+        "status": "planned" if tool.get("planned_run") is True else "skipped",
+        "task_path": "resolved-tools.json",
+    }
+    for field, value in expected.items():
+        if task.get(field) != value:
+            fail(f"sensor work queue task {field} mismatch: task={task!r} tool={tool!r}")
+    if tool.get("required") is True:
+        expected_priority = "high"
+        expected_gate_policy = "gate-required"
+    elif tool.get("planned_run") is True:
+        expected_priority = "medium"
+        expected_gate_policy = "trust-affecting" if tool.get("gate") is not None else "review-context"
+    else:
+        expected_priority = "low"
+        expected_gate_policy = "trust-affecting" if tool.get("gate") is not None else "artifact-only"
+    if task.get("priority") != expected_priority:
+        fail(f"sensor work queue task priority mismatch: task={task!r} tool={tool!r}")
+    if task.get("gate_policy") != expected_gate_policy:
+        fail(f"sensor work queue task gate_policy mismatch: task={task!r} tool={tool!r}")
+    if task.get("dedupe_key") != f"tool-registry:sensor:{tool_id}":
+        fail(f"sensor work queue task dedupe_key mismatch: task={task!r} tool={tool!r}")
+    consumers = task.get("consumers")
+    if not isinstance(consumers, list) or "compiler" not in consumers:
+        fail(f"sensor work queue task consumers missing compiler: {task!r}")
+    lease = task.get("lease")
+    if not isinstance(lease, dict):
+        fail(f"sensor work queue task lease is not an object: {task!r}")
+    if lease.get("timeout_sec") != task.get("deadline_sec"):
+        fail(f"sensor work queue task lease timeout mismatch: {task!r}")
+    if lease.get("network") not in {True, False}:
+        fail(f"sensor work queue task lease network is not boolean: {task!r}")
+    for field in ["cpu", "memory_mb", "disk_mb"]:
+        value = lease.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"sensor work queue task lease {field} is invalid: {task!r}")
+
+
+def require_proof_work_queue_task_schema(task: dict, proof_task: dict) -> None:
+    require_work_queue_task_base_schema(task)
     mirrored = [
         "id",
         "kind",
@@ -2246,12 +2316,19 @@ def require_work_queue_task_schema(task: dict, proof_task: dict) -> None:
     for field in mirrored:
         if task.get(field) != proof_task.get(field):
             fail(f"work queue task {field} does not match proof task: {task!r}")
-    if not isinstance(task.get("dedupe_key"), str) or not task["dedupe_key"]:
-        fail(f"work queue task dedupe_key is invalid: {task!r}")
     if task.get("receipt_path") != "review/proof_receipts.json":
         fail(f"work queue task receipt_path is invalid: {task!r}")
     if task.get("task_path") != "proof_tasks.ndjson":
         fail(f"work queue task task_path is invalid: {task!r}")
+
+
+def require_work_queue_task_base_schema(task: dict) -> None:
+    if not isinstance(task, dict):
+        fail(f"work queue task is not an object: {task!r}")
+    if task.get("schema") != "ub-review.work_queue_task.v1":
+        fail(f"work queue task has wrong schema: {task!r}")
+    if not isinstance(task.get("dedupe_key"), str) or not task["dedupe_key"]:
+        fail(f"work queue task dedupe_key is invalid: {task!r}")
 
 
 def require_work_event_schema(event: dict, task: dict) -> None:
