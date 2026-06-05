@@ -35,6 +35,7 @@ No local task runs without:
   "consumers": ["tests-oracle", "opposition", "compiler"],
   "gate_policy": "trust-affecting",
   "dedupe_key": "bun-ffi-to-buffer-red-green",
+  "initial_packet_status": "pending_initial_packet",
   "lease": {
     "cpu": 2,
     "memory_mb": 2048,
@@ -47,6 +48,17 @@ No local task runs without:
 ```
 
 The proof broker executes commands. Lanes request proof; they do not shell out.
+
+`initial_packet_status` records what the first model packet can know:
+
+| Status | Meaning |
+|---|---|
+| `ready_for_initial_packet` | The task is planned, initial-packet eligible, and its receipt exists when `work_queue.json` is written. |
+| `pending_initial_packet` | The task is planned and should appear as pending initial context or late follow-up work. |
+| `not_initial_packet` | The task is skipped or artifact-only for the first packet. |
+
+`work_events.ndjson` mirrors this field for every planned task. The artifact
+verifier cross-checks queue tasks against events and receipt presence.
 
 ## Packet Timing
 
