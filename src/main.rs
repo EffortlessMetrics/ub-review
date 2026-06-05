@@ -21214,6 +21214,32 @@ enabled = false
     }
 
     #[test]
+    fn coverage_summary_receipt_records_absent_and_malformed_lcov() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp.path().join("sensors/coverage");
+        fs::create_dir_all(&dir)?;
+
+        let missing = super::coverage_summary_receipt(&dir);
+        assert_eq!(missing["status"], "not_collected");
+        assert_eq!(missing["reason"], "lcov.info not present");
+        assert_eq!(missing["lcov"]["present"], serde_json::json!(false));
+        assert_eq!(missing["line_totals"]["found"], 0);
+        assert_eq!(missing["line_totals"]["hit"], 0);
+
+        fs::write(
+            dir.join("lcov.info"),
+            "TN:\nSF:src/lib.rs\nFNF:not-a-number\nFNH:1\nLF:4\nLH:not-a-number\nend_of_record\n",
+        )?;
+        let malformed = super::coverage_summary_receipt(&dir);
+        assert_eq!(malformed["status"], "collected");
+        assert_eq!(malformed["line_totals"]["found"], 4);
+        assert_eq!(malformed["line_totals"]["hit"], 0);
+        assert_eq!(malformed["function_totals"]["found"], 0);
+        assert_eq!(malformed["function_totals"]["hit"], 1);
+        Ok(())
+    }
+
+    #[test]
     fn missing_tool_status_is_recorded_as_missing() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path();
