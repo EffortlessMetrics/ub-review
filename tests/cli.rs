@@ -2074,6 +2074,182 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
 }
 
 #[test]
+fn model_auto_run_overlaps_seeded_required_proof_with_model_lanes() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "seeded-proof-overlap"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 1 }\n")?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 2 }\n")?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "change value"])?;
+
+    let config = temp.path().join("ub-review.toml");
+    write_file(
+        &config,
+        r#"review_profile = "bun-ub-v0"
+profile = "gh-runner"
+
+[repo]
+kind = "rust"
+ledger = ""
+base = "HEAD~1"
+head = "HEAD"
+
+[[proof.required]]
+id = "required-smoke"
+languages = ["rust"]
+diff_classes = ["source-general"]
+command = "cargo test --locked required_proof_smoke"
+reason = "Required Rust focused smoke for intelligent CI."
+cost = "focused-test"
+timeout_sec = 300
+required = true
+"#,
+    )?;
+
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_cargo(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let dummy_key = "dummy-minimax-key-for-seeded-proof-overlap";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_delay(2, 500)?;
+    let out = temp.path().join("packet");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[
+            ("PATH", path.as_str()),
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ("FAKE_CARGO_SLEEP_MS", "700"),
+            ("FAKE_CARGO_SLEEP_SECONDS", "1"),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 2);
+
+    let proof_requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    assert_eq!(proof_requests.len(), 1);
+    let request_id = json_str_field(&proof_requests[0], "id")?;
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert_eq!(receipts.len(), 1);
+    assert_eq!(receipts[0]["kind"], "focused-red-green");
+    assert!(receipts[0]["requested_by"].as_array().is_some_and(|lanes| {
+        lanes
+            .iter()
+            .any(|lane| lane.as_str() == Some("intelligent-ci-policy"))
+    }));
+    assert!(
+        receipts[0]["request_ids"]
+            .as_array()
+            .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+    );
+
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["models"]["model_lane_calls_attempted"], 1);
+    assert!(
+        metrics["run"]["investigation_proof_overlap_ms"]
+            .as_u64()
+            .is_some_and(|overlap| overlap > 0),
+        "expected seeded required proof to overlap model lane execution"
+    );
+    assert!(
+        metrics["run"]["local_proof_wall_ms"]
+            .as_u64()
+            .is_some_and(|wall| wall >= 1_000),
+        "fake cargo proof should contribute local proof wall time"
+    );
+
+    let scheduler: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
+    let phases = scheduler["phases"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("scheduler phases missing"))?;
+    let seeded_phase = phases
+        .iter()
+        .find(|phase| phase["loop_id"] == "proof" && phase["stage"] == "seeded-request-broker")
+        .ok_or_else(|| anyhow::anyhow!("seeded proof phase missing"))?;
+    let model_phase = phases
+        .iter()
+        .find(|phase| phase["loop_id"] == "model" && phase["stage"] == "primary")
+        .ok_or_else(|| anyhow::anyhow!("primary model phase missing"))?;
+    let seeded_started = seeded_phase["started_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("seeded proof phase missing start"))?;
+    let seeded_finished = seeded_phase["finished_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("seeded proof phase missing finish"))?;
+    let model_started = model_phase["started_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("model phase missing start"))?;
+    let model_finished = model_phase["finished_at_offset_ms"]
+        .as_u64()
+        .ok_or_else(|| anyhow::anyhow!("model phase missing finish"))?;
+    assert!(seeded_started <= model_finished);
+    assert!(seeded_finished >= model_started);
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_preserves_contentful_non_json_lane_output_as_degraded() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -2590,6 +2766,52 @@ exit 0
     Ok(())
 }
 
+fn write_fake_cargo(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    #[cfg(windows)]
+    {
+        let cache_dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("target/ub-review-test-fake-cargo");
+        let source = cache_dir.join("fake_cargo.rs");
+        let cached_exe = cache_dir.join("cargo.exe");
+        let needs_compile = !cached_exe.exists()
+            || fs::read_to_string(&source).unwrap_or_default() != FAKE_CARGO_SOURCE;
+        if needs_compile {
+            fs::create_dir_all(&cache_dir)?;
+            write_file(&source, FAKE_CARGO_SOURCE)?;
+            run(
+                &cache_dir,
+                "rustc",
+                &[path_str(&source)?, "-o", path_str(&cached_exe)?],
+            )?;
+        }
+        fs::copy(cached_exe, dir.join("cargo.exe"))?;
+    }
+    #[cfg(not(windows))]
+    {
+        let script = dir.join("cargo");
+        write_file(
+            &script,
+            r#"#!/bin/sh
+echo "fake cargo $*"
+if [ -n "$FAKE_CARGO_SLEEP_SECONDS" ]; then
+  sleep "$FAKE_CARGO_SLEEP_SECONDS"
+fi
+exit 0
+"#,
+        )?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+
+            let mut permissions = fs::metadata(&script)?.permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&script, permissions)?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg(windows)]
 const FAKE_BUN_SOURCE: &str = r#"use std::{env, fs, process};
 
@@ -2611,6 +2833,20 @@ fn main() {
     if base_plus_tests {
         eprintln!("base failure");
         process::exit(1);
+    }
+}
+"#;
+
+#[cfg(windows)]
+const FAKE_CARGO_SOURCE: &str = r#"use std::env;
+
+fn main() {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    println!("fake cargo {}", args.join(" "));
+    if let Ok(value) = env::var("FAKE_CARGO_SLEEP_MS") {
+        if let Ok(ms) = value.parse::<u64>() {
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
     }
 }
 "#;
@@ -2762,8 +2998,27 @@ fn spawn_fake_openai_provider(
     )
 }
 
+fn spawn_fake_openai_provider_with_delay(
+    expected_requests: usize,
+    delay_ms: u64,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_contents_and_delay(
+        (0..expected_requests)
+            .map(|_| fake_openai_lane_content())
+            .collect(),
+        Duration::from_millis(delay_ms),
+    )
+}
+
 fn spawn_fake_openai_provider_with_contents(
     contents: Vec<String>,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_openai_provider_with_contents_and_delay(contents, Duration::ZERO)
+}
+
+fn spawn_fake_openai_provider_with_contents_and_delay(
+    contents: Vec<String>,
+    response_delay: Duration,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
@@ -2778,7 +3033,7 @@ fn spawn_fake_openai_provider_with_contents(
                     let content = contents
                         .get(requests.len())
                         .ok_or_else(|| anyhow::anyhow!("fake provider response missing"))?;
-                    requests.push(handle_fake_openai_request(stream, content)?);
+                    requests.push(handle_fake_openai_request(stream, content, response_delay)?);
                     deadline = Instant::now() + Duration::from_secs(120);
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
@@ -2816,7 +3071,11 @@ fn fake_openai_lane_content() -> String {
     .to_string()
 }
 
-fn handle_fake_openai_request(mut stream: TcpStream, content: &str) -> Result<String> {
+fn handle_fake_openai_request(
+    mut stream: TcpStream,
+    content: &str,
+    response_delay: Duration,
+) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -2845,6 +3104,9 @@ fn handle_fake_openai_request(mut stream: TcpStream, content: &str) -> Result<St
     let mut body = vec![0; content_length];
     reader.read_exact(&mut body)?;
     let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
+    if !response_delay.is_zero() {
+        thread::sleep(response_delay);
+    }
     let response_body = serde_json::to_vec(&serde_json::json!({
         "choices": [
             {

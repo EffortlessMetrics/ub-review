@@ -5702,6 +5702,7 @@ fn write_review_artifacts(
     let mut model_calls_used = 0usize;
     let profile = config.selected_profile()?;
     append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
+    let seeded_proof_requests = proof_requests.clone();
 
     let mut proof_result = ProofBrokerResult::default();
     if matches!(args.model_mode, ModelMode::Auto) {
@@ -5713,17 +5714,18 @@ fn write_review_artifacts(
             "initial-diff-broker",
         )?;
         thread::scope(|scope| -> Result<()> {
-            let initial_proof_handle = scope.spawn(move || {
-                let broker_result =
-                    run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
-                let status = if broker_result.is_ok() {
-                    "completed"
-                } else {
-                    "failed"
-                };
-                let phase =
-                    finish_run_loop_phase(event_log, run_started, initial_proof_loop, status)?;
-                broker_result.map(|proof_result| (proof_result, phase))
+            let proof_handle = scope.spawn(move || {
+                run_seeded_proof_stream_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    args,
+                    &seeded_proof_requests,
+                    initial_proof_loop,
+                    event_log,
+                    run_started,
+                )
             });
 
             let model_loop =
@@ -5773,11 +5775,13 @@ fn write_review_artifacts(
                 "completed",
             )?;
 
-            let (initial_result, proof_phase) = initial_proof_handle
+            let (seeded_result, proof_phases) = proof_handle
                 .join()
-                .map_err(|_| anyhow::anyhow!("initial diff proof thread panicked"))??;
-            run_loop_tracker.record(proof_phase);
-            proof_result = initial_result;
+                .map_err(|_| anyhow::anyhow!("seeded proof stream thread panicked"))??;
+            for phase in proof_phases {
+                run_loop_tracker.record(phase);
+            }
+            proof_result = seeded_result;
             Ok(())
         })?;
     } else {
@@ -5819,7 +5823,7 @@ fn write_review_artifacts(
         &pr_thread_context,
         &proof_requests,
     )?;
-    if !proof_requests.is_empty() {
+    if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
             event_log,
             run_started,
@@ -6182,7 +6186,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::Artifact,
     );
-    let pr_body = render_review_body(
+    let mut pr_body = render_review_body(
         input.shared_context_id,
         input.plan,
         input.diff,
@@ -6196,8 +6200,15 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
-    validate_pr_review_body_policy(&pr_body, input.review_body_policy)
-        .with_context(|| "validate pull request review body policy")?;
+    let mut suppressed_artifact_only_pr_body = false;
+    if let Err(err) = validate_pr_review_body_policy(&pr_body, input.review_body_policy) {
+        if is_suppressible_pr_body_policy_error(&err) {
+            pr_body.clear();
+            suppressed_artifact_only_pr_body = true;
+        } else {
+            return Err(err).with_context(|| "validate pull request review body policy");
+        }
+    }
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -6221,6 +6232,8 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
+    } else if suppressed_artifact_only_pr_body {
+        "skipped_artifact_only_body"
     } else {
         "skipped_empty_smoke"
     };
@@ -6244,6 +6257,11 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         review_payload_status,
         terminal_state,
     })
+}
+
+fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
+    let text = error.to_string();
+    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
 }
 
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
@@ -8755,6 +8773,77 @@ fn run_initial_diff_proof_broker_v0(
 
 #[expect(
     clippy::too_many_arguments,
+    reason = "seeded proof stream coordinates scheduler phases and proof broker inputs"
+)]
+fn run_seeded_proof_stream_v0(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    args: &RunArgs,
+    seeded_proof_requests: &[ProofRequest],
+    initial_proof_loop: ActiveRunLoop,
+    event_log: &EventLog,
+    run_started: &Instant,
+) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
+    let mut phases = Vec::new();
+    let initial_result = run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
+    let initial_status = if initial_result.is_ok() {
+        "completed"
+    } else {
+        "failed"
+    };
+    phases.push(finish_run_loop_phase(
+        event_log,
+        run_started,
+        initial_proof_loop,
+        initial_status,
+    )?);
+    let mut proof_result = initial_result?;
+
+    if has_unreceipted_proof_request_tasks(seeded_proof_requests, &proof_result.proof_receipts) {
+        let seeded_request_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "seeded-request-broker",
+        )?;
+        let request_result = run_request_proof_broker_v0(
+            root,
+            out,
+            diff,
+            profile,
+            seeded_proof_requests,
+            &proof_result.proof_receipts,
+            &proof_result.resource_leases,
+            args,
+        );
+        let request_status = if request_result.is_ok() {
+            "completed"
+        } else {
+            "failed"
+        };
+        phases.push(finish_run_loop_phase(
+            event_log,
+            run_started,
+            seeded_request_loop,
+            request_status,
+        )?);
+        let request_result = request_result?;
+        proof_result
+            .proof_receipts
+            .extend(request_result.proof_receipts);
+        proof_result
+            .resource_leases
+            .extend(request_result.resource_leases);
+    }
+
+    Ok((proof_result, phases))
+}
+
+#[expect(
+    clippy::too_many_arguments,
     reason = "primary request proof broker mirrors follow-up broker inputs"
 )]
 fn run_request_proof_broker_v0(
@@ -8995,6 +9084,22 @@ fn unreceipted_focused_build_tasks(
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
         .collect()
+}
+
+fn has_unreceipted_proof_request_tasks(
+    proof_requests: &[ProofRequest],
+    existing_receipts: &[ProofReceipt],
+) -> bool {
+    !unreceipted_focused_test_tasks(
+        focused_test_candidates_from_requests(proof_requests),
+        existing_receipts,
+    )
+    .is_empty()
+        || !unreceipted_focused_build_tasks(
+            focused_build_candidates_from_requests(proof_requests),
+            existing_receipts,
+        )
+        .is_empty()
 }
 
 #[expect(
@@ -15505,6 +15610,9 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || is_stale_external_bot_objection_noise(&text)
         || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_workflow_paths_ignore_no_posture_noise(&text)
+        || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_current_pin_consistency_followup_noise(&text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15687,6 +15795,9 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || is_stale_external_bot_objection_noise(&text)
         || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_workflow_paths_ignore_no_posture_noise(&text)
+        || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_current_pin_consistency_followup_noise(&text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15795,6 +15906,10 @@ fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
         || is_no_finding_workflow_pin_summary_noise(text)
         || is_stale_external_bot_objection_noise(text)
         || is_workflow_tool_status_artifact_gap_noise(text)
+        || is_workflow_paths_ignore_no_posture_noise(text)
+        || is_actionlint_semantic_skip_proof_noise(text)
+        || is_current_pin_consistency_followup_noise(text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(text)
 }
 
 fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
@@ -15923,6 +16038,80 @@ fn is_workflow_paths_ignore_no_posture_noise(text: &str) -> bool {
         || text.contains("ub gate is the authoritative review")
         || (text.contains("future rename") && text.contains("re-enable"));
     mentions_paths_ignore && mentions_workflow_posture && says_no_posture_change
+}
+
+fn is_actionlint_semantic_skip_proof_noise(text: &str) -> bool {
+    let mentions_actionlint_skip = text.contains("actionlint")
+        && (text.contains("semantic skip behavior")
+            || (text.contains("skip behavior") && text.contains("droid")));
+    let says_proof_is_not_decisive = text.contains("no semantic proof")
+        || text.contains("trust rests on actionlint parse")
+        || text.contains("unproven beyond actionlint parse")
+        || text.contains("not proven by sensors")
+        || text.contains("no focused smoke proof");
+    let scoped_to_auxiliary_lane = text.contains("droid lane")
+        || text.contains("droid")
+        || text.contains("auxiliary/non-blocking")
+        || text.contains("ub gate is authoritative")
+        || text.contains("ub gate is the authoritative");
+    mentions_actionlint_skip && says_proof_is_not_decisive && scoped_to_auxiliary_lane
+}
+
+fn is_current_pin_consistency_followup_noise(text: &str) -> bool {
+    let mentions_cache_pin = (text.contains("cache key")
+        || text.contains("restore-keys")
+        || text.contains("cache restore"))
+        && (text.contains("action sha") || text.contains("repin") || text.contains("uses:"));
+    let says_future_or_parked = text.contains("future repin")
+        || text.contains("future pin")
+        || text.contains("partial repin")
+        || text.contains("parked for follow-up")
+        || text.contains("parked for lint-rule")
+        || text.contains("lint-rule follow-up")
+        || text.contains("follow-up lint rule")
+        || text.contains("follow-up lint")
+        || text.contains("lint rule or script");
+    let says_currently_consistent = text.contains("current state is consistent")
+        || text.contains("current state consistent")
+        || text.contains("current pr state is consistent")
+        || text.contains("not actionable in this pr");
+    mentions_cache_pin && says_future_or_parked && says_currently_consistent
+}
+
+fn is_workflow_pin_lockstep_no_value_summary_noise(text: &str) -> bool {
+    let workflow_scope = text.contains("workflow")
+        || text.contains("ub-review")
+        || text.contains("actionlint")
+        || text.contains("paths-ignore")
+        || text.contains("droid");
+    let mentions_lockstep_pin = text.contains("pin lockstep")
+        || text.contains("lockstep sha pin")
+        || text.contains("pin bump is lockstep")
+        || text.contains("pin/uses ref consistent")
+        || (text.contains("cache key/restore-keys")
+            && (text.contains("prefix match")
+                || text.contains("prefix is coupled")
+                || text.contains("updated in lockstep")
+                || text.contains("must be updated in lockstep")))
+        || (text.contains("cache key")
+            && text.contains("restore-keys")
+            && text.contains("uses:")
+            && text.contains("lockstep"));
+    let says_no_current_issue = text.contains("old pin absent")
+        || text.contains("current state is consistent")
+        || text.contains("current state consistent")
+        || text.contains("current pr state is consistent")
+        || text.contains("no blocker")
+        || text.contains("not a blocker")
+        || text.contains("no other third-party actions changed")
+        || text.contains("no syntactic regression")
+        || text.contains("no source, no permissions, no token, no checkout changes")
+        || (text.contains("no new")
+            && (text.contains("permission")
+                || text.contains("token")
+                || text.contains("third-party action")
+                || text.contains("checkout")));
+    workflow_scope && mentions_lockstep_pin && says_no_current_issue
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -20615,6 +20804,45 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn unreceipted_proof_request_tasks_skip_already_receipted_seeded_request() -> Result<()> {
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-policy-001".to_owned(),
+            lane: "intelligent-ci-policy".to_owned(),
+            requested_by: vec![
+                "intelligent-ci-policy".to_owned(),
+                "proof-policy:required-smoke".to_owned(),
+            ],
+            command: "cargo test --locked required_proof_smoke".to_owned(),
+            reason: "Required Rust focused smoke for intelligent CI.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: true,
+            status: "requested".to_owned(),
+        }];
+
+        assert!(super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[]
+        ));
+
+        let task = super::focused_test_candidates_from_requests(&proof_requests)
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
+        let mut receipt = test_proof_receipt("head_passed", "passed");
+        receipt.id = task.id;
+        receipt.requested_by = task.requested_by;
+        receipt.request_ids = task.request_ids;
+
+        assert!(!super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[receipt]
+        ));
+        Ok(())
+    }
+
+    #[test]
     fn proof_broker_v0_executes_allowlisted_request_as_red_green_proof() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -23235,6 +23463,28 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.\n\n## Refuted\n\n- paths-ignore addition could mask future unpinned uses: additions in ub-review-packet.yml from Droid lane coverage; refuted because: paths-ignore lift is per-PR: any future PR that also touches ub-review-packet.yml (adds/changes uses:) will change the changed-files set and re-trigger Droid. UB gate is the authoritative review surface and runs on the new pin.\n\n## Parked follow-ups\n\n- Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.\n\n## Evidence gaps\n\n- trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("paths-ignore actionlint skip-proof review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Workflow-pinning lane for PR #49. Two workflow YAML files touched. Pin lockstep verified across 3 sites, old pin absent, cache key/restore-keys prefix match, no other third-party actions changed.\n\n## Parked follow-ups\n\n- Cache key/restore-keys prefix is coupled to action SHA; any future partial repin silently mismatches restore. Current state consistent, parked for lint-rule follow-up.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("workflow lockstep summary review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -24751,6 +25001,45 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn compiler_surface_suppresses_policy_rejected_artifact_only_pr_body() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("workflow-opposition", "ok")];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "workflow-opposition".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason:
+                "No blocking finding after bounded review; residual risk remains for human review."
+                    .to_owned(),
+            evidence: "bounded lane summary".to_owned(),
+        }];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &summary_only_findings,
+            observations: &[],
+            proof_receipts: &[],
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
+        Ok(())
+    }
+
+    #[test]
     fn artifact_review_body_keeps_model_lane_roster() {
         let body = render_review_body(
             "abc123",
@@ -25330,6 +25619,27 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate and the packet will be filtered/no-posture.".to_owned(),
                 evidence: "CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
         ];
         let observations = vec![
             test_observation(
@@ -25368,6 +25678,33 @@ UB_REVIEW_HTTP_STATUS:429
                 "medium",
                 "paths-ignore-smoke-proof-gap",
             ),
+            test_observation(
+                "workflow-proof",
+                "Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "actionlint-semantic-skip-proof",
+            ),
+            test_observation(
+                "workflow-proof",
+                "Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.",
+                "parked-follow-up",
+                "parked",
+                "low",
+                "medium",
+                "cache-key-current-pin-followup",
+            ),
+            test_observation(
+                "workflow-proof",
+                "trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "actionlint-skip-proof-gap",
+            ),
         ];
         let body = render_review_body(
             "abc123",
@@ -25388,6 +25725,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("checkout credential persistence"));
         assert!(!body.contains("paths-ignore"));
         assert!(!body.contains("focused smoke proof"));
+        assert!(!body.contains("semantic skip behavior"));
+        assert!(!body.contains("cache key/restore-keys"));
         assert!(!body.contains("actionlint is not installed locally"));
         assert!(!body.contains("CodeRabbit"));
         assert!(!body.contains("892e1bb"));
@@ -25423,6 +25762,90 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.is_empty());
         assert!(!body.contains("## Refuted"));
         assert!(!body.contains("widens the workflow permission"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_workflow_lockstep_summaries_artifact_only() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![
+            ".github/workflows/droid-focused-review.yml".to_owned(),
+            ".github/workflows/ub-review-packet.yml".to_owned(),
+        ];
+        diff.patch = concat!(
+            " pull_request:\n",
+            "   paths-ignore:\n",
+            "+    - \".github/workflows/ub-review-packet.yml\"\n",
+            "+          key: ub-review-gh-runner-v2-cec5b07457f99e652a500dffc603f98e6082a7f7-${{ runner.os }}-rust-1.95-core\n",
+            "+            ub-review-gh-runner-v2-cec5b07457f99e652a500dffc603f98e6082a7f7-${{ runner.os }}-rust-1.95-\n",
+            "+        uses: EffortlessMetrics/ub-review@cec5b07457f99e652a500dffc603f98e6082a7f7\n",
+        )
+        .to_owned();
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "workflow-permissions lane: paths-ignore addition cannot alter token scopes/permissions; pin bump is lockstep across cache key, restore-keys prefix, and uses: reference. No new third-party action, no pull_request_target, no checkout credential persistence vector. Residual risk: cache key/pin coupling is a parked follow-up; no blocker.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow-pinning lane for PR #49. Two workflow YAML files touched. Pin lockstep verified for cec5b07457f99e652a500dffc603f98e6082a7f7 across 3 sites, old pin absent, cache key/restore-keys prefix match, no other third-party actions changed.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow lint proof lane: actionlint receipt ok, no focused smoke proof available, no syntactic regression. Pin lockstep and paths-ignore semantics covered by seeded thread; CodeRabbit stale SHA comment is stale (current head re-pinned to cec5b074).".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "Cache key/restore-keys prefix is coupled to action SHA; any future partial repin silently mismatches restore. Current state consistent, parked for lint-rule follow-up.".to_owned(),
+                evidence: "diff: cache key, restore-keys prefix, uses: all reference cec5b074 in lockstep".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Opposition lane for workflow/tooling: paths-ignore addition + lockstep SHA pin. Actionlint ok. No source, no permissions, no token, no checkout changes. No blocker.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Residual workflow risk: cache key/restore-keys prefix is manually coupled to action SHA. Partial repin silently breaks cache restore. Parked for follow-up lint rule.".to_owned(),
+                evidence: "cache key/restore-keys must be updated in lockstep with uses: pin; no automated guard exists; current PR state is consistent".to_owned(),
+            },
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Workflow-pinning lane"));
+        assert!(!body.contains("Pin lockstep verified"));
+        assert!(!body.contains("Current state consistent"));
+        assert!(!body.contains("No blocker"));
+        assert!(!body.contains("cache key/restore-keys"));
     }
 
     #[test]

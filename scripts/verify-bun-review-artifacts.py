@@ -17,6 +17,10 @@ from typing import Any, Callable
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
 RUN_MODE_VALUES = {"review-byok", "intelligent-ci"}
 RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
+SKIPPED_REVIEW_PAYLOAD_STATUSES = {
+    "skipped_empty_smoke",
+    "skipped_artifact_only_body",
+}
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"
 APPROVAL_LINES = {
@@ -309,6 +313,14 @@ def is_workflow_trust_posture_review_noise(text: str) -> bool:
         text
     ) or is_workflow_tool_status_artifact_gap_noise(
         text
+    ) or is_workflow_paths_ignore_no_posture_noise(
+        text
+    ) or is_actionlint_semantic_skip_proof_noise(
+        text
+    ) or is_current_pin_consistency_followup_noise(
+        text
+    ) or is_workflow_pin_lockstep_no_value_summary_noise(
+        text
     )
 
 
@@ -524,6 +536,110 @@ def is_workflow_paths_ignore_no_posture_noise(text: str) -> bool:
         or ("future rename" in text and "re-enable" in text)
     )
     return mentions_paths_ignore and mentions_workflow_posture and says_no_posture_change
+
+
+def is_actionlint_semantic_skip_proof_noise(text: str) -> bool:
+    mentions_actionlint_skip = "actionlint" in text and (
+        "semantic skip behavior" in text
+        or ("skip behavior" in text and "droid" in text)
+    )
+    says_proof_is_not_decisive = (
+        "no semantic proof" in text
+        or "trust rests on actionlint parse" in text
+        or "unproven beyond actionlint parse" in text
+        or "not proven by sensors" in text
+        or "no focused smoke proof" in text
+    )
+    scoped_to_auxiliary_lane = (
+        "droid lane" in text
+        or "droid" in text
+        or "auxiliary/non-blocking" in text
+        or "ub gate is authoritative" in text
+        or "ub gate is the authoritative" in text
+    )
+    return (
+        mentions_actionlint_skip
+        and says_proof_is_not_decisive
+        and scoped_to_auxiliary_lane
+    )
+
+
+def is_current_pin_consistency_followup_noise(text: str) -> bool:
+    mentions_cache_pin = (
+        "cache key" in text
+        or "restore-keys" in text
+        or "cache restore" in text
+    ) and ("action sha" in text or "repin" in text or "uses:" in text)
+    says_future_or_parked = (
+        "future repin" in text
+        or "future pin" in text
+        or "partial repin" in text
+        or "parked for follow-up" in text
+        or "parked for lint-rule" in text
+        or "lint-rule follow-up" in text
+        or "follow-up lint rule" in text
+        or "follow-up lint" in text
+        or "lint rule or script" in text
+    )
+    says_currently_consistent = (
+        "current state is consistent" in text
+        or "current state consistent" in text
+        or "current pr state is consistent" in text
+        or "not actionable in this pr" in text
+    )
+    return mentions_cache_pin and says_future_or_parked and says_currently_consistent
+
+
+def is_workflow_pin_lockstep_no_value_summary_noise(text: str) -> bool:
+    workflow_scope = (
+        "workflow" in text
+        or "ub-review" in text
+        or "actionlint" in text
+        or "paths-ignore" in text
+        or "droid" in text
+    )
+    mentions_lockstep_pin = (
+        "pin lockstep" in text
+        or "lockstep sha pin" in text
+        or "pin bump is lockstep" in text
+        or "pin/uses ref consistent" in text
+        or (
+            "cache key/restore-keys" in text
+            and (
+                "prefix match" in text
+                or "prefix is coupled" in text
+                or "updated in lockstep" in text
+                or "must be updated in lockstep" in text
+            )
+        )
+        or (
+            "cache key" in text
+            and "restore-keys" in text
+            and "uses:" in text
+            and "lockstep" in text
+        )
+    )
+    says_no_current_issue = (
+        "old pin absent" in text
+        or "current state is consistent" in text
+        or "current state consistent" in text
+        or "current pr state is consistent" in text
+        or "no blocker" in text
+        or "not a blocker" in text
+        or "no other third-party actions changed" in text
+        or "no syntactic regression" in text
+        or "no source, no permissions, no token, no checkout changes" in text
+        or (
+            "no new" in text
+            and (
+                "permission" in text
+                or "token" in text
+                or "third-party action" in text
+                or "checkout" in text
+            )
+        )
+    )
+    return workflow_scope and mentions_lockstep_pin and says_no_current_issue
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -989,9 +1105,9 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         skip = load_json(github_skip_path)
         if skip.get("status") != "skipped":
             fail(f"github-review-skip.json status expected skipped, got {skip.get('status')!r}")
-        if skip.get("review_payload_status") != "skipped_empty_smoke":
+        if skip.get("review_payload_status") not in SKIPPED_REVIEW_PAYLOAD_STATUSES:
             fail(
-                "github-review-skip.json review_payload_status expected skipped_empty_smoke"
+                "github-review-skip.json review_payload_status expected skipped status"
             )
         if skip.get("terminal_state") != review.get("terminal_state", {}).get("status"):
             fail("github-review-skip.json terminal_state does not match review.json")
@@ -1120,7 +1236,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
-        if metrics.get("review_payload_status") != "skipped_empty_smoke":
+        if metrics.get("review_payload_status") not in SKIPPED_REVIEW_PAYLOAD_STATUSES:
             fail("metrics review_payload_status does not match github-review-skip.json")
         if metrics.get("github_review_body_bytes") != 0:
             fail("metrics github_review_body_bytes must be 0 for skipped review payloads")
@@ -1540,6 +1656,9 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or is_stale_external_bot_objection_noise(text)
         or is_workflow_tool_status_artifact_gap_noise(text)
         or is_workflow_paths_ignore_no_posture_noise(text)
+        or is_actionlint_semantic_skip_proof_noise(text)
+        or is_current_pin_consistency_followup_noise(text)
+        or is_workflow_pin_lockstep_no_value_summary_noise(text)
         or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
@@ -3620,14 +3739,14 @@ def require_post_receipt(root: pathlib.Path) -> None:
             skip = load_json(github_skip)
             if (
                 skip.get("status") == "skipped"
-                and skip.get("review_payload_status") == "skipped_empty_smoke"
+                and skip.get("review_payload_status") in SKIPPED_REVIEW_PAYLOAD_STATUSES
             ):
                 return
         fail("neither post-result.json nor post-error.json exists")
     if post_result.exists():
         receipt = load_json(post_result)
         if receipt.get("status") == "skipped":
-            if receipt.get("review_payload_status") != "skipped_empty_smoke":
+            if receipt.get("review_payload_status") not in SKIPPED_REVIEW_PAYLOAD_STATUSES:
                 fail("post-result.json skipped receipt has wrong review_payload_status")
             require_skipped_payload_contract(receipt, root, post_result)
             return
@@ -3939,6 +4058,62 @@ def run_self_tests() -> None:
                 "receipt must come from the ub-review gate's own tooling rather "
                 "than a local pre-push run; trust depends on that gate having "
                 "actually executed actionlint v1 against this ref."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "paths-ignore actionlint skip-proof review prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs one verification check before upstream.\n\n"
+                "## Verification questions\n\n"
+                "- Confirm actionlint receipt 'ok' confirms syntactic validity, "
+                "but no semantic proof of skip behavior on the droid lane is "
+                "available; trust rests on actionlint parse plus per-PR trigger "
+                "semantics - the droid lane is auxiliary/non-blocking and the "
+                "UB gate is authoritative, so residual workflow risk is bounded.\n\n"
+                "## Refuted\n\n"
+                "- paths-ignore addition could mask future unpinned uses: "
+                "additions in ub-review-packet.yml from Droid lane coverage; "
+                "refuted because: paths-ignore lift is per-PR: any future PR "
+                "that also touches ub-review-packet.yml (adds/changes uses:) "
+                "will change the changed-files set and re-trigger Droid. "
+                "UB gate is the authoritative review surface and runs on the "
+                "new pin.\n\n"
+                "## Parked follow-ups\n\n"
+                "- Residual workflow risk: cache key/restore-keys prefix is "
+                "coupled to action SHA. Any future repin must update all three "
+                "sites; a partial update silently mismatches cache restore. "
+                "Not actionable in this PR (current state is consistent) - "
+                "parked for follow-up lint rule or script.\n\n"
+                "## Evidence gaps\n\n"
+                "- trust gap: no focused smoke proof (workflow_run on fork-PR "
+                "dry-run or pull_request_target guard) executed for the "
+                "paths-ignore change; semantic skip behavior on Droid lane "
+                "unproven beyond actionlint parse."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "workflow lockstep summary review prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs one verification check before upstream.\n\n"
+                "## Verification questions\n\n"
+                "- Workflow-pinning lane for PR #49. Two workflow YAML files "
+                "touched. Pin lockstep verified across 3 sites, old pin absent, "
+                "cache key/restore-keys prefix match, no other third-party "
+                "actions changed.\n\n"
+                "## Parked follow-ups\n\n"
+                "- Cache key/restore-keys prefix is coupled to action SHA; any "
+                "future partial repin silently mismatches restore. Current state "
+                "consistent, parked for lint-rule follow-up."
             ),
             pathlib.Path("review/github-review.json"),
         ),
