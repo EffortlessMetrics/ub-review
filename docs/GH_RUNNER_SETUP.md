@@ -4,7 +4,7 @@
 repositories.
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
+- uses: EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd
   with:
     preset: bun-ub
     profile: gh-runner
@@ -13,12 +13,12 @@ repositories.
 ```
 
 Use a full commit SHA for the Bun gate. The current known-good pin is
-`da14100f862610477e27948719bf5f0d222d27e6`, validated by
-`EffortlessSteven/bun#47`. Tagged action refs use `install-mode: auto` to try
-the Linux x64 release asset `ub-review-x86_64-unknown-linux-gnu.tar.gz` first,
-then fall back to a source build when the asset is not available. Pushing a
-`v*` tag in this repository builds and publishes that archive plus its `.sha256`
-receipt.
+`804d198b5a15a0df94bb4f43750dba71165916cd`, validated by
+`EffortlessSteven/bun#49` with terminal state `sufficient` and an artifact-only
+post skip. Tagged action refs use `install-mode: auto` to try the Linux x64
+release asset `ub-review-x86_64-unknown-linux-gnu.tar.gz` first, then fall back
+to a source build when the asset is not available. Pushing a `v*` tag in this
+repository builds and publishes that archive plus its `.sha256` receipt.
 
 For Bun review posting, the consuming workflow should set:
 

@@ -84,7 +84,7 @@ jobs:
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
+        uses: EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd
         with:
           preset: bun-ub
           profile: gh-runner
@@ -127,11 +127,12 @@ harness. GLM is skipped for v0. Missing model keys are recorded as missing revie
 evidence instead of treated as a clean run.
 
 Use a full commit SHA for the Bun gate. The current known-good Bun pin is
-`EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6`,
-validated by `EffortlessSteven/bun#47` with a successful UB evidence packet,
-uploaded artifact, `tokmd` receipts, and zero inline comments. Do not float the
-Bun hunt on `main`; update the SHA only after this repo's verifier passes and
-the Bun consumer workflow succeeds.
+`EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`,
+validated by `EffortlessSteven/bun#49` with a successful UB evidence packet,
+terminal state `sufficient`, artifact-only PR body skip, uploaded artifact,
+`tokmd` receipts, and verifier pass. Do not float the Bun hunt on `main`; update
+the SHA only after this repo's verifier passes and the Bun consumer workflow
+succeeds.
 
 After downloading the first Bun artifact, verify the packet contract before
 tagging:
