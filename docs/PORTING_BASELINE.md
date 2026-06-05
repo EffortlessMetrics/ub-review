@@ -100,7 +100,13 @@ target/ub-review/
   input/
   sensors/
   lanes/
+  resolved-tools.json
+  tool-status.json
+  tool-gate-outcomes.json
   review/
+    resolved-tools.json
+    tool-status.json
+    tool-gate-outcomes.json
     review.json
     review.md
     terminal_state.json
@@ -119,6 +125,7 @@ target/ub-review/
   events.ndjson
   model_stages.ndjson
   resolved_candidates.ndjson
+  tool_gate_outcomes.ndjson
   work_queue.json
   work_events.ndjson
   running-summary.md
@@ -136,6 +143,10 @@ availability.
 `resolved_candidates` is the candidate reconciliation receipt: it ties original
 candidate surfaces to follow-up outputs and preserves open, resolved, parked,
 dropped, unavailable, or conflicting state for audit.
+
+`tool-gate-outcomes` is the trust-affecting policy receipt for configured tool
+gates. It is separate from `tool-status`: a sensor can run successfully while
+the configured gate remains missing evidence, not evaluated, or failed.
 
 ## PR Body Contract
 

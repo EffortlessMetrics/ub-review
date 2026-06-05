@@ -53,6 +53,16 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
 - PR #275: `work_queue.json` records baseline sensor tasks before proof-planner
   tasks, and `tool-status.json` carries timeout, artifact-budget, and lease
   metadata so the verifier can audit queue/tool parity.
+- PR #276: the artifact verifier cross-checks `tool-status.json` against
+  `resolved-tools.json`, and generated model artifact path segments are bounded
+  with stable hash suffixes instead of trusting model-sized ids as filenames.
+- PR #277: `tool-gate-outcomes.json`, `review/tool-gate-outcomes.json`, and
+  `tool_gate_outcomes.ndjson` record per-tool gate policy outcomes separately
+  from sensor status.
+- PR #278: malformed `gate-decision.json` receipts stay visible as malformed
+  evidence, and the verifier rejects impossible tool-gate pass/fail claims.
+- PR #279: the self gate no longer subscribes to `pull_request.synchronize`;
+  opened and ready-for-review remain the default review-producing passes.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
@@ -87,6 +97,8 @@ Use these defaults unless a repo opts into stricter behavior:
   Clippy on changed lines, and relevant static receipts;
 - missing `cargo-allow`, `ripr`, `unsafe-review`, `actionlint`, or `ast-grep`
   is missing evidence, not a clean result;
+- configured tool gates write explicit pass, fail, not-evaluated, or
+  missing-evidence outcomes; sensor success alone is not a gate pass;
 - on standard runner images, missing core tools or a stale `tokmd` pin are
   image drift and should fail `doctor`;
 - `cargo-allow` owns source-tree exceptions;
