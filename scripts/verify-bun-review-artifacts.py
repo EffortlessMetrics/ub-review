@@ -1118,6 +1118,10 @@ def require_review(
         fail("shared_context.md missing UB ledger context section")
     if "## PR Thread Context" not in shared_context:
         fail("shared_context.md missing PR thread context section")
+    if "## Initial Work Queue" not in shared_context:
+        fail("shared_context.md missing initial work queue section")
+    if "pending work is unfinished, not missing evidence" not in shared_context:
+        fail("shared_context.md missing pending-work packet rule")
     pr_thread_context = load_json(root / "review/pr_thread_context.json")
     if not isinstance(pr_thread_context, dict):
         fail("pr_thread_context.json is not an object")

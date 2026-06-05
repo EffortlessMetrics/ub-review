@@ -610,6 +610,10 @@ fn active_len_tracks_view_after_resize() {
     assert!(shared_context.contains("- Changed surfaces: `source, tests`"));
     assert!(shared_context.contains("- Primary language: `rust`"));
     assert!(shared_context.contains("- Mixed-language diff: `false`"));
+    assert!(shared_context.contains("## Initial Work Queue"));
+    assert!(shared_context.contains("- Rule: pending work is unfinished, not missing evidence."));
+    assert!(shared_context.contains("### Ready Initial Packet Receipts"));
+    assert!(shared_context.contains("### Pending Initial Packet Tasks"));
     assert!(shared_context.contains("## PR Thread Context"));
     assert!(shared_context.contains("- Status: `"));
     let shared_context_cache_block =
@@ -1575,6 +1579,11 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert_eq!(planner_input["schema"], "ub-review.proof_planner_input.v1");
     assert_eq!(planner_input["diff_class"], "tests-only");
     assert_eq!(planner_input["runtime_budget"]["max_focused_tests"], 1);
+    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+    assert!(shared_context.contains("## Initial Work Queue"));
+    assert!(shared_context.contains("### Pending Initial Packet Tasks"));
+    assert!(shared_context.contains("`late-follow-up`, `trust-affecting`"));
+    assert!(shared_context.contains("review/proof_receipts.json"));
 
     let planner_output: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
