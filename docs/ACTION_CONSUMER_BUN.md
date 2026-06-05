@@ -1,10 +1,12 @@
 # Bun consumer workflow
 
 The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor the Rust runner.
+Non-Bun repositories can set `config: .ub-review.toml` instead of using the
+bundled `bun-ub` preset.
 
 ```yaml
 - name: Build UB review packet
-  uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
+  uses: EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd
   with:
     preset: bun-ub
     profile: gh-runner
@@ -16,7 +18,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
     install-tools: 'true'
     tool-bundle: core
     posting: review
-    mode: review-direct
+    mode: review-byok
     github-token: ${{ github.token }}
     minimax-api-key: ${{ secrets.MINIMAX }}
     minimax-provider-kind: anthropic
@@ -33,7 +35,7 @@ The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor th
 ```
 
 The Bun fork should use a full commit SHA, not `main`. The current known-good
-pin is `da14100f862610477e27948719bf5f0d222d27e6`; update it only after this
+pin is `804d198b5a15a0df94bb4f43750dba71165916cd`; update it only after this
 repo's verifier passes and the Bun consumer workflow uploads a valid packet.
 
 GLM is skipped for v0. The Bun v0 cutover workflow uses direct MiniMax M3 for

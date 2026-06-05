@@ -84,7 +84,7 @@ jobs:
 
       - name: Build UB review packet
         id: ub-review
-        uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
+        uses: EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd
         with:
           preset: bun-ub
           profile: gh-runner
@@ -95,7 +95,7 @@ jobs:
           install-tools: 'true'
           tool-bundle: core
           posting: review
-          mode: review-direct
+          mode: review-byok
           github-token: ${{ github.token }}
           minimax-api-key: ${{ secrets.MINIMAX }}
           minimax-provider-kind: anthropic
@@ -127,11 +127,12 @@ harness. GLM is skipped for v0. Missing model keys are recorded as missing revie
 evidence instead of treated as a clean run.
 
 Use a full commit SHA for the Bun gate. The current known-good Bun pin is
-`EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6`,
-validated by `EffortlessSteven/bun#47` with a successful UB evidence packet,
-uploaded artifact, `tokmd` receipts, and zero inline comments. Do not float the
-Bun hunt on `main`; update the SHA only after this repo's verifier passes and
-the Bun consumer workflow succeeds.
+`EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`,
+validated by `EffortlessSteven/bun#49` with a successful UB evidence packet,
+terminal state `sufficient`, artifact-only PR body skip, uploaded artifact,
+`tokmd` receipts, and verifier pass. Do not float the Bun hunt on `main`; update
+the SHA only after this repo's verifier passes and the Bun consumer workflow
+succeeds.
 
 After downloading the first Bun artifact, verify the packet contract before
 tagging:
@@ -284,6 +285,15 @@ reported as clean evidence.
 Heavy witnesses such as builds, tests, Miri, ASAN, and mutation testing are off
 by default. Enable them only behind explicit workflow policy.
 
+Custom configs can mark a tool as required. The requirement applies only when
+the tool's trigger matches the current diff, so required workflow tools do not
+create evidence gaps on source-only PRs.
+
+```toml
+[tools.actionlint]
+required = true
+```
+
 ### Rust unsafe evidence stack
 
 For Rust repositories with an unsafe surface, `unsafe-review` is the third
@@ -343,6 +353,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | Input | Default | Meaning |
 |---|---|---|
 | `preset` | `bun-ub` | Repo preset. |
+| `config` | empty | Optional repo-local or absolute TOML config path; overrides `preset` when set. |
 | `profile` | `gh-runner` | Box profile. |
 | `base` | `origin/main` | Base ref. |
 | `head` | `HEAD` | Head ref. |
@@ -356,7 +367,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `release-asset` | `ub-review-x86_64-unknown-linux-gnu.tar.gz` | Linux x64 release archive asset. |
 | `allow-heavy` | `false` | Permit heavy witness classes. |
 | `posting` | `review` | `review` posts one Pull Request Review; `artifact-only` only writes files. |
-| `mode` | `review-direct` | Direct BYOK MiniMax fanout; agent modes are reserved for later. |
+| `mode` | `review-byok` | BYOK grouped review mode. `intelligent-ci` selects the required-gate product mode; legacy `review-direct` is accepted as an alias. |
 | `github-token` | empty | Scoped token for `posting=review`. |
 | `minimax-api-key` | empty | MiniMax M3 lane key. |
 | `minimax-api-url` | empty | Optional MiniMax API URL override. |
@@ -378,6 +389,29 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `ledger-max-bytes` | `65536` | Maximum ledger context bytes. |
 | `fail-on-post-error` | `false` | Fail the action when PR review posting fails. |
 | `github-summary` | `true` | Append running summary to job summary. |
+
+## Repo Config Proof Policy
+
+Custom configs can require proof in `intelligent-ci` mode. Matched requests are
+still routed through the central proof broker allowlist and runtime budget.
+
+```toml
+review_profile = "bun-ub-v0"
+profile = "gh-runner"
+
+[repo]
+kind = "rust"
+
+[[proof.required]]
+id = "cargo-check"
+languages = ["rust"]
+diff_classes = ["source-general", "source-ub"]
+command = "cargo check --workspace --locked"
+reason = "Required Rust workspace check for intelligent CI."
+cost = "focused-build"
+timeout_sec = 300
+required = true
+```
 
 ## Outputs
 

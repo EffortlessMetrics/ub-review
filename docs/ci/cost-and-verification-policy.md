@@ -21,6 +21,7 @@ lanes should preserve the high-resolution scan.
 The target default PR posture is:
 
 - PR plan;
+- work queue with packet deadlines and late receipt routing;
 - Rust fast gate;
 - policy ledger parse/check once implemented;
 - `ripr` advisory/static exposure where available;

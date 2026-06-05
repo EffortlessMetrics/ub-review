@@ -13,6 +13,10 @@ inputs:
     description: Repo preset. Currently `bun-ub` is the production/default preset.
     default: bun-ub
     required: false
+  config:
+    description: Optional ub-review TOML config path. When set, this overrides preset selection.
+    default: ''
+    required: false
   profile:
     description: Box profile. `gh-runner` is the zero-config GitHub-hosted default.
     default: gh-runner
@@ -74,8 +78,8 @@ inputs:
     default: review
     required: false
   mode:
-    description: 'Execution mode: review-direct, agent-investigate, or agent-patch. Only review-direct is implemented in v0.'
-    default: review-direct
+    description: 'Execution mode: review-byok or intelligent-ci. Legacy review-direct is accepted as an alias.'
+    default: review-byok
     required: false
   run-pass:
     description: 'Run pass identity: auto, opened, ready_for_review, pull_request_other, or manual. Auto maps pull_request opened and ready_for_review to the matching pass.'
@@ -142,7 +146,7 @@ inputs:
     default: ''
     required: false
   provider-policy:
-    description: 'Provider policy: minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
+    description: 'Provider policy: primary-with-fallback, minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
     default: minimax-primary
     required: false
   lane-width:
@@ -466,18 +470,21 @@ runs:
           extra+=(--runtime-profile "${{ inputs['runtime-profile'] }}")
         fi
 
-        config="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
-        case "${{ inputs.preset }}" in
-          bun-ub|bun)
-            config="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
-            ;;
-          *)
-            echo "::warning::Unknown preset '${{ inputs.preset }}'; using bun-ub"
-            ;;
-        esac
+        config_path="${{ inputs.config }}"
+        if [[ -z "$config_path" ]]; then
+          config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
+          case "${{ inputs.preset }}" in
+            bun-ub|bun)
+              config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
+              ;;
+            *)
+              echo "::warning::Unknown preset '${{ inputs.preset }}'; using bun-ub"
+              ;;
+          esac
+        fi
 
         "${{ steps.runner.outputs.bin }}" run \
-          --config "$config" \
+          --config "$config_path" \
           --profile "${{ inputs.profile }}" \
           --root "${{ inputs.root }}" \
           --base "${{ inputs.base }}" \

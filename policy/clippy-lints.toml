@@ -1,0 +1,87 @@
+schema_version = 1
+msrv = "1.95"
+
+[policy]
+panic_free_tests = true
+allow_test_carveouts = false
+suppression_style = "expect-with-reason"
+blanket_categories = false
+rust_default_implementation = true
+
+[[active]]
+name = "clippy::unwrap_used"
+level = "deny"
+class = "panic"
+reason = "No unchecked Result/Option collapse in production or tests."
+
+[[active]]
+name = "clippy::expect_used"
+level = "deny"
+class = "panic"
+reason = "No unchecked expectation collapse in production or tests."
+
+[[active]]
+name = "clippy::panic"
+level = "deny"
+class = "panic"
+reason = "Panic-family behavior must be owned through a receipt instead of hidden in code."
+
+[[active]]
+name = "clippy::todo"
+level = "deny"
+class = "panic"
+reason = "Unimplemented behavior must be tracked as work, not shipped as a panic path."
+
+[[active]]
+name = "clippy::unimplemented"
+level = "deny"
+class = "panic"
+reason = "Unimplemented behavior must be tracked as work, not shipped as a panic path."
+
+[[active]]
+name = "clippy::dbg_macro"
+level = "deny"
+class = "debug-leak"
+reason = "Debug print surfaces should not enter committed code."
+
+[[target]]
+name = "clippy::get_unwrap"
+level = "deny"
+class = "panic"
+reason = "Indexing-like collapse should be visible and receipted."
+
+[[target]]
+name = "clippy::unwrap_in_result"
+level = "deny"
+class = "panic"
+reason = "Result-returning functions should propagate errors instead of panicking."
+
+[[target]]
+name = "clippy::panic_in_result_fn"
+level = "deny"
+class = "panic"
+reason = "Fallible APIs should use their error channel rather than panic."
+
+[[target]]
+name = "clippy::allow_attributes"
+level = "deny"
+class = "suppression-governance"
+reason = "Durable suppressions must use expect-with-reason and a policy receipt."
+
+[[target]]
+name = "clippy::allow_attributes_without_reason"
+level = "deny"
+class = "suppression-governance"
+reason = "Lint suppressions must include a reviewable reason."
+
+[[target]]
+name = "clippy::ignore_without_reason"
+level = "deny"
+class = "suppression-governance"
+reason = "Ignored tests must explain the owned gap."
+
+[[target]]
+name = "clippy::should_panic_without_expect"
+level = "deny"
+class = "test-oracle"
+reason = "Panic tests must declare the expected panic condition."

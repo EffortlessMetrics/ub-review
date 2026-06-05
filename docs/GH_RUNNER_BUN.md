@@ -5,7 +5,7 @@ The first production use of `ub-review` is the Bun UB hunt.
 The Bun fork should consume this repository as a GitHub Action:
 
 ```yaml
-- uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
+- uses: EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd
   with:
     preset: bun-ub
     profile: gh-runner
@@ -14,10 +14,10 @@ The Bun fork should consume this repository as a GitHub Action:
 ```
 
 Keep the Bun workflow pinned to a verified commit SHA. The current known-good
-pin is `da14100f862610477e27948719bf5f0d222d27e6`, validated by
-`EffortlessSteven/bun#47` with a successful `UB evidence packet / gh-runner`
-run, uploaded packet artifact, `tokmd` receipts, and zero inline comments. Do
-not float the Bun gate on `main`.
+pin is `804d198b5a15a0df94bb4f43750dba71165916cd`, validated by
+`EffortlessSteven/bun#49` with a successful `UB evidence packet / gh-runner`
+run, uploaded packet artifact, `tokmd` receipts, terminal state `sufficient`,
+artifact-only post skip, and verifier pass. Do not float the Bun gate on `main`.
 
 The action builds the packet without sensor secrets. In `posting: review` mode,
 the Bun workflow gives it the scoped `github.token` so it can submit one grouped
@@ -63,7 +63,8 @@ target/ub-review/
     shared_context.md
     review.json
     review.md
-    github-review.json
+    github-review.json        # only when review content is posted
+    github-review-skip.json   # when artifact-only output is correct
     post-result.json
     post-error.json
   events.ndjson

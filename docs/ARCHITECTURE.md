@@ -74,8 +74,9 @@ to the upstream issue.
 
 ## Agent modes
 
-The v0 hot path is `review-direct`: direct BYOK MiniMax M3 calls from the Rust
-runner over one shared evidence packet. OpenCode Go is an optional direct
-provider lane, not an agent orchestrator. GLM is skipped for v0.
+The v0 hot path is `review-byok`: BYOK MiniMax M3 calls from the Rust runner
+over one shared evidence packet. `intelligent-ci` names the required-gate
+product mode. Legacy `review-direct` is accepted as an alias. OpenCode Go is an
+optional direct provider lane, not an agent orchestrator. GLM is skipped for v0.
 `agent-investigate` and `agent-patch` are reserved for future leased
 Codex/OpenCode/Pi-style workers and are not part of the default review path.

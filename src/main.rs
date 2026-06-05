@@ -169,6 +169,7 @@ impl ReviewDepth {
 enum ModelProviderPolicy {
     Auto,
     MinimaxPrimary,
+    PrimaryWithFallback,
     MinimaxOnly,
     OpencodeGoCanary,
     OpencodeGoWide,
@@ -179,6 +180,7 @@ impl ModelProviderPolicy {
         match self {
             Self::Auto => "auto",
             Self::MinimaxPrimary => "minimax-primary",
+            Self::PrimaryWithFallback => "primary-with-fallback",
             Self::MinimaxOnly => "minimax-only",
             Self::OpencodeGoCanary => "opencode-go-canary",
             Self::OpencodeGoWide => "opencode-go-wide",
@@ -199,9 +201,11 @@ enum OpenCodeEndpointKindArg {
     AnthropicMessages,
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 enum RunMode {
-    ReviewDirect,
+    #[value(alias = "review-direct")]
+    ReviewByok,
+    IntelligentCi,
     AgentInvestigate,
     AgentPatch,
 }
@@ -209,7 +213,8 @@ enum RunMode {
 impl RunMode {
     fn key(self) -> &'static str {
         match self {
-            Self::ReviewDirect => "review-direct",
+            Self::ReviewByok => "review-byok",
+            Self::IntelligentCi => "intelligent-ci",
             Self::AgentInvestigate => "agent-investigate",
             Self::AgentPatch => "agent-patch",
         }
@@ -381,11 +386,11 @@ struct RunArgs {
         env = "UB_REVIEW_POSTING"
     )]
     posting: PostingMode,
-    /// Review execution mode. Default uses direct BYOK MiniMax fanout.
+    /// Review execution mode. Default uses BYOK model lanes.
     #[arg(
         long,
         value_enum,
-        default_value = "review-direct",
+        default_value = "review-byok",
         env = "UB_REVIEW_MODE"
     )]
     mode: RunMode,
@@ -621,7 +626,7 @@ struct GitHubReviewSkipReceipt {
     reason: String,
     review_payload_status: String,
     terminal_state: String,
-    github_review_json: String,
+    github_review_json: Option<String>,
     run_pass: String,
     model_mode: String,
     inline_comments: usize,
@@ -661,6 +666,7 @@ struct Config {
     repo: RepoConfig,
     review: ReviewConfig,
     review_body: ReviewBodyPolicy,
+    proof: ProofPolicyConfig,
     profiles: BTreeMap<String, Profile>,
     tools: BTreeMap<String, ToolPolicy>,
     lanes: Vec<LanePlan>,
@@ -684,6 +690,26 @@ struct ReviewConfig {
     require_zero_finding_audit: bool,
     enable_default_lanes: bool,
     github_summary: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct ProofPolicyConfig {
+    required: Vec<RequiredProofPolicy>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+struct RequiredProofPolicy {
+    id: String,
+    languages: Vec<String>,
+    diff_classes: Vec<String>,
+    command: String,
+    reason: String,
+    cost: Option<String>,
+    timeout_sec: u64,
+    required: bool,
+    enabled: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -837,6 +863,7 @@ struct ToolPolicy {
     class: ToolClass,
     weight: u32,
     default: Trigger,
+    required: bool,
     timeout_sec: u64,
     artifact_budget_mb: u64,
     requires_lease: bool,
@@ -970,6 +997,7 @@ struct SensorPlan {
     command: String,
     run: bool,
     reason: String,
+    required: bool,
     timeout_sec: u64,
     class: ToolClass,
     weight: u32,
@@ -989,6 +1017,7 @@ struct ResolvedToolEntry {
     class: ToolClass,
     command: String,
     required_if: Trigger,
+    required: bool,
     required_reason: String,
     runtime_profile: String,
     enabled: bool,
@@ -1013,6 +1042,7 @@ struct ToolStatusEntry {
     class: ToolClass,
     command: String,
     required_if: Trigger,
+    required: bool,
     required_reason: String,
     runtime_profile: String,
     planned_run: bool,
@@ -2461,6 +2491,20 @@ struct RefuterRunContext<'a> {
     model_calls_used: usize,
 }
 
+struct ProofPlannerRunContext<'a> {
+    root: &'a Path,
+    review_dir: &'a Path,
+    provider_preflights: &'a [ProviderPreflightReceipt],
+    shared_context: &'a str,
+    args: &'a RunArgs,
+    diff: &'a DiffContext,
+    profile: &'a Profile,
+    box_state: &'a BoxState,
+    pr_thread_context: &'a PrThreadContext,
+    model_calls_used: usize,
+    line_map: &'a BTreeSet<(String, u32)>,
+}
+
 struct FollowUpRunContext<'a> {
     root: &'a Path,
     out: &'a Path,
@@ -2586,6 +2630,7 @@ impl Default for Config {
             repo: RepoConfig::default(),
             review: ReviewConfig::default(),
             review_body: ReviewBodyPolicy::default(),
+            proof: ProofPolicyConfig::default(),
             profiles,
             tools,
             lanes: Vec::new(),
@@ -2624,6 +2669,22 @@ impl Default for ReviewBodyPolicy {
             include_provider_table: ReviewBodyTablePolicy::OnFailure,
             include_sensor_table: ReviewBodyTablePolicy::OnFailure,
             include_execution_summary: ReviewBodyExecutionSummaryPolicy::None,
+        }
+    }
+}
+
+impl Default for RequiredProofPolicy {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            languages: Vec::new(),
+            diff_classes: Vec::new(),
+            command: String::new(),
+            reason: String::new(),
+            cost: None,
+            timeout_sec: 300,
+            required: true,
+            enabled: true,
         }
     }
 }
@@ -2715,6 +2776,7 @@ impl Default for ToolPolicy {
             class: ToolClass::Static,
             weight: 1,
             default: Trigger::Never,
+            required: false,
             timeout_sec: 120,
             artifact_budget_mb: 64,
             requires_lease: false,
@@ -3326,7 +3388,7 @@ fn apply_depth_defaults(args: &mut RunArgs) -> Result<()> {
 
 fn ensure_supported_mode(mode: RunMode) -> Result<()> {
     match mode {
-        RunMode::ReviewDirect => Ok(()),
+        RunMode::ReviewByok | RunMode::IntelligentCi => Ok(()),
         RunMode::AgentInvestigate | RunMode::AgentPatch => bail!(
             "{} is reserved for optional leased workers and is not implemented in v0",
             mode.key()
@@ -3711,6 +3773,7 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
         "repo": &config.repo,
         "review": &config.review,
         "review_body": &config.review_body,
+        "proof": &config.proof,
         "review_profile": {
             "name": &config.review_profile,
             "repo_kind": &config.repo.kind,
@@ -3757,6 +3820,7 @@ fn resolved_tools_artifact(
                 class: tool.class,
                 command: tool.command.clone(),
                 required_if: tool.default,
+                required: planned.is_some_and(|sensor| sensor.required),
                 required_reason: trigger_description(tool.default).to_owned(),
                 runtime_profile: profile.name.clone(),
                 enabled: tool.enabled,
@@ -3823,6 +3887,7 @@ fn tool_status_artifact(
                 class: planned.map(|sensor| sensor.class).unwrap_or(tool.class),
                 command: tool.command.clone(),
                 required_if: tool.default,
+                required: planned.is_some_and(|sensor| sensor.required),
                 required_reason: trigger_description(tool.default).to_owned(),
                 runtime_profile: profile.name.clone(),
                 planned_run: planned.is_some_and(|sensor| sensor.run),
@@ -3860,6 +3925,7 @@ fn tool_artifact_paths(id: &str) -> Vec<String> {
         command: id.to_owned(),
         run: false,
         reason: String::new(),
+        required: false,
         timeout_sec: 0,
         class: ToolClass::Static,
         weight: 0,
@@ -3903,13 +3969,15 @@ fn resolved_plan_artifact(
     let run_pass = run_args
         .map(|args| resolved_run_pass(args.run_pass).key())
         .unwrap_or("plan-default");
+    let language_mix = classify_language_mix(&diff.changed_files);
     serde_json::json!({
         "schema": "ub-review.resolved_plan.v1",
         "base": &plan.base,
         "head": &plan.head,
         "run_pass": run_pass,
         "diff_class": diff.diff_class.key(),
-        "language_mix": classify_language_mix(&diff.changed_files),
+        "language_mix": &language_mix,
+        "proof_policy": resolved_proof_policy_artifact(config, diff, &language_mix),
         "review_profile": &config.review_profile,
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
@@ -3924,6 +3992,65 @@ fn resolved_plan_artifact(
         "lanes": &plan.lanes,
         "notes": &plan.notes,
     })
+}
+
+fn resolved_proof_policy_artifact(
+    config: &Config,
+    diff: &DiffContext,
+    language_mix: &LanguageMix,
+) -> serde_json::Value {
+    let matched_required = config
+        .proof
+        .required
+        .iter()
+        .filter(|policy| required_proof_policy_matches_diff(policy, diff, language_mix))
+        .collect::<Vec<_>>();
+    serde_json::json!({
+        "schema": "ub-review.proof_policy_resolution.v1",
+        "required": &config.proof.required,
+        "matched_required": matched_required,
+    })
+}
+
+fn required_proof_policy_matches_diff(
+    policy: &RequiredProofPolicy,
+    diff: &DiffContext,
+    language_mix: &LanguageMix,
+) -> bool {
+    policy.enabled
+        && proof_policy_language_matches(&policy.languages, language_mix)
+        && proof_policy_diff_class_matches(&policy.diff_classes, diff.diff_class.key())
+}
+
+fn proof_policy_language_matches(languages: &[String], language_mix: &LanguageMix) -> bool {
+    if languages.is_empty() {
+        return true;
+    }
+    languages.iter().any(|language| {
+        let language = normalize_policy_selector(language);
+        matches!(language.as_str(), "*" | "any" | "all")
+            || (language == "mixed" && language_mix.mixed_language)
+            || language_mix
+                .languages
+                .iter()
+                .any(|candidate| candidate == &language)
+            || language_mix.primary_language.as_deref() == Some(language.as_str())
+    })
+}
+
+fn proof_policy_diff_class_matches(diff_classes: &[String], diff_class: &str) -> bool {
+    if diff_classes.is_empty() {
+        return true;
+    }
+    let diff_class = normalize_policy_selector(diff_class);
+    diff_classes.iter().any(|candidate| {
+        let candidate = normalize_policy_selector(candidate);
+        matches!(candidate.as_str(), "*" | "any" | "all") || candidate == diff_class
+    })
+}
+
+fn normalize_policy_selector(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace('_', "-")
 }
 
 fn resolved_selector_artifact(
@@ -4544,39 +4671,53 @@ fn plan_tool(
     guard_ok: bool,
     allow_heavy: bool,
 ) -> SensorPlan {
+    let required = tool_required_for_diff(tool, diff);
     if !tool.enabled {
-        return skipped(tool, "disabled by config");
+        return skipped(tool, "disabled by config", required);
     }
     if tool.requires_lease && !allow_heavy {
-        return skipped(tool, "heavy/manual witness requires --allow-heavy");
+        return skipped(
+            tool,
+            "heavy/manual witness requires --allow-heavy",
+            required,
+        );
     }
     if matches!(tool.class, ToolClass::Test) && profile.limits.tests == 0 {
-        return skipped(tool, "profile disables test leases");
+        return skipped(tool, "profile disables test leases", required);
     }
     if matches!(tool.class, ToolClass::Build) && profile.limits.builds == 0 {
-        return skipped(tool, "profile disables build leases");
+        return skipped(tool, "profile disables build leases", required);
     }
     if !guard_ok && !matches!(tool.class, ToolClass::Packet) {
-        return skipped(tool, "box guard failed; only packet generation is allowed");
+        return skipped(
+            tool,
+            "box guard failed; only packet generation is allowed",
+            required,
+        );
     }
     match trigger_match(tool.default, &diff.flags) {
         Some(reason) => {
             if tool.id == "cargo-allow" && !cargo_allow_policy_config_exists(root) {
-                return skipped(tool, "cargo-allow policy config not found");
+                return skipped(tool, "cargo-allow policy config not found", required);
             }
             SensorPlan {
                 id: tool.id.clone(),
                 command: tool.command.clone(),
                 run: true,
                 reason,
+                required,
                 timeout_sec: tool.timeout_sec.min(profile.budgets.default_timeout_sec),
                 class: tool.class,
                 weight: tool.weight,
                 requires_lease: tool.requires_lease,
             }
         }
-        None => skipped(tool, "trigger did not match this diff"),
+        None => skipped(tool, "trigger did not match this diff", false),
     }
+}
+
+fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
+    tool.required && trigger_match(tool.default, &diff.flags).is_some()
 }
 
 fn cargo_allow_policy_config_exists(root: &Path) -> bool {
@@ -4585,12 +4726,13 @@ fn cargo_allow_policy_config_exists(root: &Path) -> bool {
         .any(|path| root.join(path).is_file())
 }
 
-fn skipped(tool: &ToolPolicy, reason: &str) -> SensorPlan {
+fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
     SensorPlan {
         id: tool.id.clone(),
         command: tool.command.clone(),
         run: false,
         reason: reason.to_owned(),
+        required,
         timeout_sec: tool.timeout_sec,
         class: tool.class,
         weight: tool.weight,
@@ -5086,6 +5228,48 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--output".to_owned(),
             dir.join("cargo-allow.md").display().to_string(),
         ],
+        "cargo-fmt" => vec![
+            "cargo".to_owned(),
+            "fmt".to_owned(),
+            "--all".to_owned(),
+            "--check".to_owned(),
+        ],
+        "cargo-check" => vec![
+            "cargo".to_owned(),
+            "check".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "cargo-test" => vec![
+            "cargo".to_owned(),
+            "test".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "cargo-clippy" => vec![
+            "cargo".to_owned(),
+            "clippy".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+            "--".to_owned(),
+            "-D".to_owned(),
+            "warnings".to_owned(),
+        ],
+        "cargo-doc" => vec![
+            "cargo".to_owned(),
+            "doc".to_owned(),
+            "--workspace".to_owned(),
+            "--no-deps".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "artifact-verifier" => vec![
+            "python".to_owned(),
+            "scripts/verify-bun-review-artifacts.py".to_owned(),
+            "--self-test".to_owned(),
+        ],
         "ast-grep" => {
             let config = root.join("tools/ub-rules/sgconfig.yml");
             if config.exists() {
@@ -5407,6 +5591,7 @@ fn write_sensor_status(
         "timeout_sec": sensor.timeout_sec,
         "class": sensor.class,
         "requires_lease": sensor.requires_lease,
+        "required": sensor.required,
     });
     fs::write(
         dir.join("ub-review-sensor-status.json"),
@@ -5610,6 +5795,13 @@ fn write_review_artifacts(
     let assignments = model_assignments(plan, args)?;
     write_shared_context_cache_artifacts(out, &shared_context, &assignments, &[], &[], args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
+    if should_run_proof_planner_model_lane(args, diff) {
+        ensure_provider_preflight_receipt(
+            &mut provider_preflights,
+            direct_minimax_spec(args),
+            args,
+        );
+    }
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
     let mut missing_or_failed_model_evidence = model_lanes
@@ -5623,6 +5815,8 @@ fn write_review_artifacts(
     let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
     let profile = config.selected_profile()?;
+    append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
+    let seeded_proof_requests = proof_requests.clone();
 
     let mut proof_result = ProofBrokerResult::default();
     if matches!(args.model_mode, ModelMode::Auto) {
@@ -5634,17 +5828,18 @@ fn write_review_artifacts(
             "initial-diff-broker",
         )?;
         thread::scope(|scope| -> Result<()> {
-            let initial_proof_handle = scope.spawn(move || {
-                let broker_result =
-                    run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
-                let status = if broker_result.is_ok() {
-                    "completed"
-                } else {
-                    "failed"
-                };
-                let phase =
-                    finish_run_loop_phase(event_log, run_started, initial_proof_loop, status)?;
-                broker_result.map(|proof_result| (proof_result, phase))
+            let proof_handle = scope.spawn(move || {
+                run_seeded_proof_stream_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    args,
+                    &seeded_proof_requests,
+                    initial_proof_loop,
+                    event_log,
+                    run_started,
+                )
             });
 
             let model_loop =
@@ -5672,6 +5867,25 @@ fn write_review_artifacts(
                 &mut proof_requests,
             )?;
             dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+            model_calls_used += run_proof_planner_model_lane(
+                ProofPlannerRunContext {
+                    root,
+                    review_dir: &review_dir,
+                    provider_preflights: &provider_preflights,
+                    shared_context: &shared_context,
+                    args,
+                    diff,
+                    profile,
+                    box_state,
+                    pr_thread_context: &pr_thread_context,
+                    model_calls_used,
+                    line_map: &line_map,
+                },
+                &mut model_lanes,
+                &mut missing_or_failed_model_evidence,
+                &mut model_observations,
+                &mut proof_requests,
+            )?;
             model_calls_used += run_refuter_pass(
                 RefuterRunContext {
                     root,
@@ -5694,11 +5908,13 @@ fn write_review_artifacts(
                 "completed",
             )?;
 
-            let (initial_result, proof_phase) = initial_proof_handle
+            let (seeded_result, proof_phases) = proof_handle
                 .join()
-                .map_err(|_| anyhow::anyhow!("initial diff proof thread panicked"))??;
-            run_loop_tracker.record(proof_phase);
-            proof_result = initial_result;
+                .map_err(|_| anyhow::anyhow!("seeded proof stream thread panicked"))??;
+            for phase in proof_phases {
+                run_loop_tracker.record(phase);
+            }
+            proof_result = seeded_result;
             Ok(())
         })?;
     } else {
@@ -5740,7 +5956,7 @@ fn write_review_artifacts(
         &pr_thread_context,
         &proof_requests,
     )?;
-    if !proof_requests.is_empty() {
+    if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
             event_log,
             run_started,
@@ -5951,7 +6167,11 @@ fn write_review_artifacts(
         &observations,
         &review.proof_receipts,
     );
-    append_follow_up_evidence_witnesses(&mut witnesses, &follow_up_evidence);
+    append_follow_up_evidence_witnesses(
+        &mut witnesses,
+        &follow_up_evidence,
+        &review.proof_receipts,
+    );
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
@@ -6099,7 +6319,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::Artifact,
     );
-    let pr_body = render_review_body(
+    let mut pr_body = render_review_body(
         input.shared_context_id,
         input.plan,
         input.diff,
@@ -6113,8 +6333,15 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
-    validate_pr_review_body_policy(&pr_body, input.review_body_policy)
-        .with_context(|| "validate pull request review body policy")?;
+    let mut suppressed_artifact_only_pr_body = false;
+    if let Err(err) = validate_pr_review_body_policy(&pr_body, input.review_body_policy) {
+        if is_suppressible_pr_body_policy_error(&err) {
+            pr_body.clear();
+            suppressed_artifact_only_pr_body = true;
+        } else {
+            return Err(err).with_context(|| "validate pull request review body policy");
+        }
+    }
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -6138,6 +6365,8 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
+    } else if suppressed_artifact_only_pr_body {
+        "skipped_artifact_only_body"
     } else {
         "skipped_empty_smoke"
     };
@@ -6163,6 +6392,11 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     })
 }
 
+fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
+    let text = error.to_string();
+    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
+}
+
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
     let trimmed = body.trim();
     if trimmed.is_empty() {
@@ -6170,6 +6404,9 @@ fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Resu
     }
     if has_forbidden_pr_review_boilerplate(trimmed) {
         bail!("github review body contains artifact-only boilerplate");
+    }
+    if is_refuted_only_pr_body(trimmed) {
+        bail!("github review body contains refuted-only artifact note");
     }
     if !policy.include_successful_lane_table && contains_successful_lane_table(trimmed) {
         bail!("github review body contains successful lane table");
@@ -6208,40 +6445,58 @@ fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Resu
 
 fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
     let lower = body.to_ascii_lowercase();
-    [
-        "no blocking finding after",
-        "no blocking ub finding",
-        "no actionable findings",
-        "a human should still inspect",
-        "human should still review",
-        "residual risk remains for human review",
-        "bounded review",
-        "## residual risk",
-        "cached prior observation",
-        "refuter demoted inline candidate",
-        "gate proof is pending",
-        "cannot perform from cached context",
-        "commit-existence/ancestry proof",
-        "upstream commit-existence",
-        "general bot output",
-        "pr-body contract hardening",
-        "actionlint ran ok",
-        "lane transcript",
-        "lane roster",
-        "model lane roster",
-        "raw observations",
-        "provider preflight",
-        "provider status",
-        "sensor status",
-        "shared context hash",
-        "cache manifest",
-        "runtime profile",
-        "review payload status",
-        "terminal state",
-        "github-review-skip",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
+    is_workflow_trust_posture_review_noise(&lower)
+        || [
+            "no blocking finding after",
+            "no blocking ub finding",
+            "no actionable findings",
+            "a human should still inspect",
+            "human should still review",
+            "residual risk remains for human review",
+            "bounded review",
+            "## residual risk",
+            "cached prior observation",
+            "refuter demoted inline candidate",
+            "gate proof is pending",
+            "cannot perform from cached context",
+            "commit-existence/ancestry proof",
+            "upstream commit-existence",
+            "general bot output",
+            "pr-body contract hardening",
+            "actionlint ran ok",
+            "lane transcript",
+            "lane roster",
+            "model lane roster",
+            "raw observations",
+            "provider preflight",
+            "provider status",
+            "sensor status",
+            "shared context hash",
+            "cache manifest",
+            "runtime profile",
+            "review payload status",
+            "terminal state",
+            "github-review-skip",
+        ]
+        .iter()
+        .any(|needle| lower.contains(needle))
+}
+
+fn is_refuted_only_pr_body(body: &str) -> bool {
+    let lower = body.to_ascii_lowercase();
+    lower.contains("## refuted")
+        && ![
+            "## decision",
+            "## confirmed findings",
+            "## verification questions",
+            "## test proof",
+            "## proof results",
+            "## parked follow-ups",
+            "## evidence gaps",
+            "## missing evidence",
+        ]
+        .iter()
+        .any(|heading| lower.contains(heading))
 }
 
 fn contains_successful_lane_table(body: &str) -> bool {
@@ -6343,6 +6598,13 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
             "artifact-only",
             "Dry run requested; this run produced artifacts but no reviewer-facing review.",
         )
+    } else if matches!(input.args.mode, RunMode::IntelligentCi)
+        && has_required_sensor_evidence_gap(input.plan, input.missing_or_failed_sensor_evidence)
+    {
+        (
+            "failed-to-review",
+            "A required intelligent-ci sensor was missing, skipped, failed, or timed out, so the gate did not reach a sufficient review state.",
+        )
     } else if matches!(input.args.model_mode, ModelMode::Off) {
         (
             "artifact-only",
@@ -6380,6 +6642,14 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
         inline_comments: input.inline_comments.len(),
         summary_only_findings: input.summary_only_findings.len(),
     }
+}
+
+fn has_required_sensor_evidence_gap(plan: &Plan, issues: &[SensorEvidenceIssue]) -> bool {
+    issues.iter().any(|issue| {
+        plan.sensors
+            .iter()
+            .any(|sensor| sensor.id == issue.sensor && sensor.required)
+    })
 }
 
 fn model_lane_is_usable_for_terminal_state(receipt: &ModelLaneReceipt) -> bool {
@@ -6786,6 +7056,7 @@ struct ObservationInput<'a> {
 
 fn make_observation(input: ObservationInput<'_>) -> Observation {
     let path = input.path.cloned();
+    let line = input.line.filter(|line| *line > 0);
     let fingerprint_input = format!(
         "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{}",
         input.lane,
@@ -6793,7 +7064,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
         input.status,
         input.claim,
         path,
-        input.line,
+        line,
         input.evidence.join("\n")
     );
     let fingerprint = sha256_hex(fingerprint_input.as_bytes());
@@ -6809,7 +7080,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
         severity: input.severity.to_owned(),
         confidence: input.confidence.to_owned(),
         path: path.clone(),
-        line: input.line,
+        line,
         fingerprint,
         evidence: input.evidence,
         dedupe_key: input
@@ -6818,7 +7089,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| {
-                observation_dedupe_key(input.lane, input.kind, path.as_deref(), input.line)
+                observation_dedupe_key(input.lane, input.kind, path.as_deref(), line)
             }),
         source: input.source.to_owned(),
     }
@@ -7017,6 +7288,7 @@ fn build_witness_records(
 fn append_follow_up_evidence_witnesses(
     witnesses: &mut Vec<WitnessRecord>,
     evidence: &FollowUpEvidenceArtifact,
+    proof_receipts: &[ProofReceipt],
 ) {
     for comment in &evidence.inline_comments {
         witnesses.push(witness_record(WitnessRecordInput {
@@ -7073,20 +7345,39 @@ fn append_follow_up_evidence_witnesses(
         }));
     }
     for request in &evidence.proof_requests {
+        let matched_receipt = proof_receipt_for_request(proof_receipts, &request.id);
+        let (status, mut request_evidence, proof_receipt_id) = match matched_receipt {
+            Some(receipt) => (
+                witness_status_for_proof_receipt(receipt),
+                proof_receipt_witness_evidence(receipt),
+                Some(receipt.id.clone()),
+            ),
+            None => ("needs-witness", vec![request.command.clone()], None),
+        };
+        request_evidence.insert(0, format!("Follow-up proof request: {}", request.command));
         witnesses.push(witness_record(WitnessRecordInput {
-            status: "needs-witness",
+            status,
             kind: "proof-request",
             source: "follow-up-proof-request",
             claim: &request.reason,
             dedupe_key: &format!("follow-up-proof-request:{}", request.id),
-            evidence: vec![request.command.clone()],
+            evidence: request_evidence,
             lane: Some(request.lane.clone()),
             path: None,
             line: None,
             observation_id: None,
-            proof_receipt_id: None,
+            proof_receipt_id,
         }));
     }
+}
+
+fn proof_receipt_for_request<'a>(
+    proof_receipts: &'a [ProofReceipt],
+    request_id: &str,
+) -> Option<&'a ProofReceipt> {
+    proof_receipts
+        .iter()
+        .find(|receipt| receipt.request_ids.iter().any(|id| id == request_id))
 }
 
 fn build_candidate_records(
@@ -7489,7 +7780,7 @@ fn append_follow_up_proof_requests(
 }
 
 fn post_broker_follow_up_proof_reason(reason: &str) -> String {
-    const NOTE: &str = "Follow-up proof request arrived after proof broker v0 execution; retained for next broker scheduling pass.";
+    const NOTE: &str = "Follow-up proof request arrived after primary proof execution; routed to the follow-up broker scheduling pass.";
     if reason.contains(NOTE) {
         return reason.to_owned();
     }
@@ -8052,19 +8343,15 @@ fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -> Result<()
     Ok(())
 }
 
-fn write_proof_planner_artifacts(
-    out: &Path,
-    diff: &DiffContext,
+fn build_proof_planner_input<'a>(
+    diff: &'a DiffContext,
     profile: &Profile,
-    box_state: &BoxState,
-    pr_thread_context: &PrThreadContext,
-    proof_requests: &[ProofRequest],
-) -> Result<()> {
-    let review_dir = out.join("review");
-    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    box_state: &'a BoxState,
+    pr_thread_context: &'a PrThreadContext,
+    proof_requests: &'a [ProofRequest],
+) -> Result<ProofPlannerInput<'a>> {
     let budget = proof_budget(profile)?;
-    let lease_budget = proof_lease_budget(profile)?;
-    let input = ProofPlannerInput {
+    Ok(ProofPlannerInput {
         schema: "ub-review.proof_planner_input.v1",
         diff_class: diff.diff_class.key(),
         changed_files: &diff.changed_files,
@@ -8078,7 +8365,16 @@ fn write_proof_planner_artifacts(
             total_proof_timeout_sec: budget.max_total_seconds,
         },
         box_shape: box_state,
-    };
+    })
+}
+
+fn build_proof_planner_output(
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+) -> Result<ProofPlannerOutput> {
+    let budget = proof_budget(profile)?;
+    let lease_budget = proof_lease_budget(profile)?;
     let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
     let build_plans = focused_build_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
@@ -8091,12 +8387,27 @@ fn write_proof_planner_artifacts(
         )
         .collect::<Vec<_>>();
     let skip = proof_planner_skips(diff);
-    let output = ProofPlannerOutput {
+    Ok(ProofPlannerOutput {
         schema: "ub-review.proof_planner_output.v1",
         lane: "proof-planner",
         proof_tasks,
         skip,
-    };
+    })
+}
+
+fn write_proof_planner_artifacts(
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    box_state: &BoxState,
+    pr_thread_context: &PrThreadContext,
+    proof_requests: &[ProofRequest],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let input =
+        build_proof_planner_input(diff, profile, box_state, pr_thread_context, proof_requests)?;
+    let output = build_proof_planner_output(diff, profile, proof_requests)?;
     fs::write(
         review_dir.join("proof_planner_input.json"),
         serde_json::to_vec_pretty(&input)?,
@@ -8700,6 +9011,77 @@ fn run_initial_diff_proof_broker_v0(
 
 #[expect(
     clippy::too_many_arguments,
+    reason = "seeded proof stream coordinates scheduler phases and proof broker inputs"
+)]
+fn run_seeded_proof_stream_v0(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    args: &RunArgs,
+    seeded_proof_requests: &[ProofRequest],
+    initial_proof_loop: ActiveRunLoop,
+    event_log: &EventLog,
+    run_started: &Instant,
+) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
+    let mut phases = Vec::new();
+    let initial_result = run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
+    let initial_status = if initial_result.is_ok() {
+        "completed"
+    } else {
+        "failed"
+    };
+    phases.push(finish_run_loop_phase(
+        event_log,
+        run_started,
+        initial_proof_loop,
+        initial_status,
+    )?);
+    let mut proof_result = initial_result?;
+
+    if has_unreceipted_proof_request_tasks(seeded_proof_requests, &proof_result.proof_receipts) {
+        let seeded_request_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "seeded-request-broker",
+        )?;
+        let request_result = run_request_proof_broker_v0(
+            root,
+            out,
+            diff,
+            profile,
+            seeded_proof_requests,
+            &proof_result.proof_receipts,
+            &proof_result.resource_leases,
+            args,
+        );
+        let request_status = if request_result.is_ok() {
+            "completed"
+        } else {
+            "failed"
+        };
+        phases.push(finish_run_loop_phase(
+            event_log,
+            run_started,
+            seeded_request_loop,
+            request_status,
+        )?);
+        let request_result = request_result?;
+        proof_result
+            .proof_receipts
+            .extend(request_result.proof_receipts);
+        proof_result
+            .resource_leases
+            .extend(request_result.resource_leases);
+    }
+
+    Ok((proof_result, phases))
+}
+
+#[expect(
+    clippy::too_many_arguments,
     reason = "primary request proof broker mirrors follow-up broker inputs"
 )]
 fn run_request_proof_broker_v0(
@@ -8940,6 +9322,22 @@ fn unreceipted_focused_build_tasks(
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
         .collect()
+}
+
+fn has_unreceipted_proof_request_tasks(
+    proof_requests: &[ProofRequest],
+    existing_receipts: &[ProofReceipt],
+) -> bool {
+    !unreceipted_focused_test_tasks(
+        focused_test_candidates_from_requests(proof_requests),
+        existing_receipts,
+    )
+    .is_empty()
+        || !unreceipted_focused_build_tasks(
+            focused_build_candidates_from_requests(proof_requests),
+            existing_receipts,
+        )
+        .is_empty()
 }
 
 #[expect(
@@ -10148,11 +10546,85 @@ fn focused_test_names_for_file(patch: &str, file: &str) -> Vec<String> {
 
 fn extract_focused_test_name(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
-    for prefix in ["test(", "it(", "describe("] {
-        if let Some(rest) = trimmed.strip_prefix(prefix)
-            && let Some(name) = parse_js_string_literal(rest.trim_start())
+    for callee in ["test", "it", "describe"] {
+        if let Some(rest) = trimmed.strip_prefix(callee)
+            && let Some(call_args) = strip_focused_test_callee_prefix(rest)
+            && let Some(name) = parse_js_string_literal(call_args.trim_start())
         {
             return Some(name);
+        }
+    }
+    None
+}
+
+fn strip_focused_test_callee_prefix(mut rest: &str) -> Option<&str> {
+    loop {
+        let trimmed = rest.trim_start();
+        if let Some(call_args) = trimmed.strip_prefix('(') {
+            return Some(call_args);
+        }
+        let after_dot = trimmed.strip_prefix('.')?;
+        let (modifier, after_modifier) = parse_js_identifier(after_dot)?;
+        if is_simple_test_modifier(modifier) {
+            rest = after_modifier;
+            continue;
+        }
+        if is_parameterized_test_modifier(modifier) {
+            rest = strip_balanced_js_call(after_modifier.trim_start())?;
+            continue;
+        }
+        return None;
+    }
+}
+
+fn parse_js_identifier(text: &str) -> Option<(&str, &str)> {
+    let end = text
+        .char_indices()
+        .take_while(|(_, ch)| ch.is_ascii_alphanumeric() || *ch == '_' || *ch == '$')
+        .map(|(index, ch)| index + ch.len_utf8())
+        .last()?;
+    Some((&text[..end], &text[end..]))
+}
+
+fn is_simple_test_modifier(value: &str) -> bool {
+    matches!(
+        value,
+        "only" | "skip" | "todo" | "failing" | "concurrent" | "serial"
+    )
+}
+
+fn is_parameterized_test_modifier(value: &str) -> bool {
+    matches!(value, "each")
+}
+
+fn strip_balanced_js_call(text: &str) -> Option<&str> {
+    if !text.starts_with('(') {
+        return None;
+    }
+    let mut depth = 0_u32;
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, ch) in text.char_indices() {
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        match ch {
+            '"' | '\'' | '`' => quote = Some(ch),
+            '(' => depth = depth.saturating_add(1),
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return Some(&text[index + ch.len_utf8()..]);
+                }
+            }
+            _ => {}
         }
     }
     None
@@ -10944,7 +11416,7 @@ fn build_github_review_skip_receipt(
         reason: review.terminal_state.reason.clone(),
         review_payload_status: review.terminal_state.review_payload_status.clone(),
         terminal_state: review.terminal_state.status.clone(),
-        github_review_json: "review/github-review.json".to_owned(),
+        github_review_json: None,
         run_pass: review.run_pass.clone(),
         model_mode: args.model_mode.key().to_owned(),
         inline_comments: review.inline_comments.len(),
@@ -12195,13 +12667,37 @@ fn model_lane(id: &str, role: &str, receives: &[&str], focus: &str) -> LanePlan 
     )
 }
 
+fn proof_planner_lane() -> LanePlan {
+    model_lane(
+        "proof-planner",
+        "Model-assisted CI proof planning",
+        &[
+            "shared-context",
+            "diff",
+            "proof-requests",
+            "runtime-profile",
+            "box-state",
+        ],
+        "Choose only additional cheap proof that would change the review decision. Emit observations, failed_objections, and proof_requests only; never emit candidate findings.",
+    )
+}
+
 fn model_assignments(plan: &Plan, args: &RunArgs) -> Result<Vec<ModelAssignment>> {
+    model_assignments_with_key_state(plan, args, model_api_key_present(ModelProvider::OpenCodeGo))
+}
+
+fn model_assignments_with_key_state(
+    plan: &Plan,
+    args: &RunArgs,
+    opencode_key_present: bool,
+) -> Result<Vec<ModelAssignment>> {
     let lanes = selected_review_lanes_for_args(plan, args)?;
     let assignments = lanes
         .into_iter()
         .map(|lane| {
             let spec = provider_spec_for_lane(&lane, args);
-            let fallback = fallback_provider_spec_for_lane(&lane, &spec, args);
+            let fallback =
+                fallback_provider_spec_for_lane(&lane, &spec, args, opencode_key_present);
             ModelAssignment {
                 lane,
                 spec,
@@ -12240,6 +12736,7 @@ fn provider_spec_for_lane_with_key_state(
         }
         ModelProviderPolicy::Auto
         | ModelProviderPolicy::MinimaxPrimary
+        | ModelProviderPolicy::PrimaryWithFallback
         | ModelProviderPolicy::OpencodeGoCanary
         | ModelProviderPolicy::OpencodeGoWide => direct_minimax_spec(args),
     }
@@ -12249,12 +12746,27 @@ fn fallback_provider_spec_for_lane(
     lane: &LanePlan,
     spec: &ProviderSpec,
     args: &RunArgs,
+    opencode_key_present: bool,
 ) -> Option<ProviderSpec> {
     if spec.provider == ModelProvider::OpenCodeGo && lane.id == "opposition" {
-        Some(direct_minimax_spec(args))
-    } else {
-        None
+        return Some(direct_minimax_spec(args));
     }
+    if spec.provider == ModelProvider::MiniMaxDirect
+        && matches!(
+            args.provider_policy,
+            ModelProviderPolicy::PrimaryWithFallback
+        )
+    {
+        if !opencode_key_present {
+            return None;
+        }
+        return Some(if is_opencode_fast_lane(&lane.id) {
+            opencode_flash_spec(args)
+        } else {
+            opencode_canary_spec(args)
+        });
+    }
+    None
 }
 
 fn direct_minimax_spec(args: &RunArgs) -> ProviderSpec {
@@ -12390,35 +12902,54 @@ fn build_provider_preflight_receipts(
     }
     specs
         .into_iter()
-        .map(|spec| {
-            let (status, reason) = match args.model_mode {
-                ModelMode::Off => ("skipped", "model-mode off".to_owned()),
-                ModelMode::Auto => {
-                    let env_name = model_api_key_env(spec.provider);
-                    let key_label = model_api_key_label(spec.provider);
-                    if env_value_present(env_name) {
-                        ("planned", format!("{key_label} present; preflight planned"))
-                    } else {
-                        (
-                            "missing_key",
-                            format!("{key_label} not provided; provider unavailable"),
-                        )
-                    }
-                }
-            };
-            ProviderPreflightReceipt {
-                provider: spec.provider.key().to_owned(),
-                model: spec.model,
-                endpoint_kind: spec.endpoint_kind.key().to_owned(),
-                status: status.to_owned(),
-                reason,
-                duration_ms: None,
-                http_status: None,
-                response_shape: None,
-                cache_usage: ModelCacheUsage::default(),
-            }
-        })
+        .map(|spec| provider_preflight_receipt_for_spec(spec, args))
         .collect()
+}
+
+fn ensure_provider_preflight_receipt(
+    receipts: &mut Vec<ProviderPreflightReceipt>,
+    spec: ProviderSpec,
+    args: &RunArgs,
+) {
+    if receipts
+        .iter()
+        .any(|receipt| preflight_matches_spec(receipt, &spec))
+    {
+        return;
+    }
+    receipts.push(provider_preflight_receipt_for_spec(spec, args));
+}
+
+fn provider_preflight_receipt_for_spec(
+    spec: ProviderSpec,
+    args: &RunArgs,
+) -> ProviderPreflightReceipt {
+    let (status, reason) = match args.model_mode {
+        ModelMode::Off => ("skipped", "model-mode off".to_owned()),
+        ModelMode::Auto => {
+            let env_name = model_api_key_env(spec.provider);
+            let key_label = model_api_key_label(spec.provider);
+            if env_value_present(env_name) {
+                ("planned", format!("{key_label} present; preflight planned"))
+            } else {
+                (
+                    "missing_key",
+                    format!("{key_label} not provided; provider unavailable"),
+                )
+            }
+        }
+    };
+    ProviderPreflightReceipt {
+        provider: spec.provider.key().to_owned(),
+        model: spec.model,
+        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        status: status.to_owned(),
+        reason,
+        duration_ms: None,
+        http_status: None,
+        response_shape: None,
+        cache_usage: ModelCacheUsage::default(),
+    }
 }
 
 fn is_model_evidence_issue(status: &str) -> bool {
@@ -12486,7 +13017,10 @@ fn is_sensor_evidence_issue(sensor: &SensorPlan, status: &str, reason: &str) -> 
 }
 
 fn is_sensor_skipped_evidence_issue(sensor: &SensorPlan, reason: &str) -> bool {
-    sensor.run || reason == "dry-run; sensor not executed" || reason.starts_with("box guard failed")
+    sensor.required
+        || sensor.run
+        || reason == "dry-run; sensor not executed"
+        || reason.starts_with("box guard failed")
 }
 
 fn model_issue_from_receipt(receipt: &ModelLaneReceipt) -> ModelEvidenceIssue {
@@ -12708,6 +13242,113 @@ fn run_available_model_lanes(
         }
     }
     Ok(calls)
+}
+
+fn should_run_proof_planner_model_lane(args: &RunArgs, diff: &DiffContext) -> bool {
+    matches!(args.mode, RunMode::IntelligentCi)
+        && !matches!(
+            diff.diff_class,
+            DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke
+        )
+}
+
+fn run_proof_planner_model_lane(
+    context: ProofPlannerRunContext<'_>,
+    model_lanes: &mut Vec<ModelLaneReceipt>,
+    missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
+    model_observations: &mut Vec<Observation>,
+    proof_requests: &mut Vec<ProofRequest>,
+) -> Result<usize> {
+    if !should_run_proof_planner_model_lane(context.args, context.diff) {
+        return Ok(0);
+    }
+
+    let lane = proof_planner_lane();
+    let spec = direct_minimax_spec(context.args);
+    let mut receipt = ModelLaneReceipt {
+        lane: lane.id.clone(),
+        provider: spec.provider.key().to_owned(),
+        model: spec.model.clone(),
+        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        status: "planned".to_owned(),
+        reason: "planned advisory proof-planner lane for intelligent-ci".to_owned(),
+        duration_ms: None,
+        http_status: None,
+        response_shape: None,
+        fallback_from: None,
+        cache_usage: ModelCacheUsage::default(),
+    };
+
+    if context.model_calls_used >= context.args.max_model_calls {
+        receipt.status = "skipped_budget".to_owned();
+        receipt.reason = "model call budget exhausted before proof-planner lane".to_owned();
+        model_lanes.push(receipt);
+        return Ok(0);
+    }
+    if !provider_preflight_ok(&spec, context.provider_preflights) {
+        receipt.status = "preflight_failed".to_owned();
+        receipt.reason = provider_preflight_reason(&spec, context.provider_preflights)
+            .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        model_lanes.push(receipt);
+        return Ok(0);
+    }
+    let env_name = model_api_key_env(spec.provider);
+    if !env_value_present(env_name) {
+        let key_label = model_api_key_label(spec.provider);
+        receipt.status = "missing_key".to_owned();
+        receipt.reason = format!("{key_label} not provided; proof-planner output unavailable");
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        model_lanes.push(receipt);
+        return Ok(0);
+    }
+
+    let lane_dir = context.review_dir.join("model").join(&lane.id);
+    fs::create_dir_all(&lane_dir)?;
+    receipt.status = "running".to_owned();
+    match call_model_proof_planner(
+        context.root,
+        &lane_dir,
+        &lane,
+        &spec,
+        context.shared_context,
+        context.diff,
+        context.profile,
+        context.box_state,
+        context.pr_thread_context,
+        proof_requests,
+        context.args,
+    ) {
+        Ok(outcome) => {
+            if outcome.degraded {
+                receipt.status = "degraded".to_owned();
+                receipt.reason =
+                    "contentful proof-planner output was preserved as degraded evidence".to_owned();
+            } else {
+                receipt.status = "ok".to_owned();
+                receipt.reason = "completed".to_owned();
+            }
+            receipt.duration_ms = Some(outcome.duration_ms);
+            receipt.http_status = outcome.http_status;
+            receipt.response_shape = Some(outcome.response_shape);
+            receipt.cache_usage = outcome.cache_usage;
+            apply_proof_planner_model_output(
+                &lane,
+                outcome.output,
+                context.line_map,
+                model_observations,
+                proof_requests,
+            );
+        }
+        Err(err) => {
+            receipt.status = classify_model_error(&err);
+            receipt.reason = format!("{err:#}");
+            receipt.http_status = http_status_from_error(&err);
+            missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        }
+    }
+    model_lanes.push(receipt);
+    Ok(1)
 }
 
 fn run_follow_up_model_pass(
@@ -13231,6 +13872,7 @@ fn render_refuter_prompt(inline_comments: &[ReviewInlineComment]) -> Result<Stri
 
 Use only the cached shared context and candidate inline comments below.
 Do not browse. Do not infer safety from missing evidence.
+Do not post, mutate files, or run shell commands. The refuter only classifies candidates.
 Return strict JSON only:
 {{
   "decisions": [
@@ -13323,6 +13965,147 @@ fn summary_from_refuted_inline(comment: ReviewInlineComment, reason: &str) -> Su
         ),
         evidence: comment.evidence,
     }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "proof-planner prompt mirrors deterministic planner inputs"
+)]
+fn call_model_proof_planner(
+    root: &Path,
+    lane_dir: &Path,
+    lane: &LanePlan,
+    spec: &ProviderSpec,
+    shared_context: &str,
+    diff: &DiffContext,
+    profile: &Profile,
+    box_state: &BoxState,
+    pr_thread_context: &PrThreadContext,
+    proof_requests: &[ProofRequest],
+    args: &RunArgs,
+) -> Result<ModelCallOutcome<LaneModelOutput>> {
+    let input =
+        build_proof_planner_input(diff, profile, box_state, pr_thread_context, proof_requests)?;
+    let output = build_proof_planner_output(diff, profile, proof_requests)?;
+    let prompt = render_proof_planner_model_task_prompt(lane, spec, &input, &output)?;
+    call_model_prompt_cached(root, lane_dir, spec, shared_context, &prompt, args)
+}
+
+fn render_proof_planner_model_task_prompt(
+    lane: &LanePlan,
+    spec: &ProviderSpec,
+    input: &ProofPlannerInput<'_>,
+    output: &ProofPlannerOutput,
+) -> Result<String> {
+    let input_json = serde_json::to_string_pretty(input)?;
+    let output_json = serde_json::to_string_pretty(output)?;
+    Ok(format!(
+        r#"Lane: {lane}
+Provider: {provider}
+Model: {model}
+Endpoint kind: {endpoint_kind}
+Role: {role}
+Focus: {focus}
+
+Use the cached shared context. You are an advisory proof-planner lane for the intelligent-ci gate.
+The deterministic planner remains the source of proof_tasks.ndjson. Add only proof requests or observations that would improve the central proof broker's plan.
+
+Planner input:
+```json
+{input_json}
+```
+
+Current deterministic planner output:
+```json
+{output_json}
+```
+
+Return only one strict JSON object:
+{{
+  "summary": null,
+  "observations": [
+    {{
+      "claim": "terse proof-planning observation, 300 chars max",
+      "question": "proof-planner",
+      "kind": "verification-question|missing-evidence|test-gap|source-route-gap|resolved-check|parked-follow-up",
+      "status": "open|covered|confirmed|refuted|parked",
+      "severity": "high|medium|low",
+      "confidence": "high|medium-high|medium|low",
+      "path": "optional repo-relative/path.rs",
+      "line": 123,
+      "evidence": ["artifact, diff, receipt, or invariant"],
+      "dedupe_key": "stable proof-planning key when known"
+    }}
+  ],
+  "candidate_findings": [],
+  "summary_only_findings": [],
+  "failed_objections": [
+    {{
+      "claim": "proof idea considered",
+      "reason": "why it is already covered, too costly, or not relevant",
+      "confidence": "high|medium-high|medium|low",
+      "kind": "resolved-check|false-premise",
+      "evidence": ["artifact, diff, receipt, or invariant"]
+    }}
+  ],
+  "proof_requests": [
+    {{
+      "command": "focused command requested from central proof broker",
+      "reason": "why this proof would change the review decision",
+      "cost": "focused-test|focused-build|manual",
+      "timeout_sec": 300,
+      "required": false
+    }}
+  ]
+}}
+
+Hard caps: at most 2 observations, 2 failed_objections, and 2 proof_requests.
+Do not emit inline_comments, candidate_findings, summary_only_findings, or PR-facing findings.
+Do not duplicate proof already represented in Current deterministic planner output.
+Do not post, mutate files, or run shell commands. Lanes request proof; only the central broker executes.
+"#,
+        lane = lane.id,
+        provider = spec.provider.key(),
+        model = spec.model,
+        endpoint_kind = spec.endpoint_kind.key(),
+        role = lane.role,
+        focus = lane.focus,
+        input_json = input_json,
+        output_json = output_json,
+    ))
+}
+
+fn apply_proof_planner_model_output(
+    lane: &LanePlan,
+    output: LaneModelOutput,
+    line_map: &BTreeSet<(String, u32)>,
+    model_observations: &mut Vec<Observation>,
+    proof_requests: &mut Vec<ProofRequest>,
+) {
+    let advisory_output = LaneModelOutput {
+        summary: None,
+        inline_comments: Vec::new(),
+        candidate_findings: Vec::new(),
+        summary_only_findings: Vec::new(),
+        observations: output.observations,
+        failed_objections: output.failed_objections,
+        proof_requests: output.proof_requests,
+        degraded: output.degraded,
+    };
+    let mut ignored_inline_comments = Vec::new();
+    let mut ignored_summary_only_findings = Vec::new();
+    apply_model_output(
+        lane,
+        advisory_output,
+        line_map,
+        0,
+        ModelOutputSinks {
+            inline_comments: &mut ignored_inline_comments,
+            summary_only_findings: &mut ignored_summary_only_findings,
+            model_observations,
+            proof_requests,
+        },
+    );
 }
 
 fn selected_provider_spec(
@@ -13714,8 +14497,9 @@ Hard caps: at most 3 observations, 2 candidate_findings, 1 summary_only_findings
 If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
+Do not post, mutate files, or run shell commands. Request executable proof only through `proof_requests`.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
-Calibration: `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation failure does not return `None`, an empty box, or a recoverable fallback. If that objection arises, return it as a refuted false-premise failed_objection, not as a candidate finding."#,
+Calibration: do not introduce `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation-failure analysis unless the current PR diff, seeded thread, or a candidate explicitly raises that objection. When raised, allocation failure does not return `None`, an empty box, or a recoverable fallback; return it as a refuted false-premise failed_objection, not as a candidate finding."#,
         lane = lane.id,
         provider = spec.provider.key(),
         model = spec.model,
@@ -14270,16 +15054,44 @@ fn validate_proof_request(
     request: ModelProofRequest,
     index: usize,
 ) -> ProofRequest {
-    let command = request.command.trim().replace(['\r', '\n'], " ");
-    let reason = non_empty_or(request.reason.trim(), "model proof request missing reason");
+    build_proof_request(
+        &lane.id,
+        vec![lane.id.clone()],
+        &request.command,
+        &request.reason,
+        "model proof request missing reason",
+        request.cost.as_deref(),
+        request.timeout_sec,
+        request.required.unwrap_or(false),
+        index,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "proof requests normalize the same fields regardless of source"
+)]
+fn build_proof_request(
+    lane: &str,
+    requested_by: Vec<String>,
+    command: &str,
+    reason: &str,
+    missing_reason_fallback: &str,
+    cost: Option<&str>,
+    timeout_sec: Option<u64>,
+    required: bool,
+    index: usize,
+) -> ProofRequest {
+    let command = command.trim().replace(['\r', '\n'], " ");
+    let reason = non_empty_or(reason.trim(), missing_reason_fallback);
     let command = non_empty_or(&command, "<missing command>");
-    let cost = classify_proof_cost(request.cost.as_deref(), &command);
+    let cost = classify_proof_cost(cost, &command);
     let status = proof_request_status(&command, &cost);
-    let timeout_sec = request.timeout_sec.unwrap_or(300).clamp(1, 900);
+    let timeout_sec = timeout_sec.unwrap_or(300).clamp(1, 900);
     let fingerprint = sha256_hex(
         format!(
             "{}\n{}\n{}\n{}\n{}",
-            lane.id, command, reason, cost, timeout_sec
+            lane, command, reason, cost, timeout_sec
         )
         .as_bytes(),
     );
@@ -14287,14 +15099,71 @@ fn validate_proof_request(
     ProofRequest {
         schema: "ub-review.proof_request.v1".to_owned(),
         id: format!("proof-{index:04}-{short}"),
-        lane: lane.id.clone(),
-        requested_by: vec![lane.id.clone()],
+        lane: lane.to_owned(),
+        requested_by,
         command,
         reason,
         cost,
         timeout_sec,
-        required: request.required.unwrap_or(false),
+        required,
         status: status.to_owned(),
+    }
+}
+
+fn configured_required_proof_requests(
+    config: &Config,
+    diff: &DiffContext,
+    args: &RunArgs,
+    start_index: usize,
+) -> Vec<ProofRequest> {
+    if args.mode != RunMode::IntelligentCi {
+        return Vec::new();
+    }
+    let language_mix = classify_language_mix(&diff.changed_files);
+    config
+        .proof
+        .required
+        .iter()
+        .filter(|policy| required_proof_policy_matches_diff(policy, diff, &language_mix))
+        .enumerate()
+        .map(|(offset, policy)| {
+            let index = start_index + offset;
+            let policy_label = proof_policy_requester(policy, offset);
+            build_proof_request(
+                "intelligent-ci-policy",
+                vec!["intelligent-ci-policy".to_owned(), policy_label],
+                &policy.command,
+                &policy.reason,
+                "configured proof policy missing reason",
+                policy.cost.as_deref(),
+                Some(policy.timeout_sec),
+                policy.required,
+                index,
+            )
+        })
+        .collect()
+}
+
+fn append_configured_required_proof_requests(
+    config: &Config,
+    diff: &DiffContext,
+    args: &RunArgs,
+    proof_requests: &mut Vec<ProofRequest>,
+) {
+    proof_requests.extend(configured_required_proof_requests(
+        config,
+        diff,
+        args,
+        proof_requests.len(),
+    ));
+}
+
+fn proof_policy_requester(policy: &RequiredProofPolicy, index: usize) -> String {
+    let id = policy.id.trim();
+    if id.is_empty() {
+        format!("proof-policy:required-{index}")
+    } else {
+        format!("proof-policy:{id}")
     }
 }
 
@@ -14815,6 +15684,7 @@ fn render_pull_request_review_body(
                     proof_receipts,
                     observation,
                 )
+                && !diff_structurally_answers_observation_test_witness_question(diff, observation)
         })
         .collect::<Vec<_>>();
     let refuted_observations = pr_observation_items
@@ -14854,38 +15724,34 @@ fn render_pull_request_review_body(
                 && !is_verification_observation(observation)
         })
         .collect::<Vec<_>>();
-    let parked = summary_only_findings
-        .iter()
-        .filter(|finding| {
+    let parked = unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
+        !is_pr_body_artifact_only_finding(finding)
+            && !is_pr_body_stale_for_current_diff(finding, diff)
+            && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+            && !diff_structurally_answers_summary_test_witness_question(diff, finding)
+            && is_parked_follow_up(finding)
+            && !summary_finding_matches_observations(finding, &observation_items)
+    }));
+    let verification_questions =
+        unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
-                && is_parked_follow_up(finding)
-                && !summary_finding_matches_observations(finding, &observation_items)
-        })
-        .collect::<Vec<_>>();
-    let verification_questions = summary_only_findings
-        .iter()
-        .filter(|finding| {
-            !is_pr_body_artifact_only_finding(finding)
-                && !is_pr_body_stale_for_current_diff(finding, diff)
-                && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+                && !diff_structurally_answers_summary_test_witness_question(diff, finding)
                 && !is_parked_follow_up(finding)
                 && is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
-        })
-        .collect::<Vec<_>>();
-    let summary_concerns = summary_only_findings
-        .iter()
-        .filter(|finding| {
+        }));
+    let summary_concerns =
+        unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
+                && !diff_structurally_answers_summary_test_witness_question(diff, finding)
                 && !is_parked_follow_up(finding)
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
-        })
-        .collect::<Vec<_>>();
+        }));
     let has_specific_missing_evidence = !missing_observations.is_empty()
         || proof_receipts.iter().any(proof_receipt_is_missing_evidence);
     let proof_result_receipts = proof_receipts
@@ -14911,7 +15777,6 @@ fn render_pull_request_review_body(
     });
     let has_decision_item = decision_sentence.is_some();
     let has_reviewer_value_item = has_decision_item
-        || !refuted_observations.is_empty()
         || !proof_result_receipts.is_empty()
         || !parked.is_empty()
         || !parked_observations.is_empty()
@@ -15092,6 +15957,80 @@ fn proof_receipts_answer_observation_test_witness_question(
     proof_receipts_answer_test_witness_question(proof_receipts, &text)
 }
 
+fn diff_structurally_answers_summary_test_witness_question(
+    diff: &DiffContext,
+    finding: &SummaryOnlyFinding,
+) -> bool {
+    if lane_is_source_route(&finding.lane) {
+        return false;
+    }
+    let text = format!("{} {}", finding.reason, finding.evidence);
+    diff_structurally_answers_test_witness_question(diff, &text)
+}
+
+fn diff_structurally_answers_observation_test_witness_question(
+    diff: &DiffContext,
+    observation: &ObservationGroup,
+) -> bool {
+    if observation
+        .lanes
+        .iter()
+        .any(|lane| lane_is_source_route(lane))
+        || kind_is_source_route_gap(&observation.kind)
+    {
+        return false;
+    }
+    if !matches!(
+        observation.kind.as_str(),
+        "missing-evidence" | "verification-question" | "test-gap"
+    ) {
+        return false;
+    }
+    let text = format!("{} {}", observation.claim, observation.evidence.join(" "));
+    diff_structurally_answers_test_witness_question(diff, &text)
+}
+
+fn diff_structurally_answers_test_witness_question(diff: &DiffContext, text: &str) -> bool {
+    text_requests_focused_test_witness(text)
+        && diff_replaces_abort_with_recoverable_error(&diff.patch)
+}
+
+fn diff_replaces_abort_with_recoverable_error(patch: &str) -> bool {
+    let mut removed_abort_path = false;
+    let mut added_recoverable_error_path = false;
+
+    for line in patch.lines() {
+        if line.starts_with("---") || line.starts_with("+++") {
+            continue;
+        }
+        if let Some(removed) = line.strip_prefix('-') {
+            removed_abort_path |= line_mentions_abort_path(removed);
+        } else if let Some(added) = line.strip_prefix('+') {
+            added_recoverable_error_path |= line_mentions_recoverable_error_path(added);
+        }
+    }
+
+    removed_abort_path && added_recoverable_error_path
+}
+
+fn line_mentions_abort_path(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    line.contains(".expect(")
+        || line.contains("panic!(")
+        || line.contains("abort(")
+        || line.contains("unreachable!(")
+}
+
+fn line_mentions_recoverable_error_path(line: &str) -> bool {
+    let line = line.to_ascii_lowercase();
+    line.contains("map_err")
+        || line.contains("throw")
+        || line.contains("typeerror")
+        || line.contains("jserror")
+        || line.contains("return err")
+        || line.contains("return error")
+}
+
 fn lane_is_source_route(lane: &str) -> bool {
     let lane = lane.to_ascii_lowercase();
     lane == "source-route" || lane == "source_route"
@@ -15211,6 +16150,14 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || (reason.contains("supply-chain tightening") && reason.contains("not widening"))
         || (reason.contains("passes core opposition tests")
             && reason.contains("remaining concerns"))
+        || is_unchanged_workflow_trust_posture_noise(&text)
+        || is_no_finding_workflow_pin_summary_noise(&text)
+        || is_stale_external_bot_objection_noise(&text)
+        || is_workflow_tool_status_artifact_gap_noise(&text)
+        || is_workflow_paths_ignore_no_posture_noise(&text)
+        || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_current_pin_consistency_followup_noise(&text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15219,7 +16166,9 @@ fn is_pr_body_stale_for_current_diff(finding: &SummaryOnlyFinding, diff: &DiffCo
         return false;
     }
     let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
-    mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch)
+    (mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch))
+        || (mentions_standing_workflow_secret_trust(&text)
+            && diff_is_workflow_tool_pin_bump_only(&diff.patch))
 }
 
 fn is_pr_body_stale_for_current_diff_observation(
@@ -15234,6 +16183,8 @@ fn is_pr_body_stale_for_current_diff_observation(
     (mentions_workflow_tool_cache_path(&text) && !diff_adds_workflow_tool_cache_path(&diff.patch))
         || (mentions_pr_trigger_synchronize_scope(&text)
             && !diff_adds_pr_trigger_scope(&diff.patch))
+        || (mentions_standing_workflow_secret_trust(&text)
+            && diff_is_workflow_tool_pin_bump_only(&diff.patch))
 }
 
 fn mentions_workflow_tool_cache_path(text: &str) -> bool {
@@ -15279,8 +16230,49 @@ fn diff_adds_pr_trigger_scope(patch: &str) -> bool {
     })
 }
 
+fn mentions_standing_workflow_secret_trust(text: &str) -> bool {
+    let mentions_secret_receiver = text.contains("secrets.minimax")
+        || text.contains("github.token")
+        || text.contains("secret/permission surface")
+        || text.contains("secret")
+        || text.contains("exposure surface");
+    let mentions_standing_action_trust = text.contains("upstream trust")
+        || text.contains("trust in upstream")
+        || text.contains("malicious or compromised")
+        || text.contains("would exfiltrate")
+        || text.contains("third-party action token scope")
+        || text.contains("residual trust")
+        || text.contains("standing-repo concern")
+        || text.contains("standing repo concern")
+        || text.contains("does not eliminate upstream trust");
+    mentions_secret_receiver && mentions_standing_action_trust
+}
+
+fn diff_is_workflow_tool_pin_bump_only(patch: &str) -> bool {
+    let mut saw_change = false;
+    for line in patch.lines() {
+        if !(line.starts_with('+') || line.starts_with('-'))
+            || line.starts_with("+++")
+            || line.starts_with("---")
+        {
+            continue;
+        }
+        saw_change = true;
+        let changed = line[1..].trim().to_ascii_lowercase();
+        if changed.is_empty() {
+            continue;
+        }
+        if !(changed.contains("ub-review-gh-runner-v")
+            || changed.starts_with("uses: effortlessmetrics/ub-review@"))
+        {
+            return false;
+        }
+    }
+    saw_change
+}
+
 fn is_verification_question(finding: &SummaryOnlyFinding) -> bool {
-    let text = format!("{} {}", finding.reason, finding.evidence).to_ascii_lowercase();
+    let text = finding.reason.to_ascii_lowercase();
     text.contains("verify")
         || text.contains("verification")
         || text.contains("confirm")
@@ -15343,6 +16335,14 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
             && (text.contains("prefix collision") || text.contains("short-prefix")))
         || (text.contains("actionlint") && text.contains("sensor reports ok"))
         || (text.contains("actionlint") && text.contains("status=ok"))
+        || is_unchanged_workflow_trust_posture_noise(&text)
+        || is_no_finding_workflow_pin_summary_noise(&text)
+        || is_stale_external_bot_objection_noise(&text)
+        || is_workflow_tool_status_artifact_gap_noise(&text)
+        || is_workflow_paths_ignore_no_posture_noise(&text)
+        || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_current_pin_consistency_followup_noise(&text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15395,7 +16395,268 @@ fn is_pr_body_meta_review_noise(text: &str) -> bool {
             && text.contains("40 hex")
             && text.contains("non-zero"))
         || (text.contains("sha were 39-hex") && text.contains("all-zero"))
+        || is_checkout_persistence_no_change_noise(text)
         || text.contains("actionlint ran ok")
+}
+
+fn is_checkout_persistence_no_change_noise(text: &str) -> bool {
+    (text.contains("checkout credential persistence")
+        || text.contains("checkout config")
+        || text.contains("persist-credentials"))
+        && (text.contains("did not change checkout")
+            || text.contains("does not change checkout")
+            || text.contains("no new persistence vector")
+            || text.contains("read-only github_token"))
+}
+
+fn is_unchanged_workflow_trust_posture_noise(text: &str) -> bool {
+    let mentions_workflow_trust = text.contains("upstream trust")
+        || text.contains("upstream sha trust")
+        || text.contains("trust in upstream")
+        || text.contains("malicious or compromised")
+        || text.contains("would exfiltrate")
+        || text.contains("reproducibly verified")
+        || text.contains("repo-level policy item")
+        || text.contains("secrets.minimax")
+        || text.contains("github.token")
+        || text.contains("workflow-level permissions")
+        || text.contains("permissions block")
+        || text.contains("exposure surface");
+    let says_unchanged_or_out_of_scope = text.contains("not introduced by this")
+        || text.contains("pre-existing")
+        || text.contains("not a diff target")
+        || text.contains("identical to prior")
+        || text.contains("identical in posture")
+        || text.contains("no widened attack surface")
+        || text.contains("zero new secret")
+        || text.contains("zero new")
+        || text.contains("not a diff finding")
+        || text.contains("not a diff-introduced")
+        || text.contains("no permission/trigger/pinning posture change")
+        || text.contains("no permission")
+        || text.contains("no permissions")
+        || text.contains("unchanged")
+        || text.contains("standing-repo concern")
+        || text.contains("standing repo concern");
+    mentions_workflow_trust && says_unchanged_or_out_of_scope
+}
+
+fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
+    is_unchanged_workflow_trust_posture_noise(text)
+        || ((text.contains("does not eliminate upstream trust")
+            || text.contains("trust in upstream tag"))
+            && (text.contains("secrets.minimax")
+                || text.contains("github.token")
+                || text.contains("malicious or compromised")))
+        || is_no_finding_workflow_pin_summary_noise(text)
+        || is_stale_external_bot_objection_noise(text)
+        || is_workflow_tool_status_artifact_gap_noise(text)
+        || is_workflow_paths_ignore_no_posture_noise(text)
+        || is_actionlint_semantic_skip_proof_noise(text)
+        || is_current_pin_consistency_followup_noise(text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(text)
+}
+
+fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
+    let mentions_pin = text.contains("pinning")
+        || text.contains("sha-pinning")
+        || text.contains("sha bump")
+        || text.contains("sha swap")
+        || text.contains("mechanical sha")
+        || text.contains("action uses")
+        || text.contains("uses: ref")
+        || text.contains("cache key")
+        || text.contains("per-action full-sha")
+        || text.contains("40-hex")
+        || text.contains("all-zero");
+    let says_no_defect = text.contains("no pinning defect introduced")
+        || text.contains("pinning posture preserved")
+        || text.contains("sha-pinning control remains effective")
+        || text.contains("sha-pinning control is effective")
+        || text.contains("old pin fully absent")
+        || text.contains("pin is 40-hex non-zero")
+        || text.contains("matches expected sha-1 shape")
+        || text.contains("pin shape valid 40-hex");
+    let says_not_current_diff = text.contains("not a diff finding")
+        || text.contains("not a diff-introduced")
+        || text.contains("not introduced by this")
+        || text.contains("identical in posture")
+        || text.contains("byte-identical")
+        || text.contains("repo-level policy item")
+        || text.contains("unchanged from prior pin")
+        || text.contains("net new secret/permission surface")
+        || text.contains("net new secret surface")
+        || text.contains("no new permission")
+        || text.contains("no permission, token-scope")
+        || text.contains("no blocker introduced");
+    mentions_pin && (says_no_defect || says_not_current_diff)
+}
+
+fn is_stale_external_bot_objection_noise(text: &str) -> bool {
+    let mentions_bots =
+        text.contains("cursor[bot]") || text.contains("coderabbit") || text.contains("stale-bot");
+    let says_stale_false_positive = (text.contains("stale") || text.contains("false positive"))
+        && (text.contains("false positive")
+            || text.contains("reopens nothing")
+            || text.contains("not real findings")
+            || text.contains("current diff")
+            || text.contains("live diff"));
+    let contradicted_target_advice = (text.contains("different sha")
+        || text.contains("targeting a different sha")
+        || text.contains("0 references to")
+        || text.contains("scripted check showing 0 references")
+        || text.contains("not match to gate target"))
+        && (text.contains("used in the diff") || text.contains("current diff"));
+    let mentions_pin_ref_mismatch = text.contains("claim target")
+        || text.contains("pin mismatch")
+        || text.contains("target sha")
+        || text.contains("current head sha")
+        || text.contains("pr title")
+        || text.contains("pr body");
+    mentions_bots
+        && mentions_pin_ref_mismatch
+        && (says_stale_false_positive || contradicted_target_advice)
+}
+
+fn is_workflow_tool_status_artifact_gap_noise(text: &str) -> bool {
+    let actionlint_ok = text.contains("actionlint")
+        && (text.contains("receipt is 'ok'")
+            || text.contains("actionlint=ok")
+            || text.contains("actionlint receipt ok")
+            || text.contains("sensor table"));
+    let not_inlined = text.contains("no per-line output")
+        || text.contains("not inlined")
+        || text.contains("central proof broker artifact")
+        || text.contains("sensors/actionlint");
+    let yaml_pin = text.contains("4-line workflow pin")
+        || text.contains("4-line sha-swap")
+        || text.contains("yaml-only")
+        || text.contains("pin/uses ref consistent");
+    let skipped_heavy = text.contains("build/test skipped")
+        || text.contains("--allow-heavy")
+        || text.contains("no fresh pr-build smoke")
+        || text.contains("heavy smoke adds limited value");
+    let disabled_workflow_tools = (text.contains("zizmor")
+        || text.contains("gitleaks")
+        || text.contains("osv-scanner")
+        || text.contains("cargo-audit")
+        || text.contains("cargo-deny")
+        || text.contains("shellcheck")
+        || text.contains("semgrep")
+        || text.contains("coverage"))
+        && (text.contains("disabled by config") || text.contains("trigger-mismatched"))
+        && (text.contains("workflow file") || text.contains("security/pinning tool"));
+    let local_actionlint_gap = text.contains("actionlint")
+        && text.contains("not installed locally")
+        && (text.contains("local pre-push run") || text.contains("ub-review gate"));
+    (actionlint_ok && (not_inlined || yaml_pin))
+        || (skipped_heavy && yaml_pin)
+        || disabled_workflow_tools
+        || local_actionlint_gap
+        || ((text.contains("parked follow-up") || text.contains("not a blocker"))
+            && actionlint_ok
+            && yaml_pin)
+}
+
+fn is_workflow_paths_ignore_no_posture_noise(text: &str) -> bool {
+    let mentions_paths_ignore = text.contains("paths-ignore") || text.contains("path-ignore");
+    let mentions_workflow_posture = text.contains("token scopes")
+        || text.contains("permissions block")
+        || text.contains("permission expansion")
+        || text.contains("job-level security context")
+        || text.contains("trigger activation")
+        || text.contains("pull_request_target")
+        || text.contains("checkout")
+        || text.contains("semantic skip behavior")
+        || text.contains("focused smoke proof")
+        || text.contains("workflow_run")
+        || text.contains("droid noise");
+    let says_no_posture_change = text.contains("only filters trigger activation")
+        || text.contains("does not alter")
+        || text.contains("no new trigger")
+        || text.contains("no new persistence vector")
+        || text.contains("not modified in this pr")
+        || text.contains("diff only mutates a paths-ignore")
+        || text.contains("not proven by sensors")
+        || text.contains("trust rests on actionlint parse")
+        || (text.contains("future pr") && text.contains("re-trigger droid"))
+        || text.contains("ub gate is the authoritative review")
+        || (text.contains("future rename") && text.contains("re-enable"));
+    mentions_paths_ignore && mentions_workflow_posture && says_no_posture_change
+}
+
+fn is_actionlint_semantic_skip_proof_noise(text: &str) -> bool {
+    let mentions_actionlint_skip = text.contains("actionlint")
+        && (text.contains("semantic skip behavior")
+            || (text.contains("skip behavior") && text.contains("droid")));
+    let says_proof_is_not_decisive = text.contains("no semantic proof")
+        || text.contains("trust rests on actionlint parse")
+        || text.contains("unproven beyond actionlint parse")
+        || text.contains("not proven by sensors")
+        || text.contains("no focused smoke proof");
+    let scoped_to_auxiliary_lane = text.contains("droid lane")
+        || text.contains("droid")
+        || text.contains("auxiliary/non-blocking")
+        || text.contains("ub gate is authoritative")
+        || text.contains("ub gate is the authoritative");
+    mentions_actionlint_skip && says_proof_is_not_decisive && scoped_to_auxiliary_lane
+}
+
+fn is_current_pin_consistency_followup_noise(text: &str) -> bool {
+    let mentions_cache_pin = (text.contains("cache key")
+        || text.contains("restore-keys")
+        || text.contains("cache restore"))
+        && (text.contains("action sha") || text.contains("repin") || text.contains("uses:"));
+    let says_future_or_parked = text.contains("future repin")
+        || text.contains("future pin")
+        || text.contains("partial repin")
+        || text.contains("parked for follow-up")
+        || text.contains("parked for lint-rule")
+        || text.contains("lint-rule follow-up")
+        || text.contains("follow-up lint rule")
+        || text.contains("follow-up lint")
+        || text.contains("lint rule or script");
+    let says_currently_consistent = text.contains("current state is consistent")
+        || text.contains("current state consistent")
+        || text.contains("current pr state is consistent")
+        || text.contains("not actionable in this pr");
+    mentions_cache_pin && says_future_or_parked && says_currently_consistent
+}
+
+fn is_workflow_pin_lockstep_no_value_summary_noise(text: &str) -> bool {
+    let workflow_scope = text.contains("workflow")
+        || text.contains("ub-review")
+        || text.contains("actionlint")
+        || text.contains("paths-ignore")
+        || text.contains("droid");
+    let mentions_lockstep_pin = text.contains("pin lockstep")
+        || text.contains("lockstep sha pin")
+        || text.contains("pin bump is lockstep")
+        || text.contains("pin/uses ref consistent")
+        || (text.contains("cache key/restore-keys")
+            && (text.contains("prefix match")
+                || text.contains("prefix is coupled")
+                || text.contains("updated in lockstep")
+                || text.contains("must be updated in lockstep")))
+        || (text.contains("cache key")
+            && text.contains("restore-keys")
+            && text.contains("uses:")
+            && text.contains("lockstep"));
+    let says_no_current_issue = text.contains("old pin absent")
+        || text.contains("current state is consistent")
+        || text.contains("current state consistent")
+        || text.contains("current pr state is consistent")
+        || text.contains("no blocker")
+        || text.contains("not a blocker")
+        || text.contains("no other third-party actions changed")
+        || text.contains("no syntactic regression")
+        || text.contains("no source, no permissions, no token, no checkout changes")
+        || (text.contains("no new")
+            && (text.contains("permission")
+                || text.contains("token")
+                || text.contains("third-party action")
+                || text.contains("checkout")));
+    workflow_scope && mentions_lockstep_pin && says_no_current_issue
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -15452,6 +16713,43 @@ fn text_is_verification_question(text: &str) -> bool {
         || text.contains("prove")
         || text.contains("proves")
         || text.contains("proven")
+}
+
+fn unique_summary_review_findings<'a>(
+    findings: impl IntoIterator<Item = &'a SummaryOnlyFinding>,
+) -> Vec<&'a SummaryOnlyFinding> {
+    let mut unique = Vec::<&SummaryOnlyFinding>::new();
+    let mut indexes = BTreeMap::<String, usize>::new();
+
+    for finding in findings {
+        let key = summary_finding_review_dedupe_key(finding);
+        if let Some(index) = indexes.get(&key).copied() {
+            if summary_finding_rank(finding) > summary_finding_rank(unique[index]) {
+                unique[index] = finding;
+            }
+        } else {
+            indexes.insert(key, unique.len());
+            unique.push(finding);
+        }
+    }
+
+    unique
+}
+
+fn summary_finding_review_dedupe_key(finding: &SummaryOnlyFinding) -> String {
+    let normalized = normalized_review_text(&reviewer_facing_pr_text(&finding.reason));
+    if normalized.chars().count() >= 24 {
+        normalized
+    } else {
+        format!("{}:{normalized}", finding.lane)
+    }
+}
+
+fn summary_finding_rank(finding: &SummaryOnlyFinding) -> (u8, u8) {
+    (
+        severity_rank(&finding.severity),
+        confidence_rank(&finding.confidence),
+    )
 }
 
 fn summary_finding_matches_observations(
@@ -17553,6 +18851,72 @@ fn builtin_tools() -> Vec<ToolPolicy> {
             false,
         ),
         tool(
+            "cargo-fmt",
+            "cargo",
+            ToolClass::Build,
+            1,
+            Trigger::Always,
+            120,
+            32,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-check",
+            "cargo",
+            ToolClass::Build,
+            4,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-test",
+            "cargo",
+            ToolClass::Test,
+            8,
+            Trigger::Always,
+            900,
+            256,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-clippy",
+            "cargo",
+            ToolClass::Build,
+            6,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-doc",
+            "cargo",
+            ToolClass::Build,
+            4,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "artifact-verifier",
+            "python",
+            ToolClass::Static,
+            2,
+            Trigger::Always,
+            120,
+            32,
+            false,
+            true,
+        ),
+        tool(
             "coverage",
             "cargo",
             ToolClass::Coverage,
@@ -17686,6 +19050,7 @@ fn tool(
         class,
         weight,
         default: trigger,
+        required: false,
         timeout_sec,
         artifact_budget_mb,
         requires_lease,
@@ -17871,39 +19236,42 @@ mod tests {
         ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
         ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
         ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
-        Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
-        ResourceLease, ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy,
-        ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth, ReviewInlineComment,
-        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
+        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
+        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
+        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
+        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
+        apply_model_output, apply_plan_selectors, apply_refuter_output,
+        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
         model_request_payload, model_response_shape, normalize_run_args,
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
-        render_pr_thread_context, render_review_body, render_summary, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_command_to_files, run_refuter_pass,
-        run_sensor, runtime_profile_from_toml, runtime_profile_override, sensor_job_count,
-        sha256_hex, split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_from_toml,
+        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
+        standard_minimax_lanes, validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
@@ -18048,6 +19416,33 @@ mod tests {
             assert!(prompt.contains("Do not drip-feed one nit per pass"));
         }
         Ok(())
+    }
+
+    #[test]
+    fn lane_prompt_does_not_seed_global_box_refutations() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+        let lane = lane_plan("tests-red-green");
+
+        let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
+
+        assert!(prompt.contains("do not introduce `Box::from(slice)`"));
+        assert!(prompt.contains("unless the current PR diff, seeded thread, or a candidate"));
+        assert!(prompt.contains("return it as a refuted false-premise failed_objection"));
+        assert!(!prompt.contains("If that objection arises"));
+    }
+
+    #[test]
+    fn lane_prompt_keeps_execution_in_proof_requests() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let spec = direct_minimax_spec(&args);
+        let lane = lane_plan("tests-red-green");
+
+        let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
+
+        assert!(prompt.contains("Do not post, mutate files, or run shell commands"));
+        assert!(prompt.contains("Request executable proof only through `proof_requests`"));
+        assert!(prompt.contains("focused command requested from central proof broker"));
     }
 
     #[test]
@@ -18251,6 +19646,188 @@ mod tests {
     }
 
     #[test]
+    fn ub_review_gate_workflow_matches_self_profile_post_policy() {
+        let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
+        let profile = include_str!("../profiles/ub-review-self.toml");
+        assert!(
+            workflow.contains("types: [opened, ready_for_review, synchronize]"),
+            "self gate should run review passes on opened/ready and gate-only synchronize"
+        );
+        assert!(
+            !workflow.contains("reopened"),
+            "self gate review triggers should match the profile post_review_on list"
+        );
+        assert!(
+            profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
+            "self profile should declare the same PR review passes"
+        );
+        assert!(
+            workflow.contains(
+                "github.event.action == 'opened' || github.event.action == 'ready_for_review'"
+            ),
+            "posting expression should be limited to the profile review passes"
+        );
+        assert!(
+            workflow.contains("github.event.action == 'synchronize' && 'off' || 'auto'"),
+            "synchronize should keep producing artifact-only gate evidence with models off"
+        );
+    }
+
+    #[test]
+    fn ub_review_self_profile_loads_baseline_gate_tools() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        assert_eq!(config.review_profile, "ub-review-self");
+        assert_eq!(config.profile, "gh-runner-full");
+        for id in [
+            "cargo-fmt",
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "artifact-verifier",
+            "ripr",
+            "unsafe-review",
+            "ast-grep",
+            "cargo-allow",
+            "actionlint",
+        ] {
+            let tool = config
+                .tools
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("missing self-profile tool {id}"))?;
+            assert!(tool.enabled, "{id} should be enabled");
+        }
+        let coverage = config
+            .tools
+            .get("coverage")
+            .ok_or_else(|| anyhow::anyhow!("missing self-profile coverage tool"))?;
+        assert!(
+            !coverage.enabled,
+            "coverage is a leased heavy witness and should not run in the default self gate"
+        );
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        for id in [
+            "cargo-fmt",
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "artifact-verifier",
+        ] {
+            let sensor = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing planned sensor {id}"))?;
+            assert!(sensor.run, "{id} should run in every self gate");
+            assert!(
+                sensor.required,
+                "{id} should be a required self gate sensor"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn baseline_gate_sensor_argvs_match_required_matrix() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let cases = [
+            ("cargo-fmt", vec!["cargo", "fmt", "--all", "--check"]),
+            (
+                "cargo-check",
+                vec!["cargo", "check", "--workspace", "--all-targets", "--locked"],
+            ),
+            (
+                "cargo-test",
+                vec!["cargo", "test", "--workspace", "--all-targets", "--locked"],
+            ),
+            (
+                "cargo-clippy",
+                vec![
+                    "cargo",
+                    "clippy",
+                    "--workspace",
+                    "--all-targets",
+                    "--locked",
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
+            ),
+            (
+                "cargo-doc",
+                vec!["cargo", "doc", "--workspace", "--no-deps", "--locked"],
+            ),
+            (
+                "artifact-verifier",
+                vec![
+                    "python",
+                    "scripts/verify-bun-review-artifacts.py",
+                    "--self-test",
+                ],
+            ),
+        ];
+        for (id, expected) in cases {
+            let sensor = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing planned sensor {id}"))?;
+            assert!(sensor.run, "{id} should run in the self-gate plan");
+            let argv = super::build_sensor_argv(
+                Path::new("."),
+                Path::new("target/ub-review/sensors/x"),
+                sensor,
+                &plan,
+            );
+            assert_eq!(argv, expected);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn action_config_input_overrides_bundled_preset_selection() {
+        let action = include_str!("../action.yml");
+        assert!(
+            action.contains("config:")
+                && action.contains("config_path=\"${{ inputs.config }}\"")
+                && action.contains("if [[ -z \"$config_path\" ]]; then")
+                && action.contains("config_path=\"$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml\"")
+                && action.contains("--config \"$config_path\""),
+            "the action should let repo-local config paths override bundled preset selection"
+        );
+    }
+
+    #[test]
     fn bun_config_loads_with_default_lanes_enabled() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../profiles/bun-ub-v0.toml"))?;
         config.merge_defaults();
@@ -18348,6 +19925,119 @@ mod tests {
 
         assert!(planned.run);
         assert_eq!(planned.reason, "source-tree exception surface changed");
+        Ok(())
+    }
+
+    #[test]
+    fn required_tool_policy_applies_only_when_trigger_matches() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut config = Config::default();
+        let actionlint = config
+            .tools
+            .get_mut("actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint tool missing"))?;
+        actionlint.required = true;
+        config
+            .tools
+            .get_mut("ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr tool missing"))?
+            .required = true;
+        config
+            .tools
+            .get_mut("unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("unsafe-review tool missing"))?
+            .required = true;
+
+        let workflow_files = vec![".github/workflows/ci.yml".to_owned()];
+        let workflow_flags = classify_diff(&workflow_files, "+name: ci");
+        let workflow_diff = DiffContext {
+            base: "HEAD~1".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: workflow_files,
+            patch: "+name: ci".to_owned(),
+            diff_class: classify_diff_class(
+                &[".github/workflows/ci.yml".to_owned()],
+                &workflow_flags,
+            ),
+            flags: workflow_flags,
+        };
+
+        let workflow_plan = super::build_plan(
+            &config,
+            &Profile::default(),
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: None,
+                free_disk_mb: None,
+                load_1m: None,
+                github_actions: false,
+            },
+            &workflow_diff,
+            temp.path(),
+            false,
+        );
+        let workflow_actionlint = workflow_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint not planned"))?;
+        assert!(workflow_actionlint.required);
+        assert!(workflow_actionlint.run);
+        let resolved_tools =
+            super::resolved_tools_artifact(&config, &Profile::default(), &workflow_plan);
+        let resolved_actionlint = resolved_tools
+            .tools
+            .iter()
+            .find(|tool| tool.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("resolved actionlint tool missing"))?;
+        assert!(resolved_actionlint.required);
+        assert!(resolved_actionlint.planned_run);
+
+        let source_diff = test_diff();
+        let source_plan = super::build_plan(
+            &config,
+            &Profile::default(),
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: None,
+                free_disk_mb: None,
+                load_1m: None,
+                github_actions: false,
+            },
+            &source_diff,
+            temp.path(),
+            false,
+        );
+        let source_actionlint = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("source actionlint not planned"))?;
+        assert!(!source_actionlint.required);
+        assert!(!source_actionlint.run);
+        assert_eq!(source_actionlint.reason, "trigger did not match this diff");
+        let source_ripr = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("source ripr not planned"))?;
+        assert!(source_ripr.required);
+        assert!(source_ripr.run);
+        let source_unsafe_review = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("source unsafe-review not planned"))?;
+        assert!(source_unsafe_review.required);
+        assert!(source_unsafe_review.run);
+        let source_resolved =
+            super::resolved_tools_artifact(&config, &Profile::default(), &source_plan);
+        let source_resolved_actionlint = source_resolved
+            .tools
+            .iter()
+            .find(|tool| tool.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("source resolved actionlint missing"))?;
+        assert!(!source_resolved_actionlint.required);
         Ok(())
     }
 
@@ -18857,6 +20547,55 @@ mod tests {
         assert_eq!(issues[0].sensor, "tokmd");
         assert_eq!(issues[0].status, "skipped");
         assert_eq!(issues[0].reason, "dry-run; sensor not executed");
+        Ok(())
+    }
+
+    #[test]
+    fn skipped_required_sensor_is_missing_review_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        required_actionlint.reason = "disabled by config".to_owned();
+        let mut trigger_skipped = sensor_plan("ripr", "ripr", false);
+        trigger_skipped.reason = "trigger did not match this diff".to_owned();
+
+        write_sensor_status(
+            &out,
+            &required_actionlint,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["actionlint".to_owned()],
+                duration_ms: 0,
+                reason: "disabled by config",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let required_status: serde_json::Value = serde_json::from_slice(&fs::read(
+            out.join("sensors/actionlint/ub-review-sensor-status.json"),
+        )?)?;
+        assert_eq!(required_status["required"], true);
+        write_sensor_status(
+            &out,
+            &trigger_skipped,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["ripr".to_owned()],
+                duration_ms: 0,
+                reason: "trigger did not match this diff",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![required_actionlint, trigger_skipped]);
+
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].sensor, "actionlint");
+        assert_eq!(issues[0].status, "skipped");
+        assert_eq!(issues[0].reason, "disabled by config");
         Ok(())
     }
 
@@ -19752,6 +21491,140 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn focused_proof_tasks_detect_modified_bun_test_callees() -> Result<()> {
+        assert_eq!(
+            super::extract_focused_test_name("test.only(\"bad free witness\", () => {})")
+                .as_deref(),
+            Some("bad free witness")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "it.skip('parked until runtime supports it', () => {})"
+            )
+            .as_deref(),
+            Some("parked until runtime supports it")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "test.concurrent.failing('racy callback path', () => {})"
+            )
+            .as_deref(),
+            Some("racy callback path")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "test.each([[\"arraybuffer\"]])('table case %s', () => {})"
+            )
+            .as_deref(),
+            Some("table case %s")
+        );
+        assert_eq!(
+            super::extract_focused_test_name(
+                "describe.each([{ name: \"ffi\" }])('ownership %s', () => {})"
+            )
+            .as_deref(),
+            Some("ownership %s")
+        );
+        assert!(super::extract_focused_test_name("testHelper('not a test', () => {})").is_none());
+        assert!(
+            super::extract_focused_test_name("test.unknown('not brokered', () => {})").is_none()
+        );
+
+        let patch = "\
+diff --git a/test/js/bun/ffi/ffi.test.js b/test/js/bun/ffi/ffi.test.js
+index 1111111..2222222 100644
+--- a/test/js/bun/ffi/ffi.test.js
++++ b/test/js/bun/ffi/ffi.test.js
+@@ -1,2 +1,7 @@
+ import { test, describe } from 'bun:test';
++test.only(\"bad free witness\", () => {});
++it.skip('parked until runtime supports it', () => {});
++test.concurrent.failing('racy callback path', () => {});
++test.each([[\"arraybuffer\"]])('table case %s', () => {});
++describe.each([{ name: \"ffi\" }])('ownership %s', () => {});
+";
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["test/js/bun/ffi/ffi.test.js".to_owned()],
+            patch: patch.to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+
+        let tasks = focused_test_tasks_from_diff(
+            &diff,
+            &[],
+            ProofBudget {
+                max_focused_test_files: 2,
+                max_focused_tests: 8,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 4_800,
+            },
+        );
+        let names = tasks
+            .iter()
+            .map(|task| task.test_name.as_deref().unwrap_or_default())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            names,
+            vec![
+                "bad free witness",
+                "parked until runtime supports it",
+                "racy callback path",
+                "table case %s",
+                "ownership %s",
+            ]
+        );
+        assert!(
+            tasks
+                .iter()
+                .all(|task| task.mode == super::FocusedProofMode::RedGreen)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unreceipted_proof_request_tasks_skip_already_receipted_seeded_request() -> Result<()> {
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-policy-001".to_owned(),
+            lane: "intelligent-ci-policy".to_owned(),
+            requested_by: vec![
+                "intelligent-ci-policy".to_owned(),
+                "proof-policy:required-smoke".to_owned(),
+            ],
+            command: "cargo test --locked required_proof_smoke".to_owned(),
+            reason: "Required Rust focused smoke for intelligent CI.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: true,
+            status: "requested".to_owned(),
+        }];
+
+        assert!(super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[]
+        ));
+
+        let task = super::focused_test_candidates_from_requests(&proof_requests)
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
+        let mut receipt = test_proof_receipt("head_passed", "passed");
+        receipt.id = task.id;
+        receipt.requested_by = task.requested_by;
+        receipt.request_ids = task.request_ids;
+
+        assert!(!super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[receipt]
+        ));
+        Ok(())
+    }
+
+    #[test]
     fn proof_broker_v0_executes_allowlisted_request_as_red_green_proof() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -20530,6 +22403,88 @@ index 1111111..2222222 100644
         assert_eq!(build_tasks[0].requested_by, vec!["tests-oracle".to_owned()]);
         assert_eq!(build_tasks[0].request_ids, vec![requests[6].id.clone()]);
         Ok(())
+    }
+
+    #[test]
+    fn intelligent_ci_synthesizes_matching_required_proof_requests() {
+        let mut config = Config::default();
+        config.proof.required = vec![
+            super::RequiredProofPolicy {
+                id: "cargo-check".to_owned(),
+                languages: vec!["rust".to_owned()],
+                diff_classes: vec!["source-ub".to_owned()],
+                command: "cargo check --workspace --locked".to_owned(),
+                reason: "Required Rust workspace check for intelligent CI.".to_owned(),
+                cost: Some("focused-build".to_owned()),
+                timeout_sec: 300,
+                required: true,
+                enabled: true,
+            },
+            super::RequiredProofPolicy {
+                id: "workflow-lint".to_owned(),
+                languages: vec!["yaml".to_owned()],
+                diff_classes: vec!["workflow/tooling".to_owned()],
+                command: "actionlint".to_owned(),
+                reason: "Only workflow diffs should request actionlint.".to_owned(),
+                cost: Some("focused-build".to_owned()),
+                timeout_sec: 120,
+                required: true,
+                enabled: true,
+            },
+        ];
+        let diff = test_diff();
+        let mut args = test_run_args(PathBuf::from("out"));
+        args.mode = RunMode::IntelligentCi;
+
+        let requests = super::configured_required_proof_requests(&config, &diff, &args, 0);
+
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].lane, "intelligent-ci-policy");
+        assert_eq!(
+            requests[0].requested_by,
+            vec![
+                "intelligent-ci-policy".to_owned(),
+                "proof-policy:cargo-check".to_owned()
+            ]
+        );
+        assert_eq!(requests[0].command, "cargo check --workspace --locked");
+        assert_eq!(
+            requests[0].reason,
+            "Required Rust workspace check for intelligent CI."
+        );
+        assert_eq!(requests[0].cost, "focused-build");
+        assert_eq!(requests[0].status, "requested");
+        assert!(requests[0].required);
+
+        let language_mix = super::classify_language_mix(&diff.changed_files);
+        let proof_policy = super::resolved_proof_policy_artifact(&config, &diff, &language_mix);
+        assert_eq!(
+            proof_policy["matched_required"].as_array().map(Vec::len),
+            Some(1)
+        );
+        assert_eq!(proof_policy["matched_required"][0]["id"], "cargo-check");
+    }
+
+    #[test]
+    fn review_byok_does_not_synthesize_required_proof_requests() {
+        let mut config = Config::default();
+        config.proof.required = vec![super::RequiredProofPolicy {
+            id: "cargo-check".to_owned(),
+            languages: vec!["rust".to_owned()],
+            diff_classes: vec!["source-ub".to_owned()],
+            command: "cargo check --workspace --locked".to_owned(),
+            reason: "Required Rust workspace check for intelligent CI.".to_owned(),
+            cost: Some("focused-build".to_owned()),
+            timeout_sec: 300,
+            required: true,
+            enabled: true,
+        }];
+        let diff = test_diff();
+        let args = test_run_args(PathBuf::from("out"));
+
+        let requests = super::configured_required_proof_requests(&config, &diff, &args, 0);
+
+        assert!(requests.is_empty());
     }
 
     #[test]
@@ -21826,6 +23781,27 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn refuter_prompt_keeps_execution_out_of_model_turn() -> Result<()> {
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
+            evidence: "ripr excerpt".to_owned(),
+        }];
+
+        let prompt = render_refuter_prompt(&inline_comments)?;
+
+        assert!(prompt.contains("Do not post, mutate files, or run shell commands"));
+        assert!(prompt.contains("The refuter only classifies candidates"));
+        assert!(prompt.contains("Use only the cached shared context"));
+        Ok(())
+    }
+
+    #[test]
     fn refuter_demotes_uncertain_or_unmatched_inline_candidates() {
         let mut inline_comments = vec![
             ReviewInlineComment {
@@ -22217,6 +24193,112 @@ index 1111111..2222222 100644
         let err = validate_github_review_payload(&review)
             .err()
             .ok_or_else(|| anyhow::anyhow!("meta review prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Confirmed findings\n\n- Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("standing workflow trust prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Confirmed findings\n\n- No pinning defect introduced. The only standing concern is upstream SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical in posture to the prior pin and is a repo-level policy item, not a diff finding.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("no-defect pinning prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Confirmed findings\n\n- The diff is a 4-line mechanical SHA bump at the three expected sites: cache `key`, `restore-keys` prefix, and action `uses:`. No permission, trigger, or `with:` block change; net new secret/permission surface relative to the prior pin is zero.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("mechanical pin no-change prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm checkout credential persistence: workflows using pull_request from forks receive a read-only GITHUB_TOKEN; this lane did not change checkout config, so no new persistence vector is introduced. Actionlint receipt 'ok' supports no syntactic regression.\n\n## Refuted\n\n- Adding a workflow file to paths-ignore could grant implicit permission expansion; refuted because: paths-ignore only filters trigger activation; it does not alter token scopes, permissions blocks, or any job-level security context.\n\n## Parked follow-ups\n\n- paths-ignore is a literal substring/glob match; a future rename of ub-review-packet.yml silently re-enables Droid noise.\n\n## Evidence gaps\n\n- zizmor, gitleaks, osv-scanner, cargo-audit, cargo-deny, shellcheck, semgrep, coverage all disabled by config or trigger-mismatched. No security/pinning tool independently re-validated this workflow file.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("paths-ignore no-posture review unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, or a temporary pull_request_target guard test) was executed for the paths-ignore change. Trust rests on actionlint parse only; semantic skip behavior on the droid lane is not proven by sensors.\n\n## Refuted\n\n- adding ub-review-packet.yml to paths-ignore could mask future unpinned uses: additions in that file from Droid lane coverage; refuted because: paths-ignore lift is per-PR: any future PR that also touches ub-review-packet.yml (i.e. adds/changes uses:) will change the changed-files set and re-trigger Droid. Droid lanes are non-blocking/auxiliary by design; UB gate is the authoritative review.\n\n## Evidence gaps\n\n- PR body states actionlint is not installed locally, so the 'ok' receipt must come from the ub-review gate's own tooling rather than a local pre-push run; trust depends on that gate having actually executed actionlint v1 against this ref.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("paths-ignore smoke-proof review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.\n\n## Refuted\n\n- paths-ignore addition could mask future unpinned uses: additions in ub-review-packet.yml from Droid lane coverage; refuted because: paths-ignore lift is per-PR: any future PR that also touches ub-review-packet.yml (adds/changes uses:) will change the changed-files set and re-trigger Droid. UB gate is the authoritative review surface and runs on the new pin.\n\n## Parked follow-ups\n\n- Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.\n\n## Evidence gaps\n\n- trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("paths-ignore actionlint skip-proof review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Workflow-pinning lane for PR #49. Two workflow YAML files touched. Pin lockstep verified across 3 sites, old pin absent, cache key/restore-keys prefix match, no other third-party actions changed.\n\n## Parked follow-ups\n\n- Cache key/restore-keys prefix is coupled to action SHA; any future partial repin silently mismatches restore. Current state consistent, parked for lint-rule follow-up.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("workflow lockstep summary review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("stale bot target-SHA prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body = "## Refuted\n\n- cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("stale bot refutation prose unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body =
+            "## Refuted\n\n- A prior objection was false, and no finding remains.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("refuted-only body unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("refuted-only artifact note"),
+            "{err:#}"
+        );
+
+        review.body = "## Evidence gaps\n\n- actionlint receipt is 'ok' per sensor table; no per-line output inlined into this lane packet, so re-verification of lint findings depends on the central proof broker artifact.\n- No fresh PR-build smoke run is available (build/test skipped, --allow-heavy required); only tokmd/actionlint receipts are present for this 4-line workflow pin.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("workflow tool-status gap prose unexpectedly passed"))?;
         assert!(
             err.to_string().contains("artifact-only boilerplate"),
             "{err:#}"
@@ -22648,6 +24730,24 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn run_mode_accepts_product_names_and_legacy_review_direct() {
+        assert_eq!(super::RunMode::ReviewByok.key(), "review-byok");
+        assert_eq!(super::RunMode::IntelligentCi.key(), "intelligent-ci");
+        assert_eq!(
+            <super::RunMode as clap::ValueEnum>::from_str("review-byok", true),
+            Ok(super::RunMode::ReviewByok)
+        );
+        assert_eq!(
+            <super::RunMode as clap::ValueEnum>::from_str("intelligent-ci", true),
+            Ok(super::RunMode::IntelligentCi)
+        );
+        assert_eq!(
+            <super::RunMode as clap::ValueEnum>::from_str("review-direct", true),
+            Ok(super::RunMode::ReviewByok)
+        );
+    }
+
+    #[test]
     fn quick_depth_expands_to_small_lane_budget() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.depth = ReviewDepth::Quick;
@@ -22959,6 +25059,65 @@ index 1111111..2222222 100644
 
         assert_eq!(spec.provider, ModelProvider::MiniMaxDirect);
         assert_eq!(spec.model, "MiniMax-M3");
+        Ok(())
+    }
+
+    #[test]
+    fn primary_with_fallback_routes_canary_and_fast_fallbacks() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.lane_width = 10;
+        args.opencode_model = "mimo-v2.5".to_owned();
+        let assignments = model_assignments_with_key_state(&test_plan(Vec::new()), &args, true)?;
+
+        let security = assignments
+            .iter()
+            .find(|assignment| assignment.lane.id == "security")
+            .ok_or_else(|| anyhow::anyhow!("security lane missing"))?;
+        assert_eq!(security.spec.provider, ModelProvider::MiniMaxDirect);
+        assert_eq!(
+            security.fallback.as_ref().map(|spec| spec.provider),
+            Some(ModelProvider::OpenCodeGo)
+        );
+        assert_eq!(
+            security.fallback.as_ref().map(|spec| spec.model.as_str()),
+            Some("mimo-v2.5")
+        );
+        let primary = direct_minimax_spec(&args);
+        let canary = fallback_provider_spec_for_lane(&lane_plan("security"), &primary, &args, true)
+            .ok_or_else(|| anyhow::anyhow!("security fallback missing"))?;
+        assert_eq!(canary.provider, ModelProvider::OpenCodeGo);
+        assert_eq!(canary.model, "mimo-v2.5");
+
+        let fast =
+            fallback_provider_spec_for_lane(&lane_plan("summary-pressure"), &primary, &args, true)
+                .ok_or_else(|| anyhow::anyhow!("fast fallback missing"))?;
+        assert_eq!(fast.provider, ModelProvider::OpenCodeGo);
+        assert_eq!(fast.model, "deepseek-v4-flash");
+        Ok(())
+    }
+
+    #[test]
+    fn primary_with_fallback_does_not_plan_missing_opencode_fallbacks() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.lane_width = 10;
+        args.opencode_model = "mimo-v2.5".to_owned();
+        let assignments = model_assignments_with_key_state(&test_plan(Vec::new()), &args, false)?;
+
+        let security = assignments
+            .iter()
+            .find(|assignment| assignment.lane.id == "security")
+            .ok_or_else(|| anyhow::anyhow!("security lane missing"))?;
+        assert_eq!(security.spec.provider, ModelProvider::MiniMaxDirect);
+        assert!(security.fallback.is_none());
+        assert!(assignments.iter().all(|assignment| {
+            assignment
+                .fallback
+                .as_ref()
+                .map(|fallback| fallback.provider)
+                != Some(ModelProvider::OpenCodeGo)
+        }));
         Ok(())
     }
 
@@ -23480,6 +25639,56 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn terminal_state_fails_intelligent_ci_required_sensor_gap() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        let plan = test_plan(vec![required_actionlint]);
+        let model_lanes = vec![model_lane_receipt("workflow-permissions", "ok")];
+        let missing_sensor = vec![SensorEvidenceIssue {
+            sensor: "actionlint".to_owned(),
+            status: "skipped".to_owned(),
+            reason: "disabled by config".to_owned(),
+        }];
+
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &missing_sensor,
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(state.status, "failed-to-review");
+        assert_eq!(state.evidence_gaps, 1);
+
+        args.mode = RunMode::ReviewByok;
+        let review_byok_state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &missing_sensor,
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(review_byok_state.status, "sufficient");
+        assert_eq!(review_byok_state.evidence_gaps, 1);
+    }
+
+    #[test]
     fn terminal_state_keeps_model_off_runs_artifact_only() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.model_mode = ModelMode::Off;
@@ -23555,10 +25764,11 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
-    fn compiler_surface_promotes_follow_up_observation_to_final_review() -> Result<()> {
+    fn compiler_surface_keeps_refuted_only_follow_up_artifact_only() -> Result<()> {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
         let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("workflow-opposition", "ok")];
         let follow_up_observation = test_observation(
             "orchestrator-follow-up-route",
             "The source-route concern was refuted by the routed proof receipt.",
@@ -23575,7 +25785,7 @@ UB_REVIEW_HTTP_STATUS:429
             args: &args,
             plan: &plan,
             diff: &diff,
-            model_lanes: &[],
+            model_lanes: &model_lanes,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             inline_comments: &[],
@@ -23584,16 +25794,10 @@ UB_REVIEW_HTTP_STATUS:429
             proof_receipts: &[],
         })?;
 
-        assert!(surface.should_prepare_github_review);
-        assert_eq!(surface.review_payload_status, "prepared");
-        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
-        assert!(surface.github_review.body.contains("## Refuted"));
-        assert!(
-            surface
-                .github_review
-                .body
-                .contains("source-route concern was refuted")
-        );
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
         Ok(())
     }
@@ -23631,6 +25835,45 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert!(!surface.should_prepare_github_review);
         assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_suppresses_policy_rejected_artifact_only_pr_body() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("workflow-opposition", "ok")];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "workflow-opposition".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason:
+                "No blocking finding after bounded review; residual risk remains for human review."
+                    .to_owned(),
+            evidence: "bounded lane summary".to_owned(),
+        }];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &summary_only_findings,
+            observations: &[],
+            proof_receipts: &[],
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
         assert_eq!(surface.terminal_state.status, "sufficient");
         assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
@@ -23886,6 +26129,41 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "refuter demoted inline candidate at .github/workflows/ub-review-packet.yml:56: the PR packet contains no upstream commit-existence/ancestry proof, and the PR body says 'Gate proof is pending this PR's UB evidence packet.' Confirming reachability requires an external API call that the lane cannot perform from cached context.".to_owned(),
                 evidence: "uses: EffortlessMetrics/ub-review@4dfbd9d7caeff4f506984c63cc36f248233206e6 - only local diff evidence, no upstream commit proof".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned(),
+                evidence: "The diff is an atomic ub-review SHA/cache-key bump; the with: block is unchanged.".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "No pinning defect introduced. The only standing concern is upstream SHA trust for EffortlessMetrics/ub-review@e76ccbc, which is identical in posture to the prior pin and is a repo-level policy item, not a diff finding.".to_owned(),
+                evidence: "Per-action full-SHA pinning preserved; old pin fully removed; 3 replacement sites consistent; actionlint ok; workflow file diff is 4 lines, no perm/trigger change.".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The diff is a 4-line mechanical SHA bump (da14100 -> 88f3dcc7c344f8b54871caea2122de0b68701925) at the three expected sites: cache `key` (line 56), `restore-keys` prefix (line 58), and action `uses:` (line 62). No permission, trigger, or `with:` block change; net new secret/permission surface relative to the prior pin is zero.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow-proof lane: actionlint receipt ok; no Rust/source surface touched (yaml-only). Pin/uses ref consistent at 3x ec8f890; old da14100 absent. Strongest failed objection: actionlint proof receipt not inlined for me to re-verify, and no fresh PR-build smoke. cursor/coderabbit stale SHA mismatch is a false positive (cites e76ccbc while PR targets ec8f890).".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "actionlint 'ok' status is reported by the sensor table but the underlying lint output is not inlined into the workflow-proof lane packet; trust in 'no workflow lint findings' therefore depends on the central proof broker artifact at sensors/actionlint/. For a 4-line SHA-swap with consistent 40-hex pin and unchanged permissions/trigger, this is a parked follow-up, not a blocker.".to_owned(),
+                evidence: "sensor table: actionlint=ok; receipt path sensors/actionlint/; yaml-only diff; pin 40-hex non-zero".to_owned(),
+            },
         ];
         let mut tokmd_gap = test_observation(
             "sensor-tokmd",
@@ -23906,6 +26184,60 @@ UB_REVIEW_HTTP_STATUS:429
                 "low",
                 "medium",
                 "bug:workflow-permissions",
+            ),
+            test_observation(
+                "workflow-permissions",
+                "Workflow-level permissions block on the caller workflow was not modified; perms posture remains whatever the base file declares (pre-existing, not a diff target).",
+                "verification-question",
+                "open",
+                "low",
+                "high",
+                "wf-perms-unchanged",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.",
+                "security-risk",
+                "open",
+                "medium",
+                "medium-high",
+                "wf-pin-secrets-surface",
+            ),
+            test_observation(
+                "workflow-pinning",
+                "Pinning format could be 39-hex or all-zero making the gate unsafe.; refuted because: e76ccbcbe94258fd03cf6ddb4e1536833cad610d is 40 hex characters, non-zero, and matches expected SHA-1 shape; the gate's SHA-pinning control remains effective.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "false-premise:workflow-pinning",
+            ),
+            test_observation(
+                "workflow-permissions",
+                "cursor[bot] and coderabbitai[bot] comments claim target is e76ccbcb... and demand swap back; PR body, diff, and head tree all show ec8f890 as the actual target. Their objection is a false positive against the current diff and reopens nothing.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "wf-perms-stale-cursor-coderabbit",
+            ),
+            test_observation(
+                "workflow-proof",
+                "actionlint receipt is 'ok' per sensor table; no per-line output inlined into this lane packet, so re-verification of lint findings depends on the central proof broker artifact",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "wf-proof:actionlint-receipt-inlined?",
+            ),
+            test_observation(
+                "workflow-proof",
+                "No fresh PR-build smoke run is available (build/test skipped, --allow-heavy required); only tokmd/actionlint receipts are present for this 4-line workflow pin",
+                "missing-evidence",
+                "open",
+                "low",
+                "high",
+                "missing-evidence:.github/workflows/ub-review-packet.yml:62",
             ),
             test_observation(
                 "orchestrator-follow-up",
@@ -24007,6 +26339,15 @@ UB_REVIEW_HTTP_STATUS:429
                 "refutation-meta",
             ),
             test_observation(
+                "workflow-opposition",
+                "Workflow posture is unsafe because the new pin dad0f23 receives secrets and is not reproducibly verified in this repo.; refuted because: False-premise at the opposition-lane level: the diff itself adds zero new secret/permission surface relative to the prior pin ccae442; pinning-by-SHA is the established control and is preserved. Trust in upstream tag is a standing-repo concern, not introduced by this 4-line bump.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "false-premise:workflow-opposition",
+            ),
+            test_observation(
                 "workflow-permissions",
                 "Actionlint ran ok; combined with disabled zizmor/gitleaks, security-relevant linting for this pin-only diff is partial but the diff class does not require them.",
                 "missing-evidence",
@@ -24047,6 +26388,305 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("Gate proof is pending"));
         assert!(!body.contains("40 hex and non-zero"));
         assert!(!body.contains("Actionlint ran ok"));
+        assert!(!body.contains("malicious or compromised"));
+        assert!(!body.contains("does not eliminate upstream trust"));
+        assert!(!body.contains("pre-existing, not a diff target"));
+        assert!(!body.contains("standing-repo concern"));
+        assert!(!body.contains("No pinning defect introduced"));
+        assert!(!body.contains("repo-level policy item"));
+        assert!(!body.contains("4-line mechanical SHA bump"));
+        assert!(!body.contains("net new secret/permission surface"));
+        assert!(!body.contains("Pinning format could be 39-hex"));
+        assert!(!body.contains("SHA-pinning control remains effective"));
+        assert!(!body.contains("cursor[bot]"));
+        assert!(!body.contains("coderabbit"));
+        assert!(!body.contains("stale-bot false positives"));
+        assert!(!body.contains("central proof broker artifact"));
+        assert!(!body.contains("No fresh PR-build smoke"));
+        assert!(!body.contains("--allow-heavy"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_paths_ignore_no_posture_review_artifact_only() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![".github/workflows/droid-focused-review.yml".to_owned()];
+        diff.patch = concat!(
+            " pull_request:\n",
+            "   paths-ignore:\n",
+            "+    - \".github/workflows/ub-review-packet.yml\"\n",
+        )
+        .to_owned();
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm checkout credential persistence: workflows using pull_request from forks receive a read-only GITHUB_TOKEN; this lane did not change checkout config, so no new persistence vector is introduced. Actionlint receipt 'ok' supports no syntactic regression.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Adding a workflow file to paths-ignore could grant implicit permission expansion; refuted because: paths-ignore only filters trigger activation; it does not alter token scopes, permissions blocks, or any job-level security context.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "zizmor, gitleaks, osv-scanner, cargo-audit, cargo-deny, shellcheck, semgrep, coverage all disabled by config or trigger-mismatched. No security/pinning tool independently re-validated this workflow file.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, or a temporary pull_request_target guard test) was executed for the paths-ignore change. Trust rests on actionlint parse only; semantic skip behavior on the droid lane is not proven by sensors.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "PR body states actionlint is not installed locally, so the 'ok' receipt must come from the ub-review gate's own tooling rather than a local pre-push run; trust depends on that gate having actually executed actionlint v1 against this ref.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate and the packet will be filtered/no-posture.".to_owned(),
+                evidence: "CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+        ];
+        let observations = vec![
+            test_observation(
+                "workflow-permissions",
+                "Confirm checkout credential persistence: workflows using pull_request from forks receive a read-only GITHUB_TOKEN; this lane did not change checkout config, so no new persistence vector is introduced. Actionlint receipt 'ok' supports no syntactic regression.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "checkout-persistence-no-change",
+            ),
+            test_observation(
+                "workflow-opposition",
+                "Adding a workflow file to paths-ignore could grant implicit permission expansion; refuted because: paths-ignore only filters trigger activation; it does not alter token scopes, permissions blocks, or any job-level security context.",
+                "false-premise",
+                "refuted",
+                "low",
+                "medium",
+                "paths-ignore-permission-refuted",
+            ),
+            test_observation(
+                "workflow-proof",
+                "paths-ignore is a literal substring/glob match; a future rename of ub-review-packet.yml silently re-enables Droid noise.",
+                "parked-follow-up",
+                "parked",
+                "low",
+                "medium",
+                "paths-ignore-future-rename",
+            ),
+            test_observation(
+                "workflow-proof",
+                "Confirm no focused smoke proof (workflow_run on a fork-PR dry-run, or a temporary pull_request_target guard test) was executed for the paths-ignore change. Trust rests on actionlint parse only; semantic skip behavior on the droid lane is not proven by sensors.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "paths-ignore-smoke-proof-gap",
+            ),
+            test_observation(
+                "workflow-proof",
+                "Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "actionlint-semantic-skip-proof",
+            ),
+            test_observation(
+                "workflow-proof",
+                "Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.",
+                "parked-follow-up",
+                "parked",
+                "low",
+                "medium",
+                "cache-key-current-pin-followup",
+            ),
+            test_observation(
+                "workflow-proof",
+                "trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "actionlint-skip-proof-gap",
+            ),
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &observations,
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("checkout credential persistence"));
+        assert!(!body.contains("paths-ignore"));
+        assert!(!body.contains("focused smoke proof"));
+        assert!(!body.contains("semantic skip behavior"));
+        assert!(!body.contains("cache key/restore-keys"));
+        assert!(!body.contains("actionlint is not installed locally"));
+        assert!(!body.contains("CodeRabbit"));
+        assert!(!body.contains("892e1bb"));
+        assert!(!body.contains("zizmor"));
+        assert!(!body.contains("Droid noise"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_refuted_only_observations_artifact_only() {
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[] as &[SummaryOnlyFinding],
+            &[test_observation(
+                "workflow-opposition",
+                "This diff widens the workflow permission/secret surface; refuted because the changed hunk only updates an already pinned action ref.",
+                "false-premise",
+                "refuted",
+                "low",
+                "high",
+                "refuted-only-workflow-posture",
+            )],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("## Refuted"));
+        assert!(!body.contains("widens the workflow permission"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_workflow_lockstep_summaries_artifact_only() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![
+            ".github/workflows/droid-focused-review.yml".to_owned(),
+            ".github/workflows/ub-review-packet.yml".to_owned(),
+        ];
+        diff.patch = concat!(
+            " pull_request:\n",
+            "   paths-ignore:\n",
+            "+    - \".github/workflows/ub-review-packet.yml\"\n",
+            "+          key: ub-review-gh-runner-v2-cec5b07457f99e652a500dffc603f98e6082a7f7-${{ runner.os }}-rust-1.95-core\n",
+            "+            ub-review-gh-runner-v2-cec5b07457f99e652a500dffc603f98e6082a7f7-${{ runner.os }}-rust-1.95-\n",
+            "+        uses: EffortlessMetrics/ub-review@cec5b07457f99e652a500dffc603f98e6082a7f7\n",
+        )
+        .to_owned();
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "workflow-permissions lane: paths-ignore addition cannot alter token scopes/permissions; pin bump is lockstep across cache key, restore-keys prefix, and uses: reference. No new third-party action, no pull_request_target, no checkout credential persistence vector. Residual risk: cache key/pin coupling is a parked follow-up; no blocker.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow-pinning lane for PR #49. Two workflow YAML files touched. Pin lockstep verified for cec5b07457f99e652a500dffc603f98e6082a7f7 across 3 sites, old pin absent, cache key/restore-keys prefix match, no other third-party actions changed.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow lint proof lane: actionlint receipt ok, no focused smoke proof available, no syntactic regression. Pin lockstep and paths-ignore semantics covered by seeded thread; CodeRabbit stale SHA comment is stale (current head re-pinned to cec5b074).".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "Cache key/restore-keys prefix is coupled to action SHA; any future partial repin silently mismatches restore. Current state consistent, parked for lint-rule follow-up.".to_owned(),
+                evidence: "diff: cache key, restore-keys prefix, uses: all reference cec5b074 in lockstep".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Opposition lane for workflow/tooling: paths-ignore addition + lockstep SHA pin. Actionlint ok. No source, no permissions, no token, no checkout changes. No blocker.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Residual workflow risk: cache key/restore-keys prefix is manually coupled to action SHA. Partial repin silently breaks cache restore. Parked for follow-up lint rule.".to_owned(),
+                evidence: "cache key/restore-keys must be updated in lockstep with uses: pin; no automated guard exists; current PR state is consistent".to_owned(),
+            },
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Workflow-pinning lane"));
+        assert!(!body.contains("Pin lockstep verified"));
+        assert!(!body.contains("Current state consistent"));
+        assert!(!body.contains("No blocker"));
+        assert!(!body.contains("cache key/restore-keys"));
     }
 
     #[test]
@@ -24248,6 +26888,56 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn pr_review_body_dedupes_duplicate_summary_findings() {
+        let duplicate_reason = "The bare toThrow assertion is non-discriminating for the changed FFI offset path; strengthen it with the expected TypeError message.";
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: duplicate_reason.to_owned(),
+                evidence: "oracle lane transcript".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "tests-red-green".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: duplicate_reason.to_owned(),
+                evidence: "red/green lane transcript".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "sibling-paths".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium-high".to_owned(),
+                reason: "Parked follow-up: sweep sibling FFI offset entry points for the same expect-to-error conversion.".to_owned(),
+                evidence: "sibling lane transcript".to_owned(),
+            },
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert_eq!(body.matches("bare toThrow assertion").count(), 1);
+        assert!(body.contains("## Confirmed findings"));
+        assert!(body.contains("## Parked follow-ups"));
+        assert!(body.contains("sweep sibling FFI offset entry points"));
+        assert!(!body.contains("oracle lane transcript"));
+        assert!(!body.contains("red/green lane transcript"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
     fn pr_review_body_keeps_red_green_question_after_head_only_proof_receipt() {
         let receipt = test_proof_receipt("head_passed", "passed");
         let observations = vec![test_observation(
@@ -24284,6 +26974,89 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.contains("## Verification questions"));
         assert!(body.contains("Confirm the new test still needs a base+tests red/green witness."));
         assert!(body.contains("Needs one test-proof clarification before upstream."));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn pr_review_body_drops_structurally_answered_red_green_question() {
+        let mut diff = test_diff();
+        diff.patch = "\
+diff --git a/src/ffi.rs b/src/ffi.rs
+index 1111111..2222222 100644
+--- a/src/ffi.rs
++++ b/src/ffi.rs
+@@ -1,3 +1,3 @@
+-let offset = usize::try_from(raw_offset).expect(\"offset must fit\");
++let offset = usize::try_from(raw_offset).map_err(|_| TypeError::new(\"offset must fit\"))?;
+"
+        .to_owned();
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "tests-red-green".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason:
+                "The added regression still needs base+tests red/green proof; old code was not run."
+                    .to_owned(),
+            evidence: "lane transcript".to_owned(),
+        }];
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty(), "{body}");
+    }
+
+    #[test]
+    fn structural_red_green_does_not_answer_source_route_question() {
+        let mut diff = test_diff();
+        diff.patch = "\
+diff --git a/src/ffi.rs b/src/ffi.rs
+index 1111111..2222222 100644
+--- a/src/ffi.rs
++++ b/src/ffi.rs
+@@ -1,3 +1,3 @@
+-let offset = usize::try_from(raw_offset).expect(\"offset must fit\");
++let offset = usize::try_from(raw_offset).map_err(|_| TypeError::new(\"offset must fit\"))?;
+"
+        .to_owned();
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "source-route".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Confirm the base+tests red/green proof reaches the patched FFI offset route."
+                .to_owned(),
+            evidence: "route lane transcript".to_owned(),
+        }];
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains("Confirm the base+tests red/green proof reaches"));
         assert!(!has_standalone_approval_line(&body));
     }
 
@@ -24417,6 +27190,7 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(skip["status"], "skipped");
         assert_eq!(skip["review_payload_status"], "skipped_empty_smoke");
         assert_eq!(skip["terminal_state"], "artifact-only");
+        assert!(skip["github_review_json"].is_null());
         assert_eq!(skip["run_pass"], "manual");
         assert_eq!(metrics["wall_clock_seconds"], 73);
         assert_eq!(metrics["wall_clock_ms"], 73_000);
@@ -24451,7 +27225,7 @@ UB_REVIEW_HTTP_STATUS:429
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
-            mode: "review-direct".to_owned(),
+            mode: "review-byok".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
             run_pass: "opened".to_owned(),
@@ -25362,12 +28136,17 @@ index 1111111..2222222 100644
         assert!(
             canonical_proof_requests[0]
                 .reason
-                .contains("Follow-up proof request arrived after proof broker v0 execution")
+                .contains("routed to the follow-up broker scheduling pass")
+        );
+        assert!(
+            !canonical_proof_requests[0]
+                .reason
+                .contains("retained for next broker scheduling pass")
         );
         append_follow_up_proof_requests(&mut canonical_proof_requests, &evidence);
         assert_eq!(canonical_proof_requests.len(), 1);
         let mut witnesses = Vec::new();
-        append_follow_up_evidence_witnesses(&mut witnesses, &evidence);
+        append_follow_up_evidence_witnesses(&mut witnesses, &evidence, &[]);
         assert_eq!(witnesses.len(), 5);
         assert!(witnesses.iter().any(|witness| {
             witness.source == "follow-up-inline-comment"
@@ -25398,6 +28177,30 @@ index 1111111..2222222 100644
                     .iter()
                     .any(|item| item.contains("bun test test/js/bun/fs/fs.write.test.ts"))
         }));
+
+        let mut receipt = test_red_green_proof_receipt("discriminating", "failed");
+        receipt.request_ids = vec![evidence.proof_requests[0].id.clone()];
+        let mut linked_witnesses = Vec::new();
+        append_follow_up_evidence_witnesses(&mut linked_witnesses, &evidence, &[receipt.clone()]);
+        let linked_request_witness = linked_witnesses
+            .iter()
+            .find(|witness| witness.source == "follow-up-proof-request")
+            .ok_or_else(|| anyhow::anyhow!("missing linked follow-up proof request witness"))?;
+        assert_eq!(linked_request_witness.status, "tool-confirmed");
+        assert_eq!(
+            linked_request_witness.proof_receipt_id.as_deref(),
+            Some(receipt.id.as_str())
+        );
+        assert!(linked_request_witness.evidence.iter().any(|item| {
+            item.contains("Follow-up proof request")
+                && item.contains("bun test test/js/bun/fs/fs.write.test.ts")
+        }));
+        assert!(
+            linked_request_witness
+                .evidence
+                .iter()
+                .any(|item| item.contains("base-plus-tests"))
+        );
 
         write_follow_up_output_artifacts(temp.path(), &outputs)?;
         write_follow_up_evidence_artifact(temp.path(), &evidence)?;
@@ -25445,10 +28248,8 @@ index 1111111..2222222 100644
         assert_eq!(proof_request_file, serde_json::to_value(&proof_json[0])?);
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
         assert_eq!(proof_ndjson.lines().count(), 1);
-        assert!(
-            proof_ndjson
-                .contains("Follow-up proof request arrived after proof broker v0 execution")
-        );
+        assert!(proof_ndjson.contains("routed to the follow-up broker scheduling pass"));
+        assert!(!proof_ndjson.contains("retained for next broker scheduling pass"));
         let witness_json: Vec<super::WitnessRecord> =
             serde_json::from_slice(&fs::read(temp.path().join("review/witnesses.json"))?)?;
         assert_eq!(witness_json.len(), 5);
@@ -25473,7 +28274,7 @@ index 1111111..2222222 100644
         let review = super::ReviewArtifacts {
             shared_context_id: "abc123".to_owned(),
             review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
-            mode: "review-direct".to_owned(),
+            mode: "review-byok".to_owned(),
             posting: "review".to_owned(),
             runtime_profile: "gh-runner".to_owned(),
             run_pass: "manual".to_owned(),
@@ -25995,6 +28796,7 @@ index 1111111..2222222 100644
             command: command.to_owned(),
             run,
             reason: "test reason".to_owned(),
+            required: false,
             timeout_sec: 1,
             class: ToolClass::Static,
             weight: 1,
@@ -26259,6 +29061,33 @@ index 1111111..2222222 100644
         }
     }
 
+    #[test]
+    fn observation_artifacts_normalize_zero_line_to_absent() {
+        let path = "src/main.rs".to_owned();
+        let observation = make_observation(ObservationInput {
+            index: 0,
+            lane: "source-route",
+            question: "source-route",
+            claim: "model supplied a non-positive observation line",
+            kind: "false-premise",
+            status: "refuted",
+            severity: "low",
+            confidence: "high",
+            path: Some(&path),
+            line: Some(0),
+            evidence: vec!["model observation fixture".to_owned()],
+            dedupe_key: None,
+            source: "model-observation",
+        });
+
+        assert_eq!(observation.path.as_deref(), Some("src/main.rs"));
+        assert_eq!(observation.line, None);
+        assert_eq!(
+            observation.dedupe_key,
+            "false-premise:source-route".to_owned()
+        );
+    }
+
     fn lane_plan(id: &str) -> LanePlan {
         LanePlan {
             id: id.to_owned(),
@@ -26366,7 +29195,7 @@ index 1111111..2222222 100644
             allow_heavy: false,
             no_github_summary: true,
             posting: PostingMode::ArtifactOnly,
-            mode: RunMode::ReviewDirect,
+            mode: RunMode::ReviewByok,
             run_pass: super::RunPass::Auto,
             model_mode: ModelMode::Auto,
             selectors: SelectorArgs::default(),
