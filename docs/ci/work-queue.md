@@ -125,6 +125,9 @@ review/metrics.json
 events.ndjson
 ```
 
+`review/metrics.json` records `final_follow_up_tasks`, the unresolved follow-up
+count after late receipt routing and final convergence filtering.
+
 Sensor queue tasks are generated from the tool registry. `tool-status.json`
 must mirror the stable tool metadata from `resolved-tools.json`, including
 timeout, artifact budget, lease flag, gate policy, and artifact paths. The

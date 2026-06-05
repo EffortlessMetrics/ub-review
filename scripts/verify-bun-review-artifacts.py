@@ -1326,6 +1326,15 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     require_receipt_route_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
+    final_orchestrator_plan = load_json(root / "review/final_orchestrator_plan.json")
+    final_follow_up_tasks = final_orchestrator_plan.get("follow_up_tasks")
+    if not isinstance(final_follow_up_tasks, list):
+        fail("review/final_orchestrator_plan.json follow_up_tasks is not an array")
+    final_follow_up_metric = require_non_negative_int(
+        metrics, "metrics.final_follow_up_tasks", "final_follow_up_tasks"
+    )
+    if final_follow_up_metric != len(final_follow_up_tasks):
+        fail("metrics final_follow_up_tasks does not match final_orchestrator_plan")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
     require_model_stage_artifacts(root, review, follow_up_results)
     follow_up_outputs = require_follow_up_outputs(root, follow_up_results)
