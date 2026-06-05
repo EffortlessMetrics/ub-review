@@ -167,6 +167,7 @@ impl ReviewDepth {
 enum ModelProviderPolicy {
     Auto,
     MinimaxPrimary,
+    PrimaryWithFallback,
     MinimaxOnly,
     OpencodeGoCanary,
     OpencodeGoWide,
@@ -177,6 +178,7 @@ impl ModelProviderPolicy {
         match self {
             Self::Auto => "auto",
             Self::MinimaxPrimary => "minimax-primary",
+            Self::PrimaryWithFallback => "primary-with-fallback",
             Self::MinimaxOnly => "minimax-only",
             Self::OpencodeGoCanary => "opencode-go-canary",
             Self::OpencodeGoWide => "opencode-go-wide",
@@ -5162,6 +5164,48 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             dir.join("cargo-allow.receipt.json").display().to_string(),
             "--output".to_owned(),
             dir.join("cargo-allow.md").display().to_string(),
+        ],
+        "cargo-fmt" => vec![
+            "cargo".to_owned(),
+            "fmt".to_owned(),
+            "--all".to_owned(),
+            "--check".to_owned(),
+        ],
+        "cargo-check" => vec![
+            "cargo".to_owned(),
+            "check".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "cargo-test" => vec![
+            "cargo".to_owned(),
+            "test".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "cargo-clippy" => vec![
+            "cargo".to_owned(),
+            "clippy".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+            "--".to_owned(),
+            "-D".to_owned(),
+            "warnings".to_owned(),
+        ],
+        "cargo-doc" => vec![
+            "cargo".to_owned(),
+            "doc".to_owned(),
+            "--workspace".to_owned(),
+            "--no-deps".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "artifact-verifier" => vec![
+            "python".to_owned(),
+            "scripts/verify-bun-review-artifacts.py".to_owned(),
+            "--self-test".to_owned(),
         ],
         "ast-grep" => {
             let config = root.join("tools/ub-rules/sgconfig.yml");
@@ -12474,6 +12518,7 @@ fn provider_spec_for_lane_with_key_state(
         }
         ModelProviderPolicy::Auto
         | ModelProviderPolicy::MinimaxPrimary
+        | ModelProviderPolicy::PrimaryWithFallback
         | ModelProviderPolicy::OpencodeGoCanary
         | ModelProviderPolicy::OpencodeGoWide => direct_minimax_spec(args),
     }
@@ -12485,10 +12530,21 @@ fn fallback_provider_spec_for_lane(
     args: &RunArgs,
 ) -> Option<ProviderSpec> {
     if spec.provider == ModelProvider::OpenCodeGo && lane.id == "opposition" {
-        Some(direct_minimax_spec(args))
-    } else {
-        None
+        return Some(direct_minimax_spec(args));
     }
+    if spec.provider == ModelProvider::MiniMaxDirect
+        && matches!(
+            args.provider_policy,
+            ModelProviderPolicy::PrimaryWithFallback
+        )
+    {
+        return Some(if is_opencode_fast_lane(&lane.id) {
+            opencode_flash_spec(args)
+        } else {
+            opencode_canary_spec(args)
+        });
+    }
+    None
 }
 
 fn direct_minimax_spec(args: &RunArgs) -> ProviderSpec {
@@ -18306,6 +18362,72 @@ fn builtin_tools() -> Vec<ToolPolicy> {
             false,
         ),
         tool(
+            "cargo-fmt",
+            "cargo",
+            ToolClass::Build,
+            1,
+            Trigger::Always,
+            120,
+            32,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-check",
+            "cargo",
+            ToolClass::Build,
+            4,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-test",
+            "cargo",
+            ToolClass::Test,
+            8,
+            Trigger::Always,
+            900,
+            256,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-clippy",
+            "cargo",
+            ToolClass::Build,
+            6,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-doc",
+            "cargo",
+            ToolClass::Build,
+            4,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "artifact-verifier",
+            "python",
+            ToolClass::Static,
+            2,
+            Trigger::Always,
+            120,
+            32,
+            false,
+            true,
+        ),
+        tool(
             "coverage",
             "cargo",
             ToolClass::Coverage,
@@ -19030,6 +19152,119 @@ mod tests {
                 && action.contains("--run-pass \"${{ inputs['run-pass'] }}\""),
             "the action should pass event action and resolved pass input into ub-review run"
         );
+    }
+
+    #[test]
+    fn ub_review_self_profile_loads_baseline_gate_tools() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        assert_eq!(config.review_profile, "ub-review-self");
+        assert_eq!(config.profile, "gh-runner-full");
+        for id in [
+            "cargo-fmt",
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "artifact-verifier",
+            "ripr",
+            "unsafe-review",
+            "ast-grep",
+            "cargo-allow",
+            "actionlint",
+            "coverage",
+        ] {
+            let tool = config
+                .tools
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("missing self-profile tool {id}"))?;
+            assert!(tool.enabled, "{id} should be enabled");
+        }
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        for id in [
+            "cargo-fmt",
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "artifact-verifier",
+        ] {
+            let sensor = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing planned sensor {id}"))?;
+            assert!(sensor.run, "{id} should run in every self gate");
+            assert!(
+                sensor.required,
+                "{id} should be a required self gate sensor"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn baseline_gate_sensor_argvs_match_required_matrix() {
+        let plan = test_plan(Vec::new());
+        let cases = [
+            ("cargo-fmt", vec!["cargo", "fmt", "--all", "--check"]),
+            (
+                "cargo-check",
+                vec!["cargo", "check", "--workspace", "--all-targets", "--locked"],
+            ),
+            (
+                "cargo-test",
+                vec!["cargo", "test", "--workspace", "--all-targets", "--locked"],
+            ),
+            (
+                "cargo-clippy",
+                vec![
+                    "cargo",
+                    "clippy",
+                    "--workspace",
+                    "--all-targets",
+                    "--locked",
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
+            ),
+            (
+                "cargo-doc",
+                vec!["cargo", "doc", "--workspace", "--no-deps", "--locked"],
+            ),
+            (
+                "artifact-verifier",
+                vec![
+                    "python",
+                    "scripts/verify-bun-review-artifacts.py",
+                    "--self-test",
+                ],
+            ),
+        ];
+        for (id, expected) in cases {
+            let sensor = sensor_plan(id, expected[0], true);
+            let argv = super::build_sensor_argv(
+                Path::new("."),
+                Path::new("target/ub-review/sensors/x"),
+                &sensor,
+                &plan,
+            );
+            assert_eq!(argv, expected);
+        }
     }
 
     #[test]
@@ -24277,6 +24512,30 @@ index 1111111..2222222 100644
 
         assert_eq!(spec.provider, ModelProvider::MiniMaxDirect);
         assert_eq!(spec.model, "MiniMax-M3");
+        Ok(())
+    }
+
+    #[test]
+    fn minimax_primary_assigns_opencode_fallbacks() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.lane_width = 10;
+        args.opencode_model = "mimo-v2.5".to_owned();
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
+
+        let security = assignments
+            .iter()
+            .find(|assignment| assignment.lane.id == "security")
+            .ok_or_else(|| anyhow::anyhow!("security lane missing"))?;
+        assert_eq!(security.spec.provider, ModelProvider::MiniMaxDirect);
+        assert_eq!(
+            security.fallback.as_ref().map(|spec| spec.provider),
+            Some(ModelProvider::OpenCodeGo)
+        );
+        assert_eq!(
+            security.fallback.as_ref().map(|spec| spec.model.as_str()),
+            Some("mimo-v2.5")
+        );
         Ok(())
     }
 

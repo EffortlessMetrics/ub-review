@@ -1,0 +1,232 @@
+# ub-review self-dogfood profile.
+# One required GitHub check should run these proof-stream receipts under
+# ub-review/gate while older CI remains available during transition.
+
+review_profile = "ub-review-self"
+profile = "gh-runner-full"
+
+[repo]
+kind = "ub-review"
+ledger = "docs/UB_LEDGER.md"
+base = "origin/main"
+head = "HEAD"
+
+[review]
+posting_engine = "artifact"
+custom_poster = false
+ban_standalone_approval = true
+require_zero_finding_audit = true
+enable_default_lanes = true
+
+[review_body]
+include_successful_lane_table = false
+include_provider_table = "on_failure"
+include_sensor_table = "on_failure"
+include_execution_summary = "none"
+
+# Self-gate proof stream: baseline CI commands are sensors so they run inside
+# ub-review/gate instead of as independent required PR jobs.
+[tools.cargo-fmt]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 1
+timeout_sec = 120
+artifact_budget_mb = 32
+requires_lease = false
+
+[tools.cargo-check]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 4
+timeout_sec = 600
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.cargo-test]
+enabled = true
+class = "test"
+default = "always"
+required = true
+weight = 8
+timeout_sec = 900
+artifact_budget_mb = 256
+requires_lease = false
+
+[tools.cargo-clippy]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 6
+timeout_sec = 600
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.cargo-doc]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 4
+timeout_sec = 600
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.artifact-verifier]
+enabled = true
+class = "static"
+default = "always"
+required = true
+weight = 2
+timeout_sec = 120
+artifact_budget_mb = 32
+requires_lease = false
+
+[tools.tokmd]
+enabled = true
+class = "packet"
+default = "always"
+required = false
+weight = 2
+timeout_sec = 300
+artifact_budget_mb = 192
+requires_lease = false
+
+[tools.cargo-allow]
+enabled = true
+class = "static"
+default = "source-exception-changed"
+required = true
+weight = 2
+timeout_sec = 120
+artifact_budget_mb = 64
+requires_lease = false
+
+[tools.ripr]
+enabled = true
+class = "static"
+default = "rust-behavior-or-tests-changed"
+required = true
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.unsafe-review]
+enabled = true
+class = "static"
+default = "unsafe-or-native-risk-changed"
+required = true
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.ast-grep]
+enabled = true
+class = "search"
+default = "source-changed"
+required = true
+weight = 1
+timeout_sec = 60
+artifact_budget_mb = 64
+requires_lease = false
+
+[tools.actionlint]
+enabled = true
+class = "workflow"
+default = "workflow-changed"
+required = true
+weight = 1
+timeout_sec = 60
+artifact_budget_mb = 32
+requires_lease = false
+
+[tools.coverage]
+enabled = true
+class = "coverage"
+default = "manual"
+required = false
+weight = 6
+timeout_sec = 1800
+artifact_budget_mb = 256
+requires_lease = true
+
+[tools.semgrep]
+enabled = false
+
+[tools.osv-scanner]
+enabled = false
+
+[tools.cargo-audit]
+enabled = false
+
+[tools.cargo-deny]
+enabled = false
+
+[tools.shellcheck]
+enabled = false
+
+[tools.cppcheck]
+enabled = false
+
+[tools.zizmor]
+enabled = false
+
+[tools.gitleaks]
+enabled = false
+
+[[proof.required]]
+id = "cargo-check"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo check --workspace --all-targets --locked"
+reason = "Required Rust workspace check for the ub-review self gate."
+cost = "focused-build"
+timeout_sec = 600
+required = true
+enabled = true
+
+[[proof.required]]
+id = "cargo-doc"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo doc --workspace --no-deps --locked"
+reason = "Required documentation build for the ub-review self gate."
+cost = "focused-build"
+timeout_sec = 600
+required = true
+enabled = true
+
+[gate]
+required_check = "ub-review/gate"
+target_minutes = 30
+hard_timeout_minutes = 60
+post_review_on = ["opened", "ready_for_review"]
+synchronize_mode = "gate-only"
+
+[providers]
+policy = "primary-with-fallback"
+
+[providers.minimax]
+enabled = true
+env = "MINIMAX_API_KEY"
+model = "MiniMax-M3"
+role = "primary"
+prompt_cache = "explicit-anthropic"
+max_concurrency = 12
+
+[providers.opencode]
+enabled = true
+env = "OPENCODE"
+role = "fallback"
+models = ["deepseek-v4-flash", "mimo-v2.5"]
+max_concurrency = 8
+
+[tools.ripr.gate]
+scope = "on-diff"
+max_new_unsuppressed = 0

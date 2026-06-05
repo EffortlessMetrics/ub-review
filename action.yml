@@ -81,6 +81,10 @@ inputs:
     description: 'Execution mode: review-byok or intelligent-ci. Legacy review-direct is accepted as an alias.'
     default: review-byok
     required: false
+  event-mode:
+    description: 'Event-depth selector. auto uses the GitHub event action to resolve opened, ready_for_review, synchronize, and manual passes.'
+    default: auto
+    required: false
   run-pass:
     description: 'Run pass identity: auto, opened, ready_for_review, pull_request_other, or manual. Auto maps pull_request opened and ready_for_review to the matching pass.'
     default: auto
@@ -146,7 +150,7 @@ inputs:
     default: ''
     required: false
   provider-policy:
-    description: 'Provider policy: minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
+    description: 'Provider policy: primary-with-fallback, minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
     default: minimax-primary
     required: false
   lane-width:
