@@ -25,6 +25,8 @@ const STANDARD_MODEL_CONCURRENCY: usize = 8;
 const STANDARD_MAX_MODEL_CALLS: usize = 14;
 const DEFAULT_REVIEW_PROFILE: &str = "bun-ub-v0";
 const TOKMD_ANALYZE_PRESET: &str = "bun-ub";
+const DEFAULT_INITIAL_PACKET_DEADLINE_SEC: u64 = 60;
+const DEFAULT_FOLLOW_UP_PACKET_DEADLINE_SEC: u64 = 300;
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -1548,6 +1550,11 @@ struct ProofTaskArtifact {
     schema: &'static str,
     id: String,
     kind: String,
+    source: String,
+    priority: String,
+    packet_policy: String,
+    deadline_sec: u64,
+    gate_policy: String,
     status: String,
     command: String,
     head_command: String,
@@ -1571,6 +1578,48 @@ struct ProofTaskLease {
     memory_mb: u64,
     disk_mb: u64,
     network: bool,
+    timeout_sec: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct WorkQueueArtifact<'a> {
+    schema: &'static str,
+    initial_packet_deadline_sec: u64,
+    follow_up_deadline_sec: u64,
+    tasks: &'a [WorkQueueTaskArtifact],
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct WorkQueueTaskArtifact {
+    schema: &'static str,
+    id: String,
+    kind: String,
+    source: String,
+    priority: String,
+    packet_policy: String,
+    deadline_sec: u64,
+    consumers: Vec<String>,
+    gate_policy: String,
+    dedupe_key: String,
+    lease: ProofTaskLease,
+    receipt_path: String,
+    status: String,
+    task_path: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct WorkEventArtifact {
+    schema: &'static str,
+    kind: &'static str,
+    task_id: String,
+    task_kind: String,
+    source: String,
+    packet_policy: String,
+    deadline_sec: u64,
+    consumers: Vec<String>,
+    gate_policy: String,
+    status: String,
+    receipt_path: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -8062,6 +8111,7 @@ fn write_proof_planner_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("proof_tasks.ndjson"), ndjson)?;
+    write_work_queue_artifacts(out, &output.proof_tasks)?;
     Ok(())
 }
 
@@ -8077,10 +8127,19 @@ fn proof_task_artifact(
         None => plan.head_command.clone(),
     };
     let purpose = focused_proof_task_purpose(&plan);
+    let timeout_sec = plan
+        .timeout_sec
+        .saturating_mul(plan.mode.command_count())
+        .min(budget.max_total_seconds);
     ProofTaskArtifact {
         schema: "ub-review.proof_task.v1",
         id: plan.id,
         kind: "focused-test".to_owned(),
+        source: "proof-planner".to_owned(),
+        priority: "high".to_owned(),
+        packet_policy: "late-follow-up".to_owned(),
+        deadline_sec: timeout_sec,
+        gate_policy: "trust-affecting".to_owned(),
         status: plan.status,
         command,
         head_command: plan.head_command,
@@ -8093,15 +8152,13 @@ fn proof_task_artifact(
         ],
         value: "high".to_owned(),
         cost: "low".to_owned(),
-        timeout_sec: plan
-            .timeout_sec
-            .saturating_mul(plan.mode.command_count())
-            .min(budget.max_total_seconds),
+        timeout_sec,
         lease: ProofTaskLease {
             cpu: lease_budget.cpu,
             memory_mb: lease_budget.memory_mb,
             disk_mb: lease_budget.disk_mb,
             network: lease_budget.network,
+            timeout_sec,
         },
         test_file: plan.test_file,
         test_name: plan.test_name,
@@ -8116,10 +8173,16 @@ fn focused_build_task_artifact(
     budget: ProofBudget,
     lease_budget: ProofLeaseBudget,
 ) -> ProofTaskArtifact {
+    let timeout_sec = plan.timeout_sec.min(budget.max_total_seconds);
     ProofTaskArtifact {
         schema: "ub-review.proof_task.v1",
         id: plan.id,
         kind: "focused-build".to_owned(),
+        source: "proof-planner".to_owned(),
+        priority: "medium".to_owned(),
+        packet_policy: "late-follow-up".to_owned(),
+        deadline_sec: timeout_sec,
+        gate_policy: "trust-affecting".to_owned(),
         status: plan.status,
         command: plan.command.clone(),
         head_command: plan.command.clone(),
@@ -8128,12 +8191,13 @@ fn focused_build_task_artifact(
         consumers: focused_build_task_consumers(&plan.requested_by),
         value: "medium".to_owned(),
         cost: "focused-build".to_owned(),
-        timeout_sec: plan.timeout_sec.min(budget.max_total_seconds),
+        timeout_sec,
         lease: ProofTaskLease {
             cpu: lease_budget.cpu,
             memory_mb: lease_budget.memory_mb,
             disk_mb: lease_budget.disk_mb,
             network: lease_budget.network,
+            timeout_sec,
         },
         test_file: "workspace".to_owned(),
         test_name: None,
@@ -8141,6 +8205,75 @@ fn focused_build_task_artifact(
         requested_by: plan.requested_by,
         request_ids: plan.request_ids,
     }
+}
+
+fn write_work_queue_artifacts(out: &Path, proof_tasks: &[ProofTaskArtifact]) -> Result<()> {
+    let tasks = proof_tasks
+        .iter()
+        .map(work_queue_task_from_proof_task)
+        .collect::<Vec<_>>();
+    let queue = WorkQueueArtifact {
+        schema: "ub-review.work_queue.v1",
+        initial_packet_deadline_sec: DEFAULT_INITIAL_PACKET_DEADLINE_SEC,
+        follow_up_deadline_sec: DEFAULT_FOLLOW_UP_PACKET_DEADLINE_SEC,
+        tasks: &tasks,
+    };
+    fs::write(
+        out.join("work_queue.json"),
+        serde_json::to_vec_pretty(&queue)?,
+    )?;
+
+    let mut ndjson = String::new();
+    for task in &tasks {
+        let event = WorkEventArtifact {
+            schema: "ub-review.work_event.v1",
+            kind: "task_planned",
+            task_id: task.id.clone(),
+            task_kind: task.kind.clone(),
+            source: task.source.clone(),
+            packet_policy: task.packet_policy.clone(),
+            deadline_sec: task.deadline_sec,
+            consumers: task.consumers.clone(),
+            gate_policy: task.gate_policy.clone(),
+            status: task.status.clone(),
+            receipt_path: task.receipt_path.clone(),
+        };
+        ndjson.push_str(&serde_json::to_string(&event)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("work_events.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn work_queue_task_from_proof_task(task: &ProofTaskArtifact) -> WorkQueueTaskArtifact {
+    WorkQueueTaskArtifact {
+        schema: "ub-review.work_queue_task.v1",
+        id: task.id.clone(),
+        kind: task.kind.clone(),
+        source: task.source.clone(),
+        priority: task.priority.clone(),
+        packet_policy: task.packet_policy.clone(),
+        deadline_sec: task.deadline_sec,
+        consumers: task.consumers.clone(),
+        gate_policy: task.gate_policy.clone(),
+        dedupe_key: work_queue_dedupe_key(task),
+        lease: task.lease.clone(),
+        receipt_path: "review/proof_receipts.json".to_owned(),
+        status: task.status.clone(),
+        task_path: "proof_tasks.ndjson".to_owned(),
+    }
+}
+
+fn work_queue_dedupe_key(task: &ProofTaskArtifact) -> String {
+    if task.request_ids.is_empty() {
+        return format!("{}:{}:{}", task.source, task.kind, task.id);
+    }
+    format!(
+        "{}:{}:{}",
+        task.source,
+        task.kind,
+        task.request_ids.join("+")
+    )
 }
 
 fn focused_build_task_consumers(requested_by: &[String]) -> Vec<String> {

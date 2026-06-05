@@ -400,6 +400,8 @@ def require_common_tree(root: pathlib.Path) -> None:
         "input/diff.patch",
         "input/diff-context.json",
         "events.ndjson",
+        "work_queue.json",
+        "work_events.ndjson",
         "plan.json",
         "resolved-profile.json",
         "resolved-plan.json",
@@ -1628,6 +1630,7 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
             fail(f"invalid proof_tasks.ndjson line {index + 1}: {error}")
         if parsed != proof_tasks[index]:
             fail(f"proof_tasks.ndjson line {index + 1} does not match proof planner output")
+    require_work_queue_artifacts(root, proof_tasks)
 
 
 def require_proof_task_schema(task: dict) -> None:
@@ -1635,12 +1638,39 @@ def require_proof_task_schema(task: dict) -> None:
         fail(f"proof task is not an object: {task!r}")
     if task.get("schema") != "ub-review.proof_task.v1":
         fail(f"proof task has wrong schema: {task!r}")
-    for field in ["id", "kind", "mode", "command", "purpose", "value", "cost", "status"]:
+    for field in [
+        "id",
+        "kind",
+        "source",
+        "priority",
+        "packet_policy",
+        "gate_policy",
+        "mode",
+        "command",
+        "purpose",
+        "value",
+        "cost",
+        "status",
+    ]:
         if not isinstance(task.get(field), str) or not task[field]:
             fail(f"proof task missing string field {field}: {task!r}")
+    if task.get("packet_policy") not in {
+        "must-run",
+        "include-if-ready",
+        "late-follow-up",
+        "adaptive",
+        "artifact-only",
+        "gate-only",
+    }:
+        fail(f"proof task packet_policy is invalid: {task!r}")
+    deadline = task.get("deadline_sec")
+    if not isinstance(deadline, int) or isinstance(deadline, bool) or deadline < 0:
+        fail(f"proof task deadline_sec is invalid: {task!r}")
     timeout = task.get("timeout_sec")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 0:
         fail(f"proof task timeout_sec is invalid: {task!r}")
+    if timeout != deadline:
+        fail(f"proof task timeout_sec does not match deadline_sec: {task!r}")
     consumers = task.get("consumers")
     if not isinstance(consumers, list) or not all(
         isinstance(consumer, str) and consumer for consumer in consumers
@@ -1655,6 +1685,94 @@ def require_proof_task_schema(task: dict) -> None:
             fail(f"proof task lease {field} is invalid: {task!r}")
     if lease.get("network") not in {True, False}:
         fail(f"proof task lease network is not boolean: {task!r}")
+    lease_timeout = lease.get("timeout_sec")
+    if (
+        not isinstance(lease_timeout, int)
+        or isinstance(lease_timeout, bool)
+        or lease_timeout != deadline
+    ):
+        fail(f"proof task lease timeout_sec does not match deadline_sec: {task!r}")
+
+
+def require_work_queue_artifacts(root: pathlib.Path, proof_tasks: list[dict]) -> None:
+    queue = load_json(root / "work_queue.json")
+    if queue.get("schema") != "ub-review.work_queue.v1":
+        fail("work_queue.json has wrong schema")
+    for field in ["initial_packet_deadline_sec", "follow_up_deadline_sec"]:
+        value = queue.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            fail(f"work_queue.json {field} is invalid: {value!r}")
+    tasks = queue.get("tasks")
+    if not isinstance(tasks, list):
+        fail("work_queue.json tasks is not an array")
+    if len(tasks) != len(proof_tasks):
+        fail("work_queue.json task count does not match proof planner output")
+
+    for index, task in enumerate(tasks):
+        require_work_queue_task_schema(task, proof_tasks[index])
+
+    lines = [line for line in read_text(root / "work_events.ndjson").splitlines() if line.strip()]
+    if len(lines) != len(tasks):
+        fail("work_events.ndjson line count does not match work_queue.json tasks")
+    for index, line in enumerate(lines):
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid work_events.ndjson line {index + 1}: {error}")
+        require_work_event_schema(event, tasks[index])
+
+
+def require_work_queue_task_schema(task: dict, proof_task: dict) -> None:
+    if not isinstance(task, dict):
+        fail(f"work queue task is not an object: {task!r}")
+    if task.get("schema") != "ub-review.work_queue_task.v1":
+        fail(f"work queue task has wrong schema: {task!r}")
+    mirrored = [
+        "id",
+        "kind",
+        "source",
+        "priority",
+        "packet_policy",
+        "deadline_sec",
+        "consumers",
+        "gate_policy",
+        "lease",
+        "status",
+    ]
+    for field in mirrored:
+        if task.get(field) != proof_task.get(field):
+            fail(f"work queue task {field} does not match proof task: {task!r}")
+    if not isinstance(task.get("dedupe_key"), str) or not task["dedupe_key"]:
+        fail(f"work queue task dedupe_key is invalid: {task!r}")
+    if task.get("receipt_path") != "review/proof_receipts.json":
+        fail(f"work queue task receipt_path is invalid: {task!r}")
+    if task.get("task_path") != "proof_tasks.ndjson":
+        fail(f"work queue task task_path is invalid: {task!r}")
+
+
+def require_work_event_schema(event: dict, task: dict) -> None:
+    if not isinstance(event, dict):
+        fail(f"work event is not an object: {event!r}")
+    if event.get("schema") != "ub-review.work_event.v1":
+        fail(f"work event has wrong schema: {event!r}")
+    if event.get("kind") != "task_planned":
+        fail(f"work event kind expected task_planned, got {event.get('kind')!r}")
+    expected = {
+        "task_id": "id",
+        "task_kind": "kind",
+        "source": "source",
+        "packet_policy": "packet_policy",
+        "deadline_sec": "deadline_sec",
+        "consumers": "consumers",
+        "gate_policy": "gate_policy",
+        "status": "status",
+        "receipt_path": "receipt_path",
+    }
+    for event_field, task_field in expected.items():
+        if event.get(event_field) != task.get(task_field):
+            fail(
+                f"work event {event_field} does not match queue task {task_field}: {event!r}"
+            )
 
 
 def require_proof_request_files(root: pathlib.Path, proof_requests: list[dict]) -> None:
@@ -3279,6 +3397,8 @@ def require_post_receipt(root: pathlib.Path) -> None:
 def require_no_secret_markers(root: pathlib.Path) -> None:
     paths = [
         root / "running-summary.md",
+        root / "work_queue.json",
+        root / "work_events.ndjson",
         root / "review/shared_context.md",
         root / "review/pr_thread_context.json",
         root / "review/terminal_state.json",
