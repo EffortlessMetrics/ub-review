@@ -1781,6 +1781,30 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         sensor_task["receipt_path"],
         "sensors/ripr/ub-review-sensor-status.json"
     );
+    let sensor_receipt_ready = out
+        .join(json_str_field(sensor_task, "receipt_path")?)
+        .is_file();
+    let expected_initial_packet_status = if sensor_task["status"] == "planned"
+        && sensor_receipt_ready
+        && matches!(
+            sensor_task["packet_policy"].as_str(),
+            Some("must-run" | "include-if-ready")
+        ) {
+        "ready_for_initial_packet"
+    } else if sensor_task["status"] == "planned"
+        && matches!(
+            sensor_task["packet_policy"].as_str(),
+            Some("must-run" | "include-if-ready" | "late-follow-up" | "adaptive")
+        )
+    {
+        "pending_initial_packet"
+    } else {
+        "not_initial_packet"
+    };
+    assert_eq!(
+        sensor_task["initial_packet_status"],
+        expected_initial_packet_status
+    );
     assert_eq!(sensor_task["task_path"], "resolved-tools.json");
     assert_eq!(
         sensor_task["consumers"],
@@ -1814,6 +1838,10 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     }
     assert_eq!(queue_task["receipt_path"], "review/proof_receipts.json");
     assert_eq!(queue_task["task_path"], "proof_tasks.ndjson");
+    assert_eq!(
+        queue_task["initial_packet_status"],
+        "pending_initial_packet"
+    );
     assert!(
         queue_task["dedupe_key"]
             .as_str()
@@ -1844,6 +1872,10 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert_eq!(work_event["gate_policy"], queue_task["gate_policy"]);
     assert_eq!(work_event["status"], queue_task["status"]);
     assert_eq!(work_event["receipt_path"], queue_task["receipt_path"]);
+    assert_eq!(
+        work_event["initial_packet_status"],
+        queue_task["initial_packet_status"]
+    );
 
     let receipt_ndjson = fs::read_to_string(out.join("proof_receipts.ndjson"))?;
     assert_eq!(

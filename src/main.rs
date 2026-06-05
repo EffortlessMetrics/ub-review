@@ -1786,6 +1786,7 @@ struct WorkQueueTaskArtifact {
     lease: ProofTaskLease,
     receipt_path: String,
     status: String,
+    initial_packet_status: String,
     task_path: String,
 }
 
@@ -1801,6 +1802,7 @@ struct WorkEventArtifact {
     consumers: Vec<String>,
     gate_policy: String,
     status: String,
+    initial_packet_status: String,
     receipt_path: String,
 }
 
@@ -9555,7 +9557,7 @@ fn write_work_queue_artifacts(
     let mut tasks = plan
         .sensors
         .iter()
-        .map(work_queue_task_from_sensor)
+        .map(|sensor| work_queue_task_from_sensor(out, sensor))
         .collect::<Vec<_>>();
     tasks.extend(proof_tasks.iter().map(work_queue_task_from_proof_task));
     let queue = WorkQueueArtifact {
@@ -9582,6 +9584,7 @@ fn write_work_queue_artifacts(
             consumers: task.consumers.clone(),
             gate_policy: task.gate_policy.clone(),
             status: task.status.clone(),
+            initial_packet_status: task.initial_packet_status.clone(),
             receipt_path: task.receipt_path.clone(),
         };
         ndjson.push_str(&serde_json::to_string(&event)?);
@@ -9591,26 +9594,36 @@ fn write_work_queue_artifacts(
     Ok(())
 }
 
-fn work_queue_task_from_sensor(sensor: &SensorPlan) -> WorkQueueTaskArtifact {
+fn work_queue_task_from_sensor(out: &Path, sensor: &SensorPlan) -> WorkQueueTaskArtifact {
+    let packet_policy = work_queue_sensor_packet_policy(sensor);
+    let receipt_path = format!("sensors/{}/ub-review-sensor-status.json", sensor.id);
+    let status = if sensor.run { "planned" } else { "skipped" }.to_owned();
+    let receipt_ready = out.join(&receipt_path).is_file();
     WorkQueueTaskArtifact {
         schema: "ub-review.work_queue_task.v1",
         id: format!("sensor-{}", sensor.id),
         kind: "sensor".to_owned(),
         source: "tool-registry".to_owned(),
         priority: work_queue_sensor_priority(sensor),
-        packet_policy: work_queue_sensor_packet_policy(sensor),
+        packet_policy: packet_policy.clone(),
         deadline_sec: work_queue_sensor_deadline(sensor),
         consumers: work_queue_sensor_consumers(&sensor.id),
         gate_policy: work_queue_sensor_gate_policy(sensor),
         dedupe_key: format!("tool-registry:sensor:{}", sensor.id),
         lease: work_queue_sensor_lease(sensor),
-        receipt_path: format!("sensors/{}/ub-review-sensor-status.json", sensor.id),
-        status: if sensor.run { "planned" } else { "skipped" }.to_owned(),
+        receipt_path,
+        status: status.clone(),
+        initial_packet_status: work_queue_initial_packet_status(
+            &packet_policy,
+            &status,
+            receipt_ready,
+        ),
         task_path: "resolved-tools.json".to_owned(),
     }
 }
 
 fn work_queue_task_from_proof_task(task: &ProofTaskArtifact) -> WorkQueueTaskArtifact {
+    let receipt_ready = false;
     WorkQueueTaskArtifact {
         schema: "ub-review.work_queue_task.v1",
         id: task.id.clone(),
@@ -9625,7 +9638,29 @@ fn work_queue_task_from_proof_task(task: &ProofTaskArtifact) -> WorkQueueTaskArt
         lease: task.lease.clone(),
         receipt_path: "review/proof_receipts.json".to_owned(),
         status: task.status.clone(),
+        initial_packet_status: work_queue_initial_packet_status(
+            &task.packet_policy,
+            &task.status,
+            receipt_ready,
+        ),
         task_path: "proof_tasks.ndjson".to_owned(),
+    }
+}
+
+fn work_queue_initial_packet_status(
+    packet_policy: &str,
+    status: &str,
+    receipt_ready: bool,
+) -> String {
+    match packet_policy {
+        "must-run" | "include-if-ready" if status == "planned" && receipt_ready => {
+            "ready_for_initial_packet".to_owned()
+        }
+        "must-run" | "include-if-ready" if status == "planned" => {
+            "pending_initial_packet".to_owned()
+        }
+        "late-follow-up" | "adaptive" if status == "planned" => "pending_initial_packet".to_owned(),
+        _ => "not_initial_packet".to_owned(),
     }
 }
 
@@ -21065,6 +21100,12 @@ mod tests {
             true,
         );
         let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("sensors/cargo-fmt"))?;
+        fs::write(
+            temp.path()
+                .join("sensors/cargo-fmt/ub-review-sensor-status.json"),
+            "{}",
+        )?;
         super::write_work_queue_artifacts(temp.path(), &plan, &[])?;
         let queue: serde_json::Value =
             serde_json::from_slice(&fs::read(temp.path().join("work_queue.json"))?)?;
@@ -21086,6 +21127,10 @@ mod tests {
             cargo_fmt["receipt_path"],
             "sensors/cargo-fmt/ub-review-sensor-status.json"
         );
+        assert_eq!(
+            cargo_fmt["initial_packet_status"],
+            "ready_for_initial_packet"
+        );
 
         let tokmd = tasks
             .iter()
@@ -21093,6 +21138,7 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("tokmd queue task missing"))?;
         assert_eq!(tokmd["packet_policy"], "include-if-ready");
         assert_eq!(tokmd["gate_policy"], "review-context");
+        assert_eq!(tokmd["initial_packet_status"], "pending_initial_packet");
 
         let semgrep = tasks
             .iter()
@@ -21102,6 +21148,21 @@ mod tests {
         assert_eq!(semgrep["status"], "skipped");
         assert_eq!(semgrep["deadline_sec"], 0);
         assert_eq!(semgrep["lease"]["timeout_sec"], semgrep["deadline_sec"]);
+        assert_eq!(semgrep["initial_packet_status"], "not_initial_packet");
+
+        let work_events = fs::read_to_string(temp.path().join("work_events.ndjson"))?;
+        let cargo_fmt_event = work_events
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .find(|event| event["task_id"] == "sensor-cargo-fmt")
+            .ok_or_else(|| anyhow::anyhow!("cargo-fmt work event missing"))?;
+        assert_eq!(
+            cargo_fmt_event["initial_packet_status"],
+            cargo_fmt["initial_packet_status"]
+        );
         Ok(())
     }
 

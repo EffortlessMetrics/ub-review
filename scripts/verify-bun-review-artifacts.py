@@ -2309,7 +2309,7 @@ def require_work_queue_artifacts(root: pathlib.Path, proof_tasks: list[dict]) ->
         task = sensor_tasks_by_id.get(f"sensor-{tool_id}")
         if task is None:
             fail(f"missing sensor work queue task for tool {tool_id!r}")
-        require_sensor_work_queue_task_schema(task, tool)
+        require_sensor_work_queue_task_schema(root, task, tool)
     proof_queue_tasks = tasks[len(tools) :]
     for index, task in enumerate(proof_queue_tasks):
         require_proof_work_queue_task_schema(task, proof_tasks[index])
@@ -2325,7 +2325,7 @@ def require_work_queue_artifacts(root: pathlib.Path, proof_tasks: list[dict]) ->
         require_work_event_schema(event, tasks[index])
 
 
-def require_sensor_work_queue_task_schema(task: dict, tool: dict) -> None:
+def require_sensor_work_queue_task_schema(root: pathlib.Path, task: dict, tool: dict) -> None:
     require_work_queue_task_base_schema(task)
     tool_id = tool.get("id")
     if not isinstance(tool_id, str) or not tool_id:
@@ -2344,6 +2344,12 @@ def require_sensor_work_queue_task_schema(task: dict, tool: dict) -> None:
         "status": "planned" if tool.get("planned_run") is True else "skipped",
         "task_path": "resolved-tools.json",
     }
+    receipt_ready = (root / expected["receipt_path"]).is_file()
+    expected["initial_packet_status"] = expected_work_queue_initial_packet_status(
+        expected["packet_policy"],
+        expected["status"],
+        receipt_ready,
+    )
     for field, value in expected.items():
         if task.get(field) != value:
             fail(f"sensor work queue task {field} mismatch: task={task!r} tool={tool!r}")
@@ -2399,6 +2405,13 @@ def require_proof_work_queue_task_schema(task: dict, proof_task: dict) -> None:
         fail(f"work queue task receipt_path is invalid: {task!r}")
     if task.get("task_path") != "proof_tasks.ndjson":
         fail(f"work queue task task_path is invalid: {task!r}")
+    expected_initial_packet_status = expected_work_queue_initial_packet_status(
+        proof_task.get("packet_policy"),
+        proof_task.get("status"),
+        False,
+    )
+    if task.get("initial_packet_status") != expected_initial_packet_status:
+        fail(f"proof work queue task initial_packet_status is invalid: {task!r}")
 
 
 def require_work_queue_task_base_schema(task: dict) -> None:
@@ -2408,6 +2421,28 @@ def require_work_queue_task_base_schema(task: dict) -> None:
         fail(f"work queue task has wrong schema: {task!r}")
     if not isinstance(task.get("dedupe_key"), str) or not task["dedupe_key"]:
         fail(f"work queue task dedupe_key is invalid: {task!r}")
+    if task.get("initial_packet_status") not in {
+        "ready_for_initial_packet",
+        "pending_initial_packet",
+        "not_initial_packet",
+    }:
+        fail(f"work queue task initial_packet_status is invalid: {task!r}")
+
+
+def expected_work_queue_initial_packet_status(
+    packet_policy: object, status: object, receipt_ready: bool
+) -> str:
+    if (
+        packet_policy in {"must-run", "include-if-ready"}
+        and status == "planned"
+        and receipt_ready
+    ):
+        return "ready_for_initial_packet"
+    if packet_policy in {"must-run", "include-if-ready"} and status == "planned":
+        return "pending_initial_packet"
+    if packet_policy in {"late-follow-up", "adaptive"} and status == "planned":
+        return "pending_initial_packet"
+    return "not_initial_packet"
 
 
 def require_work_event_schema(event: dict, task: dict) -> None:
@@ -2426,6 +2461,7 @@ def require_work_event_schema(event: dict, task: dict) -> None:
         "consumers": "consumers",
         "gate_policy": "gate_policy",
         "status": "status",
+        "initial_packet_status": "initial_packet_status",
         "receipt_path": "receipt_path",
     }
     for event_field, task_field in expected.items():
