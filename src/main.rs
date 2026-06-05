@@ -855,8 +855,7 @@ struct Budgets {
     sanitizer: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default)]
+#[derive(Clone, Debug, Serialize)]
 struct ToolPolicy {
     id: String,
     command: String,
@@ -868,6 +867,90 @@ struct ToolPolicy {
     artifact_budget_mb: u64,
     requires_lease: bool,
     enabled: bool,
+    #[serde(skip)]
+    provided: ToolPolicyProvided,
+}
+
+#[derive(Clone, Debug, Default)]
+struct ToolPolicyProvided {
+    id: bool,
+    command: bool,
+    class: bool,
+    weight: bool,
+    default: bool,
+    required: bool,
+    timeout_sec: bool,
+    artifact_budget_mb: bool,
+    requires_lease: bool,
+    enabled: bool,
+}
+
+#[derive(Default, Deserialize)]
+struct ToolPolicyInput {
+    id: Option<String>,
+    command: Option<String>,
+    class: Option<ToolClass>,
+    weight: Option<u32>,
+    default: Option<Trigger>,
+    required: Option<bool>,
+    timeout_sec: Option<u64>,
+    artifact_budget_mb: Option<u64>,
+    requires_lease: Option<bool>,
+    enabled: Option<bool>,
+}
+
+impl ToolPolicyProvided {
+    fn all() -> Self {
+        Self {
+            id: true,
+            command: true,
+            class: true,
+            weight: true,
+            default: true,
+            required: true,
+            timeout_sec: true,
+            artifact_budget_mb: true,
+            requires_lease: true,
+            enabled: true,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ToolPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let input = ToolPolicyInput::deserialize(deserializer)?;
+        let defaults = ToolPolicy::default();
+        let provided = ToolPolicyProvided {
+            id: input.id.is_some(),
+            command: input.command.is_some(),
+            class: input.class.is_some(),
+            weight: input.weight.is_some(),
+            default: input.default.is_some(),
+            required: input.required.is_some(),
+            timeout_sec: input.timeout_sec.is_some(),
+            artifact_budget_mb: input.artifact_budget_mb.is_some(),
+            requires_lease: input.requires_lease.is_some(),
+            enabled: input.enabled.is_some(),
+        };
+        Ok(Self {
+            id: input.id.unwrap_or(defaults.id),
+            command: input.command.unwrap_or(defaults.command),
+            class: input.class.unwrap_or(defaults.class),
+            weight: input.weight.unwrap_or(defaults.weight),
+            default: input.default.unwrap_or(defaults.default),
+            required: input.required.unwrap_or(defaults.required),
+            timeout_sec: input.timeout_sec.unwrap_or(defaults.timeout_sec),
+            artifact_budget_mb: input
+                .artifact_budget_mb
+                .unwrap_or(defaults.artifact_budget_mb),
+            requires_lease: input.requires_lease.unwrap_or(defaults.requires_lease),
+            enabled: input.enabled.unwrap_or(defaults.enabled),
+            provided,
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -2781,6 +2864,7 @@ impl Default for ToolPolicy {
             artifact_budget_mb: 64,
             requires_lease: false,
             enabled: true,
+            provided: ToolPolicyProvided::default(),
         }
     }
 }
@@ -2812,20 +2896,35 @@ impl Config {
         for (key, default_tool) in defaults.tools {
             match self.tools.get_mut(&key) {
                 Some(tool) => {
-                    if tool.id.is_empty() {
+                    if !tool.provided.id || tool.id.is_empty() {
                         tool.id = default_tool.id;
                     }
-                    if tool.command.is_empty() {
+                    if !tool.provided.command || tool.command.is_empty() {
                         tool.command = default_tool.command;
                     }
-                    if tool.timeout_sec == 0 {
+                    if !tool.provided.class {
+                        tool.class = default_tool.class;
+                    }
+                    if !tool.provided.weight || tool.weight == 0 {
+                        tool.weight = default_tool.weight;
+                    }
+                    if !tool.provided.default {
+                        tool.default = default_tool.default;
+                    }
+                    if !tool.provided.required {
+                        tool.required = default_tool.required;
+                    }
+                    if !tool.provided.timeout_sec || tool.timeout_sec == 0 {
                         tool.timeout_sec = default_tool.timeout_sec;
                     }
-                    if tool.artifact_budget_mb == 0 {
+                    if !tool.provided.artifact_budget_mb || tool.artifact_budget_mb == 0 {
                         tool.artifact_budget_mb = default_tool.artifact_budget_mb;
                     }
-                    if tool.weight == 0 {
-                        tool.weight = default_tool.weight;
+                    if !tool.provided.requires_lease {
+                        tool.requires_lease = default_tool.requires_lease;
+                    }
+                    if !tool.provided.enabled {
+                        tool.enabled = default_tool.enabled;
                     }
                 }
                 None => {
@@ -19055,6 +19154,7 @@ fn tool(
         artifact_budget_mb,
         requires_lease,
         enabled,
+        provided: ToolPolicyProvided::all(),
     }
 }
 
@@ -20038,6 +20138,136 @@ mod tests {
             .find(|tool| tool.id == "actionlint")
             .ok_or_else(|| anyhow::anyhow!("source resolved actionlint missing"))?;
         assert!(!source_resolved_actionlint.required);
+        Ok(())
+    }
+
+    #[test]
+    fn partial_tool_config_inherits_builtin_routing_defaults() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut config: Config = toml::from_str(
+            r#"
+[tools.actionlint]
+required = true
+"#,
+        )?;
+        config.merge_defaults();
+        let actionlint = config
+            .tools
+            .get("actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint tool missing"))?;
+        assert_eq!(actionlint.command, "actionlint");
+        assert_eq!(actionlint.class, ToolClass::Workflow);
+        assert_eq!(actionlint.default, super::Trigger::WorkflowChanged);
+        assert_eq!(actionlint.weight, 1);
+        assert_eq!(actionlint.timeout_sec, 60);
+        assert_eq!(actionlint.artifact_budget_mb, 32);
+        assert!(actionlint.enabled);
+        assert!(actionlint.required);
+
+        let workflow_files = vec![".github/workflows/ci.yml".to_owned()];
+        let workflow_flags = classify_diff(&workflow_files, "+name: ci");
+        let workflow_diff = DiffContext {
+            base: "HEAD~1".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: workflow_files,
+            patch: "+name: ci".to_owned(),
+            diff_class: DiffClass::WorkflowTooling,
+            flags: workflow_flags,
+        };
+        let workflow_plan = super::build_plan(
+            &config,
+            &Profile::default(),
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: None,
+                free_disk_mb: None,
+                load_1m: None,
+                github_actions: false,
+            },
+            &workflow_diff,
+            temp.path(),
+            false,
+        );
+        let workflow_actionlint = workflow_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("workflow actionlint not planned"))?;
+        assert!(workflow_actionlint.required);
+        assert!(workflow_actionlint.run);
+        assert_eq!(workflow_actionlint.class, ToolClass::Workflow);
+
+        let resolved_tools =
+            super::resolved_tools_artifact(&config, &Profile::default(), &workflow_plan);
+        let resolved_actionlint = resolved_tools
+            .tools
+            .iter()
+            .find(|tool| tool.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("resolved actionlint missing"))?;
+        assert_eq!(resolved_actionlint.class, ToolClass::Workflow);
+        assert_eq!(
+            resolved_actionlint.required_if,
+            super::Trigger::WorkflowChanged
+        );
+        assert!(resolved_actionlint.required);
+        assert!(resolved_actionlint.planned_run);
+
+        let source_diff = test_diff();
+        let source_plan = super::build_plan(
+            &config,
+            &Profile::default(),
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: None,
+                free_disk_mb: None,
+                load_1m: None,
+                github_actions: false,
+            },
+            &source_diff,
+            temp.path(),
+            false,
+        );
+        let source_actionlint = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("source actionlint not planned"))?;
+        assert!(!source_actionlint.required);
+        assert!(!source_actionlint.run);
+        assert_eq!(source_actionlint.reason, "trigger did not match this diff");
+        Ok(())
+    }
+
+    #[test]
+    fn partial_tool_config_preserves_explicit_overrides() -> Result<()> {
+        let mut config: Config = toml::from_str(
+            r#"
+[tools.actionlint]
+command = "custom-actionlint"
+class = "static"
+default = "always"
+required = true
+weight = 7
+timeout_sec = 123
+artifact_budget_mb = 45
+requires_lease = true
+enabled = false
+"#,
+        )?;
+        config.merge_defaults();
+        let actionlint = config
+            .tools
+            .get("actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint tool missing"))?;
+        assert_eq!(actionlint.command, "custom-actionlint");
+        assert_eq!(actionlint.class, ToolClass::Static);
+        assert_eq!(actionlint.default, super::Trigger::Always);
+        assert!(actionlint.required);
+        assert_eq!(actionlint.weight, 7);
+        assert_eq!(actionlint.timeout_sec, 123);
+        assert_eq!(actionlint.artifact_budget_mb, 45);
+        assert!(actionlint.requires_lease);
+        assert!(!actionlint.enabled);
         Ok(())
     }
 
