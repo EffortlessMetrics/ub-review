@@ -1161,6 +1161,9 @@ struct ToolStatusEntry {
     required_reason: String,
     runtime_profile: String,
     planned_run: bool,
+    timeout_sec: u64,
+    artifact_budget_mb: u64,
+    requires_lease: bool,
     status: String,
     reason: String,
     exit_code: Option<i32>,
@@ -4098,6 +4101,15 @@ fn tool_status_artifact(
                 required_reason: trigger_description(tool.default).to_owned(),
                 runtime_profile: profile.name.clone(),
                 planned_run: planned.is_some_and(|sensor| sensor.run),
+                timeout_sec: planned
+                    .map(|sensor| sensor.timeout_sec)
+                    .unwrap_or(tool.timeout_sec),
+                artifact_budget_mb: planned
+                    .map(|sensor| sensor.artifact_budget_mb)
+                    .unwrap_or(tool.artifact_budget_mb),
+                requires_lease: planned
+                    .map(|sensor| sensor.requires_lease)
+                    .unwrap_or(tool.requires_lease),
                 status: receipt
                     .as_ref()
                     .map(|receipt| receipt.status.clone())

@@ -437,6 +437,9 @@ fn active_len_tracks_view_after_resize() {
         tools.iter().any(|tool| {
             tool["id"] == "ripr"
                 && tool["planned_run"] == true
+                && tool["timeout_sec"].as_u64().is_some()
+                && tool["artifact_budget_mb"].as_u64().is_some()
+                && tool["requires_lease"].as_bool().is_some()
                 && tool["status"] == "skipped"
                 && tool["reason"] == "dry-run; sensor not executed"
         })
