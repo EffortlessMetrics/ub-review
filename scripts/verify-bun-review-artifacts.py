@@ -1583,7 +1583,7 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
     if plan != expected:
         fail("review/orchestrator_plan.json does not match pre-follow-up evidence routing")
     final_plan = load_json(root / "review/final_orchestrator_plan.json")
-    final_expected = expected_orchestrator_plan(
+    final_expected = expected_final_orchestrator_plan(
         candidates, observations, proof_receipts, resource_leases
     )
     if final_plan != final_expected:
@@ -1683,6 +1683,30 @@ def expected_orchestrator_plan(
         "observation_groups": observation_groups,
         "follow_up_tasks": follow_up_tasks,
     }
+
+
+def expected_final_orchestrator_plan(
+    candidates: list[dict],
+    observations: list[dict],
+    proof_receipts: list[dict],
+    resource_leases: list[dict],
+) -> dict:
+    plan = expected_orchestrator_plan(
+        candidates, observations, proof_receipts, resource_leases
+    )
+    plan["follow_up_tasks"] = [
+        task
+        for task in plan["follow_up_tasks"]
+        if not final_follow_up_task_resolved_by_tool_proof(task)
+    ]
+    return plan
+
+
+def final_follow_up_task_resolved_by_tool_proof(task: dict) -> bool:
+    return task["evidence_need"] == "proof-confirmation" and any(
+        evidence["kind"] == "proof-receipt" and evidence["status"] == "tool-confirmed"
+        for evidence in task["routed_evidence"]
+    )
 
 
 def candidate_evidence_need(candidate: dict) -> str:
