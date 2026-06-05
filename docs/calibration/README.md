@@ -46,3 +46,6 @@ ub-review: duplicate
 
 Do not treat a calibration note as proof that a lane is good or bad. It is a
 receipt for later tuning.
+
+For copyable Bun packet behavior examples, use
+[`examples/bun/packets/README.md`](../../examples/bun/packets/README.md).

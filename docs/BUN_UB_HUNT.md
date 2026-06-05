@@ -144,5 +144,7 @@ Use [SENSOR_ROUTING.md](SENSOR_ROUTING.md) for the current filing map.
 - [GH_RUNNER_BUN.md](GH_RUNNER_BUN.md) for the known-good pin and artifact check.
 - [RUNNER_IMAGE.md](RUNNER_IMAGE.md) for required tools and doctor behavior.
 - [REVIEW_BODY_CONTRACT.md](REVIEW_BODY_CONTRACT.md) for reviewer-facing text.
+- [../examples/bun/packets/README.md](../examples/bun/packets/README.md) for
+  real Bun packet behavior examples.
 - [calibration/bun-ub-review-ledger.md](calibration/bun-ub-review-ledger.md)
   for real run calibration notes.
