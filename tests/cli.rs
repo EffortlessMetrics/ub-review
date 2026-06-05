@@ -437,6 +437,9 @@ fn active_len_tracks_view_after_resize() {
         tools.iter().any(|tool| {
             tool["id"] == "ripr"
                 && tool["planned_run"] == true
+                && tool["timeout_sec"].as_u64().is_some()
+                && tool["artifact_budget_mb"].as_u64().is_some()
+                && tool["requires_lease"].as_bool().is_some()
                 && tool["status"] == "skipped"
                 && tool["reason"] == "dry-run; sensor not executed"
         })
@@ -1695,14 +1698,75 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
 
     let work_queue: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("work_queue.json"))?)?;
+    let tool_status: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("tool-status.json"))?)?;
+    let tool_status_tools = tool_status["tools"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("tool status tools missing"))?;
     assert_eq!(work_queue["schema"], "ub-review.work_queue.v1");
     assert_eq!(work_queue["initial_packet_deadline_sec"], 60);
     assert_eq!(work_queue["follow_up_deadline_sec"], 300);
     let queue_tasks = work_queue["tasks"]
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("work queue tasks missing"))?;
-    assert_eq!(queue_tasks.len(), proof_tasks.len());
-    let queue_task = &queue_tasks[0];
+    assert_eq!(
+        queue_tasks.len(),
+        tool_status_tools.len() + proof_tasks.len()
+    );
+    let sensor_task = queue_tasks
+        .iter()
+        .find(|task| task["id"] == "sensor-ripr")
+        .ok_or_else(|| anyhow::anyhow!("ripr sensor queue task missing"))?;
+    let ripr_tool = tool_status_tools
+        .iter()
+        .find(|tool| tool["id"] == "ripr")
+        .ok_or_else(|| anyhow::anyhow!("ripr tool status missing"))?;
+    assert_eq!(sensor_task["schema"], "ub-review.work_queue_task.v1");
+    assert_eq!(sensor_task["kind"], "sensor");
+    assert_eq!(sensor_task["source"], "tool-registry");
+    let expected_packet_policy = if ripr_tool["required"].as_bool() == Some(true) {
+        "must-run"
+    } else if ripr_tool["planned_run"].as_bool() == Some(true) {
+        "include-if-ready"
+    } else {
+        "artifact-only"
+    };
+    assert_eq!(sensor_task["packet_policy"], expected_packet_policy);
+    let expected_gate_policy = if ripr_tool["required"].as_bool() == Some(true) {
+        "gate-required"
+    } else if ripr_tool["gate"].is_object() {
+        "trust-affecting"
+    } else if ripr_tool["planned_run"].as_bool() == Some(true) {
+        "review-context"
+    } else {
+        "artifact-only"
+    };
+    assert_eq!(sensor_task["gate_policy"], expected_gate_policy);
+    assert_eq!(
+        sensor_task["status"],
+        if ripr_tool["planned_run"].as_bool() == Some(true) {
+            "planned"
+        } else {
+            "skipped"
+        }
+    );
+    assert_eq!(
+        sensor_task["receipt_path"],
+        "sensors/ripr/ub-review-sensor-status.json"
+    );
+    assert_eq!(sensor_task["task_path"], "resolved-tools.json");
+    assert_eq!(
+        sensor_task["consumers"],
+        serde_json::json!(["tests-oracle", "proof-planner", "compiler"])
+    );
+    assert_eq!(
+        sensor_task["lease"]["timeout_sec"],
+        sensor_task["deadline_sec"]
+    );
+    let queue_task = queue_tasks
+        .iter()
+        .find(|task| task["kind"] == proof_task["kind"] && task["id"] == proof_task["id"])
+        .ok_or_else(|| anyhow::anyhow!("proof queue task missing"))?;
     assert_eq!(queue_task["schema"], "ub-review.work_queue_task.v1");
     for field in [
         "id",
@@ -1734,7 +1798,14 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         .filter(|line| !line.trim().is_empty())
         .collect::<Vec<_>>();
     assert_eq!(work_event_lines.len(), queue_tasks.len());
-    let work_event: serde_json::Value = serde_json::from_str(work_event_lines[0])?;
+    let work_events = work_event_lines
+        .iter()
+        .map(|line| serde_json::from_str::<serde_json::Value>(line))
+        .collect::<Result<Vec<_>, _>>()?;
+    let work_event = work_events
+        .iter()
+        .find(|event| event["task_id"] == queue_task["id"])
+        .ok_or_else(|| anyhow::anyhow!("proof work event missing"))?;
     assert_eq!(work_event["schema"], "ub-review.work_event.v1");
     assert_eq!(work_event["kind"], "task_planned");
     assert_eq!(work_event["task_id"], queue_task["id"]);
