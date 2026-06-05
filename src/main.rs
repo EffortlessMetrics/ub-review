@@ -5702,6 +5702,7 @@ fn write_review_artifacts(
     let mut model_calls_used = 0usize;
     let profile = config.selected_profile()?;
     append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
+    let seeded_proof_requests = proof_requests.clone();
 
     let mut proof_result = ProofBrokerResult::default();
     if matches!(args.model_mode, ModelMode::Auto) {
@@ -5713,17 +5714,18 @@ fn write_review_artifacts(
             "initial-diff-broker",
         )?;
         thread::scope(|scope| -> Result<()> {
-            let initial_proof_handle = scope.spawn(move || {
-                let broker_result =
-                    run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
-                let status = if broker_result.is_ok() {
-                    "completed"
-                } else {
-                    "failed"
-                };
-                let phase =
-                    finish_run_loop_phase(event_log, run_started, initial_proof_loop, status)?;
-                broker_result.map(|proof_result| (proof_result, phase))
+            let proof_handle = scope.spawn(move || {
+                run_seeded_proof_stream_v0(
+                    root,
+                    out,
+                    diff,
+                    profile,
+                    args,
+                    &seeded_proof_requests,
+                    initial_proof_loop,
+                    event_log,
+                    run_started,
+                )
             });
 
             let model_loop =
@@ -5773,11 +5775,13 @@ fn write_review_artifacts(
                 "completed",
             )?;
 
-            let (initial_result, proof_phase) = initial_proof_handle
+            let (seeded_result, proof_phases) = proof_handle
                 .join()
-                .map_err(|_| anyhow::anyhow!("initial diff proof thread panicked"))??;
-            run_loop_tracker.record(proof_phase);
-            proof_result = initial_result;
+                .map_err(|_| anyhow::anyhow!("seeded proof stream thread panicked"))??;
+            for phase in proof_phases {
+                run_loop_tracker.record(phase);
+            }
+            proof_result = seeded_result;
             Ok(())
         })?;
     } else {
@@ -5819,7 +5823,7 @@ fn write_review_artifacts(
         &pr_thread_context,
         &proof_requests,
     )?;
-    if !proof_requests.is_empty() {
+    if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
             event_log,
             run_started,
@@ -8755,6 +8759,77 @@ fn run_initial_diff_proof_broker_v0(
 
 #[expect(
     clippy::too_many_arguments,
+    reason = "seeded proof stream coordinates scheduler phases and proof broker inputs"
+)]
+fn run_seeded_proof_stream_v0(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    args: &RunArgs,
+    seeded_proof_requests: &[ProofRequest],
+    initial_proof_loop: ActiveRunLoop,
+    event_log: &EventLog,
+    run_started: &Instant,
+) -> Result<(ProofBrokerResult, Vec<RunLoopPhase>)> {
+    let mut phases = Vec::new();
+    let initial_result = run_initial_diff_proof_broker_v0(root, out, diff, profile, args);
+    let initial_status = if initial_result.is_ok() {
+        "completed"
+    } else {
+        "failed"
+    };
+    phases.push(finish_run_loop_phase(
+        event_log,
+        run_started,
+        initial_proof_loop,
+        initial_status,
+    )?);
+    let mut proof_result = initial_result?;
+
+    if has_unreceipted_proof_request_tasks(seeded_proof_requests, &proof_result.proof_receipts) {
+        let seeded_request_loop = start_run_loop(
+            event_log,
+            run_started,
+            "proof",
+            "proof",
+            "seeded-request-broker",
+        )?;
+        let request_result = run_request_proof_broker_v0(
+            root,
+            out,
+            diff,
+            profile,
+            seeded_proof_requests,
+            &proof_result.proof_receipts,
+            &proof_result.resource_leases,
+            args,
+        );
+        let request_status = if request_result.is_ok() {
+            "completed"
+        } else {
+            "failed"
+        };
+        phases.push(finish_run_loop_phase(
+            event_log,
+            run_started,
+            seeded_request_loop,
+            request_status,
+        )?);
+        let request_result = request_result?;
+        proof_result
+            .proof_receipts
+            .extend(request_result.proof_receipts);
+        proof_result
+            .resource_leases
+            .extend(request_result.resource_leases);
+    }
+
+    Ok((proof_result, phases))
+}
+
+#[expect(
+    clippy::too_many_arguments,
     reason = "primary request proof broker mirrors follow-up broker inputs"
 )]
 fn run_request_proof_broker_v0(
@@ -8995,6 +9070,22 @@ fn unreceipted_focused_build_tasks(
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
         .collect()
+}
+
+fn has_unreceipted_proof_request_tasks(
+    proof_requests: &[ProofRequest],
+    existing_receipts: &[ProofReceipt],
+) -> bool {
+    !unreceipted_focused_test_tasks(
+        focused_test_candidates_from_requests(proof_requests),
+        existing_receipts,
+    )
+    .is_empty()
+        || !unreceipted_focused_build_tasks(
+            focused_build_candidates_from_requests(proof_requests),
+            existing_receipts,
+        )
+        .is_empty()
 }
 
 #[expect(
@@ -20695,6 +20786,45 @@ index 1111111..2222222 100644
                 .iter()
                 .all(|task| task.mode == super::FocusedProofMode::RedGreen)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn unreceipted_proof_request_tasks_skip_already_receipted_seeded_request() -> Result<()> {
+        let proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-policy-001".to_owned(),
+            lane: "intelligent-ci-policy".to_owned(),
+            requested_by: vec![
+                "intelligent-ci-policy".to_owned(),
+                "proof-policy:required-smoke".to_owned(),
+            ],
+            command: "cargo test --locked required_proof_smoke".to_owned(),
+            reason: "Required Rust focused smoke for intelligent CI.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: true,
+            status: "requested".to_owned(),
+        }];
+
+        assert!(super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[]
+        ));
+
+        let task = super::focused_test_candidates_from_requests(&proof_requests)
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
+        let mut receipt = test_proof_receipt("head_passed", "passed");
+        receipt.id = task.id;
+        receipt.requested_by = task.requested_by;
+        receipt.request_ids = task.request_ids;
+
+        assert!(!super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[receipt]
+        ));
         Ok(())
     }
 
