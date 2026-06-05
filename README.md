@@ -284,6 +284,15 @@ reported as clean evidence.
 Heavy witnesses such as builds, tests, Miri, ASAN, and mutation testing are off
 by default. Enable them only behind explicit workflow policy.
 
+Custom configs can mark a tool as required. The requirement applies only when
+the tool's trigger matches the current diff, so required workflow tools do not
+create evidence gaps on source-only PRs.
+
+```toml
+[tools.actionlint]
+required = true
+```
+
 ### Rust unsafe evidence stack
 
 For Rust repositories with an unsafe surface, `unsafe-review` is the third
