@@ -153,6 +153,8 @@ fn active_len_tracks_view_after_resize() {
         "input/diff.patch",
         "input/diff-context.json",
         "events.ndjson",
+        "work_queue.json",
+        "work_events.ndjson",
         "resolved-profile.json",
         "resolved-plan.json",
         "resolved-tools.json",
@@ -1636,6 +1638,84 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert!(proof_plan.contains("result=`discriminating`"));
     let resource_plan = fs::read_to_string(out.join("review/resource_plan.md"))?;
     assert!(resource_plan.contains("status=`granted`"));
+
+    let proof_planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    let proof_tasks = proof_planner_output["proof_tasks"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("proof_tasks missing"))?;
+    assert_eq!(proof_tasks.len(), 1);
+    let proof_task = &proof_tasks[0];
+    assert_eq!(proof_task["schema"], "ub-review.proof_task.v1");
+    assert_eq!(proof_task["kind"], "focused-test");
+    assert_eq!(proof_task["source"], "proof-planner");
+    assert_eq!(proof_task["priority"], "high");
+    assert_eq!(proof_task["packet_policy"], "late-follow-up");
+    assert_eq!(proof_task["gate_policy"], "trust-affecting");
+    assert!(
+        proof_task["deadline_sec"]
+            .as_u64()
+            .is_some_and(|deadline| deadline > 0)
+    );
+    assert_eq!(
+        proof_task["lease"]["timeout_sec"],
+        proof_task["deadline_sec"]
+    );
+    assert_eq!(proof_task["timeout_sec"], proof_task["deadline_sec"]);
+
+    let work_queue: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("work_queue.json"))?)?;
+    assert_eq!(work_queue["schema"], "ub-review.work_queue.v1");
+    assert_eq!(work_queue["initial_packet_deadline_sec"], 60);
+    assert_eq!(work_queue["follow_up_deadline_sec"], 300);
+    let queue_tasks = work_queue["tasks"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("work queue tasks missing"))?;
+    assert_eq!(queue_tasks.len(), proof_tasks.len());
+    let queue_task = &queue_tasks[0];
+    assert_eq!(queue_task["schema"], "ub-review.work_queue_task.v1");
+    for field in [
+        "id",
+        "kind",
+        "source",
+        "priority",
+        "packet_policy",
+        "deadline_sec",
+        "consumers",
+        "gate_policy",
+        "lease",
+        "status",
+    ] {
+        assert_eq!(
+            queue_task[field], proof_task[field],
+            "queue field {field} should mirror proof task"
+        );
+    }
+    assert_eq!(queue_task["receipt_path"], "review/proof_receipts.json");
+    assert_eq!(queue_task["task_path"], "proof_tasks.ndjson");
+    assert!(
+        queue_task["dedupe_key"]
+            .as_str()
+            .is_some_and(|key| key.starts_with("proof-planner:focused-test:"))
+    );
+    let work_events = fs::read_to_string(out.join("work_events.ndjson"))?;
+    let work_event_lines = work_events
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect::<Vec<_>>();
+    assert_eq!(work_event_lines.len(), queue_tasks.len());
+    let work_event: serde_json::Value = serde_json::from_str(work_event_lines[0])?;
+    assert_eq!(work_event["schema"], "ub-review.work_event.v1");
+    assert_eq!(work_event["kind"], "task_planned");
+    assert_eq!(work_event["task_id"], queue_task["id"]);
+    assert_eq!(work_event["task_kind"], queue_task["kind"]);
+    assert_eq!(work_event["source"], queue_task["source"]);
+    assert_eq!(work_event["packet_policy"], queue_task["packet_policy"]);
+    assert_eq!(work_event["deadline_sec"], queue_task["deadline_sec"]);
+    assert_eq!(work_event["consumers"], queue_task["consumers"]);
+    assert_eq!(work_event["gate_policy"], queue_task["gate_policy"]);
+    assert_eq!(work_event["status"], queue_task["status"]);
+    assert_eq!(work_event["receipt_path"], queue_task["receipt_path"]);
 
     let receipt_ndjson = fs::read_to_string(out.join("proof_receipts.ndjson"))?;
     assert_eq!(
