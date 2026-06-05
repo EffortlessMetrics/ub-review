@@ -5892,7 +5892,6 @@ fn write_review_artifacts(
     let shared_context_id = sha256_hex(shared_context.as_bytes());
     let line_map = right_side_diff_lines(&diff.patch);
     let assignments = model_assignments(plan, args)?;
-    write_shared_context_cache_artifacts(out, &shared_context, &assignments, &[], &[], args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
     if should_run_proof_planner_model_lane(args, diff) {
         ensure_provider_preflight_receipt(
@@ -5901,6 +5900,15 @@ fn write_review_artifacts(
             args,
         );
     }
+    write_shared_context_cache_artifacts(
+        out,
+        &shared_context,
+        &assignments,
+        &provider_preflights,
+        &[],
+        &[],
+        args,
+    )?;
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
     let mut missing_or_failed_model_evidence = model_lanes
@@ -5943,7 +5951,13 @@ fn write_review_artifacts(
 
             let model_loop =
                 start_run_loop(event_log, run_started, "model", "investigation", "primary")?;
-            run_provider_preflights(root, &review_dir, &mut provider_preflights, args)?;
+            run_provider_preflights(
+                root,
+                &review_dir,
+                &mut provider_preflights,
+                &shared_context,
+                args,
+            )?;
             append_preflight_evidence_issues(
                 &provider_preflights,
                 &mut missing_or_failed_model_evidence,
@@ -6201,6 +6215,7 @@ fn write_review_artifacts(
         out,
         &shared_context,
         &assignments,
+        &review.provider_preflights,
         &review.model_lanes,
         &follow_up_results,
         args,
@@ -7017,9 +7032,15 @@ fn model_prompt_cache_metrics(
     follow_up_results: &[FollowUpResult],
 ) -> PromptCacheMetrics {
     let creation_input_tokens = review
-        .model_lanes
+        .provider_preflights
         .iter()
         .filter_map(|receipt| receipt.cache_usage.cache_creation_input_tokens)
+        .chain(
+            review
+                .model_lanes
+                .iter()
+                .filter_map(|receipt| receipt.cache_usage.cache_creation_input_tokens),
+        )
         .chain(
             follow_up_results
                 .iter()
@@ -7027,9 +7048,15 @@ fn model_prompt_cache_metrics(
         )
         .sum();
     let read_input_tokens = review
-        .model_lanes
+        .provider_preflights
         .iter()
         .filter_map(|receipt| receipt.cache_usage.cache_read_input_tokens)
+        .chain(
+            review
+                .model_lanes
+                .iter()
+                .filter_map(|receipt| receipt.cache_usage.cache_read_input_tokens),
+        )
         .chain(
             follow_up_results
                 .iter()
@@ -11663,6 +11690,7 @@ fn write_shared_context_cache_artifacts(
     out: &Path,
     shared_context: &str,
     assignments: &[ModelAssignment],
+    provider_preflights: &[ProviderPreflightReceipt],
     model_lanes: &[ModelLaneReceipt],
     follow_up_results: &[FollowUpResult],
     args: &RunArgs,
@@ -11715,6 +11743,22 @@ fn write_shared_context_cache_artifacts(
         cache_creation_input_tokens: None,
         cache_read_input_tokens: None,
     });
+    for receipt in provider_preflights
+        .iter()
+        .filter(|receipt| model_call_attempted_status(&receipt.status))
+    {
+        events.push(SharedContextCacheEvent {
+            schema: "ub-review.cache_event.v1",
+            kind: "provider_preflight_cache_usage".to_owned(),
+            shared_context_hash: shared_context_hash.clone(),
+            lane: Some("provider-preflight".to_owned()),
+            provider: Some(receipt.provider.clone()),
+            endpoint_kind: Some(receipt.endpoint_kind.clone()),
+            cache_mode: model_cache_mode(&receipt.provider, &receipt.endpoint_kind).to_owned(),
+            cache_creation_input_tokens: receipt.cache_usage.cache_creation_input_tokens,
+            cache_read_input_tokens: receipt.cache_usage.cache_read_input_tokens,
+        });
+    }
     for receipt in model_lanes
         .iter()
         .filter(|receipt| model_call_attempted_status(&receipt.status))
@@ -13187,6 +13231,7 @@ fn run_provider_preflights(
     root: &Path,
     review_dir: &Path,
     provider_preflights: &mut [ProviderPreflightReceipt],
+    shared_context: &str,
     args: &RunArgs,
 ) -> Result<()> {
     let preflight_dir = review_dir.join("provider-preflight");
@@ -13199,7 +13244,13 @@ fn run_provider_preflights(
         let lane_dir = preflight_dir.join(sanitize_artifact_name(&spec.label()));
         fs::create_dir_all(&lane_dir)?;
         let prompt = "Return strict JSON only: {\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}";
-        match call_model_prompt(root, &lane_dir, &spec, prompt, args) {
+        let outcome = match provider_preflight_cacheable_prefix(&spec, shared_context) {
+            Some(cacheable_prefix) => {
+                call_model_prompt_cached(root, &lane_dir, &spec, cacheable_prefix, prompt, args)
+            }
+            None => call_model_prompt(root, &lane_dir, &spec, prompt, args),
+        };
+        match outcome {
             Ok(outcome) => {
                 receipt.status = "ok".to_owned();
                 receipt.reason = "completed".to_owned();
@@ -13216,6 +13267,15 @@ fn run_provider_preflights(
         }
     }
     Ok(())
+}
+
+fn provider_preflight_cacheable_prefix<'a>(
+    spec: &ProviderSpec,
+    shared_context: &'a str,
+) -> Option<&'a str> {
+    (model_cache_mode(spec.provider.key(), spec.endpoint_kind.key())
+        == "explicit-anthropic-cache-control")
+        .then_some(shared_context)
 }
 
 fn provider_spec_from_preflight(receipt: &ProviderPreflightReceipt) -> Result<ProviderSpec> {
@@ -25791,6 +25851,78 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn provider_preflight_cache_selection_is_minimax_anthropic_only() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
+        let anthropic = direct_minimax_spec(&args);
+        assert_eq!(
+            super::provider_preflight_cacheable_prefix(&anthropic, "shared context"),
+            Some("shared context")
+        );
+
+        args.minimax_provider_kind = ProviderKindArg::Openai;
+        let openai = direct_minimax_spec(&args);
+        assert_eq!(
+            super::provider_preflight_cacheable_prefix(&openai, "shared context"),
+            None
+        );
+    }
+
+    #[test]
+    fn cache_events_include_provider_preflight_usage() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
+        let assignments = model_assignments(&test_plan(Vec::new()), &args)?;
+        let preflights = vec![super::ProviderPreflightReceipt {
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "completed".to_owned(),
+            duration_ms: Some(25),
+            http_status: Some(200),
+            response_shape: Some("anthropic".to_owned()),
+            cache_usage: super::ModelCacheUsage {
+                input_tokens: Some(900),
+                output_tokens: Some(30),
+                cache_creation_input_tokens: Some(700),
+                cache_read_input_tokens: Some(50),
+            },
+        }];
+
+        super::write_shared_context_cache_artifacts(
+            temp.path(),
+            "stable shared context",
+            &assignments,
+            &preflights,
+            &[],
+            &[],
+            &args,
+        )?;
+
+        let events = fs::read_to_string(temp.path().join("review/cache_events.ndjson"))?;
+        let preflight_event = events
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .find(|event| event["kind"] == "provider_preflight_cache_usage")
+            .ok_or_else(|| anyhow::anyhow!("provider preflight cache event missing"))?;
+        assert_eq!(preflight_event["lane"], "provider-preflight");
+        assert_eq!(preflight_event["provider"], "minimax");
+        assert_eq!(preflight_event["endpoint_kind"], "anthropic-messages");
+        assert_eq!(
+            preflight_event["cache_mode"],
+            "explicit-anthropic-cache-control"
+        );
+        assert_eq!(preflight_event["cache_creation_input_tokens"], 700);
+        assert_eq!(preflight_event["cache_read_input_tokens"], 50);
+        Ok(())
+    }
+
+    #[test]
     fn opencode_go_canary_payload_uses_messages_shape() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let spec = opencode_canary_spec(&args);
@@ -27757,7 +27889,12 @@ index 1111111..2222222 100644
                     duration_ms: Some(100),
                     http_status: Some(200),
                     response_shape: Some("anthropic".to_owned()),
-                    cache_usage: super::ModelCacheUsage::default(),
+                    cache_usage: super::ModelCacheUsage {
+                        input_tokens: Some(900),
+                        output_tokens: Some(30),
+                        cache_creation_input_tokens: Some(200),
+                        cache_read_input_tokens: Some(50),
+                    },
                 },
                 super::ProviderPreflightReceipt {
                     provider: "opencode-go".to_owned(),
@@ -27833,8 +27970,8 @@ index 1111111..2222222 100644
         assert_eq!(metrics.follow_up_results.status_counts["ok"], 1);
         assert_eq!(metrics.follow_up_results.status_counts["skipped_budget"], 1);
         assert_eq!(metrics.follow_up_results.calls_attempted, 1);
-        assert_eq!(metrics.models.prompt_cache_creation_input_tokens, 800);
-        assert_eq!(metrics.models.prompt_cache_read_input_tokens, 400);
+        assert_eq!(metrics.models.prompt_cache_creation_input_tokens, 1_000);
+        assert_eq!(metrics.models.prompt_cache_read_input_tokens, 450);
         assert_eq!(metrics.models.prompt_cache_lane_hits, 1);
         assert_eq!(metrics.models.prompt_cache_lane_misses, 0);
         assert_eq!(metrics.models.prompt_cache_lane_unknown, 0);
