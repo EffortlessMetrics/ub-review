@@ -139,6 +139,10 @@ Doctor reports:
 - base cache hit or miss;
 - rule cache hit or miss.
 
+Doctor does not check `FACTORY_API_KEY`; the current action has no Factory
+provider input. The artifact verifier still treats raw Factory key assignments
+as secret leaks.
+
 ## Policy
 
 For the Bun profile:

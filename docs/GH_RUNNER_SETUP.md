@@ -35,6 +35,9 @@ Sensor packet generation does not require secrets. Posting uses the scoped
 provider canary/deep modes through `secrets.OPENCODE`; the action does not shell
 out to OpenCode as an agent harness. GLM is skipped for v0. Missing model keys
 are recorded as missing review evidence.
+`FACTORY_API_KEY` can remain an organization secret, but the current action does
+not consume it. Do not pass it through the Bun v0 workflow; the verifier guards
+the name so raw values fail artifact checks.
 
 The consuming workflow is responsible for:
 

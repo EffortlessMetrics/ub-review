@@ -29,6 +29,9 @@ canary/deep modes. The action maps them into `UB_REVIEW_MINIMAX_API_KEY` and
 `UB_REVIEW_OPENCODE_API_KEY`; `ub-review doctor` reports only present/missing
 status for those env vars. The calling workflow still owns uploading
 `target/ub-review` as the durable artifact.
+`FACTORY_API_KEY` is not an action input for this preset. Keep it out of the Bun
+workflow unless a later provider path adds an explicit input. Raw Factory key
+assignments are verifier failures; GitHub secret placeholders are allowed.
 
 The `core` hosted-runner tool bundle attempts `tokmd` `1.12.0`,
 `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint`. Missing
