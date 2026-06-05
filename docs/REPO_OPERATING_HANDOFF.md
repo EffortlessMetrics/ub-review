@@ -85,6 +85,11 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   task set instead of leaking stale work into the final decision.
 - PR #290: `review/metrics.json` records the final follow-up task count after
   late receipt routing and final convergence filtering.
+- PR #292: terminal state records `final_follow_up_tasks`, and the verifier
+  checks it against `review/metrics.json` and
+  `review/final_orchestrator_plan.json`.
+- PR #293: Bun runner docs make `FACTORY_API_KEY` a verifier-guarded secret
+  name, not a Bun v0 action input or doctor-reported provider key.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
