@@ -47,6 +47,9 @@ The action maps those GitHub secrets into runner env vars:
 `UB_REVIEW_MINIMAX_API_KEY` and `UB_REVIEW_OPENCODE_API_KEY`. `ub-review
 doctor` reports only whether those env vars are present; it must not print
 secret values.
+`FACTORY_API_KEY` may exist as an organization secret for other automation. The
+Bun v0 action path does not accept or map it. The artifact verifier still treats
+raw Factory key assignments as leaks and allows GitHub secret placeholders.
 Use `depth: quick`, `standard`, or `deep` for preset lane/model-call pressure;
 keep raw lane/model budget overrides on `standard`.
 For focused reruns, `lanes`, `except-lanes`, `tools`, and `except-tools` accept
