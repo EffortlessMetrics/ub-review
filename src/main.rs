@@ -6293,11 +6293,15 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
             return Err(err).with_context(|| "validate pull request review body policy");
         }
     }
+    let pr_inline_comments: &[ReviewInlineComment] = if suppressed_artifact_only_pr_body {
+        &[]
+    } else {
+        input.inline_comments
+    };
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
-        comments: input
-            .inline_comments
+        comments: pr_inline_comments
             .iter()
             .map(|comment| GitHubReviewComment {
                 path: comment.path.clone(),
@@ -6307,13 +6311,14 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
             })
             .collect(),
     };
-    let should_prepare_github_review = should_prepare_github_review_payload(
-        input.args,
-        input.inline_comments,
-        input.summary_only_findings,
-        input.proof_receipts,
-        &pr_body,
-    );
+    let should_prepare_github_review = !suppressed_artifact_only_pr_body
+        && should_prepare_github_review_payload(
+            input.args,
+            pr_inline_comments,
+            input.summary_only_findings,
+            input.proof_receipts,
+            &pr_body,
+        );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
     } else if suppressed_artifact_only_pr_body {
@@ -6327,7 +6332,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         review_payload_status,
         should_prepare_github_review,
         pr_body: &pr_body,
-        inline_comments: input.inline_comments,
+        inline_comments: pr_inline_comments,
         summary_only_findings: input.summary_only_findings,
         model_lanes: input.model_lanes,
         missing_or_failed_sensor_evidence: input.missing_or_failed_sensor_evidence,
@@ -25792,6 +25797,54 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(surface.terminal_state.status, "sufficient");
         assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_suppressed_pr_body_drops_inline_comments_for_posting() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let inline_comments = (0..13)
+            .map(|index| ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/main.rs".to_owned(),
+                line: 100 + index,
+                side: "RIGHT".to_owned(),
+                body: format!("Confirm concise-review guard boundary {index}."),
+                evidence: "generated regression fixture".to_owned(),
+            })
+            .collect::<Vec<_>>();
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(!surface.terminal_state.reviewer_value_present);
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
+        assert!(
+            surface
+                .artifact_body
+                .contains("Confirm concise-review guard boundary 0")
+        );
         Ok(())
     }
 
