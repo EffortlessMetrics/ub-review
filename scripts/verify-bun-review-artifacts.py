@@ -2996,14 +2996,11 @@ def follow_up_dropped_evidence(output: dict) -> list[str] | None:
 
 
 def observation_is_refuted(observation: dict) -> bool:
-    return observation.get("status") == "refuted" or observation.get("kind") in {
-        "false-premise",
-        "resolved-check",
-    }
+    return observation.get("status") == "refuted"
 
 
 def observation_is_parked(observation: dict) -> bool:
-    return observation.get("status") == "parked" or observation.get("kind") == "parked-follow-up"
+    return observation.get("status") == "parked"
 
 
 def require_resolved_candidate_schema(record: dict) -> None:

@@ -8234,14 +8234,10 @@ fn follow_up_dropped_evidence(output: &FollowUpOutputRecord) -> Option<Vec<Strin
 
 fn observation_is_refuted(observation: &Observation) -> bool {
     observation.status == "refuted"
-        || matches!(
-            observation.kind.as_str(),
-            "false-premise" | "resolved-check"
-        )
 }
 
 fn observation_is_parked(observation: &Observation) -> bool {
-    observation.status == "parked" || observation.kind == "parked-follow-up"
+    observation.status == "parked"
 }
 
 fn write_model_stage_artifacts(
@@ -29547,6 +29543,8 @@ index 1111111..2222222 100644
             test_candidate_record("candidate-parked"),
             test_candidate_record("candidate-dropped"),
             test_candidate_record("candidate-conflicting"),
+            test_candidate_record("candidate-resolved-kind-open"),
+            test_candidate_record("candidate-parked-kind-open"),
         ];
         let outputs = vec![
             test_follow_up_output_for_candidate(
@@ -29636,6 +29634,36 @@ index 1111111..2222222 100644
                 )],
                 Vec::new(),
             ),
+            test_follow_up_output_for_candidate(
+                "follow-resolved-kind-open",
+                &candidates[7].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-resolved-kind-open",
+                    "The proof receipt may resolve this candidate, but status stayed open.",
+                    "resolved-check",
+                    "open",
+                    "low",
+                    "medium",
+                    "candidate-resolved-kind-open",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-parked-kind-open",
+                &candidates[8].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-parked-kind-open",
+                    "The sibling route may be parked, but status stayed open.",
+                    "parked-follow-up",
+                    "open",
+                    "low",
+                    "medium",
+                    "candidate-parked-kind-open",
+                )],
+                Vec::new(),
+            ),
         ];
         let results = outputs
             .iter()
@@ -29665,6 +29693,10 @@ index 1111111..2222222 100644
         assert_eq!(records[5].resolved_disposition, "dropped");
         assert_eq!(records[6].resolved_status, "conflicting");
         assert_eq!(records[6].resolved_disposition, "summary-only");
+        assert_eq!(records[7].resolved_status, "unresolved");
+        assert_eq!(records[7].resolved_disposition, "summary-only");
+        assert_eq!(records[8].resolved_status, "unresolved");
+        assert_eq!(records[8].resolved_disposition, "summary-only");
         assert_eq!(
             records[6].source_artifacts,
             vec![
