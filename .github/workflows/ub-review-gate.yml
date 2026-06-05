@@ -2,7 +2,7 @@ name: ub-review/gate
 
 on:
   pull_request:
-    types: [opened, ready_for_review, synchronize, reopened]
+    types: [opened, ready_for_review, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -45,7 +45,7 @@ jobs:
           root: .
           out: target/ub-review
           github-token: ${{ github.token }}
-          posting: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review' || github.event.action == 'reopened') && 'review' || 'artifact-only' }}
+          posting: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review') && 'review' || 'artifact-only' }}
           model-mode: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' && 'off' || 'auto' }}
           depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
           provider-policy: primary-with-fallback
@@ -58,7 +58,10 @@ jobs:
 
       - name: Verify ub-review artifacts
         if: always()
-        run: python scripts/verify-bun-review-artifacts.py target/ub-review
+        run: >
+          python scripts/verify-bun-review-artifacts.py target/ub-review
+          --expected-review-profile ub-review-self
+          --expected-repo-kind ub-review
 
       - uses: actions/upload-artifact@v7
         if: always()

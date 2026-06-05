@@ -147,7 +147,7 @@ artifact_budget_mb = 32
 requires_lease = false
 
 [tools.coverage]
-enabled = true
+enabled = false
 class = "coverage"
 default = "manual"
 required = false
