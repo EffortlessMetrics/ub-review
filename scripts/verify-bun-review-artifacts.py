@@ -808,6 +808,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/resolved-tools.json",
         "review/tool-status.json",
         "review/provider-preflight-status.json",
+        "review/model_stages.json",
         "review/metrics.json",
         "review/scheduler.json",
         "review/review.json",
@@ -820,6 +821,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
+        "review/final_compiler_input.json",
         "review/witnesses.json",
         "review/witness_registry.json",
         "review/proof_requests.json",
@@ -833,6 +835,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "follow_up_questions.ndjson",
         "follow_up_results.ndjson",
         "follow_up_outputs.ndjson",
+        "model_stages.ndjson",
         "witnesses.ndjson",
         "proof_requests.ndjson",
         "proof_tasks.ndjson",
@@ -1273,8 +1276,10 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
+    require_model_stage_artifacts(root, review, follow_up_results)
     follow_up_outputs = require_follow_up_outputs(root, follow_up_results)
     follow_up_evidence = require_follow_up_evidence(root, follow_up_outputs)
+    require_final_compiler_input(root, review, follow_up_evidence)
     require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
@@ -2628,6 +2633,116 @@ def require_follow_up_results(
     return results
 
 
+def require_model_stage_artifacts(
+    root: pathlib.Path, review: dict, follow_up_results: list[dict]
+) -> None:
+    stages = load_json(root / "review/model_stages.json")
+    if not isinstance(stages, list):
+        fail("review/model_stages.json is not an array")
+    lines = [
+        line
+        for line in read_text(root / "model_stages.ndjson").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != len(stages):
+        fail("model_stages.ndjson line count does not match review/model_stages.json")
+    for index, stage in enumerate(stages):
+        if not isinstance(stage, dict):
+            fail(f"model stage {index + 1} is not an object: {stage!r}")
+        try:
+            parsed = json.loads(lines[index])
+        except json.JSONDecodeError as error:
+            fail(f"invalid model_stages.ndjson line {index + 1}: {error}")
+        if parsed != stage:
+            fail(f"model_stages.ndjson line {index + 1} does not match JSON artifact")
+        require_model_stage_schema(stage)
+
+    model_lanes = review.get("model_lanes", [])
+    if not isinstance(model_lanes, list):
+        fail("review.json model_lanes is not an array")
+    expected_total = len(model_lanes) + len(follow_up_results)
+    if len(stages) != expected_total:
+        fail(
+            "review/model_stages.json count does not match model_lanes + follow_up_results"
+        )
+    for index, receipt in enumerate(model_lanes):
+        stage = stages[index]
+        if stage.get("source") != expected_model_lane_stage_source(receipt.get("lane")):
+            fail(f"model stage source does not match model lane receipt: {stage!r}")
+        if stage.get("stage") != expected_model_lane_stage(receipt.get("lane")):
+            fail(f"model stage value does not match model lane receipt: {stage!r}")
+        for field in ["lane", "status", "reason", "provider", "model", "endpoint_kind"]:
+            if stage.get(field) != receipt.get(field):
+                fail(f"model stage {field} does not match model lane receipt: {stage!r}")
+        for field in ["task_id", "group_id", "packet_path"]:
+            if field in stage:
+                fail(f"primary model stage unexpectedly has {field}: {stage!r}")
+    offset = len(model_lanes)
+    for index, result in enumerate(follow_up_results):
+        stage = stages[offset + index]
+        if stage.get("source") != "orchestrator-follow-up":
+            fail(f"follow-up model stage has wrong source: {stage!r}")
+        if stage.get("stage") != result.get("stage"):
+            fail(f"follow-up model stage does not match follow-up result: {stage!r}")
+        for field in ["status", "reason"]:
+            if stage.get(field) != result.get(field):
+                fail(f"follow-up model stage {field} does not match result: {stage!r}")
+        if stage.get("lane") != result.get("model_lane"):
+            fail(f"follow-up model stage lane does not match result: {stage!r}")
+        if stage.get("task_id") != result.get("task_id"):
+            fail(f"follow-up model stage task_id does not match result: {stage!r}")
+        if stage.get("group_id") != result.get("group_id"):
+            fail(f"follow-up model stage group_id does not match result: {stage!r}")
+        if stage.get("packet_path") != result.get("packet_path"):
+            fail(f"follow-up model stage packet_path does not match result: {stage!r}")
+
+
+def require_model_stage_schema(stage: dict) -> None:
+    if stage.get("schema") != "ub-review.model_stage.v1":
+        fail(f"model stage has wrong schema: {stage!r}")
+    for field in [
+        "lane",
+        "source",
+        "stage",
+        "stage_reason",
+        "status",
+        "reason",
+        "provider",
+        "model",
+        "endpoint_kind",
+    ]:
+        if not isinstance(stage.get(field), str) or not stage.get(field):
+            fail(f"model stage {field} is missing or empty: {stage!r}")
+    if stage.get("source") not in {
+        "model-lane",
+        "proof-planner",
+        "refuter",
+        "orchestrator-follow-up",
+    }:
+        fail(f"model stage source is unsupported: {stage!r}")
+    if stage.get("stage") not in {"primary", "secondary", "tertiary"}:
+        fail(f"model stage value is unsupported: {stage!r}")
+    for field in ["task_id", "group_id", "packet_path", "response_shape"]:
+        if field in stage and not isinstance(stage.get(field), str):
+            fail(f"model stage {field} is not a string: {stage!r}")
+    if "duration_ms" in stage and not isinstance(stage.get("duration_ms"), int):
+        fail(f"model stage duration_ms is not an integer: {stage!r}")
+    if "http_status" in stage and not isinstance(stage.get("http_status"), int):
+        fail(f"model stage http_status is not an integer: {stage!r}")
+
+
+def expected_model_lane_stage(lane: object) -> str:
+    return "tertiary" if lane == "refuter" else "primary"
+
+
+def expected_model_lane_stage_source(lane: object) -> str:
+    if lane == "proof-planner":
+        return "proof-planner"
+    if lane == "refuter":
+        return "refuter"
+    return "model-lane"
+
+
 def require_follow_up_outputs(root: pathlib.Path, results: list[dict]) -> list[dict]:
     outputs = load_json(root / "review/follow_up_outputs.json")
     if not isinstance(outputs, list):
@@ -2678,6 +2793,64 @@ def require_follow_up_evidence(root: pathlib.Path, outputs: list[dict]) -> dict:
         if values != expected:
             fail(f"follow-up evidence {field} does not match flattened outputs")
     return evidence
+
+
+def require_final_compiler_input(
+    root: pathlib.Path, review: dict, follow_up_evidence: dict
+) -> None:
+    final_input = load_json(root / "review/final_compiler_input.json")
+    if not isinstance(final_input, dict):
+        fail("review/final_compiler_input.json is not an object")
+    if final_input.get("schema") != "ub-review.final_compiler_input.v1":
+        fail(f"final compiler input has wrong schema: {final_input!r}")
+    if final_input.get("phase") != "final":
+        fail(f"final compiler input phase expected final: {final_input!r}")
+    source_artifacts = final_input.get("source_artifacts")
+    if not isinstance(source_artifacts, list):
+        fail("final compiler input source_artifacts is not an array")
+    for source in [
+        "review/review.json",
+        "review/follow_up_evidence.json",
+        "review/proof_receipts.json",
+    ]:
+        if source not in source_artifacts:
+            fail(f"final compiler input missing source artifact {source}")
+    for field in [
+        "model_lanes",
+        "missing_or_failed_sensor_evidence",
+        "missing_or_failed_model_evidence",
+        "inline_comments",
+        "summary_only_findings",
+        "observations",
+        "proof_receipts",
+    ]:
+        if not isinstance(final_input.get(field), list):
+            fail(f"final compiler input {field} is not an array")
+    for field in [
+        "model_lanes",
+        "missing_or_failed_sensor_evidence",
+        "missing_or_failed_model_evidence",
+        "inline_comments",
+        "proof_receipts",
+    ]:
+        if final_input.get(field) != review.get(field, []):
+            fail(f"final compiler input {field} does not match review.json")
+    expected_summary = list(review.get("summary_only_findings", [])) + list(
+        follow_up_evidence.get("summary_only_findings", [])
+    )
+    if final_input.get("summary_only_findings") != expected_summary:
+        fail(
+            "final compiler input summary_only_findings does not match "
+            "review.json plus follow_up_evidence"
+        )
+    expected_observations = list(review.get("observations", [])) + list(
+        follow_up_evidence.get("observations", [])
+    )
+    if final_input.get("observations") != expected_observations:
+        fail(
+            "final compiler input observations does not match "
+            "review.json plus follow_up_evidence"
+        )
 
 
 def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> list[dict]:

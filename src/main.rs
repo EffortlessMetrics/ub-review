@@ -2044,6 +2044,34 @@ struct FollowUpOutputRecord {
 }
 
 #[derive(Debug, Serialize)]
+struct ModelStageRecord {
+    schema: String,
+    lane: String,
+    source: String,
+    stage: String,
+    stage_reason: String,
+    status: String,
+    reason: String,
+    provider: String,
+    model: String,
+    endpoint_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    task_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    group_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    packet_path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    duration_ms: Option<u128>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    http_status: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    response_shape: Option<String>,
+    #[serde(default)]
+    cache_usage: ModelCacheUsage,
+}
+
+#[derive(Debug, Serialize)]
 struct FollowUpEvidenceArtifact {
     schema: String,
     follow_up_outputs: usize,
@@ -6211,6 +6239,7 @@ fn write_review_artifacts(
     )?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
+    write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args)?;
     write_shared_context_cache_artifacts(
         out,
         &shared_context,
@@ -6254,6 +6283,25 @@ fn write_review_artifacts(
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
     let mut compiler_observations = review.observations.clone();
     compiler_observations.extend(follow_up_evidence.observations.clone());
+    write_final_compiler_input_artifact(
+        out,
+        FinalCompilerInputArtifact {
+            schema: "ub-review.final_compiler_input.v1",
+            phase: "final",
+            source_artifacts: &[
+                "review/review.json",
+                "review/follow_up_evidence.json",
+                "review/proof_receipts.json",
+            ],
+            model_lanes: &review.model_lanes,
+            missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
+            missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
+            inline_comments: &review.inline_comments,
+            summary_only_findings: &compiler_summary_only_findings,
+            observations: &compiler_observations,
+            proof_receipts: &review.proof_receipts,
+        },
+    )?;
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
         review_body_policy: &config.review_body,
@@ -6401,6 +6449,20 @@ struct ReviewCompilerInput<'a> {
     args: &'a RunArgs,
     plan: &'a Plan,
     diff: &'a DiffContext,
+    model_lanes: &'a [ModelLaneReceipt],
+    missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
+    missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
+    inline_comments: &'a [ReviewInlineComment],
+    summary_only_findings: &'a [SummaryOnlyFinding],
+    observations: &'a [Observation],
+    proof_receipts: &'a [ProofReceipt],
+}
+
+#[derive(Debug, Serialize)]
+struct FinalCompilerInputArtifact<'a> {
+    schema: &'static str,
+    phase: &'static str,
+    source_artifacts: &'static [&'static str],
     model_lanes: &'a [ModelLaneReceipt],
     missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
@@ -7896,6 +7958,124 @@ fn write_follow_up_output_artifacts(out: &Path, outputs: &[FollowUpOutputRecord]
     }
     fs::write(out.join("follow_up_outputs.ndjson"), ndjson)?;
     Ok(())
+}
+
+fn write_model_stage_artifacts(
+    out: &Path,
+    model_lanes: &[ModelLaneReceipt],
+    follow_up_results: &[FollowUpResult],
+    args: &RunArgs,
+) -> Result<()> {
+    let records = model_stage_records(model_lanes, follow_up_results, args);
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("model_stages.json"),
+        serde_json::to_vec_pretty(&records)?,
+    )?;
+    let mut ndjson = String::new();
+    for record in &records {
+        ndjson.push_str(&serde_json::to_string(record)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("model_stages.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn write_final_compiler_input_artifact(
+    out: &Path,
+    artifact: FinalCompilerInputArtifact<'_>,
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("final_compiler_input.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    Ok(())
+}
+
+fn model_stage_records(
+    model_lanes: &[ModelLaneReceipt],
+    follow_up_results: &[FollowUpResult],
+    args: &RunArgs,
+) -> Vec<ModelStageRecord> {
+    let mut records = model_lanes
+        .iter()
+        .map(model_lane_stage_record)
+        .collect::<Vec<_>>();
+    let follow_up_spec = direct_minimax_spec(args);
+    records.extend(
+        follow_up_results
+            .iter()
+            .map(|result| follow_up_stage_record(result, &follow_up_spec)),
+    );
+    records
+}
+
+fn model_lane_stage_record(receipt: &ModelLaneReceipt) -> ModelStageRecord {
+    let (source, stage, stage_reason) = model_lane_stage_metadata(&receipt.lane);
+    ModelStageRecord {
+        schema: "ub-review.model_stage.v1".to_owned(),
+        lane: receipt.lane.clone(),
+        source: source.to_owned(),
+        stage: stage.to_owned(),
+        stage_reason: stage_reason.to_owned(),
+        status: receipt.status.clone(),
+        reason: receipt.reason.clone(),
+        provider: receipt.provider.clone(),
+        model: receipt.model.clone(),
+        endpoint_kind: receipt.endpoint_kind.clone(),
+        task_id: None,
+        group_id: None,
+        packet_path: None,
+        duration_ms: receipt.duration_ms,
+        http_status: receipt.http_status,
+        response_shape: receipt.response_shape.clone(),
+        cache_usage: receipt.cache_usage.clone(),
+    }
+}
+
+fn model_lane_stage_metadata(lane: &str) -> (&'static str, &'static str, &'static str) {
+    match lane {
+        "proof-planner" => (
+            "proof-planner",
+            "primary",
+            "proof-planner scopes local proof from the shared packet and early lane evidence",
+        ),
+        "refuter" => (
+            "refuter",
+            "tertiary",
+            "refuter classifies primary candidates before the final compiler pass",
+        ),
+        _ => (
+            "model-lane",
+            "primary",
+            "initial cached lane turn over the shared PR packet",
+        ),
+    }
+}
+
+fn follow_up_stage_record(result: &FollowUpResult, spec: &ProviderSpec) -> ModelStageRecord {
+    ModelStageRecord {
+        schema: "ub-review.model_stage.v1".to_owned(),
+        lane: result.model_lane.clone(),
+        source: "orchestrator-follow-up".to_owned(),
+        stage: result.stage.clone(),
+        stage_reason: follow_up_stage_reason(&result.stage).to_owned(),
+        status: result.status.clone(),
+        reason: result.reason.clone(),
+        provider: spec.provider.key().to_owned(),
+        model: spec.model.clone(),
+        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        task_id: Some(result.task_id.clone()),
+        group_id: Some(result.group_id.clone()),
+        packet_path: Some(result.packet_path.clone()),
+        duration_ms: result.duration_ms,
+        http_status: result.http_status,
+        response_shape: result.response_shape.clone(),
+        cache_usage: result.cache_usage.clone(),
+    }
 }
 
 fn follow_up_evidence_from_outputs(outputs: &[FollowUpOutputRecord]) -> FollowUpEvidenceArtifact {
@@ -28642,6 +28822,118 @@ index 1111111..2222222 100644
                             .as_array()
                             .is_some_and(Vec::is_empty))
                 )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn model_stage_records_cover_primary_refuter_and_follow_ups() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = test_run_args(temp.path().join("out"));
+        let mut planner = model_lane_receipt("proof-planner", "ok");
+        planner.reason = "planned advisory proof-planner lane for intelligent-ci".to_owned();
+        let mut refuter = model_lane_receipt("refuter", "ok");
+        refuter.reason = "completed".to_owned();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok"), planner, refuter];
+        let secondary = test_follow_up_result("follow-secondary", "group-secondary", "ok");
+        let mut tertiary = test_follow_up_result("follow-tertiary", "group-tertiary", "skipped");
+        tertiary.stage = "tertiary".to_owned();
+        let follow_up_results = vec![secondary, tertiary];
+
+        let records = super::model_stage_records(&model_lanes, &follow_up_results, &args);
+        assert_eq!(records.len(), 5);
+        assert_eq!(records[0].lane, "tests-oracle");
+        assert_eq!(records[0].source, "model-lane");
+        assert_eq!(records[0].stage, "primary");
+        assert!(records[0].task_id.is_none());
+        assert_eq!(records[1].lane, "proof-planner");
+        assert_eq!(records[1].source, "proof-planner");
+        assert_eq!(records[1].stage, "primary");
+        assert_eq!(records[2].lane, "refuter");
+        assert_eq!(records[2].source, "refuter");
+        assert_eq!(records[2].stage, "tertiary");
+        assert_eq!(records[3].source, "orchestrator-follow-up");
+        assert_eq!(records[3].stage, "secondary");
+        assert_eq!(records[3].task_id.as_deref(), Some("follow-secondary"));
+        assert_eq!(records[4].source, "orchestrator-follow-up");
+        assert_eq!(records[4].stage, "tertiary");
+        assert_eq!(records[4].task_id.as_deref(), Some("follow-tertiary"));
+
+        super::write_model_stage_artifacts(temp.path(), &model_lanes, &follow_up_results, &args)?;
+        let written: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("review/model_stages.json"))?)?;
+        let lines = fs::read_to_string(temp.path().join("model_stages.ndjson"))?;
+        let ndjson = lines
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        assert_eq!(written.as_array().map(Vec::len), Some(records.len()));
+        assert_eq!(written.as_array().cloned().unwrap_or_default(), ndjson);
+        Ok(())
+    }
+
+    #[test]
+    fn final_compiler_input_artifact_records_exact_final_sources() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] Confirm the focused proof covers the changed route.".to_owned(),
+            evidence: "test evidence".to_owned(),
+        }];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "orchestrator-follow-up-follow-secondary".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: "Follow-up narrowed the remaining proof question.".to_owned(),
+            evidence: "follow-up evidence".to_owned(),
+        }];
+        let proof_receipts = Vec::new();
+        super::write_final_compiler_input_artifact(
+            temp.path(),
+            super::FinalCompilerInputArtifact {
+                schema: "ub-review.final_compiler_input.v1",
+                phase: "final",
+                source_artifacts: &[
+                    "review/review.json",
+                    "review/follow_up_evidence.json",
+                    "review/proof_receipts.json",
+                ],
+                model_lanes: &model_lanes,
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+                inline_comments: &inline_comments,
+                summary_only_findings: &summary_only_findings,
+                observations: &[],
+                proof_receipts: &proof_receipts,
+            },
+        )?;
+        let written: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/final_compiler_input.json"),
+        )?)?;
+        assert_eq!(written["schema"], "ub-review.final_compiler_input.v1");
+        assert_eq!(written["phase"], "final");
+        assert_eq!(written["model_lanes"][0]["lane"], "tests-oracle");
+        assert_eq!(
+            written["inline_comments"][0]["body"],
+            "[tests-oracle] Confirm the focused proof covers the changed route."
+        );
+        assert_eq!(
+            written["summary_only_findings"][0]["reason"],
+            "Follow-up narrowed the remaining proof question."
+        );
+        assert_eq!(
+            written["source_artifacts"],
+            serde_json::json!([
+                "review/review.json",
+                "review/follow_up_evidence.json",
+                "review/proof_receipts.json"
+            ])
         );
         Ok(())
     }
