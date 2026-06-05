@@ -70,6 +70,21 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
 - PR #283: `work_queue.json` and `work_events.ndjson` record
   `initial_packet_status` so the first packet can distinguish ready receipts,
   pending initial work, pending late follow-up work, and non-initial tasks.
+- PR #284: `docs/ci/work-queue.md` records the packet-status contract for
+  initial, late, adaptive, artifact-only, and gate-only work.
+- PR #285: the artifact verifier treats raw `FACTORY_API_KEY` assignments as
+  secret leaks while allowing GitHub secret placeholders, including escaped
+  placeholders, and keeps verifier-script meta chatter artifact-only.
+- PR #286: the shared context packet includes initial work-queue state so lanes
+  see ready receipts and pending proof before they reason about the diff.
+- PR #287: proof receipt routing artifacts record which proof receipts route to
+  which follow-up consumers.
+- PR #288: `review/final_orchestrator_plan.json` captures the post-follow-up
+  convergence plan used for the final compiler pass.
+- PR #289: resolved final proof follow-ups are removed from the remaining final
+  task set instead of leaking stale work into the final decision.
+- PR #290: `review/metrics.json` records the final follow-up task count after
+  late receipt routing and final convergence filtering.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
