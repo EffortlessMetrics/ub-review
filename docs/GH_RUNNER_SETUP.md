@@ -30,10 +30,11 @@ permissions:
 
 Sensor packet generation does not require secrets. Posting uses the scoped
 `github.token`. Default model review uses direct MiniMax M3 through
-`secrets.MINIMAX`. The Bun v0 workflow uses `provider-policy: minimax-only`.
-OpenCode Go remains optional for later direct provider canary/deep modes; the
-action does not shell out to OpenCode as an agent harness. GLM is skipped for
-v0. Missing model keys are recorded as missing review evidence.
+`secrets.MINIMAX_API_KEY`. The Bun v0 workflow uses
+`provider-policy: minimax-only`. OpenCode Go remains optional for later direct
+provider canary/deep modes through `secrets.OPENCODE`; the action does not shell
+out to OpenCode as an agent harness. GLM is skipped for v0. Missing model keys
+are recorded as missing review evidence.
 
 The consuming workflow is responsible for:
 
@@ -62,6 +63,8 @@ successful lane count, uploads `target/ub-review-model-smoke`, and keeps posting
 errors tolerated so artifacts remain available for inspection.
 
 Adding the `ub-review-model-smoke` label to a PR still runs a cheap one-lane
-provider smoke by default. Manual dispatch exposes `model_smoke_lane_width`,
-`model_smoke_max_model_calls`, `model_smoke_model_concurrency`, and
-`model_smoke_expected_ok_lanes` when a wider or deeper live check is needed.
+provider smoke by default. Without that label, the PR job is intentionally
+skipped even when `MINIMAX_API_KEY` is configured. Manual dispatch exposes
+`model_smoke_lane_width`, `model_smoke_max_model_calls`,
+`model_smoke_model_concurrency`, and `model_smoke_expected_ok_lanes` when a
+wider or deeper live check is needed.

@@ -99,7 +99,7 @@ jobs:
           posting: review
           mode: review-byok
           github-token: ${{ github.token }}
-          minimax-api-key: ${{ secrets.MINIMAX }}
+          minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
           minimax-provider-kind: anthropic
           model-mode: auto
           provider-policy: minimax-only
@@ -122,11 +122,11 @@ jobs:
 
 Sensor packet generation does not require secrets. Posting the grouped PR review
 uses the scoped `github.token`. The Bun v0 workflow uses direct MiniMax M3 for
-all 10 model lanes through `secrets.MINIMAX`. OpenCode Go remains an optional
-direct provider for later canary/deep modes, but it is not part of the Bun v0
-cutover workflow. `ub-review` does not shell out to OpenCode as an agent
-harness. GLM is skipped for v0. Missing model keys are recorded as missing review
-evidence instead of treated as a clean run.
+all 10 model lanes through `secrets.MINIMAX_API_KEY`. OpenCode Go remains an
+optional direct provider for later canary/deep modes through `secrets.OPENCODE`,
+but it is not part of the Bun v0 cutover workflow. `ub-review` does not shell
+out to OpenCode as an agent harness. GLM is skipped for v0. Missing model keys
+are recorded as missing review evidence instead of treated as a clean run.
 
 Use a full commit SHA for the Bun gate. The current known-good Bun pin is
 `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`,

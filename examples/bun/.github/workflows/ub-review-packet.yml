@@ -71,7 +71,7 @@ jobs:
           posting: review
           mode: review-byok
           github-token: ${{ github.token }}
-          minimax-api-key: ${{ secrets.MINIMAX }}
+          minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
           minimax-provider-kind: anthropic
           model-mode: auto
           provider-policy: minimax-only

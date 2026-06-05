@@ -23,9 +23,10 @@ artifact-only post skip, and verifier pass. Do not float the Bun gate on `main`.
 
 The action builds the packet without sensor secrets. In `posting: review` mode,
 the Bun workflow gives it the scoped `github.token` so it can submit one grouped
-Pull Request Review. MiniMax M3 lanes use `secrets.MINIMAX`; GLM is skipped for
-v0. The calling workflow still owns uploading `target/ub-review` as the durable
-artifact.
+Pull Request Review. MiniMax M3 lanes use `secrets.MINIMAX_API_KEY`; GLM is
+skipped for v0. `secrets.OPENCODE` is reserved for optional direct provider
+canary/deep modes. The calling workflow still owns uploading `target/ub-review`
+as the durable artifact.
 
 The `core` hosted-runner tool bundle attempts `tokmd` `1.12.0`,
 `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint`. Missing
