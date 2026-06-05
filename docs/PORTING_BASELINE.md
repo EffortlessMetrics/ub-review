@@ -105,6 +105,10 @@ target/ub-review/
     review.md
     terminal_state.json
     metrics.json
+    candidates.json
+    follow_up_results.json
+    follow_up_outputs.json
+    resolved_candidates.json
     proof_requests.json
     proof_receipts.json
     resource_leases.json
@@ -114,6 +118,7 @@ target/ub-review/
     github-review-skip.json   # when artifact-only is correct
   events.ndjson
   model_stages.ndjson
+  resolved_candidates.ndjson
   work_queue.json
   work_events.ndjson
   running-summary.md
@@ -127,6 +132,10 @@ python scripts/verify-bun-review-artifacts.py target/ub-review
 
 Use stricter flags only after the target repo has stable model lanes and sensor
 availability.
+
+`resolved_candidates` is the candidate reconciliation receipt: it ties original
+candidate surfaces to follow-up outputs and preserves open, resolved, parked,
+dropped, unavailable, or conflicting state for audit.
 
 ## PR Body Contract
 

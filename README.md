@@ -211,6 +211,7 @@ target/ub-review/
     follow_up_results.json
     follow_up_outputs.json
     follow_up_evidence.json
+    resolved_candidates.json
     final_compiler_input.json
     witnesses.json
     witness_registry.json
@@ -233,6 +234,7 @@ target/ub-review/
   follow_up_questions.ndjson
   follow_up_results.ndjson
   follow_up_outputs.ndjson
+  resolved_candidates.ndjson
   model_stages.ndjson
   witnesses.ndjson
   proof_requests.ndjson
@@ -249,6 +251,11 @@ target/ub-review/lanes/tests.md
 target/ub-review/lanes/ub.md
 target/ub-review/input/diff.patch
 ```
+
+`resolved_candidates` reconciles `review/candidates.json` with
+`review/follow_up_results.json` and `review/follow_up_outputs.json`. It records
+unchanged, unresolved, unavailable, resolved, or conflicting candidate state
+after follow-up evidence; it is an audit receipt, not reviewer-facing text.
 
 ## Bun preset
 

@@ -67,6 +67,10 @@ target/ub-review/
     model_stages.json
     review.json
     review.md
+    candidates.json
+    follow_up_results.json
+    follow_up_outputs.json
+    resolved_candidates.json
     final_compiler_input.json
     github-review.json        # only when review content is posted
     github-review-skip.json   # when artifact-only output is correct
@@ -74,12 +78,15 @@ target/ub-review/
     post-error.json
   events.ndjson
   model_stages.ndjson
+  resolved_candidates.ndjson
   running-summary.md
 ```
 
 Start with `running-summary.md`, then inspect `review/review.md`, the lane
 packets under `lanes/`, and `review/post-result.json` or
 `review/post-error.json` for the grouped review posting trail.
+Use `review/resolved_candidates.json` when checking whether follow-up evidence
+actually changed candidate disposition.
 
 After changing the pin, download the Bun packet artifact and run:
 

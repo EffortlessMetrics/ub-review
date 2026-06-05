@@ -101,8 +101,10 @@ review/proof_plan.md
 review/proof_receipts.json
 review/resource_leases.json
 review/model_stages.json
+review/resolved_candidates.json
 review/final_compiler_input.json
 model_stages.ndjson
+resolved_candidates.ndjson
 review/cache_manifest.json
 review/metrics.json
 events.ndjson

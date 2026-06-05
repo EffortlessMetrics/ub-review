@@ -40,6 +40,9 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
 - PR #267: `follow_up_results` and `follow_up_outputs` preserve disposition,
   evidence need, candidate ids, and observation group ids from orchestrator
   follow-up tasks, and the verifier cross-checks that provenance.
+- PR #270: `resolved_candidates` records candidate disposition after follow-up
+  outputs, and the verifier rejects open follow-up observations being promoted
+  into resolved dispositions.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
