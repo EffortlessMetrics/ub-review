@@ -1807,6 +1807,30 @@ struct WorkEventArtifact {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct ReceiptRoutesArtifact<'a> {
+    schema: &'static str,
+    source_artifacts: Vec<&'static str>,
+    routes: &'a [ReceiptRouteArtifact],
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ReceiptRouteArtifact {
+    schema: &'static str,
+    id: String,
+    receipt_id: String,
+    phase: String,
+    receipt_kind: String,
+    result: String,
+    status: String,
+    requested_by: Vec<String>,
+    request_ids: Vec<String>,
+    consumers: Vec<String>,
+    lease_ids: Vec<String>,
+    source_artifacts: Vec<String>,
+    reason: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct ProofPlannerSkip {
     kind: String,
     reason: String,
@@ -6721,6 +6745,8 @@ fn write_review_artifacts(
         follow_up_proof_loop,
         "completed",
     )?;
+    let receipt_routes = receipt_route_artifacts(&review.proof_receipts, &review.resource_leases);
+    write_receipt_route_artifacts(out, &receipt_routes)?;
     let final_compiler_loop =
         start_run_loop(event_log, run_started, "compiler", "coordination", "final")?;
     let mut compiler_summary_only_findings = review.summary_only_findings.clone();
@@ -6736,6 +6762,7 @@ fn write_review_artifacts(
                 "review/review.json",
                 "review/follow_up_evidence.json",
                 "review/proof_receipts.json",
+                "review/receipt_routes.json",
             ],
             model_lanes: &review.model_lanes,
             missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
@@ -9942,6 +9969,110 @@ fn write_proof_receipt_artifacts(out: &Path, proof_receipts: &[ProofReceipt]) ->
         ndjson.push('\n');
     }
     fs::write(out.join("proof_receipts.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn receipt_route_artifacts(
+    proof_receipts: &[ProofReceipt],
+    resource_leases: &[ResourceLease],
+) -> Vec<ReceiptRouteArtifact> {
+    proof_receipts
+        .iter()
+        .map(|receipt| {
+            let lease_ids = resource_leases
+                .iter()
+                .filter(|lease| lease.consumer == receipt.id)
+                .map(|lease| lease.id.clone())
+                .collect::<Vec<_>>();
+            let mut source_artifacts = vec!["review/proof_receipts.json".to_owned()];
+            if !lease_ids.is_empty() {
+                source_artifacts.push("review/resource_leases.json".to_owned());
+            }
+            ReceiptRouteArtifact {
+                schema: "ub-review.receipt_route.v1",
+                id: format!("receipt-route-{}", receipt.id),
+                receipt_id: receipt.id.clone(),
+                phase: receipt_route_phase(receipt).to_owned(),
+                receipt_kind: receipt.kind.clone(),
+                result: receipt.result.clone(),
+                status: routed_status_for_proof_receipt(receipt).to_owned(),
+                requested_by: receipt.requested_by.clone(),
+                request_ids: receipt.request_ids.clone(),
+                consumers: receipt_route_consumers(receipt),
+                lease_ids,
+                source_artifacts,
+                reason: receipt.reason.clone(),
+            }
+        })
+        .collect()
+}
+
+fn receipt_route_phase(receipt: &ProofReceipt) -> &'static str {
+    if receipt
+        .requested_by
+        .iter()
+        .any(|lane| lane.starts_with("orchestrator-follow-up"))
+        || receipt
+            .request_ids
+            .iter()
+            .any(|request_id| request_id.contains("follow-up"))
+    {
+        "follow-up-receipt"
+    } else if receipt
+        .requested_by
+        .iter()
+        .any(|lane| lane == "proof-broker")
+        && receipt.request_ids.is_empty()
+    {
+        "initial-diff-receipt"
+    } else {
+        "model-request-receipt"
+    }
+}
+
+fn receipt_route_consumers(receipt: &ProofReceipt) -> Vec<String> {
+    let mut consumers = Vec::new();
+    if receipt
+        .requested_by
+        .iter()
+        .any(|lane| lane == "proof-broker")
+    {
+        match receipt.kind.as_str() {
+            "focused-head" | "focused-red-green" => {
+                push_unique(&mut consumers, "tests-oracle");
+                push_unique(&mut consumers, "opposition");
+            }
+            "focused-build" => push_unique(&mut consumers, "architecture"),
+            _ => {}
+        }
+    }
+    for lane in &receipt.requested_by {
+        if lane != "proof-broker" {
+            push_unique(&mut consumers, lane);
+        }
+    }
+    push_unique(&mut consumers, "compiler");
+    consumers
+}
+
+fn write_receipt_route_artifacts(out: &Path, routes: &[ReceiptRouteArtifact]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let artifact = ReceiptRoutesArtifact {
+        schema: "ub-review.receipt_routes.v1",
+        source_artifacts: vec!["review/proof_receipts.json", "review/resource_leases.json"],
+        routes,
+    };
+    fs::write(
+        review_dir.join("receipt_routes.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    let mut ndjson = String::new();
+    for route in routes {
+        ndjson.push_str(&serde_json::to_string(route)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("receipt_routes.ndjson"), ndjson)?;
     Ok(())
 }
 
@@ -30442,6 +30573,7 @@ index 1111111..2222222 100644
                     "review/review.json",
                     "review/follow_up_evidence.json",
                     "review/proof_receipts.json",
+                    "review/receipt_routes.json",
                 ],
                 model_lanes: &model_lanes,
                 missing_or_failed_sensor_evidence: &[],
@@ -30471,10 +30603,88 @@ index 1111111..2222222 100644
             serde_json::json!([
                 "review/review.json",
                 "review/follow_up_evidence.json",
-                "review/proof_receipts.json"
+                "review/proof_receipts.json",
+                "review/receipt_routes.json"
             ])
         );
         Ok(())
+    }
+
+    #[test]
+    fn receipt_routes_capture_initial_model_and_follow_up_consumers() {
+        let initial = ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-initial".to_owned(),
+            kind: "focused-red-green".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: vec!["proof-broker".to_owned()],
+            request_ids: Vec::new(),
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "HEAD passed; base+tests failed".to_owned(),
+        };
+        let model_request = ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-model".to_owned(),
+            kind: "focused-build".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["architecture".to_owned()],
+            request_ids: vec!["proof-request-1".to_owned()],
+            commands: Vec::new(),
+            result: "head_passed".to_owned(),
+            reason: "focused build passed".to_owned(),
+        };
+        let follow_up = ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-follow-up".to_owned(),
+            kind: "focused-head".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["orchestrator-follow-up-tests-oracle".to_owned()],
+            request_ids: vec!["proof-follow-up-1".to_owned()],
+            commands: Vec::new(),
+            result: "skipped_budget".to_owned(),
+            reason: "budget exhausted".to_owned(),
+        };
+        let lease = ResourceLease {
+            schema: "ub-review.resource_lease.v1".to_owned(),
+            id: "lease-proof-initial".to_owned(),
+            kind: "focused-test".to_owned(),
+            consumer: "proof-initial".to_owned(),
+            status: "granted".to_owned(),
+            reason: "lease granted".to_owned(),
+            cpu: 2,
+            memory_mb: 2048,
+            disk_mb: 1024,
+            timeout_sec: 300,
+            network: false,
+            worktree: None,
+            command: None,
+            scratch: true,
+        };
+
+        let routes = super::receipt_route_artifacts(&[initial, model_request, follow_up], &[lease]);
+        assert_eq!(routes.len(), 3);
+        assert_eq!(routes[0].phase, "initial-diff-receipt");
+        assert_eq!(
+            routes[0].consumers,
+            vec!["tests-oracle", "opposition", "compiler"]
+        );
+        assert_eq!(routes[0].lease_ids, vec!["lease-proof-initial"]);
+        assert_eq!(routes[0].status, "tool-confirmed");
+        assert_eq!(routes[1].phase, "model-request-receipt");
+        assert_eq!(routes[1].consumers, vec!["architecture", "compiler"]);
+        assert_eq!(routes[2].phase, "follow-up-receipt");
+        assert_eq!(
+            routes[2].consumers,
+            vec!["orchestrator-follow-up-tests-oracle", "compiler"]
+        );
+        assert_eq!(routes[2].status, "missing-evidence");
     }
 
     #[test]
