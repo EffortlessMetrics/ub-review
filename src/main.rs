@@ -1367,6 +1367,7 @@ struct ReviewMetrics {
     summary_only_findings: usize,
     observations: usize,
     follow_up_results: FollowUpResultMetrics,
+    final_follow_up_tasks: usize,
     proof_requests: usize,
     proof_receipts: usize,
     resource_leases: usize,
@@ -6851,6 +6852,7 @@ fn write_review_artifacts(
         review_payload_status,
         observations_count: observations.len(),
         follow_up_results: &follow_up_results,
+        final_follow_up_tasks: final_orchestrator_plan.follow_up_tasks.len(),
         run: run_loop_metrics,
         elapsed,
     });
@@ -7371,6 +7373,7 @@ struct ReviewMetricsInput<'a> {
     review_payload_status: &'a str,
     observations_count: usize,
     follow_up_results: &'a [FollowUpResult],
+    final_follow_up_tasks: usize,
     run: RunLoopMetrics,
     elapsed: Duration,
 }
@@ -7385,6 +7388,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         review_payload_status,
         observations_count,
         follow_up_results,
+        final_follow_up_tasks,
         mut run,
         elapsed,
     } = input;
@@ -7479,6 +7483,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
                 .filter(|result| model_call_attempted_status(&result.status))
                 .count(),
         },
+        final_follow_up_tasks,
         proof_requests: review.proof_requests.len(),
         proof_receipts: review.proof_receipts.len(),
         resource_leases: review.resource_leases.len(),
@@ -29692,6 +29697,7 @@ index 1111111..2222222 100644
             review_payload_status: "prepared",
             observations_count: 0,
             follow_up_results: &follow_up_results,
+            final_follow_up_tasks: 1,
             run: test_run_loop_metrics(),
             elapsed: std::time::Duration::from_secs(601),
         });
@@ -29716,6 +29722,7 @@ index 1111111..2222222 100644
         assert_eq!(metrics.follow_up_results.status_counts["ok"], 1);
         assert_eq!(metrics.follow_up_results.status_counts["skipped_budget"], 1);
         assert_eq!(metrics.follow_up_results.calls_attempted, 1);
+        assert_eq!(metrics.final_follow_up_tasks, 1);
         assert_eq!(metrics.models.prompt_cache_creation_input_tokens, 1_000);
         assert_eq!(metrics.models.prompt_cache_read_input_tokens, 450);
         assert_eq!(metrics.models.prompt_cache_lane_hits, 1);

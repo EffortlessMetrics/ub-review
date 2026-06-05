@@ -673,6 +673,17 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(metrics["schema_version"], 1);
     assert_eq!(metrics["shared_context_id"], review["shared_context_id"]);
     assert_eq!(metrics["terminal_state"], terminal_state["status"]);
+    let final_orchestrator_plan: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/final_orchestrator_plan.json"))?)?;
+    assert_eq!(
+        metrics["final_follow_up_tasks"],
+        serde_json::json!(
+            final_orchestrator_plan["follow_up_tasks"]
+                .as_array()
+                .ok_or_else(|| anyhow::anyhow!("final follow_up_tasks missing"))?
+                .len()
+        )
+    );
     assert_eq!(
         metrics["run"]["concurrency_model"],
         "profiled-stream-scheduler-v0"
@@ -683,6 +694,7 @@ fn active_len_tracks_view_after_resize() {
     );
     assert_eq!(metrics["run"]["local_proof_wall_excludes_model_wait"], true);
     for pointer in [
+        "/final_follow_up_tasks",
         "/run/elapsed_wall_ms",
         "/run/coordination_wall_ms",
         "/run/investigation_wall_ms",
