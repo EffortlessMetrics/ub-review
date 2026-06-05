@@ -64,13 +64,16 @@ target/ub-review/
   lanes/
   review/
     shared_context.md
+    model_stages.json
     review.json
     review.md
+    final_compiler_input.json
     github-review.json        # only when review content is posted
     github-review-skip.json   # when artifact-only output is correct
     post-result.json
     post-error.json
   events.ndjson
+  model_stages.ndjson
   running-summary.md
 ```
 

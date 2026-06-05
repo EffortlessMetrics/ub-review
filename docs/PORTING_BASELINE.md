@@ -108,9 +108,12 @@ target/ub-review/
     proof_requests.json
     proof_receipts.json
     resource_leases.json
+    model_stages.json
+    final_compiler_input.json
     github-review.json        # only when posting reviewer-value content
     github-review-skip.json   # when artifact-only is correct
   events.ndjson
+  model_stages.ndjson
   work_queue.json
   work_events.ndjson
   running-summary.md

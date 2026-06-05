@@ -100,6 +100,9 @@ resource_leases.ndjson
 review/proof_plan.md
 review/proof_receipts.json
 review/resource_leases.json
+review/model_stages.json
+review/final_compiler_input.json
+model_stages.ndjson
 review/cache_manifest.json
 review/metrics.json
 events.ndjson
