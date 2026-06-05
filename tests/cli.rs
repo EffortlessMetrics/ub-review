@@ -1927,6 +1927,213 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn intelligent_ci_runs_advisory_proof_planner_lane_before_request_broker() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "planner-lane-fixture"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn value() -> usize {
+    1
+}
+"#,
+    )?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(
+        &repo.join("src/lib.rs"),
+        r#"pub fn value() -> usize {
+    2
+}
+"#,
+    )?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "change value"])?;
+
+    let planner_content = serde_json::json!({
+        "summary": null,
+        "observations": [
+            {
+                "claim": "Planner identified one cheap focused proof request.",
+                "question": "proof-planner",
+                "kind": "test-gap",
+                "status": "open",
+                "severity": "medium",
+                "confidence": "high",
+                "evidence": ["fake planner response"]
+            }
+        ],
+        "candidate_findings": [],
+        "summary_only_findings": [],
+        "failed_objections": [],
+        "proof_requests": [
+            {
+                "command": "cargo test --locked planner_requested_proof",
+                "reason": "Focused planner request should route through the central broker.",
+                "cost": "focused-test",
+                "timeout_sec": 60,
+                "required": false
+            }
+        ]
+    })
+    .to_string();
+    let dummy_key = "dummy-minimax-key-for-proof-planner-lane";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+        fake_openai_lane_content(),
+        fake_openai_lane_content(),
+        planner_content,
+    ])?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "2",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 3);
+
+    let planner_artifact_dir = out.join("review/model/proof-planner");
+    for name in [
+        "request.json",
+        "response.json",
+        "content.json",
+        "stderr.txt",
+    ] {
+        let path = planner_artifact_dir.join(name);
+        assert!(path.exists(), "missing {}", path.display());
+        let text = fs::read_to_string(&path)?;
+        assert!(
+            !text.contains(dummy_key),
+            "secret leaked to {}",
+            path.display()
+        );
+    }
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    let model_lanes = review["model_lanes"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("model_lanes missing"))?;
+    let planner_lane = model_lanes
+        .iter()
+        .find(|lane| lane["lane"].as_str() == Some("proof-planner"))
+        .ok_or_else(|| anyhow::anyhow!("proof-planner model lane missing"))?;
+    assert_eq!(planner_lane["status"], "ok");
+    assert_eq!(planner_lane["provider"], "minimax");
+    assert_eq!(planner_lane["endpoint_kind"], "openai-chat");
+    assert!(
+        review["observations"]
+            .as_array()
+            .is_some_and(|observations| observations.iter().any(|observation| {
+                observation["lane"].as_str() == Some("proof-planner")
+                    && observation["kind"].as_str() == Some("test-gap")
+            }))
+    );
+
+    let proof_requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    let planner_request = proof_requests
+        .iter()
+        .find(|request| request["lane"].as_str() == Some("proof-planner"))
+        .ok_or_else(|| anyhow::anyhow!("planner proof request missing"))?;
+    assert_eq!(
+        planner_request["command"],
+        "cargo test --locked planner_requested_proof"
+    );
+    assert_eq!(planner_request["cost"], "focused-test");
+    let request_id = json_str_field(planner_request, "id")?;
+
+    let planner_input: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_input.json"))?)?;
+    assert!(
+        planner_input["proof_requests"]
+            .as_array()
+            .is_some_and(|requests| requests.iter().any(|request| {
+                request["id"].as_str() == Some(request_id)
+                    && request["lane"].as_str() == Some("proof-planner")
+            }))
+    );
+    let planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    assert!(
+        planner_output["proof_tasks"]
+            .as_array()
+            .is_some_and(|tasks| tasks.iter().any(|task| {
+                task["request_ids"]
+                    .as_array()
+                    .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+            }))
+    );
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert!(receipts.iter().any(|receipt| {
+        receipt["request_ids"]
+            .as_array()
+            .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+            && receipt["result"].as_str() == Some("skipped_profile")
+    }));
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_overlaps_initial_diff_proof_with_model_lanes() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
