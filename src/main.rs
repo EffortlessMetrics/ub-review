@@ -14234,7 +14234,8 @@ fn provider_spec_from_preflight(receipt: &ProviderPreflightReceipt) -> Result<Pr
     })
 }
 
-const MAX_ARTIFACT_NAME_LEN: usize = 96;
+const ARTIFACT_NAME_MAX_CHARS: usize = 96;
+const ARTIFACT_NAME_HASH_CHARS: usize = 16;
 
 fn sanitize_artifact_name(value: &str) -> String {
     let sanitized: String = value
@@ -14247,16 +14248,16 @@ fn sanitize_artifact_name(value: &str) -> String {
             }
         })
         .collect();
-
-    if sanitized.len() <= MAX_ARTIFACT_NAME_LEN {
+    if sanitized.len() <= ARTIFACT_NAME_MAX_CHARS {
         return sanitized;
     }
-
     let digest = sha256_hex(value.as_bytes());
-    let suffix = &digest[..12];
-    let prefix_len = MAX_ARTIFACT_NAME_LEN - suffix.len() - 1;
-    let prefix: String = sanitized.chars().take(prefix_len).collect();
-    format!("{prefix}-{suffix}")
+    let prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1;
+    format!(
+        "{}-{}",
+        sanitized.chars().take(prefix_len).collect::<String>(),
+        &digest[..ARTIFACT_NAME_HASH_CHARS]
+    )
 }
 
 fn run_available_model_lanes(
@@ -20451,27 +20452,26 @@ mod tests {
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
         FollowUpOutputRecord, FollowUpQuestionTask, GitHubReview, GitHubReviewComment,
-        LaneModelOutput, LanePlan, Limits, MAX_ARTIFACT_NAME_LEN, ModelAssignment,
-        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
-        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
-        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
-        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
-        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
-        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
-        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
-        apply_model_output, apply_plan_selectors, apply_refuter_output,
-        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
-        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCandidateComment,
+        ModelCandidateFinding, ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection,
+        ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
+        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
+        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
+        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
+        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
+        STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue, SensorPlan,
+        SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
         follow_up_output_record, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
@@ -20483,15 +20483,14 @@ mod tests {
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
         resolved_candidate_records, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_from_toml, runtime_profile_override, sanitize_artifact_name,
-        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
-        validate_failed_objection, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
+        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
+        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
+        write_candidate_artifacts, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
@@ -29276,6 +29275,117 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn artifact_name_sanitizer_bounds_long_generated_ids() {
+        assert_eq!(
+            super::sanitize_artifact_name("source-route/question one"),
+            "source-route-question-one"
+        );
+        let raw = format!("candidate-{}", "generated-id-segment-".repeat(24));
+        let sanitized = super::sanitize_artifact_name(&raw);
+        let digest = sha256_hex(raw.as_bytes());
+        assert!(sanitized.len() <= super::ARTIFACT_NAME_MAX_CHARS);
+        assert!(sanitized.starts_with("candidate-generated-id-segment-"));
+        assert!(sanitized.ends_with(&format!("-{}", &digest[..16])));
+
+        let sibling = format!("{raw}-sibling");
+        assert_ne!(sanitized, super::sanitize_artifact_name(&sibling));
+    }
+
+    #[test]
+    fn long_model_artifact_ids_are_bounded_without_rewriting_receipts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let long_tail = "lane-generated-proof-request-".repeat(20);
+        let candidate_id = format!("candidate-{long_tail}");
+        let candidate = CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: candidate_id.clone(),
+            lane: "tests-oracle".to_owned(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            disposition: "summary-only".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            claim: "Long generated candidate id should stay in the receipt.".to_owned(),
+            evidence: "Filesystem artifact path is bounded separately.".to_owned(),
+            path: None,
+            line: None,
+            side: None,
+        };
+        write_candidate_artifacts(temp.path(), std::slice::from_ref(&candidate))?;
+        let candidate_file = temp.path().join("candidates").join(format!(
+            "{}.json",
+            super::sanitize_artifact_name(&candidate_id)
+        ));
+        assert!(candidate_file.is_file());
+        assert!(
+            candidate_file
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.len() <= super::ARTIFACT_NAME_MAX_CHARS + ".json".len())
+        );
+        let written_candidate: CandidateRecord =
+            serde_json::from_slice(&fs::read(candidate_file)?)?;
+        assert_eq!(written_candidate.id, candidate_id);
+
+        let proof_request_id = format!("proof-request-{long_tail}");
+        let proof_request = ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: proof_request_id.clone(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test focused_case".to_owned(),
+            reason: "Exercise long model-generated proof request ids.".to_owned(),
+            cost: "low".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        write_proof_request_artifacts(
+            temp.path(),
+            &test_diff(),
+            &Profile::default(),
+            std::slice::from_ref(&proof_request),
+            &[] as &[ProofReceipt],
+        )?;
+        let proof_request_file = temp.path().join("proof_requests").join(format!(
+            "{}.json",
+            super::sanitize_artifact_name(&proof_request_id)
+        ));
+        assert!(proof_request_file.is_file());
+        let written_request: ProofRequest = serde_json::from_slice(&fs::read(proof_request_file)?)?;
+        assert_eq!(written_request.id, proof_request_id);
+
+        let task_id = format!("follow-up-{long_tail}");
+        let task = FollowUpQuestionTask {
+            schema: "ub-review.follow_up_question_task.v1".to_owned(),
+            id: task_id.clone(),
+            group_id: "group-long-generated-id".to_owned(),
+            stage: "tertiary".to_owned(),
+            stage_reason: "routed evidence arrived".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            disposition: "summary-only".to_owned(),
+            candidate_ids: vec![candidate.id],
+            observation_group_ids: Vec::new(),
+            routed_evidence: Vec::new(),
+            question: "Does the new proof receipt close this concern?".to_owned(),
+            status: "planned".to_owned(),
+            reason: "test long follow-up artifact path".to_owned(),
+        };
+        super::write_follow_up_question_packets(temp.path(), std::slice::from_ref(&task))?;
+        let packet_path = temp
+            .path()
+            .join(super::follow_up_packet_artifact_path(&task));
+        assert!(packet_path.is_file());
+        let packet: serde_json::Value = serde_json::from_slice(&fs::read(packet_path)?)?;
+        assert_eq!(packet["task_id"], task_id);
+        assert!(
+            follow_up_model_lane_id(&task).len()
+                <= "orchestrator-follow-up-".len() + super::ARTIFACT_NAME_MAX_CHARS
+        );
+        Ok(())
+    }
+
+    #[test]
     fn candidate_artifacts_track_inline_and_summary_surfaces() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let inline_comments = vec![ReviewInlineComment {
@@ -30773,10 +30883,10 @@ index 1111111..2222222 100644
         let files = fs::read_dir(&lane_dir)?.collect::<Result<Vec<_>, _>>()?;
         assert_eq!(files.len(), 1);
         let file_name = files[0].file_name().to_string_lossy().to_string();
-        let expected_stem = sanitize_artifact_name(&long_question);
-        assert_eq!(expected_stem.len(), MAX_ARTIFACT_NAME_LEN);
+        let expected_stem = super::sanitize_artifact_name(&long_question);
+        assert_eq!(expected_stem.len(), super::ARTIFACT_NAME_MAX_CHARS);
         assert_eq!(file_name, format!("{expected_stem}.json"));
-        assert!(file_name.len() <= MAX_ARTIFACT_NAME_LEN + ".json".len());
+        assert!(file_name.len() <= super::ARTIFACT_NAME_MAX_CHARS + ".json".len());
 
         let artifact: serde_json::Value = serde_json::from_slice(&fs::read(files[0].path())?)?;
         assert_eq!(artifact["question"], long_question);

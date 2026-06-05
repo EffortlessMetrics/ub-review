@@ -4348,8 +4348,7 @@ def require_tool_registry_artifacts(root: pathlib.Path) -> None:
         status_entry = status_by_id.get(tool_id)
         if status_entry is None:
             continue
-        if status_entry.get("gate") != resolved_entry.get("gate"):
-            fail(f"tool-status.json gate policy for {tool_id} does not match resolved-tools.json")
+        require_tool_status_matches_resolved(tool_id, resolved_entry, status_entry)
 
     for sensor in SENSORS:
         if sensor not in resolved_by_id:
@@ -4511,6 +4510,24 @@ def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
         for field in ["class", "command", "required_if", "required_reason", "runtime_profile"]:
             if not isinstance(entry.get(field), str) or not entry[field]:
                 fail(f"{path} {tool_id} missing string field {field}: {entry!r}")
+        for field in ["required", "planned_run", "requires_lease"]:
+            if not isinstance(entry.get(field), bool):
+                fail(f"{path} {tool_id} missing boolean field {field}: {entry!r}")
+        for field in ["timeout_sec", "artifact_budget_mb"]:
+            value = entry.get(field)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                fail(f"{path} {tool_id} field {field} is invalid: {entry!r}")
+        if path == "tool-status.json":
+            for field in ["status", "reason"]:
+                if not isinstance(entry.get(field), str) or not entry[field]:
+                    fail(f"{path} {tool_id} missing string field {field}: {entry!r}")
+            if not isinstance(entry.get("timed_out"), bool):
+                fail(f"{path} {tool_id} timed_out is not boolean: {entry!r}")
+            exit_code = entry.get("exit_code")
+            if exit_code is not None and (
+                not isinstance(exit_code, int) or isinstance(exit_code, bool)
+            ):
+                fail(f"{path} {tool_id} exit_code is invalid: {entry!r}")
         artifact_paths = entry.get("artifact_paths")
         if not isinstance(artifact_paths, list) or not all(
             isinstance(item, str) and item for item in artifact_paths
@@ -4521,6 +4538,31 @@ def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
             require_tool_gate_policy(path, tool_id, gate)
         by_id[tool_id] = entry
     return by_id
+
+
+def require_tool_status_matches_resolved(
+    tool_id: str, resolved_entry: dict, status_entry: dict
+) -> None:
+    mirrored_fields = [
+        "class",
+        "command",
+        "required_if",
+        "required",
+        "required_reason",
+        "runtime_profile",
+        "planned_run",
+        "timeout_sec",
+        "artifact_budget_mb",
+        "requires_lease",
+        "gate",
+        "artifact_paths",
+    ]
+    for field in mirrored_fields:
+        if status_entry.get(field) != resolved_entry.get(field):
+            fail(
+                f"tool-status.json {field} for {tool_id} "
+                "does not match resolved-tools.json"
+            )
 
 
 def require_tool_gate_policy(path: str, tool_id: str, gate: object) -> None:
@@ -4863,6 +4905,27 @@ def self_test_coverage_sidecar_receipts() -> None:
             },
         )
         require_coverage_status_artifact(root, tool_status)
+
+
+def self_test_tool_status_metadata_mismatch_fails() -> None:
+    resolved_entry = {
+        "id": "ripr",
+        "class": "static",
+        "command": "ripr",
+        "required_if": "rust-behavior-or-tests-changed",
+        "required": False,
+        "required_reason": "Rust behavior or tests changed",
+        "runtime_profile": "gh-runner",
+        "planned_run": True,
+        "timeout_sec": 240,
+        "artifact_budget_mb": 128,
+        "requires_lease": False,
+        "gate": None,
+        "artifact_paths": ["sensors/ripr/ub-review-sensor-status.json"],
+    }
+    status_entry = dict(resolved_entry)
+    status_entry["timeout_sec"] = 120
+    require_tool_status_matches_resolved("ripr", resolved_entry, status_entry)
 
 
 def run_self_tests() -> None:
@@ -5290,6 +5353,11 @@ def run_self_tests() -> None:
         self_test_missing_nonempty_candidate_dir_fails,
     )
     self_test_coverage_sidecar_receipts()
+    expect_self_test_failure(
+        "tool status metadata mismatch",
+        "tool-status.json timeout_sec for ripr does not match resolved-tools.json",
+        self_test_tool_status_metadata_mismatch_fails,
+    )
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     require_skipped_payload_contract(
         {"github_review_json": None},

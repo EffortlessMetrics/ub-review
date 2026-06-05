@@ -47,6 +47,12 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   `coverage-summary.json`, `changed-lines.json`, and `upload.json` sidecars, and
   the verifier checks that each stays execution telemetry rather than a
   correctness claim.
+- PR #274: `ub-review doctor` reports MiniMax and OpenCode provider-key env
+  presence without printing secret values, and Bun runner docs map GitHub
+  secrets to `UB_REVIEW_*` env vars.
+- PR #275: `work_queue.json` records baseline sensor tasks before proof-planner
+  tasks, and `tool-status.json` carries timeout, artifact-budget, and lease
+  metadata so the verifier can audit queue/tool parity.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
