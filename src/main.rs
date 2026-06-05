@@ -6747,7 +6747,7 @@ fn write_review_artifacts(
     )?;
     let receipt_routes = receipt_route_artifacts(&review.proof_receipts, &review.resource_leases);
     write_receipt_route_artifacts(out, &receipt_routes)?;
-    let final_orchestrator_plan = build_orchestrator_plan(
+    let final_orchestrator_plan = build_final_orchestrator_plan(
         &candidates,
         &observation_summary.unique,
         &review.proof_receipts,
@@ -8387,6 +8387,27 @@ fn build_orchestrator_plan(
         observation_groups,
         follow_up_tasks,
     }
+}
+
+fn build_final_orchestrator_plan(
+    candidates: &[CandidateRecord],
+    observations: &[ObservationGroup],
+    proof_receipts: &[ProofReceipt],
+    resource_leases: &[ResourceLease],
+) -> OrchestratorPlanArtifact {
+    let mut plan =
+        build_orchestrator_plan(candidates, observations, proof_receipts, resource_leases);
+    plan.follow_up_tasks
+        .retain(|task| !final_follow_up_task_resolved_by_tool_proof(task));
+    plan
+}
+
+fn final_follow_up_task_resolved_by_tool_proof(task: &FollowUpQuestionTask) -> bool {
+    task.evidence_need == "proof-confirmation"
+        && task
+            .routed_evidence
+            .iter()
+            .any(|evidence| evidence.kind == "proof-receipt" && evidence.status == "tool-confirmed")
 }
 
 fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> Result<()> {
@@ -20801,12 +20822,13 @@ mod tests {
         SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
         append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
         apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        build_candidate_records, build_final_orchestrator_plan, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
         follow_up_output_record, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
@@ -30674,8 +30696,12 @@ index 1111111..2222222 100644
             command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
         };
 
-        let final_plan =
-            build_orchestrator_plan(&candidates, &observations, &[late_receipt], &[late_lease]);
+        let final_plan = build_final_orchestrator_plan(
+            &candidates,
+            &observations,
+            &[late_receipt],
+            &[late_lease],
+        );
         write_final_orchestrator_artifact(temp.path(), &final_plan)?;
 
         let initial_written: serde_json::Value = serde_json::from_slice(&fs::read(
@@ -30689,17 +30715,16 @@ index 1111111..2222222 100644
                 .as_array()
                 .is_some_and(Vec::is_empty)
         );
+        assert_eq!(initial_written["follow_up_tasks"][0]["stage"], "secondary");
         assert_eq!(
             final_written["evidence_groups"][0]["routed_evidence"][0]["id"],
             "proof-follow-up-late"
         );
-        assert_eq!(
-            final_written["follow_up_tasks"][0]["stage"], "tertiary",
-            "final routed proof should refine rather than repeat the secondary proof question"
-        );
-        assert_eq!(
-            final_written["follow_up_tasks"][0]["routed_evidence"][0]["id"],
-            "proof-follow-up-late"
+        assert!(
+            final_written["follow_up_tasks"]
+                .as_array()
+                .is_some_and(Vec::is_empty),
+            "final routed proof should resolve the proof-confirmation follow-up task"
         );
         Ok(())
     }
