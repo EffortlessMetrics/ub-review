@@ -19,7 +19,8 @@ bun-ub
 ```
 
 The initial target is the Bun UB hunt. Other repo presets should be added after
-this one proves useful on real PRs.
+this one proves useful on real PRs. The Bun-specific operating handoff lives in
+[docs/BUN_UB_HUNT.md](docs/BUN_UB_HUNT.md).
 
 ## Why this exists
 

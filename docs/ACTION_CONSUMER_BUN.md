@@ -2,7 +2,8 @@
 
 The Bun fork should consume `ub-review` as a normal GitHub Action, not vendor the Rust runner.
 Non-Bun repositories can set `config: .ub-review.toml` instead of using the
-bundled `bun-ub` preset.
+bundled `bun-ub` preset. Use [BUN_UB_HUNT.md](BUN_UB_HUNT.md) for the Bun
+invariant, PR shape, and proof rules.
 
 ```yaml
 - name: Build UB review packet

@@ -1,6 +1,8 @@
 # Bun UB preset on GitHub-hosted runners
 
 The first production use of `ub-review` is the Bun UB hunt.
+Use [BUN_UB_HUNT.md](BUN_UB_HUNT.md) for the hunt invariant, proof rules, and
+packet handoff.
 
 The Bun fork should consume this repository as a GitHub Action:
 
