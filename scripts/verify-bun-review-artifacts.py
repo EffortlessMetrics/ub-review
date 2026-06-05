@@ -4431,6 +4431,7 @@ def require_tool_gate_outcome_artifacts(
             fail(f"tool-gate-outcomes.json source_artifacts missing sensor receipt for {tool_id}")
         if "tool-status.json" not in source_artifacts:
             fail(f"tool-gate-outcomes.json source_artifacts missing tool-status for {tool_id}")
+        require_tool_gate_outcome_consistency(outcome)
 
     lines = [line for line in read_text(root / "tool_gate_outcomes.ndjson").splitlines() if line.strip()]
     if len(lines) != len(outcome_entries):
@@ -4492,6 +4493,50 @@ def require_tool_gate_outcome_entry(entry: dict) -> None:
     ):
         fail(f"tool gate outcome new_unsuppressed metric is invalid: {entry!r}")
     require_tool_gate_policy("tool-gate-outcomes.json", entry["tool"], entry.get("policy"))
+
+
+def require_tool_gate_outcome_consistency(entry: dict) -> None:
+    tool_id = entry["tool"]
+    outcome = entry["outcome"]
+    evaluated = entry["evaluated"]
+    sensor_status = entry["sensor_status"]
+    policy = entry["policy"]
+    metrics = entry["metrics"]
+    max_new_unsuppressed = policy.get("max_new_unsuppressed")
+    new_unsuppressed = metrics.get("new_unsuppressed")
+
+    if outcome in {"passed", "failed"} and evaluated is not True:
+        fail(f"tool-gate-outcomes.json {tool_id} outcome {outcome} must be evaluated")
+    if outcome in {"not_evaluated", "missing_evidence"} and evaluated is not False:
+        fail(f"tool-gate-outcomes.json {tool_id} outcome {outcome} must not be evaluated")
+    if sensor_status in {"failed", "timed_out"} and outcome != "failed":
+        fail(f"tool-gate-outcomes.json {tool_id} failed sensor must produce failed outcome")
+    if outcome == "passed" and sensor_status != "ok":
+        fail(f"tool-gate-outcomes.json {tool_id} passed with non-ok sensor status")
+    if sensor_status != "ok" or max_new_unsuppressed is None:
+        return
+
+    if outcome == "passed":
+        if not isinstance(new_unsuppressed, int) or isinstance(new_unsuppressed, bool):
+            fail(f"tool-gate-outcomes.json {tool_id} passed without new_unsuppressed metric")
+        if new_unsuppressed > max_new_unsuppressed:
+            fail(
+                f"tool-gate-outcomes.json {tool_id} passed with new_unsuppressed "
+                f"{new_unsuppressed} above threshold {max_new_unsuppressed}"
+            )
+    elif outcome == "failed":
+        if not isinstance(new_unsuppressed, int) or isinstance(new_unsuppressed, bool):
+            fail(f"tool-gate-outcomes.json {tool_id} failed without new_unsuppressed metric")
+        if new_unsuppressed <= max_new_unsuppressed:
+            fail(
+                f"tool-gate-outcomes.json {tool_id} failed with new_unsuppressed "
+                f"{new_unsuppressed} within threshold {max_new_unsuppressed}"
+            )
+    elif new_unsuppressed is not None:
+        fail(
+            f"tool-gate-outcomes.json {tool_id} unevaluated outcome carries "
+            "new_unsuppressed metric"
+        )
 
 
 def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
@@ -4928,6 +4973,33 @@ def self_test_tool_status_metadata_mismatch_fails() -> None:
     require_tool_status_matches_resolved("ripr", resolved_entry, status_entry)
 
 
+def self_test_tool_gate_outcome_false_pass_fails() -> None:
+    entry = {
+        "schema": "ub-review.tool_gate_outcome.v1",
+        "tool": "ripr",
+        "policy": {"scope": "on-diff", "max_new_unsuppressed": 0},
+        "required": False,
+        "planned_run": True,
+        "sensor_status": "ok",
+        "sensor_reason": "completed",
+        "sensor_receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+        "status_source": "tool-status.json",
+        "outcome": "passed",
+        "evaluated": True,
+        "reason": "bad fixture claims pass despite threshold breach",
+        "metrics": {"new_unsuppressed": 1},
+        "source_artifacts": [
+            "sensors/ripr/ub-review-sensor-status.json",
+            "tool-status.json",
+            "sensors/ripr/gate-decision.json",
+        ],
+        "packet_policy": "gate-only",
+        "gate_policy": "trust-affecting",
+    }
+    require_tool_gate_outcome_entry(entry)
+    require_tool_gate_outcome_consistency(entry)
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
@@ -5357,6 +5429,11 @@ def run_self_tests() -> None:
         "tool status metadata mismatch",
         "tool-status.json timeout_sec for ripr does not match resolved-tools.json",
         self_test_tool_status_metadata_mismatch_fails,
+    )
+    expect_self_test_failure(
+        "tool gate outcome false pass",
+        "passed with new_unsuppressed 1 above threshold 0",
+        self_test_tool_gate_outcome_false_pass_fails,
     )
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     require_skipped_payload_contract(

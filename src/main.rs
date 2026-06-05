@@ -4239,7 +4239,11 @@ fn tool_gate_outcome_entry(
 ) -> ToolGateOutcomeEntry {
     let sensor_receipt_path = format!("sensors/{}/ub-review-sensor-status.json", tool.id);
     let gate_decision_path = format!("sensors/{}/gate-decision.json", tool.id);
-    let gate_decision = read_tool_gate_decision(&out.join(&gate_decision_path));
+    let gate_decision_state = read_tool_gate_decision(&out.join(&gate_decision_path));
+    let gate_decision = match &gate_decision_state {
+        ToolGateDecisionState::Present(decision) => Some(decision),
+        ToolGateDecisionState::Missing | ToolGateDecisionState::Malformed(_) => None,
+    };
     let sensor_status = status
         .map(|entry| entry.status.clone())
         .unwrap_or_else(|| "missing_status".to_owned());
@@ -4271,7 +4275,15 @@ fn tool_gate_outcome_entry(
             None,
         ),
         Some(entry) if entry.status == "ok" => {
-            evaluate_tool_gate_threshold(tool, &policy, gate_decision.as_ref())
+            match (&gate_decision_state, policy.max_new_unsuppressed) {
+                (ToolGateDecisionState::Malformed(reason), Some(_)) => (
+                    "missing_evidence".to_owned(),
+                    false,
+                    format!("`{}` gate-decision receipt is malformed: {reason}", tool.id),
+                    None,
+                ),
+                _ => evaluate_tool_gate_threshold(tool, &policy, gate_decision),
+            }
         }
         Some(entry) => (
             "missing_evidence".to_owned(),
@@ -4284,7 +4296,7 @@ fn tool_gate_outcome_entry(
         ),
     };
     let mut source_artifacts = vec![sensor_receipt_path.clone(), "tool-status.json".to_owned()];
-    if gate_decision.is_some() {
+    if !matches!(gate_decision_state, ToolGateDecisionState::Missing) {
         source_artifacts.push(gate_decision_path);
     }
     ToolGateOutcomeEntry {
@@ -4359,9 +4371,24 @@ struct ToolGateDecision {
     new_unsuppressed: u64,
 }
 
-fn read_tool_gate_decision(path: &Path) -> Option<ToolGateDecision> {
-    let text = fs::read_to_string(path).ok()?;
-    serde_json::from_str(&text).ok()
+enum ToolGateDecisionState {
+    Missing,
+    Malformed(String),
+    Present(ToolGateDecision),
+}
+
+fn read_tool_gate_decision(path: &Path) -> ToolGateDecisionState {
+    if !path.exists() {
+        return ToolGateDecisionState::Missing;
+    }
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(err) => return ToolGateDecisionState::Malformed(err.to_string()),
+    };
+    match serde_json::from_str(&text) {
+        Ok(decision) => ToolGateDecisionState::Present(decision),
+        Err(err) => ToolGateDecisionState::Malformed(err.to_string()),
+    }
 }
 
 fn tool_artifact_paths(id: &str) -> Vec<String> {
@@ -21174,6 +21201,72 @@ mod tests {
         assert_eq!(ripr.outcome, "passed");
         assert!(ripr.evaluated);
         assert_eq!(ripr.metrics.new_unsuppressed, Some(0));
+        assert!(
+            ripr.source_artifacts
+                .iter()
+                .any(|artifact| artifact == "sensors/ripr/gate-decision.json")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn tool_gate_outcome_records_malformed_gate_decision_receipt() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let temp = tempfile::tempdir()?;
+        let ripr = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr sensor missing"))?;
+        super::write_sensor_status(
+            temp.path(),
+            ripr,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["ripr".to_owned(), "gate".to_owned()],
+                duration_ms: 12,
+                reason: "ripr gate receipt ok",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        fs::write(
+            temp.path().join("sensors/ripr/gate-decision.json"),
+            br#"{"new_unsuppressed":"zero"}"#,
+        )?;
+        let tool_status =
+            super::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
+        let outcomes = super::tool_gate_outcome_artifact(
+            temp.path(),
+            &config,
+            config.selected_profile()?,
+            &tool_status,
+        );
+        let ripr = outcomes
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.tool == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr gate outcome missing"))?;
+        assert_eq!(ripr.sensor_status, "ok");
+        assert_eq!(ripr.outcome, "missing_evidence");
+        assert!(!ripr.evaluated);
+        assert!(ripr.reason.contains("gate-decision receipt is malformed"));
+        assert_eq!(ripr.metrics.new_unsuppressed, None);
         assert!(
             ripr.source_artifacts
                 .iter()
