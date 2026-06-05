@@ -38,6 +38,7 @@ MAX_PR_REVIEW_BODY_BULLETS = 12
 ARTIFACT_NAME_MAX_CHARS = 96
 ARTIFACT_NAME_HASH_CHARS = 16
 SECRET_VALUE_NAMES = [
+    "FACTORY_API_KEY",
     "github_token",
     "GITHUB_TOKEN",
     "MINIMAX_API_KEY",
@@ -156,11 +157,16 @@ def looks_like_secret_assignment_value(value: str) -> bool:
     if value.startswith(("$", "${{", "%", "<", "[", "`")):
         return False
     lowered = value.lower()
+    if lowered.startswith(("\\u003c", "\\x3c")) or lowered.lstrip("\\").startswith(
+        ("u003c", "x3c")
+    ):
+        return False
     if lowered.startswith(SECRET_VALUE_PREFIXES):
         return True
     compact = re.sub(r"[^A-Za-z0-9]", "", value)
     return (
         len(compact) >= 16
+        and len(set(compact.lower())) >= 5
         and any(character.isalpha() for character in compact)
         and any(character.isdigit() for character in compact)
     )
@@ -526,9 +532,11 @@ def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
         and ("skipped" in text or "disabled" in text)
         and (
             "no .github diff" in text
+            or "no github actions yaml" in text
             or "no workflow" in text
             or "consumer workflow" in text
             or "invokes this script" in text
+            or "no yaml in diff" in text
         )
     )
     return (
@@ -543,6 +551,28 @@ def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
             and yaml_pin
         )
     )
+
+
+def is_gap_noise_meta_review_noise(text: str) -> bool:
+    mentions_gap_noise = (
+        "gap-noise" in text
+        or "is_workflow_tool_status_artifact_gap_noise" in text
+    )
+    mentions_meta_surface = (
+        "observation text" in text
+        or "observation string" in text
+        or "string literal" in text
+        or "trust_language_softening" in text
+        or "trust-language softening" in text
+        or "substring-based matching" in text
+    )
+    mentions_softening = (
+        "softened" in text
+        or "softening" in text
+        or "not trust-affecting" in text
+        or "absence of proof" in text
+    )
+    return mentions_gap_noise and mentions_meta_surface and mentions_softening
 
 
 def is_workflow_paths_ignore_no_posture_noise(text: str) -> bool:
@@ -1810,6 +1840,7 @@ def is_pr_body_meta_review_noise(text: str) -> bool:
             "the refutation claiming" in text
             and "still matches current evidence" in text
         )
+        or is_gap_noise_meta_review_noise(text)
         or (
             "pr-body contract hardening" in text
             and "not verifiable from the repo diff" in text
@@ -5169,6 +5200,23 @@ def run_self_tests() -> None:
         "expected one of",
         lambda: require_run_mode("review-direct", "self-test legacy mode"),
     )
+    factory_key_name = "FACTORY" + "_API_KEY"
+    factory_key_value = hashlib.sha256(b"factory-key-self-test").hexdigest()[:24]
+    factory_key_assignment = factory_key_name + "=" + factory_key_value
+    factory_key_placeholder = factory_key_name + "=${{ secrets." + factory_key_name + " }}"
+    if secret_leak_marker(factory_key_assignment) != factory_key_name:
+        fail("self-test FACTORY_API_KEY secret assignment was not detected")
+    if secret_leak_marker(factory_key_placeholder) is not None:
+        fail("self-test FACTORY_API_KEY secret placeholder was treated as a leak")
+    low_diversity_value = factory_key_name + "=" + (("x" * 15) + "1")
+    if secret_leak_marker(low_diversity_value) is not None:
+        fail("self-test low-diversity synthetic value was treated as a leak")
+    escaped_placeholder = factory_key_name + r"=\u003csha256-truncated\u003e"
+    if secret_leak_marker(escaped_placeholder) is not None:
+        fail("self-test escaped placeholder was treated as a leak")
+    double_escaped_placeholder = factory_key_name + r"=\\u003csha256-truncated\\u003e"
+    if secret_leak_marker(double_escaped_placeholder) is not None:
+        fail("self-test double-escaped placeholder was treated as a leak")
     require_github_comment(
         {
             "path": "src/lib.rs",
