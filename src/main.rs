@@ -1244,6 +1244,7 @@ struct ReviewTerminalState {
     model_lanes: usize,
     evidence_gaps: usize,
     proof_receipts: usize,
+    final_follow_up_tasks: usize,
     inline_comments: usize,
     summary_only_findings: usize,
 }
@@ -6622,6 +6623,7 @@ fn write_review_artifacts(
         summary_only_findings: &summary_only_findings,
         observations: &model_observations,
         proof_receipts: &proof_receipts,
+        final_follow_up_tasks: 0,
     })?;
     let mut review = ReviewArtifacts {
         shared_context_id,
@@ -6795,6 +6797,7 @@ fn write_review_artifacts(
         summary_only_findings: &compiler_summary_only_findings,
         observations: &compiler_observations,
         proof_receipts: &review.proof_receipts,
+        final_follow_up_tasks: final_orchestrator_plan.follow_up_tasks.len(),
     })?;
     let review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
@@ -6937,6 +6940,7 @@ struct ReviewCompilerInput<'a> {
     summary_only_findings: &'a [SummaryOnlyFinding],
     observations: &'a [Observation],
     proof_receipts: &'a [ProofReceipt],
+    final_follow_up_tasks: usize,
 }
 
 #[derive(Debug, Serialize)]
@@ -7044,6 +7048,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         missing_or_failed_sensor_evidence: input.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: input.missing_or_failed_model_evidence,
         proof_receipts: input.proof_receipts,
+        final_follow_up_tasks: input.final_follow_up_tasks,
     });
     Ok(CompiledReviewSurface {
         artifact_body,
@@ -7260,6 +7265,7 @@ struct TerminalStateInput<'a> {
     missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
     proof_receipts: &'a [ProofReceipt],
+    final_follow_up_tasks: usize,
 }
 
 fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalState {
@@ -7328,6 +7334,7 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
         model_lanes: input.model_lanes.len(),
         evidence_gaps,
         proof_receipts: input.proof_receipts.len(),
+        final_follow_up_tasks: input.final_follow_up_tasks,
         inline_comments: input.inline_comments.len(),
         summary_only_findings: input.summary_only_findings.len(),
     }
@@ -27879,6 +27886,7 @@ UB_REVIEW_HTTP_STATUS:429
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         });
 
         assert_eq!(state.status, "sufficient");
@@ -27912,6 +27920,7 @@ UB_REVIEW_HTTP_STATUS:429
             missing_or_failed_sensor_evidence: &missing_sensor,
             missing_or_failed_model_evidence: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         });
 
         assert_eq!(state.status, "failed-to-review");
@@ -27930,6 +27939,7 @@ UB_REVIEW_HTTP_STATUS:429
             missing_or_failed_sensor_evidence: &missing_sensor,
             missing_or_failed_model_evidence: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         });
 
         assert_eq!(review_byok_state.status, "sufficient");
@@ -27953,6 +27963,7 @@ UB_REVIEW_HTTP_STATUS:429
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         });
 
         assert_eq!(state.status, "artifact-only");
@@ -27983,6 +27994,7 @@ UB_REVIEW_HTTP_STATUS:429
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &missing_model,
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         });
 
         assert_eq!(state.status, "failed-to-review");
@@ -28005,6 +28017,7 @@ UB_REVIEW_HTTP_STATUS:429
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         });
 
         assert_eq!(state.status, "needs-reviewer-attention");
@@ -28040,11 +28053,13 @@ UB_REVIEW_HTTP_STATUS:429
             summary_only_findings: &[],
             observations: &[follow_up_observation],
             proof_receipts: &[],
+            final_follow_up_tasks: 2,
         })?;
 
         assert!(!surface.should_prepare_github_review);
         assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
         assert_eq!(surface.terminal_state.status, "sufficient");
+        assert_eq!(surface.terminal_state.final_follow_up_tasks, 2);
         assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
         Ok(())
@@ -28079,6 +28094,7 @@ UB_REVIEW_HTTP_STATUS:429
             summary_only_findings: &[],
             observations: &[resolved_observation],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -28118,6 +28134,7 @@ UB_REVIEW_HTTP_STATUS:429
             summary_only_findings: &summary_only_findings,
             observations: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -28160,6 +28177,7 @@ UB_REVIEW_HTTP_STATUS:429
             summary_only_findings: &[],
             observations: &[],
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -28353,6 +28371,7 @@ UB_REVIEW_HTTP_STATUS:429
             summary_only_findings: &summary_only_findings,
             observations: &observations,
             proof_receipts: &[],
+            final_follow_up_tasks: 0,
         })?;
 
         assert!(
@@ -32294,6 +32313,7 @@ index 1111111..2222222 100644
             model_lanes: 1,
             evidence_gaps: 0,
             proof_receipts: 0,
+            final_follow_up_tasks: 0,
             inline_comments: 0,
             summary_only_findings: 0,
         }

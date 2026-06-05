@@ -1365,6 +1365,15 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     )
     if final_follow_up_metric != len(final_follow_up_tasks):
         fail("metrics final_follow_up_tasks does not match final_orchestrator_plan")
+    terminal_final_follow_up_metric = require_non_negative_int(
+        review.get("terminal_state", {}),
+        "terminal_state.final_follow_up_tasks",
+        "final_follow_up_tasks",
+    )
+    if terminal_final_follow_up_metric != len(final_follow_up_tasks):
+        fail("terminal_state final_follow_up_tasks does not match final_orchestrator_plan")
+    if terminal_final_follow_up_metric != final_follow_up_metric:
+        fail("terminal_state final_follow_up_tasks does not match metrics")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
     require_model_stage_artifacts(root, review, follow_up_results)
     follow_up_outputs = require_follow_up_outputs(root, follow_up_results)

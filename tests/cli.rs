@@ -685,6 +685,10 @@ fn active_len_tracks_view_after_resize() {
         )
     );
     assert_eq!(
+        terminal_state["final_follow_up_tasks"],
+        metrics["final_follow_up_tasks"]
+    );
+    assert_eq!(
         metrics["run"]["concurrency_model"],
         "profiled-stream-scheduler-v0"
     );
