@@ -198,6 +198,7 @@ fn active_len_tracks_view_after_resize() {
         "review/proof_planner_input.json",
         "review/proof_planner_output.json",
         "review/proof_receipts.json",
+        "review/receipt_routes.json",
         "review/proof_plan.md",
         "review/resource_leases.json",
         "review/resource_plan.md",
@@ -209,6 +210,7 @@ fn active_len_tracks_view_after_resize() {
         "proof_requests.ndjson",
         "proof_tasks.ndjson",
         "proof_receipts.ndjson",
+        "receipt_routes.ndjson",
         "tool_gate_outcomes.ndjson",
         "witnesses.ndjson",
         "resource_leases.ndjson",
@@ -1680,6 +1682,33 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
     assert_eq!(leases[0]["status"], "granted");
     assert_eq!(leases[0]["consumer"], receipt["id"]);
     assert_eq!(leases[0]["network"], false);
+
+    let receipt_routes: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/receipt_routes.json"))?)?;
+    assert_eq!(receipt_routes["schema"], "ub-review.receipt_routes.v1");
+    let routes = json_array_field(&receipt_routes, "routes")?;
+    assert_eq!(routes.len(), 1);
+    assert_eq!(routes[0]["schema"], "ub-review.receipt_route.v1");
+    assert_eq!(routes[0]["receipt_id"], receipt["id"]);
+    assert_eq!(routes[0]["phase"], "initial-diff-receipt");
+    assert_eq!(routes[0]["status"], "tool-confirmed");
+    assert_eq!(
+        routes[0]["consumers"],
+        serde_json::json!(["tests-oracle", "opposition", "compiler"])
+    );
+    assert_eq!(routes[0]["lease_ids"], serde_json::json!([leases[0]["id"]]));
+    assert_eq!(
+        routes[0]["source_artifacts"],
+        serde_json::json!(["review/proof_receipts.json", "review/resource_leases.json"])
+    );
+    let route_ndjson = fs::read_to_string(out.join("receipt_routes.ndjson"))?;
+    assert_eq!(
+        route_ndjson
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .count(),
+        routes.len()
+    );
 
     let review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;

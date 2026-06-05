@@ -117,6 +117,7 @@ target/ub-review/
     resolved_candidates.json
     proof_requests.json
     proof_receipts.json
+    receipt_routes.json
     resource_leases.json
     model_stages.json
     final_compiler_input.json
@@ -126,6 +127,7 @@ target/ub-review/
   model_stages.ndjson
   resolved_candidates.ndjson
   tool_gate_outcomes.ndjson
+  receipt_routes.ndjson
   work_queue.json
   work_events.ndjson
   running-summary.md

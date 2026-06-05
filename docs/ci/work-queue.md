@@ -108,9 +108,11 @@ resolved-tools.json
 tool-status.json
 proof_tasks.ndjson
 proof_receipts.ndjson
+receipt_routes.ndjson
 resource_leases.ndjson
 review/proof_plan.md
 review/proof_receipts.json
+review/receipt_routes.json
 review/resource_leases.json
 review/model_stages.json
 review/resolved_candidates.json

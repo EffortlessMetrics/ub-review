@@ -847,6 +847,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/proof_planner_output.json",
         "review/proof_request_groups.json",
         "review/proof_receipts.json",
+        "review/receipt_routes.json",
         "review/proof_plan.md",
         "review/resource_leases.json",
         "review/resource_plan.md",
@@ -859,6 +860,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "proof_requests.ndjson",
         "proof_tasks.ndjson",
         "proof_receipts.ndjson",
+        "receipt_routes.ndjson",
         "tool_gate_outcomes.ndjson",
         "resource_leases.ndjson",
     ]:
@@ -1321,6 +1323,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     if review.get("resource_leases", []) != resource_leases:
         fail("review resource_leases does not match review/resource_leases.json")
     require_resource_lease_artifacts(root, proof_receipts, resource_leases)
+    require_receipt_route_artifacts(root, proof_receipts, resource_leases)
     orchestrator_plan = load_json(root / "review/orchestrator_plan.json")
     follow_up_results = require_follow_up_results(root, orchestrator_plan["follow_up_tasks"])
     require_model_stage_artifacts(root, review, follow_up_results)
@@ -2513,6 +2516,131 @@ def require_proof_receipt_ndjson(root: pathlib.Path, proof_receipts: list[dict])
             fail(f"proof_receipts.ndjson line {index + 1} does not match JSON artifact")
 
 
+def require_receipt_route_artifacts(
+    root: pathlib.Path, proof_receipts: list[dict], resource_leases: list[dict]
+) -> None:
+    artifact = load_json(root / "review/receipt_routes.json")
+    if not isinstance(artifact, dict):
+        fail("review/receipt_routes.json is not an object")
+    if artifact.get("schema") != "ub-review.receipt_routes.v1":
+        fail(f"receipt routes artifact has wrong schema: {artifact!r}")
+    if artifact.get("source_artifacts") != [
+        "review/proof_receipts.json",
+        "review/resource_leases.json",
+    ]:
+        fail(f"receipt routes source_artifacts are unsupported: {artifact!r}")
+    routes = artifact.get("routes")
+    if not isinstance(routes, list):
+        fail("review/receipt_routes.json routes is not an array")
+    expected = expected_receipt_routes(proof_receipts, resource_leases)
+    if routes != expected:
+        fail("review/receipt_routes.json routes do not match proof receipts and leases")
+    lines = [
+        line
+        for line in read_text(root / "receipt_routes.ndjson").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != len(routes):
+        fail("receipt_routes.ndjson line count does not match review/receipt_routes.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid receipt_routes.ndjson line {index + 1}: {error}")
+        if parsed != routes[index]:
+            fail(f"receipt_routes.ndjson line {index + 1} does not match JSON artifact")
+        require_receipt_route_schema(parsed)
+
+
+def expected_receipt_routes(
+    proof_receipts: list[dict], resource_leases: list[dict]
+) -> list[dict]:
+    routes = []
+    for receipt in proof_receipts:
+        lease_ids = [
+            lease["id"]
+            for lease in resource_leases
+            if lease.get("consumer") == receipt["id"]
+        ]
+        source_artifacts = ["review/proof_receipts.json"]
+        if lease_ids:
+            source_artifacts.append("review/resource_leases.json")
+        routes.append(
+            {
+                "schema": "ub-review.receipt_route.v1",
+                "id": f"receipt-route-{receipt['id']}",
+                "receipt_id": receipt["id"],
+                "phase": receipt_route_phase(receipt),
+                "receipt_kind": receipt["kind"],
+                "result": receipt["result"],
+                "status": routed_status_for_proof_receipt(receipt),
+                "requested_by": receipt["requested_by"],
+                "request_ids": receipt["request_ids"],
+                "consumers": receipt_route_consumers(receipt),
+                "lease_ids": lease_ids,
+                "source_artifacts": source_artifacts,
+                "reason": receipt["reason"],
+            }
+        )
+    return routes
+
+
+def receipt_route_phase(receipt: dict) -> str:
+    if any(
+        isinstance(lane, str) and lane.startswith("orchestrator-follow-up")
+        for lane in receipt["requested_by"]
+    ) or any("follow-up" in request_id for request_id in receipt["request_ids"]):
+        return "follow-up-receipt"
+    if "proof-broker" in receipt["requested_by"] and not receipt["request_ids"]:
+        return "initial-diff-receipt"
+    return "model-request-receipt"
+
+
+def receipt_route_consumers(receipt: dict) -> list[str]:
+    consumers: list[str] = []
+    if "proof-broker" in receipt["requested_by"]:
+        if receipt["kind"] in {"focused-head", "focused-red-green"}:
+            append_unique(consumers, "tests-oracle")
+            append_unique(consumers, "opposition")
+        elif receipt["kind"] == "focused-build":
+            append_unique(consumers, "architecture")
+    for lane in receipt["requested_by"]:
+        if lane != "proof-broker":
+            append_unique(consumers, lane)
+    append_unique(consumers, "compiler")
+    return consumers
+
+
+def require_receipt_route_schema(route: dict) -> None:
+    if not isinstance(route, dict):
+        fail(f"receipt route is not an object: {route!r}")
+    if route.get("schema") != "ub-review.receipt_route.v1":
+        fail(f"receipt route has wrong schema: {route!r}")
+    for field in [
+        "id",
+        "receipt_id",
+        "phase",
+        "receipt_kind",
+        "result",
+        "status",
+        "reason",
+    ]:
+        if not isinstance(route.get(field), str) or not route[field]:
+            fail(f"receipt route missing string field {field}: {route!r}")
+    if route["phase"] not in {
+        "initial-diff-receipt",
+        "model-request-receipt",
+        "follow-up-receipt",
+    }:
+        fail(f"receipt route phase is unsupported: {route!r}")
+    for field in ["requested_by", "request_ids", "consumers", "lease_ids", "source_artifacts"]:
+        values = route.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(value, str) and value for value in values
+        ):
+            fail(f"receipt route {field} is not a string array: {route!r}")
+
+
 def require_resource_lease_artifacts(
     root: pathlib.Path, proof_receipts: list[dict], resource_leases: list[dict]
 ) -> None:
@@ -3292,6 +3420,7 @@ def require_final_compiler_input(
         "review/review.json",
         "review/follow_up_evidence.json",
         "review/proof_receipts.json",
+        "review/receipt_routes.json",
     ]:
         if source not in source_artifacts:
             fail(f"final compiler input missing source artifact {source}")

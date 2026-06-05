@@ -219,6 +219,7 @@ target/ub-review/
     proof_request_groups.json
     proof_receipts.json
     proof_plan.md
+    receipt_routes.json
     resource_leases.json
     resource_plan.md
     github-review.json
@@ -239,6 +240,7 @@ target/ub-review/
   witnesses.ndjson
   proof_requests.ndjson
   proof_receipts.ndjson
+  receipt_routes.ndjson
   resource_leases.ndjson
   running-summary.md
 ```
