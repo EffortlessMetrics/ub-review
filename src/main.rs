@@ -6186,7 +6186,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::Artifact,
     );
-    let pr_body = render_review_body(
+    let mut pr_body = render_review_body(
         input.shared_context_id,
         input.plan,
         input.diff,
@@ -6200,8 +6200,15 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
-    validate_pr_review_body_policy(&pr_body, input.review_body_policy)
-        .with_context(|| "validate pull request review body policy")?;
+    let mut suppressed_artifact_only_pr_body = false;
+    if let Err(err) = validate_pr_review_body_policy(&pr_body, input.review_body_policy) {
+        if is_suppressible_pr_body_policy_error(&err) {
+            pr_body.clear();
+            suppressed_artifact_only_pr_body = true;
+        } else {
+            return Err(err).with_context(|| "validate pull request review body policy");
+        }
+    }
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -6225,6 +6232,8 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
+    } else if suppressed_artifact_only_pr_body {
+        "skipped_artifact_only_body"
     } else {
         "skipped_empty_smoke"
     };
@@ -6248,6 +6257,11 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         review_payload_status,
         terminal_state,
     })
+}
+
+fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
+    let text = error.to_string();
+    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
 }
 
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
@@ -24980,6 +24994,45 @@ UB_REVIEW_HTTP_STATUS:429
 
         assert!(!surface.should_prepare_github_review);
         assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_suppresses_policy_rejected_artifact_only_pr_body() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("workflow-opposition", "ok")];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "workflow-opposition".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason:
+                "No blocking finding after bounded review; residual risk remains for human review."
+                    .to_owned(),
+            evidence: "bounded lane summary".to_owned(),
+        }];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &summary_only_findings,
+            observations: &[],
+            proof_receipts: &[],
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
         assert_eq!(surface.terminal_state.status, "sufficient");
         assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());

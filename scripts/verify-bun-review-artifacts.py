@@ -17,6 +17,10 @@ from typing import Any, Callable
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
 RUN_MODE_VALUES = {"review-byok", "intelligent-ci"}
 RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
+SKIPPED_REVIEW_PAYLOAD_STATUSES = {
+    "skipped_empty_smoke",
+    "skipped_artifact_only_body",
+}
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"
 APPROVAL_LINES = {
@@ -1101,9 +1105,9 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
         skip = load_json(github_skip_path)
         if skip.get("status") != "skipped":
             fail(f"github-review-skip.json status expected skipped, got {skip.get('status')!r}")
-        if skip.get("review_payload_status") != "skipped_empty_smoke":
+        if skip.get("review_payload_status") not in SKIPPED_REVIEW_PAYLOAD_STATUSES:
             fail(
-                "github-review-skip.json review_payload_status expected skipped_empty_smoke"
+                "github-review-skip.json review_payload_status expected skipped status"
             )
         if skip.get("terminal_state") != review.get("terminal_state", {}).get("status"):
             fail("github-review-skip.json terminal_state does not match review.json")
@@ -1232,7 +1236,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
     if (root / "review/github-review-skip.json").exists():
-        if metrics.get("review_payload_status") != "skipped_empty_smoke":
+        if metrics.get("review_payload_status") not in SKIPPED_REVIEW_PAYLOAD_STATUSES:
             fail("metrics review_payload_status does not match github-review-skip.json")
         if metrics.get("github_review_body_bytes") != 0:
             fail("metrics github_review_body_bytes must be 0 for skipped review payloads")
@@ -3735,14 +3739,14 @@ def require_post_receipt(root: pathlib.Path) -> None:
             skip = load_json(github_skip)
             if (
                 skip.get("status") == "skipped"
-                and skip.get("review_payload_status") == "skipped_empty_smoke"
+                and skip.get("review_payload_status") in SKIPPED_REVIEW_PAYLOAD_STATUSES
             ):
                 return
         fail("neither post-result.json nor post-error.json exists")
     if post_result.exists():
         receipt = load_json(post_result)
         if receipt.get("status") == "skipped":
-            if receipt.get("review_payload_status") != "skipped_empty_smoke":
+            if receipt.get("review_payload_status") not in SKIPPED_REVIEW_PAYLOAD_STATUSES:
                 fail("post-result.json skipped receipt has wrong review_payload_status")
             require_skipped_payload_contract(receipt, root, post_result)
             return
