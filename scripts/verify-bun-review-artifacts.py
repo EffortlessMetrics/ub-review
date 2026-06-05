@@ -41,6 +41,7 @@ SECRET_VALUE_NAMES = [
     "github_token",
     "GITHUB_TOKEN",
     "MINIMAX_API_KEY",
+    "OPENCODE",
     "OPENCODE_API_KEY",
     "UB_REVIEW_GITHUB_TOKEN",
     "UB_REVIEW_MINIMAX_API_KEY",
@@ -519,11 +520,23 @@ def is_workflow_tool_status_artifact_gap_noise(text: str) -> bool:
         and "not installed locally" in text
         and ("local pre-push run" in text or "ub-review gate" in text)
     )
+    non_workflow_lint_skip = (
+        "actionlint" in text
+        and ("zizmor" in text or "shellcheck" in text)
+        and ("skipped" in text or "disabled" in text)
+        and (
+            "no .github diff" in text
+            or "no workflow" in text
+            or "consumer workflow" in text
+            or "invokes this script" in text
+        )
+    )
     return (
         (actionlint_ok and (not_inlined or yaml_pin))
         or (skipped_heavy and yaml_pin)
         or disabled_workflow_tools
         or local_actionlint_gap
+        or non_workflow_lint_skip
         or (
             ("parked follow-up" in text or "not a blocker" in text)
             and actionlint_ok
@@ -1740,6 +1753,8 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or is_workflow_tool_status_artifact_gap_noise(text)
         or is_workflow_paths_ignore_no_posture_noise(text)
         or is_actionlint_semantic_skip_proof_noise(text)
+        or is_non_workflow_verifier_scope_noise(text)
+        or is_self_test_meta_review_noise(text)
         or is_current_pin_consistency_followup_noise(text)
         or is_workflow_pin_lockstep_no_value_summary_noise(text)
         or is_pr_body_meta_review_noise(text)
@@ -1804,6 +1819,61 @@ def is_pr_body_meta_review_noise(text: str) -> bool:
         or is_checkout_persistence_no_change_noise(text)
         or "actionlint ran ok" in text
     )
+
+
+def is_non_workflow_verifier_scope_noise(text: str) -> bool:
+    verifier_script = (
+        "scripts/verify-bun-review-artifacts.py" in text
+        or "python verifier" in text
+        or "python-only" in text
+        or "python script" in text
+    )
+    workflow_not_changed = (
+        "no .github/workflows" in text
+        or "no github actions yaml" in text
+        or "no workflow yaml" in text
+        or "no workflow file" in text
+        or "no workflow changes" in text
+        or "no workflow files changed" in text
+        or "no action versions" in text
+        or "no action references" in text
+        or "no actions, reusable workflows" in text
+        or "no workflow trigger" in text
+        or "diff does not modify any github actions yaml" in text
+    )
+    says_scope_only = (
+        "actionlint" in text
+        or "zizmor" in text
+        or "pinning" in text
+        or "permissions" in text
+        or "token-scope" in text
+        or "out of scope" in text
+        or "not applicable" in text
+        or "not a trust gap" in text
+        or "no actionable finding" in text
+        or "nothing to pin-review" in text
+        or "surfaces are limited" in text
+        or "validator script itself" in text
+    )
+    return verifier_script and workflow_not_changed and says_scope_only
+
+
+def is_self_test_meta_review_noise(text: str) -> bool:
+    mentions_self_test = (
+        "self-test" in text
+        or "run_self_tests" in text
+        or "--self-test" in text
+        or "tempfile.temporarydirectory" in text
+    )
+    says_meta = (
+        "receipt not in seeded thread" in text
+        or "pr body asserts" in text
+        or "focused smoke proof pattern" in text
+        or "suitable for python change verification" in text
+        or "confirm new self-tests" in text
+        or "if --self-test is not executed in ci" in text
+    )
+    return mentions_self_test and says_meta
 
 
 def is_checkout_persistence_no_change_noise(text: str) -> bool:
@@ -5054,6 +5124,10 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
+    if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
+        fail("self-test OPENCODE secret assignment was not detected")
+    if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
+        fail("self-test OPENCODE secret placeholder was treated as a leak")
     expect_self_test_failure(
         "legacy run mode artifact",
         "expected one of",
