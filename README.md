@@ -206,9 +206,11 @@ target/ub-review/
     merged_observations.json
     dropped_observations.json
     orchestrator_plan.json
+    model_stages.json
     follow_up_results.json
     follow_up_outputs.json
     follow_up_evidence.json
+    final_compiler_input.json
     witnesses.json
     witness_registry.json
     proof_requests.json
@@ -230,6 +232,7 @@ target/ub-review/
   follow_up_questions.ndjson
   follow_up_results.ndjson
   follow_up_outputs.ndjson
+  model_stages.ndjson
   witnesses.ndjson
   proof_requests.ndjson
   proof_receipts.ndjson

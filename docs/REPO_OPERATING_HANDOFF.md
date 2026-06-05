@@ -32,6 +32,11 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   published version.
 - PR #204: Bun artifact verifier rejects inline review boilerplate and CI runs
   the verifier self-test.
+- PR #264: model-stage artifacts record primary, proof-planner, refuter, and
+  follow-up model stages; `review/final_compiler_input.json` records the final
+  compiler inputs after follow-up evidence.
+- PR #265: follow-up model-stage test coverage now exercises provider,
+  duration, HTTP status, response shape, and cache-token fields.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
