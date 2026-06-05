@@ -6747,6 +6747,13 @@ fn write_review_artifacts(
     )?;
     let receipt_routes = receipt_route_artifacts(&review.proof_receipts, &review.resource_leases);
     write_receipt_route_artifacts(out, &receipt_routes)?;
+    let final_orchestrator_plan = build_orchestrator_plan(
+        &candidates,
+        &observation_summary.unique,
+        &review.proof_receipts,
+        &review.resource_leases,
+    );
+    write_final_orchestrator_artifact(out, &final_orchestrator_plan)?;
     let final_compiler_loop =
         start_run_loop(event_log, run_started, "compiler", "coordination", "final")?;
     let mut compiler_summary_only_findings = review.summary_only_findings.clone();
@@ -6763,6 +6770,7 @@ fn write_review_artifacts(
                 "review/follow_up_evidence.json",
                 "review/proof_receipts.json",
                 "review/receipt_routes.json",
+                "review/final_orchestrator_plan.json",
             ],
             model_lanes: &review.model_lanes,
             missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
@@ -8396,6 +8404,16 @@ fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> 
     }
     fs::write(out.join("follow_up_questions.ndjson"), ndjson)?;
     write_follow_up_question_packets(out, &plan.follow_up_tasks)?;
+    Ok(())
+}
+
+fn write_final_orchestrator_artifact(out: &Path, plan: &OrchestratorPlanArtifact) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("final_orchestrator_plan.json"),
+        serde_json::to_vec_pretty(plan)?,
+    )?;
     Ok(())
 }
 
@@ -20805,9 +20823,10 @@ mod tests {
         validate_github_review_payload, validate_github_review_payload_for_post,
         validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
         validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_candidate_artifacts, write_final_orchestrator_artifact,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
@@ -30574,6 +30593,7 @@ index 1111111..2222222 100644
                     "review/follow_up_evidence.json",
                     "review/proof_receipts.json",
                     "review/receipt_routes.json",
+                    "review/final_orchestrator_plan.json",
                 ],
                 model_lanes: &model_lanes,
                 missing_or_failed_sensor_evidence: &[],
@@ -30604,8 +30624,82 @@ index 1111111..2222222 100644
                 "review/review.json",
                 "review/follow_up_evidence.json",
                 "review/proof_receipts.json",
-                "review/receipt_routes.json"
+                "review/receipt_routes.json",
+                "review/final_orchestrator_plan.json"
             ])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn final_orchestrator_plan_can_route_late_follow_up_receipts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let candidates = vec![super::CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: "candidate-proof".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            disposition: "summary-only".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            claim: "Needs red/green proof before upstream.".to_owned(),
+            evidence: "proof request from tests lane".to_owned(),
+            path: None,
+            line: None,
+            side: None,
+        }];
+        let observations = Vec::new();
+        let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[]);
+        write_orchestrator_artifacts(temp.path(), &initial_plan)?;
+        let mut late_receipt = test_red_green_proof_receipt("discriminating", "failed");
+        late_receipt.id = "proof-follow-up-late".to_owned();
+        late_receipt.requested_by = vec!["tests-oracle".to_owned()];
+        late_receipt.request_ids = vec!["proof-follow-up-1".to_owned()];
+        late_receipt.reason = "HEAD passed; base+tests failed after follow-up proof.".to_owned();
+        let late_lease = ResourceLease {
+            schema: "ub-review.resource_lease.v1".to_owned(),
+            id: "lease-proof-follow-up-late".to_owned(),
+            kind: "focused-test".to_owned(),
+            consumer: "proof-follow-up-late".to_owned(),
+            status: "granted".to_owned(),
+            reason: "follow-up proof lease granted".to_owned(),
+            cpu: 2,
+            memory_mb: 2_048,
+            disk_mb: 1_024,
+            timeout_sec: 600,
+            network: false,
+            scratch: true,
+            worktree: Some("base-plus-tests".to_owned()),
+            command: Some("bun test test/js/bun/md/md-edge-cases.test.ts".to_owned()),
+        };
+
+        let final_plan =
+            build_orchestrator_plan(&candidates, &observations, &[late_receipt], &[late_lease]);
+        write_final_orchestrator_artifact(temp.path(), &final_plan)?;
+
+        let initial_written: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/orchestrator_plan.json"),
+        )?)?;
+        let final_written: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/final_orchestrator_plan.json"),
+        )?)?;
+        assert!(
+            initial_written["evidence_groups"][0]["routed_evidence"]
+                .as_array()
+                .is_some_and(Vec::is_empty)
+        );
+        assert_eq!(
+            final_written["evidence_groups"][0]["routed_evidence"][0]["id"],
+            "proof-follow-up-late"
+        );
+        assert_eq!(
+            final_written["follow_up_tasks"][0]["stage"], "tertiary",
+            "final routed proof should refine rather than repeat the secondary proof question"
+        );
+        assert_eq!(
+            final_written["follow_up_tasks"][0]["routed_evidence"][0]["id"],
+            "proof-follow-up-late"
         );
         Ok(())
     }

@@ -188,6 +188,7 @@ fn active_len_tracks_view_after_resize() {
         "review/merged_observations.json",
         "review/dropped_observations.json",
         "review/orchestrator_plan.json",
+        "review/final_orchestrator_plan.json",
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
