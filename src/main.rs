@@ -15463,6 +15463,8 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || is_stale_external_bot_objection_noise(&text)
         || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_workflow_paths_ignore_no_posture_noise(&text)
+        || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_current_pin_consistency_followup_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15645,6 +15647,8 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || is_stale_external_bot_objection_noise(&text)
         || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_workflow_paths_ignore_no_posture_noise(&text)
+        || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_current_pin_consistency_followup_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15753,6 +15757,9 @@ fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
         || is_no_finding_workflow_pin_summary_noise(text)
         || is_stale_external_bot_objection_noise(text)
         || is_workflow_tool_status_artifact_gap_noise(text)
+        || is_workflow_paths_ignore_no_posture_noise(text)
+        || is_actionlint_semantic_skip_proof_noise(text)
+        || is_current_pin_consistency_followup_noise(text)
 }
 
 fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
@@ -15881,6 +15888,39 @@ fn is_workflow_paths_ignore_no_posture_noise(text: &str) -> bool {
         || text.contains("ub gate is the authoritative review")
         || (text.contains("future rename") && text.contains("re-enable"));
     mentions_paths_ignore && mentions_workflow_posture && says_no_posture_change
+}
+
+fn is_actionlint_semantic_skip_proof_noise(text: &str) -> bool {
+    let mentions_actionlint_skip = text.contains("actionlint")
+        && (text.contains("semantic skip behavior")
+            || (text.contains("skip behavior") && text.contains("droid")));
+    let says_proof_is_not_decisive = text.contains("no semantic proof")
+        || text.contains("trust rests on actionlint parse")
+        || text.contains("unproven beyond actionlint parse")
+        || text.contains("not proven by sensors")
+        || text.contains("no focused smoke proof");
+    let scoped_to_auxiliary_lane = text.contains("droid lane")
+        || text.contains("droid")
+        || text.contains("auxiliary/non-blocking")
+        || text.contains("ub gate is authoritative")
+        || text.contains("ub gate is the authoritative");
+    mentions_actionlint_skip && says_proof_is_not_decisive && scoped_to_auxiliary_lane
+}
+
+fn is_current_pin_consistency_followup_noise(text: &str) -> bool {
+    let mentions_cache_pin = (text.contains("cache key")
+        || text.contains("restore-keys")
+        || text.contains("cache restore"))
+        && (text.contains("action sha") || text.contains("repin") || text.contains("uses:"));
+    let says_future_or_parked = text.contains("future repin")
+        || text.contains("future pin")
+        || text.contains("parked for follow-up")
+        || text.contains("follow-up lint rule")
+        || text.contains("follow-up lint")
+        || text.contains("lint rule or script");
+    let says_currently_consistent =
+        text.contains("current state is consistent") || text.contains("not actionable in this pr");
+    mentions_cache_pin && says_future_or_parked && says_currently_consistent
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -23030,6 +23070,17 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.\n\n## Refuted\n\n- paths-ignore addition could mask future unpinned uses: additions in ub-review-packet.yml from Droid lane coverage; refuted because: paths-ignore lift is per-PR: any future PR that also touches ub-review-packet.yml (adds/changes uses:) will change the changed-files set and re-trigger Droid. UB gate is the authoritative review surface and runs on the new pin.\n\n## Parked follow-ups\n\n- Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.\n\n## Evidence gaps\n\n- trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("paths-ignore actionlint skip-proof review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -25075,6 +25126,27 @@ UB_REVIEW_HTTP_STATUS:429
                 reason: "CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate and the packet will be filtered/no-posture.".to_owned(),
                 evidence: "CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned(),
             },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.".to_owned(),
+                evidence: "workflow lane summary".to_owned(),
+            },
         ];
         let observations = vec![
             test_observation(
@@ -25113,6 +25185,33 @@ UB_REVIEW_HTTP_STATUS:429
                 "medium",
                 "paths-ignore-smoke-proof-gap",
             ),
+            test_observation(
+                "workflow-proof",
+                "Confirm actionlint receipt 'ok' confirms syntactic validity, but no semantic proof of skip behavior on the droid lane is available; trust rests on actionlint parse plus per-PR trigger semantics - the droid lane is auxiliary/non-blocking and the UB gate is authoritative, so residual workflow risk is bounded.",
+                "verification-question",
+                "open",
+                "low",
+                "medium",
+                "actionlint-semantic-skip-proof",
+            ),
+            test_observation(
+                "workflow-proof",
+                "Residual workflow risk: cache key/restore-keys prefix is coupled to action SHA. Any future repin must update all three sites; a partial update silently mismatches cache restore. Not actionable in this PR (current state is consistent) - parked for follow-up lint rule or script.",
+                "parked-follow-up",
+                "parked",
+                "low",
+                "medium",
+                "cache-key-current-pin-followup",
+            ),
+            test_observation(
+                "workflow-proof",
+                "trust gap: no focused smoke proof (workflow_run on fork-PR dry-run or pull_request_target guard) executed for the paths-ignore change; semantic skip behavior on Droid lane unproven beyond actionlint parse.",
+                "missing-evidence",
+                "open",
+                "low",
+                "medium",
+                "actionlint-skip-proof-gap",
+            ),
         ];
         let body = render_review_body(
             "abc123",
@@ -25133,6 +25232,8 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("checkout credential persistence"));
         assert!(!body.contains("paths-ignore"));
         assert!(!body.contains("focused smoke proof"));
+        assert!(!body.contains("semantic skip behavior"));
+        assert!(!body.contains("cache key/restore-keys"));
         assert!(!body.contains("actionlint is not installed locally"));
         assert!(!body.contains("CodeRabbit"));
         assert!(!body.contains("892e1bb"));

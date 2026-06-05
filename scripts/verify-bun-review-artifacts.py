@@ -309,6 +309,12 @@ def is_workflow_trust_posture_review_noise(text: str) -> bool:
         text
     ) or is_workflow_tool_status_artifact_gap_noise(
         text
+    ) or is_workflow_paths_ignore_no_posture_noise(
+        text
+    ) or is_actionlint_semantic_skip_proof_noise(
+        text
+    ) or is_current_pin_consistency_followup_noise(
+        text
     )
 
 
@@ -524,6 +530,53 @@ def is_workflow_paths_ignore_no_posture_noise(text: str) -> bool:
         or ("future rename" in text and "re-enable" in text)
     )
     return mentions_paths_ignore and mentions_workflow_posture and says_no_posture_change
+
+
+def is_actionlint_semantic_skip_proof_noise(text: str) -> bool:
+    mentions_actionlint_skip = "actionlint" in text and (
+        "semantic skip behavior" in text
+        or ("skip behavior" in text and "droid" in text)
+    )
+    says_proof_is_not_decisive = (
+        "no semantic proof" in text
+        or "trust rests on actionlint parse" in text
+        or "unproven beyond actionlint parse" in text
+        or "not proven by sensors" in text
+        or "no focused smoke proof" in text
+    )
+    scoped_to_auxiliary_lane = (
+        "droid lane" in text
+        or "droid" in text
+        or "auxiliary/non-blocking" in text
+        or "ub gate is authoritative" in text
+        or "ub gate is the authoritative" in text
+    )
+    return (
+        mentions_actionlint_skip
+        and says_proof_is_not_decisive
+        and scoped_to_auxiliary_lane
+    )
+
+
+def is_current_pin_consistency_followup_noise(text: str) -> bool:
+    mentions_cache_pin = (
+        "cache key" in text
+        or "restore-keys" in text
+        or "cache restore" in text
+    ) and ("action sha" in text or "repin" in text or "uses:" in text)
+    says_future_or_parked = (
+        "future repin" in text
+        or "future pin" in text
+        or "parked for follow-up" in text
+        or "follow-up lint rule" in text
+        or "follow-up lint" in text
+        or "lint rule or script" in text
+    )
+    says_currently_consistent = (
+        "current state is consistent" in text
+        or "not actionable in this pr" in text
+    )
+    return mentions_cache_pin and says_future_or_parked and says_currently_consistent
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -1540,6 +1593,8 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or is_stale_external_bot_objection_noise(text)
         or is_workflow_tool_status_artifact_gap_noise(text)
         or is_workflow_paths_ignore_no_posture_noise(text)
+        or is_actionlint_semantic_skip_proof_noise(text)
+        or is_current_pin_consistency_followup_noise(text)
         or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
@@ -3939,6 +3994,42 @@ def run_self_tests() -> None:
                 "receipt must come from the ub-review gate's own tooling rather "
                 "than a local pre-push run; trust depends on that gate having "
                 "actually executed actionlint v1 against this ref."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "paths-ignore actionlint skip-proof review prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs one verification check before upstream.\n\n"
+                "## Verification questions\n\n"
+                "- Confirm actionlint receipt 'ok' confirms syntactic validity, "
+                "but no semantic proof of skip behavior on the droid lane is "
+                "available; trust rests on actionlint parse plus per-PR trigger "
+                "semantics - the droid lane is auxiliary/non-blocking and the "
+                "UB gate is authoritative, so residual workflow risk is bounded.\n\n"
+                "## Refuted\n\n"
+                "- paths-ignore addition could mask future unpinned uses: "
+                "additions in ub-review-packet.yml from Droid lane coverage; "
+                "refuted because: paths-ignore lift is per-PR: any future PR "
+                "that also touches ub-review-packet.yml (adds/changes uses:) "
+                "will change the changed-files set and re-trigger Droid. "
+                "UB gate is the authoritative review surface and runs on the "
+                "new pin.\n\n"
+                "## Parked follow-ups\n\n"
+                "- Residual workflow risk: cache key/restore-keys prefix is "
+                "coupled to action SHA. Any future repin must update all three "
+                "sites; a partial update silently mismatches cache restore. "
+                "Not actionable in this PR (current state is consistent) - "
+                "parked for follow-up lint rule or script.\n\n"
+                "## Evidence gaps\n\n"
+                "- trust gap: no focused smoke proof (workflow_run on fork-PR "
+                "dry-run or pull_request_target guard) executed for the "
+                "paths-ignore change; semantic skip behavior on Droid lane "
+                "unproven beyond actionlint parse."
             ),
             pathlib.Path("review/github-review.json"),
         ),
