@@ -1994,6 +1994,10 @@ struct FollowUpResult {
     task_id: String,
     group_id: String,
     stage: String,
+    disposition: String,
+    evidence_need: String,
+    candidate_ids: Vec<String>,
+    observation_group_ids: Vec<String>,
     packet_path: String,
     model_lane: String,
     status: String,
@@ -2034,6 +2038,10 @@ struct FollowUpOutputRecord {
     task_id: String,
     group_id: String,
     stage: String,
+    disposition: String,
+    evidence_need: String,
+    candidate_ids: Vec<String>,
+    observation_group_ids: Vec<String>,
     model_lane: String,
     status: String,
     reason: String,
@@ -13979,6 +13987,10 @@ fn follow_up_output_record(
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
         stage: task.stage.clone(),
+        disposition: task.disposition.clone(),
+        evidence_need: task.evidence_need.clone(),
+        candidate_ids: task.candidate_ids.clone(),
+        observation_group_ids: task.observation_group_ids.clone(),
         model_lane: model_lane.to_owned(),
         status: status.to_owned(),
         reason: reason.to_owned(),
@@ -13999,6 +14011,10 @@ fn empty_follow_up_output_record(
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
         stage: task.stage.clone(),
+        disposition: task.disposition.clone(),
+        evidence_need: task.evidence_need.clone(),
+        candidate_ids: task.candidate_ids.clone(),
+        observation_group_ids: task.observation_group_ids.clone(),
         model_lane: model_lane.to_owned(),
         status: result.status.clone(),
         reason: result.reason.clone(),
@@ -14038,6 +14054,10 @@ fn follow_up_result(
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
         stage: task.stage.clone(),
+        disposition: task.disposition.clone(),
+        evidence_need: task.evidence_need.clone(),
+        candidate_ids: task.candidate_ids.clone(),
+        observation_group_ids: task.observation_group_ids.clone(),
         packet_path: packet_path.to_owned(),
         model_lane: model_lane.to_owned(),
         status: status.to_owned(),
@@ -28736,6 +28756,13 @@ index 1111111..2222222 100644
         assert_eq!(proof_result.schema, "ub-review.follow_up_result.v1");
         assert_eq!(proof_result.group_id, proof_task.group_id);
         assert_eq!(proof_result.stage, proof_task.stage);
+        assert_eq!(proof_result.disposition, proof_task.disposition);
+        assert_eq!(proof_result.evidence_need, proof_task.evidence_need);
+        assert_eq!(proof_result.candidate_ids, proof_task.candidate_ids);
+        assert_eq!(
+            proof_result.observation_group_ids,
+            proof_task.observation_group_ids
+        );
         assert_eq!(
             proof_result.packet_path,
             format!("questions/orchestrator-follow-up/{}.json", proof_task.id)
@@ -28761,6 +28788,13 @@ index 1111111..2222222 100644
         assert_eq!(proof_output.schema, "ub-review.follow_up_output.v1");
         assert_eq!(proof_output.group_id, proof_task.group_id);
         assert_eq!(proof_output.stage, proof_task.stage);
+        assert_eq!(proof_output.disposition, proof_task.disposition);
+        assert_eq!(proof_output.evidence_need, proof_task.evidence_need);
+        assert_eq!(proof_output.candidate_ids, proof_task.candidate_ids);
+        assert_eq!(
+            proof_output.observation_group_ids,
+            proof_task.observation_group_ids
+        );
         assert_eq!(proof_output.status, "skipped");
         assert!(proof_output.inline_comments.is_empty());
         assert!(proof_output.summary_only_findings.is_empty());
@@ -29048,6 +29082,10 @@ index 1111111..2222222 100644
         assert_eq!(record.schema, "ub-review.follow_up_output.v1");
         assert_eq!(record.task_id, task.id);
         assert_eq!(record.stage, "secondary");
+        assert_eq!(record.disposition, task.disposition);
+        assert_eq!(record.evidence_need, task.evidence_need);
+        assert_eq!(record.candidate_ids, task.candidate_ids);
+        assert_eq!(record.observation_group_ids, task.observation_group_ids);
         assert_eq!(record.model_lane, model_lane);
         assert_eq!(record.inline_comments.len(), 1);
         assert_eq!(record.inline_comments[0].lane, record.model_lane);
@@ -29797,6 +29835,10 @@ index 1111111..2222222 100644
             task_id: task_id.to_owned(),
             group_id: group_id.to_owned(),
             stage: "secondary".to_owned(),
+            disposition: "observation".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            candidate_ids: Vec::new(),
+            observation_group_ids: Vec::new(),
             packet_path: format!("questions/orchestrator-follow-up/{task_id}.json"),
             model_lane: format!("orchestrator-follow-up-{task_id}"),
             status: status.to_owned(),

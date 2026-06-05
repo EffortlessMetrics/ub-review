@@ -2971,6 +2971,8 @@ def require_follow_up_result_schema(
         "task_id",
         "group_id",
         "stage",
+        "disposition",
+        "evidence_need",
         "packet_path",
         "model_lane",
         "status",
@@ -2986,6 +2988,13 @@ def require_follow_up_result_schema(
         fail(f"follow-up result does not match task identity: {result!r}")
     if result["stage"] != task["stage"]:
         fail(f"follow-up result stage does not match task: {result!r}")
+    if result["disposition"] != task["disposition"]:
+        fail(f"follow-up result disposition does not match task: {result!r}")
+    if result["evidence_need"] != task["evidence_need"]:
+        fail(f"follow-up result evidence_need does not match task: {result!r}")
+    for field in ["candidate_ids", "observation_group_ids"]:
+        if not isinstance(result.get(field), list) or result[field] != task[field]:
+            fail(f"follow-up result {field} does not match task: {result!r}")
     if result["packet_path"] != expected_packet_path:
         fail(f"follow-up result packet_path does not match task: {result!r}")
     if result["model_lane"] != expected_model_lane:
@@ -3043,10 +3052,30 @@ def require_follow_up_result_schema(
 def require_follow_up_output_schema(output: dict, result: dict) -> None:
     if output.get("schema") != "ub-review.follow_up_output.v1":
         fail(f"follow-up output has wrong schema: {output!r}")
-    for field in ["task_id", "group_id", "stage", "model_lane", "status", "reason"]:
+    for field in [
+        "task_id",
+        "group_id",
+        "stage",
+        "disposition",
+        "evidence_need",
+        "model_lane",
+        "status",
+        "reason",
+    ]:
         if not isinstance(output.get(field), str) or not output[field]:
             fail(f"follow-up output missing string field {field}: {output!r}")
-    for field in ["task_id", "group_id", "stage", "model_lane", "status", "reason"]:
+    for field in [
+        "task_id",
+        "group_id",
+        "stage",
+        "disposition",
+        "evidence_need",
+        "candidate_ids",
+        "observation_group_ids",
+        "model_lane",
+        "status",
+        "reason",
+    ]:
         if output[field] != result[field]:
             fail(f"follow-up output field {field} does not match result: {output!r}")
     inline_comments = output.get("inline_comments")
