@@ -58,8 +58,17 @@ Coverage receipts should identify:
 
 - command, tool version, and feature set;
 - local sensor status in `sensors/coverage/status.json`;
-- output artifact path, such as `lcov.info` or Codecov report URL;
-- upload mode and whether the upload was informational or required;
+- LCOV summary totals in `sensors/coverage/coverage-summary.json`;
+- changed-line state in `sensors/coverage/changed-lines.json`;
+- upload mode in `sensors/coverage/upload.json`;
+- output artifact path, such as `sensors/coverage/lcov.info` or Codecov report
+  URL;
 - skipped and unknown states separately from pass and fail.
+
+Every local coverage receipt must set `execution_surface_only=true` and
+`correctness_claim=false`. `coverage-summary.json` may report line and function
+hit totals parsed from LCOV; `changed-lines.json` may remain `not_collected`
+until a changed-line mapper exists; `upload.json` records that Codecov upload is
+owned by the coverage workflow unless the local sensor performs it.
 
 Credential and rollout rules live in [Coverage](../ops/coverage.md).

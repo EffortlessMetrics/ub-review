@@ -5758,7 +5758,32 @@ fn write_sensor_status(
 }
 
 fn write_coverage_status_receipt(dir: &Path, fields: SensorStatusWrite<'_>) -> Result<()> {
-    let lcov_path = dir.join("lcov.info");
+    let summary = coverage_summary_receipt(dir);
+    let changed_lines = serde_json::json!({
+        "schema": "ub-review.coverage_changed_lines.v1",
+        "status": "not_collected",
+        "reason": "changed-line coverage is not computed by the local coverage sensor yet",
+        "execution_surface_only": true,
+        "correctness_claim": false,
+        "source_artifacts": ["sensors/coverage/lcov.info"],
+    });
+    let upload = serde_json::json!({
+        "schema": "ub-review.coverage_upload.v1",
+        "status": "workflow_owned",
+        "reason": "Codecov upload is performed by the coverage workflow, not this local sensor",
+        "execution_surface_only": true,
+        "correctness_claim": false,
+        "source_artifacts": [],
+    });
+    fs::write(
+        dir.join("coverage-summary.json"),
+        serde_json::to_vec_pretty(&summary)?,
+    )?;
+    fs::write(
+        dir.join("changed-lines.json"),
+        serde_json::to_vec_pretty(&changed_lines)?,
+    )?;
+    fs::write(dir.join("upload.json"), serde_json::to_vec_pretty(&upload)?)?;
     let value = serde_json::json!({
         "schema": "ub-review.coverage_status.v1",
         "status": fields.status,
@@ -5767,19 +5792,69 @@ fn write_coverage_status_receipt(dir: &Path, fields: SensorStatusWrite<'_>) -> R
         "correctness_claim": false,
         "lcov": {
             "path": "sensors/coverage/lcov.info",
-            "present": lcov_path.is_file(),
+            "present": summary["lcov"]["present"],
+        },
+        "summary": {
+            "path": "sensors/coverage/coverage-summary.json",
+            "status": summary["status"],
         },
         "changed_lines": {
-            "status": "not_collected",
-            "reason": "changed-line coverage is not computed by the local coverage sensor yet",
+            "path": "sensors/coverage/changed-lines.json",
+            "status": changed_lines["status"],
         },
         "upload": {
-            "status": "workflow_owned",
-            "reason": "Codecov upload is performed by the coverage workflow, not this local sensor",
+            "path": "sensors/coverage/upload.json",
+            "status": upload["status"],
         },
     });
     fs::write(dir.join("status.json"), serde_json::to_vec_pretty(&value)?)?;
     Ok(())
+}
+
+fn coverage_summary_receipt(dir: &Path) -> serde_json::Value {
+    let lcov_path = dir.join("lcov.info");
+    let mut lines_found = 0u64;
+    let mut lines_hit = 0u64;
+    let mut functions_found = 0u64;
+    let mut functions_hit = 0u64;
+    let present = lcov_path.is_file();
+    if present {
+        let text = fs::read_to_string(&lcov_path).unwrap_or_default();
+        for line in text.lines() {
+            if let Some(value) = line.strip_prefix("LF:") {
+                lines_found += parse_lcov_count(value);
+            } else if let Some(value) = line.strip_prefix("LH:") {
+                lines_hit += parse_lcov_count(value);
+            } else if let Some(value) = line.strip_prefix("FNF:") {
+                functions_found += parse_lcov_count(value);
+            } else if let Some(value) = line.strip_prefix("FNH:") {
+                functions_hit += parse_lcov_count(value);
+            }
+        }
+    }
+    serde_json::json!({
+        "schema": "ub-review.coverage_summary.v1",
+        "status": if present { "collected" } else { "not_collected" },
+        "reason": if present { "lcov.info parsed" } else { "lcov.info not present" },
+        "execution_surface_only": true,
+        "correctness_claim": false,
+        "lcov": {
+            "path": "sensors/coverage/lcov.info",
+            "present": present,
+        },
+        "line_totals": {
+            "found": lines_found,
+            "hit": lines_hit,
+        },
+        "function_totals": {
+            "found": functions_found,
+            "hit": functions_hit,
+        },
+    })
+}
+
+fn parse_lcov_count(value: &str) -> u64 {
+    value.trim().parse().unwrap_or_default()
 }
 
 fn ensure_sensor_text_receipts(dir: &Path) -> Result<()> {
@@ -5808,7 +5883,13 @@ fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "cargo-allow.receipt.json".to_owned(),
         ]),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
-        "coverage" => outputs.extend(["status.json".to_owned(), "lcov.info".to_owned()]),
+        "coverage" => outputs.extend([
+            "status.json".to_owned(),
+            "coverage-summary.json".to_owned(),
+            "changed-lines.json".to_owned(),
+            "upload.json".to_owned(),
+            "lcov.info".to_owned(),
+        ]),
         _ => {}
     }
     outputs
@@ -21068,31 +21149,93 @@ enabled = false
                 "stdout.txt".to_owned(),
                 "stderr.txt".to_owned(),
                 "status.json".to_owned(),
+                "coverage-summary.json".to_owned(),
+                "changed-lines.json".to_owned(),
+                "upload.json".to_owned(),
                 "lcov.info".to_owned()
             ]
         );
+        fs::create_dir_all(&dir)?;
+        fs::write(
+            dir.join("lcov.info"),
+            "TN:\nSF:src/lib.rs\nFNF:2\nFNH:1\nLF:4\nLH:3\nend_of_record\n",
+        )?;
         super::write_sensor_status(
             &out,
             sensor,
             SensorStatusWrite {
-                status: "skipped",
+                status: "ok",
                 argv: &argv,
                 duration_ms: 0,
-                reason: "disabled by config",
-                exit_code: None,
+                reason: "completed",
+                exit_code: Some(0),
                 timed_out: false,
             },
         )?;
         let status: serde_json::Value =
             serde_json::from_slice(&fs::read(dir.join("status.json"))?)?;
+        let summary: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.join("coverage-summary.json"))?)?;
+        let changed_lines: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.join("changed-lines.json"))?)?;
+        let upload: serde_json::Value =
+            serde_json::from_slice(&fs::read(dir.join("upload.json"))?)?;
         assert_eq!(status["schema"], "ub-review.coverage_status.v1");
-        assert_eq!(status["status"], "skipped");
+        assert_eq!(status["status"], "ok");
         assert_eq!(status["execution_surface_only"], serde_json::json!(true));
         assert_eq!(status["correctness_claim"], serde_json::json!(false));
         assert_eq!(status["lcov"]["path"], "sensors/coverage/lcov.info");
-        assert_eq!(status["lcov"]["present"], serde_json::json!(false));
-        assert_eq!(status["changed_lines"]["status"], "not_collected");
+        assert_eq!(status["lcov"]["present"], serde_json::json!(true));
+        assert_eq!(
+            status["summary"]["path"],
+            "sensors/coverage/coverage-summary.json"
+        );
+        assert_eq!(summary["schema"], "ub-review.coverage_summary.v1");
+        assert_eq!(summary["status"], "collected");
+        assert_eq!(summary["line_totals"]["found"], 4);
+        assert_eq!(summary["line_totals"]["hit"], 3);
+        assert_eq!(summary["function_totals"]["found"], 2);
+        assert_eq!(summary["function_totals"]["hit"], 1);
+        assert_eq!(
+            status["changed_lines"]["path"],
+            "sensors/coverage/changed-lines.json"
+        );
+        assert_eq!(
+            changed_lines["schema"],
+            "ub-review.coverage_changed_lines.v1"
+        );
+        assert_eq!(changed_lines["status"], "not_collected");
+        assert_eq!(changed_lines["correctness_claim"], serde_json::json!(false));
+        assert_eq!(status["upload"]["path"], "sensors/coverage/upload.json");
+        assert_eq!(upload["schema"], "ub-review.coverage_upload.v1");
         assert_eq!(status["upload"]["status"], "workflow_owned");
+        assert_eq!(upload["correctness_claim"], serde_json::json!(false));
+        Ok(())
+    }
+
+    #[test]
+    fn coverage_summary_receipt_records_absent_and_malformed_lcov() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let dir = temp.path().join("sensors/coverage");
+        fs::create_dir_all(&dir)?;
+
+        let missing = super::coverage_summary_receipt(&dir);
+        assert_eq!(missing["status"], "not_collected");
+        assert_eq!(missing["reason"], "lcov.info not present");
+        assert_eq!(missing["lcov"]["present"], serde_json::json!(false));
+        assert_eq!(missing["line_totals"]["found"], 0);
+        assert_eq!(missing["line_totals"]["hit"], 0);
+
+        fs::write(
+            dir.join("lcov.info"),
+            "TN:\nSF:src/lib.rs\nFNF:not-a-number\nFNH:1\nLF:4\nLH:not-a-number\nend_of_record\n",
+        )?;
+        let malformed = super::coverage_summary_receipt(&dir);
+        assert_eq!(malformed["status"], "collected");
+        assert_eq!(malformed["line_totals"]["found"], 4);
+        assert_eq!(malformed["line_totals"]["hit"], 0);
+        assert_eq!(malformed["function_totals"]["found"], 0);
+        assert_eq!(malformed["function_totals"]["hit"], 1);
         Ok(())
     }
 

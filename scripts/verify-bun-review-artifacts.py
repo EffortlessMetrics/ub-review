@@ -4291,6 +4291,13 @@ def require_coverage_status_artifact(root: pathlib.Path, tool_status: dict) -> N
     paths = tool_status.get("artifact_paths", [])
     if "sensors/coverage/status.json" not in paths:
         fail("tool-status.json coverage missing status artifact path")
+    for path in [
+        "sensors/coverage/coverage-summary.json",
+        "sensors/coverage/changed-lines.json",
+        "sensors/coverage/upload.json",
+    ]:
+        if path not in paths:
+            fail(f"tool-status.json coverage missing {path}")
     status = load_json(root / "sensors/coverage/status.json")
     if status.get("schema") != "ub-review.coverage_status.v1":
         fail("sensors/coverage/status.json has wrong schema")
@@ -4311,17 +4318,59 @@ def require_coverage_status_artifact(root: pathlib.Path, tool_status: dict) -> N
     if lcov.get("present") != (root / "sensors/coverage/lcov.info").is_file():
         fail("coverage status.json lcov present does not match artifact")
 
+    summary_ref = status.get("summary")
+    if not isinstance(summary_ref, dict):
+        fail("coverage status.json summary is not an object")
+    if summary_ref.get("path") != "sensors/coverage/coverage-summary.json":
+        fail("coverage status.json summary path is invalid")
+    summary = load_json(root / "sensors/coverage/coverage-summary.json")
+    if summary.get("schema") != "ub-review.coverage_summary.v1":
+        fail("sensors/coverage/coverage-summary.json has wrong schema")
+    require_coverage_telemetry_flags(summary, "coverage-summary.json")
+    if summary.get("status") != summary_ref.get("status"):
+        fail("coverage status.json summary status does not match summary receipt")
+    if summary.get("lcov") != lcov:
+        fail("coverage summary lcov does not match status.json")
+    for field in ["line_totals", "function_totals"]:
+        totals = summary.get(field)
+        if not isinstance(totals, dict):
+            fail(f"coverage summary {field} is not an object")
+        for key in ["found", "hit"]:
+            if not isinstance(totals.get(key), int) or totals[key] < 0:
+                fail(f"coverage summary {field}.{key} is not a non-negative integer")
+
     changed_lines = status.get("changed_lines")
-    if not isinstance(changed_lines, dict) or not isinstance(
-        changed_lines.get("status"), str
-    ):
+    if not isinstance(changed_lines, dict) or not isinstance(changed_lines.get("status"), str):
         fail("coverage status.json changed_lines status is invalid")
+    if changed_lines.get("path") != "sensors/coverage/changed-lines.json":
+        fail("coverage status.json changed_lines path is invalid")
     if changed_lines["status"] not in {"not_collected", "collected", "unknown"}:
         fail("coverage status.json changed_lines status is unsupported")
+    changed_line_receipt = load_json(root / "sensors/coverage/changed-lines.json")
+    if changed_line_receipt.get("schema") != "ub-review.coverage_changed_lines.v1":
+        fail("sensors/coverage/changed-lines.json has wrong schema")
+    require_coverage_telemetry_flags(changed_line_receipt, "changed-lines.json")
+    if changed_line_receipt.get("status") != changed_lines.get("status"):
+        fail("coverage changed-lines status does not match status.json")
 
     upload = status.get("upload")
     if not isinstance(upload, dict) or not isinstance(upload.get("status"), str):
         fail("coverage status.json upload status is invalid")
+    if upload.get("path") != "sensors/coverage/upload.json":
+        fail("coverage status.json upload path is invalid")
+    upload_receipt = load_json(root / "sensors/coverage/upload.json")
+    if upload_receipt.get("schema") != "ub-review.coverage_upload.v1":
+        fail("sensors/coverage/upload.json has wrong schema")
+    require_coverage_telemetry_flags(upload_receipt, "upload.json")
+    if upload_receipt.get("status") != upload.get("status"):
+        fail("coverage upload status does not match status.json")
+
+
+def require_coverage_telemetry_flags(receipt: dict, label: str) -> None:
+    if receipt.get("execution_surface_only") is not True:
+        fail(f"{label} must mark execution_surface_only true")
+    if receipt.get("correctness_claim") is not False:
+        fail(f"{label} must not claim correctness")
 
 
 def require_model_receipts(review: dict, metrics: dict, min_ok_model_lanes: int) -> None:
@@ -4467,6 +4516,94 @@ def self_test_missing_nonempty_candidate_dir_fails() -> None:
             encoding="utf-8",
         )
         require_candidate_artifacts(root, review)
+
+
+def self_test_coverage_sidecar_receipts() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        coverage_dir = root / "sensors/coverage"
+        coverage_dir.mkdir(parents=True)
+        (coverage_dir / "lcov.info").write_text(
+            "TN:\nSF:src/lib.rs\nFNF:2\nFNH:1\nLF:4\nLH:3\nend_of_record\n",
+            encoding="utf-8",
+        )
+        tool_status = {
+            "status": "ok",
+            "reason": "completed",
+            "artifact_paths": [
+                "sensors/coverage/ub-review-sensor-status.json",
+                "sensors/coverage/status.json",
+                "sensors/coverage/coverage-summary.json",
+                "sensors/coverage/changed-lines.json",
+                "sensors/coverage/upload.json",
+                "sensors/coverage/lcov.info",
+            ],
+        }
+        write_self_test_json(
+            coverage_dir / "coverage-summary.json",
+            {
+                "schema": "ub-review.coverage_summary.v1",
+                "status": "collected",
+                "reason": "lcov.info parsed",
+                "execution_surface_only": True,
+                "correctness_claim": False,
+                "lcov": {
+                    "path": "sensors/coverage/lcov.info",
+                    "present": True,
+                },
+                "line_totals": {"found": 4, "hit": 3},
+                "function_totals": {"found": 2, "hit": 1},
+            },
+        )
+        write_self_test_json(
+            coverage_dir / "changed-lines.json",
+            {
+                "schema": "ub-review.coverage_changed_lines.v1",
+                "status": "not_collected",
+                "reason": "changed-line coverage is not computed by the local coverage sensor yet",
+                "execution_surface_only": True,
+                "correctness_claim": False,
+                "source_artifacts": ["sensors/coverage/lcov.info"],
+            },
+        )
+        write_self_test_json(
+            coverage_dir / "upload.json",
+            {
+                "schema": "ub-review.coverage_upload.v1",
+                "status": "workflow_owned",
+                "reason": "Codecov upload is performed by the coverage workflow, not this local sensor",
+                "execution_surface_only": True,
+                "correctness_claim": False,
+                "source_artifacts": [],
+            },
+        )
+        write_self_test_json(
+            coverage_dir / "status.json",
+            {
+                "schema": "ub-review.coverage_status.v1",
+                "status": "ok",
+                "reason": "completed",
+                "execution_surface_only": True,
+                "correctness_claim": False,
+                "lcov": {
+                    "path": "sensors/coverage/lcov.info",
+                    "present": True,
+                },
+                "summary": {
+                    "path": "sensors/coverage/coverage-summary.json",
+                    "status": "collected",
+                },
+                "changed_lines": {
+                    "path": "sensors/coverage/changed-lines.json",
+                    "status": "not_collected",
+                },
+                "upload": {
+                    "path": "sensors/coverage/upload.json",
+                    "status": "workflow_owned",
+                },
+            },
+        )
+        require_coverage_status_artifact(root, tool_status)
 
 
 def run_self_tests() -> None:
@@ -4893,6 +5030,7 @@ def run_self_tests() -> None:
         "missing candidates directory",
         self_test_missing_nonempty_candidate_dir_fails,
     )
+    self_test_coverage_sidecar_receipts()
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     require_skipped_payload_contract(
         {"github_review_json": None},
