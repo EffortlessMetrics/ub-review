@@ -2,7 +2,7 @@ name: ub-review/gate
 
 on:
   pull_request:
-    types: [opened, ready_for_review, synchronize]
+    types: [opened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -46,7 +46,7 @@ jobs:
           out: target/ub-review
           github-token: ${{ github.token }}
           posting: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review') && 'review' || 'artifact-only' }}
-          model-mode: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' && 'off' || 'auto' }}
+          model-mode: auto
           depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
           provider-policy: primary-with-fallback
           minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
