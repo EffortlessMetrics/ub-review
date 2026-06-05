@@ -2440,6 +2440,20 @@ struct RefuterRunContext<'a> {
     model_calls_used: usize,
 }
 
+struct ProofPlannerRunContext<'a> {
+    root: &'a Path,
+    review_dir: &'a Path,
+    provider_preflights: &'a [ProviderPreflightReceipt],
+    shared_context: &'a str,
+    args: &'a RunArgs,
+    diff: &'a DiffContext,
+    profile: &'a Profile,
+    box_state: &'a BoxState,
+    pr_thread_context: &'a PrThreadContext,
+    model_calls_used: usize,
+    line_map: &'a BTreeSet<(String, u32)>,
+}
+
 struct FollowUpRunContext<'a> {
     root: &'a Path,
     out: &'a Path,
@@ -5688,6 +5702,13 @@ fn write_review_artifacts(
     let assignments = model_assignments(plan, args)?;
     write_shared_context_cache_artifacts(out, &shared_context, &assignments, &[], &[], args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
+    if should_run_proof_planner_model_lane(args, diff) {
+        ensure_provider_preflight_receipt(
+            &mut provider_preflights,
+            direct_minimax_spec(args),
+            args,
+        );
+    }
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
     let mut missing_or_failed_model_evidence = model_lanes
@@ -5753,6 +5774,25 @@ fn write_review_artifacts(
                 &mut proof_requests,
             )?;
             dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+            model_calls_used += run_proof_planner_model_lane(
+                ProofPlannerRunContext {
+                    root,
+                    review_dir: &review_dir,
+                    provider_preflights: &provider_preflights,
+                    shared_context: &shared_context,
+                    args,
+                    diff,
+                    profile,
+                    box_state,
+                    pr_thread_context: &pr_thread_context,
+                    model_calls_used,
+                    line_map: &line_map,
+                },
+                &mut model_lanes,
+                &mut missing_or_failed_model_evidence,
+                &mut model_observations,
+                &mut proof_requests,
+            )?;
             model_calls_used += run_refuter_pass(
                 RefuterRunContext {
                     root,
@@ -8195,19 +8235,15 @@ fn write_witness_artifacts(out: &Path, witnesses: &[WitnessRecord]) -> Result<()
     Ok(())
 }
 
-fn write_proof_planner_artifacts(
-    out: &Path,
-    diff: &DiffContext,
+fn build_proof_planner_input<'a>(
+    diff: &'a DiffContext,
     profile: &Profile,
-    box_state: &BoxState,
-    pr_thread_context: &PrThreadContext,
-    proof_requests: &[ProofRequest],
-) -> Result<()> {
-    let review_dir = out.join("review");
-    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    box_state: &'a BoxState,
+    pr_thread_context: &'a PrThreadContext,
+    proof_requests: &'a [ProofRequest],
+) -> Result<ProofPlannerInput<'a>> {
     let budget = proof_budget(profile)?;
-    let lease_budget = proof_lease_budget(profile)?;
-    let input = ProofPlannerInput {
+    Ok(ProofPlannerInput {
         schema: "ub-review.proof_planner_input.v1",
         diff_class: diff.diff_class.key(),
         changed_files: &diff.changed_files,
@@ -8221,7 +8257,16 @@ fn write_proof_planner_artifacts(
             total_proof_timeout_sec: budget.max_total_seconds,
         },
         box_shape: box_state,
-    };
+    })
+}
+
+fn build_proof_planner_output(
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+) -> Result<ProofPlannerOutput> {
+    let budget = proof_budget(profile)?;
+    let lease_budget = proof_lease_budget(profile)?;
     let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
     let build_plans = focused_build_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
@@ -8234,12 +8279,27 @@ fn write_proof_planner_artifacts(
         )
         .collect::<Vec<_>>();
     let skip = proof_planner_skips(diff);
-    let output = ProofPlannerOutput {
+    Ok(ProofPlannerOutput {
         schema: "ub-review.proof_planner_output.v1",
         lane: "proof-planner",
         proof_tasks,
         skip,
-    };
+    })
+}
+
+fn write_proof_planner_artifacts(
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    box_state: &BoxState,
+    pr_thread_context: &PrThreadContext,
+    proof_requests: &[ProofRequest],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let input =
+        build_proof_planner_input(diff, profile, box_state, pr_thread_context, proof_requests)?;
+    let output = build_proof_planner_output(diff, profile, proof_requests)?;
     fs::write(
         review_dir.join("proof_planner_input.json"),
         serde_json::to_vec_pretty(&input)?,
@@ -12415,6 +12475,21 @@ fn model_lane(id: &str, role: &str, receives: &[&str], focus: &str) -> LanePlan 
     )
 }
 
+fn proof_planner_lane() -> LanePlan {
+    model_lane(
+        "proof-planner",
+        "Model-assisted CI proof planning",
+        &[
+            "shared-context",
+            "diff",
+            "proof-requests",
+            "runtime-profile",
+            "box-state",
+        ],
+        "Choose only additional cheap proof that would change the review decision. Emit observations, failed_objections, and proof_requests only; never emit candidate findings.",
+    )
+}
+
 fn model_assignments(plan: &Plan, args: &RunArgs) -> Result<Vec<ModelAssignment>> {
     let lanes = selected_review_lanes_for_args(plan, args)?;
     let assignments = lanes
@@ -12610,35 +12685,54 @@ fn build_provider_preflight_receipts(
     }
     specs
         .into_iter()
-        .map(|spec| {
-            let (status, reason) = match args.model_mode {
-                ModelMode::Off => ("skipped", "model-mode off".to_owned()),
-                ModelMode::Auto => {
-                    let env_name = model_api_key_env(spec.provider);
-                    let key_label = model_api_key_label(spec.provider);
-                    if env_value_present(env_name) {
-                        ("planned", format!("{key_label} present; preflight planned"))
-                    } else {
-                        (
-                            "missing_key",
-                            format!("{key_label} not provided; provider unavailable"),
-                        )
-                    }
-                }
-            };
-            ProviderPreflightReceipt {
-                provider: spec.provider.key().to_owned(),
-                model: spec.model,
-                endpoint_kind: spec.endpoint_kind.key().to_owned(),
-                status: status.to_owned(),
-                reason,
-                duration_ms: None,
-                http_status: None,
-                response_shape: None,
-                cache_usage: ModelCacheUsage::default(),
-            }
-        })
+        .map(|spec| provider_preflight_receipt_for_spec(spec, args))
         .collect()
+}
+
+fn ensure_provider_preflight_receipt(
+    receipts: &mut Vec<ProviderPreflightReceipt>,
+    spec: ProviderSpec,
+    args: &RunArgs,
+) {
+    if receipts
+        .iter()
+        .any(|receipt| preflight_matches_spec(receipt, &spec))
+    {
+        return;
+    }
+    receipts.push(provider_preflight_receipt_for_spec(spec, args));
+}
+
+fn provider_preflight_receipt_for_spec(
+    spec: ProviderSpec,
+    args: &RunArgs,
+) -> ProviderPreflightReceipt {
+    let (status, reason) = match args.model_mode {
+        ModelMode::Off => ("skipped", "model-mode off".to_owned()),
+        ModelMode::Auto => {
+            let env_name = model_api_key_env(spec.provider);
+            let key_label = model_api_key_label(spec.provider);
+            if env_value_present(env_name) {
+                ("planned", format!("{key_label} present; preflight planned"))
+            } else {
+                (
+                    "missing_key",
+                    format!("{key_label} not provided; provider unavailable"),
+                )
+            }
+        }
+    };
+    ProviderPreflightReceipt {
+        provider: spec.provider.key().to_owned(),
+        model: spec.model,
+        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        status: status.to_owned(),
+        reason,
+        duration_ms: None,
+        http_status: None,
+        response_shape: None,
+        cache_usage: ModelCacheUsage::default(),
+    }
 }
 
 fn is_model_evidence_issue(status: &str) -> bool {
@@ -12931,6 +13025,113 @@ fn run_available_model_lanes(
         }
     }
     Ok(calls)
+}
+
+fn should_run_proof_planner_model_lane(args: &RunArgs, diff: &DiffContext) -> bool {
+    matches!(args.mode, RunMode::IntelligentCi)
+        && !matches!(
+            diff.diff_class,
+            DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke
+        )
+}
+
+fn run_proof_planner_model_lane(
+    context: ProofPlannerRunContext<'_>,
+    model_lanes: &mut Vec<ModelLaneReceipt>,
+    missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
+    model_observations: &mut Vec<Observation>,
+    proof_requests: &mut Vec<ProofRequest>,
+) -> Result<usize> {
+    if !should_run_proof_planner_model_lane(context.args, context.diff) {
+        return Ok(0);
+    }
+
+    let lane = proof_planner_lane();
+    let spec = direct_minimax_spec(context.args);
+    let mut receipt = ModelLaneReceipt {
+        lane: lane.id.clone(),
+        provider: spec.provider.key().to_owned(),
+        model: spec.model.clone(),
+        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        status: "planned".to_owned(),
+        reason: "planned advisory proof-planner lane for intelligent-ci".to_owned(),
+        duration_ms: None,
+        http_status: None,
+        response_shape: None,
+        fallback_from: None,
+        cache_usage: ModelCacheUsage::default(),
+    };
+
+    if context.model_calls_used >= context.args.max_model_calls {
+        receipt.status = "skipped_budget".to_owned();
+        receipt.reason = "model call budget exhausted before proof-planner lane".to_owned();
+        model_lanes.push(receipt);
+        return Ok(0);
+    }
+    if !provider_preflight_ok(&spec, context.provider_preflights) {
+        receipt.status = "preflight_failed".to_owned();
+        receipt.reason = provider_preflight_reason(&spec, context.provider_preflights)
+            .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        model_lanes.push(receipt);
+        return Ok(0);
+    }
+    let env_name = model_api_key_env(spec.provider);
+    if !env_value_present(env_name) {
+        let key_label = model_api_key_label(spec.provider);
+        receipt.status = "missing_key".to_owned();
+        receipt.reason = format!("{key_label} not provided; proof-planner output unavailable");
+        missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        model_lanes.push(receipt);
+        return Ok(0);
+    }
+
+    let lane_dir = context.review_dir.join("model").join(&lane.id);
+    fs::create_dir_all(&lane_dir)?;
+    receipt.status = "running".to_owned();
+    match call_model_proof_planner(
+        context.root,
+        &lane_dir,
+        &lane,
+        &spec,
+        context.shared_context,
+        context.diff,
+        context.profile,
+        context.box_state,
+        context.pr_thread_context,
+        proof_requests,
+        context.args,
+    ) {
+        Ok(outcome) => {
+            if outcome.degraded {
+                receipt.status = "degraded".to_owned();
+                receipt.reason =
+                    "contentful proof-planner output was preserved as degraded evidence".to_owned();
+            } else {
+                receipt.status = "ok".to_owned();
+                receipt.reason = "completed".to_owned();
+            }
+            receipt.duration_ms = Some(outcome.duration_ms);
+            receipt.http_status = outcome.http_status;
+            receipt.response_shape = Some(outcome.response_shape);
+            receipt.cache_usage = outcome.cache_usage;
+            apply_proof_planner_model_output(
+                &lane,
+                outcome.output,
+                context.line_map,
+                model_observations,
+                proof_requests,
+            );
+        }
+        Err(err) => {
+            receipt.status = classify_model_error(&err);
+            receipt.reason = format!("{err:#}");
+            receipt.http_status = http_status_from_error(&err);
+            missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
+        }
+    }
+    model_lanes.push(receipt);
+    Ok(1)
 }
 
 fn run_follow_up_model_pass(
@@ -13547,6 +13748,147 @@ fn summary_from_refuted_inline(comment: ReviewInlineComment, reason: &str) -> Su
         ),
         evidence: comment.evidence,
     }
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "proof-planner prompt mirrors deterministic planner inputs"
+)]
+fn call_model_proof_planner(
+    root: &Path,
+    lane_dir: &Path,
+    lane: &LanePlan,
+    spec: &ProviderSpec,
+    shared_context: &str,
+    diff: &DiffContext,
+    profile: &Profile,
+    box_state: &BoxState,
+    pr_thread_context: &PrThreadContext,
+    proof_requests: &[ProofRequest],
+    args: &RunArgs,
+) -> Result<ModelCallOutcome<LaneModelOutput>> {
+    let input =
+        build_proof_planner_input(diff, profile, box_state, pr_thread_context, proof_requests)?;
+    let output = build_proof_planner_output(diff, profile, proof_requests)?;
+    let prompt = render_proof_planner_model_task_prompt(lane, spec, &input, &output)?;
+    call_model_prompt_cached(root, lane_dir, spec, shared_context, &prompt, args)
+}
+
+fn render_proof_planner_model_task_prompt(
+    lane: &LanePlan,
+    spec: &ProviderSpec,
+    input: &ProofPlannerInput<'_>,
+    output: &ProofPlannerOutput,
+) -> Result<String> {
+    let input_json = serde_json::to_string_pretty(input)?;
+    let output_json = serde_json::to_string_pretty(output)?;
+    Ok(format!(
+        r#"Lane: {lane}
+Provider: {provider}
+Model: {model}
+Endpoint kind: {endpoint_kind}
+Role: {role}
+Focus: {focus}
+
+Use the cached shared context. You are an advisory proof-planner lane for the intelligent-ci gate.
+The deterministic planner remains the source of proof_tasks.ndjson. Add only proof requests or observations that would improve the central proof broker's plan.
+
+Planner input:
+```json
+{input_json}
+```
+
+Current deterministic planner output:
+```json
+{output_json}
+```
+
+Return only one strict JSON object:
+{{
+  "summary": null,
+  "observations": [
+    {{
+      "claim": "terse proof-planning observation, 300 chars max",
+      "question": "proof-planner",
+      "kind": "verification-question|missing-evidence|test-gap|source-route-gap|resolved-check|parked-follow-up",
+      "status": "open|covered|confirmed|refuted|parked",
+      "severity": "high|medium|low",
+      "confidence": "high|medium-high|medium|low",
+      "path": "optional repo-relative/path.rs",
+      "line": 123,
+      "evidence": ["artifact, diff, receipt, or invariant"],
+      "dedupe_key": "stable proof-planning key when known"
+    }}
+  ],
+  "candidate_findings": [],
+  "summary_only_findings": [],
+  "failed_objections": [
+    {{
+      "claim": "proof idea considered",
+      "reason": "why it is already covered, too costly, or not relevant",
+      "confidence": "high|medium-high|medium|low",
+      "kind": "resolved-check|false-premise",
+      "evidence": ["artifact, diff, receipt, or invariant"]
+    }}
+  ],
+  "proof_requests": [
+    {{
+      "command": "focused command requested from central proof broker",
+      "reason": "why this proof would change the review decision",
+      "cost": "focused-test|focused-build|manual",
+      "timeout_sec": 300,
+      "required": false
+    }}
+  ]
+}}
+
+Hard caps: at most 2 observations, 2 failed_objections, and 2 proof_requests.
+Do not emit inline_comments, candidate_findings, summary_only_findings, or PR-facing findings.
+Do not duplicate proof already represented in Current deterministic planner output.
+Do not post, mutate files, or run shell commands. Lanes request proof; only the central broker executes.
+"#,
+        lane = lane.id,
+        provider = spec.provider.key(),
+        model = spec.model,
+        endpoint_kind = spec.endpoint_kind.key(),
+        role = lane.role,
+        focus = lane.focus,
+        input_json = input_json,
+        output_json = output_json,
+    ))
+}
+
+fn apply_proof_planner_model_output(
+    lane: &LanePlan,
+    output: LaneModelOutput,
+    line_map: &BTreeSet<(String, u32)>,
+    model_observations: &mut Vec<Observation>,
+    proof_requests: &mut Vec<ProofRequest>,
+) {
+    let advisory_output = LaneModelOutput {
+        summary: None,
+        inline_comments: Vec::new(),
+        candidate_findings: Vec::new(),
+        summary_only_findings: Vec::new(),
+        observations: output.observations,
+        failed_objections: output.failed_objections,
+        proof_requests: output.proof_requests,
+        degraded: output.degraded,
+    };
+    let mut ignored_inline_comments = Vec::new();
+    let mut ignored_summary_only_findings = Vec::new();
+    apply_model_output(
+        lane,
+        advisory_output,
+        line_map,
+        0,
+        ModelOutputSinks {
+            inline_comments: &mut ignored_inline_comments,
+            summary_only_findings: &mut ignored_summary_only_findings,
+            model_observations,
+            proof_requests,
+        },
+    );
 }
 
 fn selected_provider_spec(
