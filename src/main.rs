@@ -20869,8 +20869,12 @@ mod tests {
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
         let profile = include_str!("../profiles/ub-review-self.toml");
         assert!(
-            workflow.contains("types: [opened, ready_for_review, synchronize]"),
-            "self gate should run review passes on opened/ready and gate-only synchronize"
+            workflow.contains("types: [opened, ready_for_review]"),
+            "self gate should run default passes on opened and ready_for_review"
+        );
+        assert!(
+            !workflow.contains("synchronize"),
+            "self gate must not spend a default pass on synchronize"
         );
         assert!(
             !workflow.contains("reopened"),
@@ -20887,8 +20891,8 @@ mod tests {
             "posting expression should be limited to the profile review passes"
         );
         assert!(
-            workflow.contains("github.event.action == 'synchronize' && 'off' || 'auto'"),
-            "synchronize should keep producing artifact-only gate evidence with models off"
+            workflow.contains("model-mode: auto"),
+            "opened and ready_for_review passes should keep normal model routing"
         );
     }
 
