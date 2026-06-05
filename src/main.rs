@@ -14234,8 +14234,10 @@ fn provider_spec_from_preflight(receipt: &ProviderPreflightReceipt) -> Result<Pr
     })
 }
 
+const MAX_ARTIFACT_NAME_LEN: usize = 96;
+
 fn sanitize_artifact_name(value: &str) -> String {
-    value
+    let sanitized: String = value
         .chars()
         .map(|ch| {
             if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_') {
@@ -14244,7 +14246,17 @@ fn sanitize_artifact_name(value: &str) -> String {
                 '-'
             }
         })
-        .collect()
+        .collect();
+
+    if sanitized.len() <= MAX_ARTIFACT_NAME_LEN {
+        return sanitized;
+    }
+
+    let digest = sha256_hex(value.as_bytes());
+    let suffix = &digest[..12];
+    let prefix_len = MAX_ARTIFACT_NAME_LEN - suffix.len() - 1;
+    let prefix: String = sanitized.chars().take(prefix_len).collect();
+    format!("{prefix}-{suffix}")
 }
 
 fn run_available_model_lanes(
@@ -20439,26 +20451,27 @@ mod tests {
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
         FollowUpOutputRecord, FollowUpQuestionTask, GitHubReview, GitHubReviewComment,
-        LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCandidateComment,
-        ModelCandidateFinding, ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection,
-        ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
-        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
-        STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue, SensorPlan,
-        SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        LaneModelOutput, LanePlan, Limits, MAX_ARTIFACT_NAME_LEN, ModelAssignment,
+        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
+        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
+        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
+        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
+        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
+        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
+        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
+        apply_model_output, apply_plan_selectors, apply_refuter_output,
+        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
         follow_up_output_record, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
@@ -20470,14 +20483,15 @@ mod tests {
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
         resolved_candidate_records, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        runtime_profile_from_toml, runtime_profile_override, sanitize_artifact_name,
+        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
@@ -30732,6 +30746,40 @@ index 1111111..2222222 100644
                 .to_string()
                 .contains("questions artifact path collision")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn observation_question_artifacts_bound_model_supplied_filenames() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut observations = vec![test_observation(
+            "opposition",
+            "The lane emitted a long verification question.",
+            "missing-evidence",
+            "open",
+            "low",
+            "medium",
+            "long-question-filename",
+        )];
+        let long_question = format!(
+            "{}terminal-proof-question",
+            "confirm-the-focused-proof-before-upstream-".repeat(12)
+        );
+        observations[0].question = long_question.clone();
+
+        write_observation_artifacts(temp.path(), &observations)?;
+
+        let lane_dir = temp.path().join("questions").join("opposition");
+        let files = fs::read_dir(&lane_dir)?.collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(files.len(), 1);
+        let file_name = files[0].file_name().to_string_lossy().to_string();
+        let expected_stem = sanitize_artifact_name(&long_question);
+        assert_eq!(expected_stem.len(), MAX_ARTIFACT_NAME_LEN);
+        assert_eq!(file_name, format!("{expected_stem}.json"));
+        assert!(file_name.len() <= MAX_ARTIFACT_NAME_LEN + ".json".len());
+
+        let artifact: serde_json::Value = serde_json::from_slice(&fs::read(files[0].path())?)?;
+        assert_eq!(artifact["question"], long_question);
         Ok(())
     }
 
