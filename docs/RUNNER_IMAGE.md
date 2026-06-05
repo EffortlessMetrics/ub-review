@@ -132,6 +132,8 @@ Doctor reports:
 
 - tool presence;
 - tool `--version` output;
+- provider key env presence for `UB_REVIEW_MINIMAX_API_KEY` and
+  `UB_REVIEW_OPENCODE_API_KEY`, without printing values;
 - cache root;
 - profile/config hash;
 - base cache hit or miss;

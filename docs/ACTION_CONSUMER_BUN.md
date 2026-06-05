@@ -43,6 +43,10 @@ GLM is skipped for v0. The Bun v0 cutover workflow uses direct MiniMax M3 for
 all model lanes through `secrets.MINIMAX_API_KEY`. OpenCode Go remains optional
 for later direct provider canary/deep modes through `secrets.OPENCODE`;
 `ub-review` does not invoke the OpenCode agent harness.
+The action maps those GitHub secrets into runner env vars:
+`UB_REVIEW_MINIMAX_API_KEY` and `UB_REVIEW_OPENCODE_API_KEY`. `ub-review
+doctor` reports only whether those env vars are present; it must not print
+secret values.
 Use `depth: quick`, `standard`, or `deep` for preset lane/model-call pressure;
 keep raw lane/model budget overrides on `standard`.
 For focused reruns, `lanes`, `except-lanes`, `tools`, and `except-tools` accept

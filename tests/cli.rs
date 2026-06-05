@@ -1187,6 +1187,34 @@ command = "ub-review-test-missing-tokmd"
 }
 
 #[test]
+fn doctor_reports_provider_key_env_status_without_values() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(&config, r#"profile = "gh-runner""#)?;
+
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_capture_with_env(
+        temp.path(),
+        bin,
+        &["doctor", "--config", path_str(&config)?],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", "minimax-secret-value"),
+            ("UB_REVIEW_OPENCODE_API_KEY", "   "),
+        ],
+    )?;
+
+    assert!(output.contains("Providers:"));
+    assert!(output.contains("minimax"));
+    assert!(output.contains("present"));
+    assert!(output.contains("env=UB_REVIEW_MINIMAX_API_KEY"));
+    assert!(output.contains("opencode-go"));
+    assert!(output.contains("missing"));
+    assert!(output.contains("env=UB_REVIEW_OPENCODE_API_KEY"));
+    assert!(!output.contains("minimax-secret-value"));
+    Ok(())
+}
+
+#[test]
 fn doctor_standard_image_env_requires_core_tools() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
@@ -3451,6 +3479,29 @@ fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)])
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
+}
+
+fn run_capture_with_env(
+    cwd: &Path,
+    program: &str,
+    args: &[&str],
+    envs: &[(&str, &str)],
+) -> Result<String> {
+    let mut command = Command::new(program);
+    command.args(args).current_dir(cwd);
+    for (name, value) in envs {
+        command.env(name, value);
+    }
+    let output = command.output()?;
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if output.status.success() {
+        return Ok(combined);
+    }
+    bail!("{program} {args:?} failed\n{combined}");
 }
 
 fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
