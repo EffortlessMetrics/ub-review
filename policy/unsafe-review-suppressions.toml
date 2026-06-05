@@ -1,5 +1,0 @@
-schema_version = 1
-
-# No unsafe-review suppressions are intentionally retained in this seed ledger.
-# Add [[suppression]] entries only for reviewed unsafe-contract gaps that have an
-# owner, reason, expiry or review date, and a concrete witness route or waiver.

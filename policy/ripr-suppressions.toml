@@ -1,5 +1,0 @@
-schema_version = 1
-
-# No ripr suppressions are intentionally retained in this seed ledger.
-# Add [[suppression]] entries only for reviewed static mutation-exposure findings
-# that have an owner, reason, expiry or review date, and replacement evidence.

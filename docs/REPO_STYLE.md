@@ -99,20 +99,22 @@ Industrialized swarm repo:
 
 ## Seed policy ledgers
 
-`policy/allow.toml` is the default durable source-exception ledger. Companion
-policy ledgers exist only where they add review semantics instead of duplicating
-source exception ownership:
+`policy/allow.toml` is the default durable source-exception ledger. Keep it as
+the first home for syntax-visible exceptions: unsafe, panic-family calls, lint
+suppressions, generated files, scripts, workflows, and non-Rust files.
+
+Use companion ledgers only when they add review semantics:
 
 - `policy/clippy-lints.toml` records active and targeted lint policy.
-- `policy/clippy-debt.toml` records retained lint-policy debt before broad
-  suppressions or delayed lint flips are accepted.
+- `policy/clippy-debt.toml` records retained lint-policy debt when a repo cannot
+  turn a lint on yet.
 - `policy/ripr-suppressions.toml` records reviewed static mutation-exposure
   suppressions.
 - `policy/unsafe-review-suppressions.toml` records reviewed unsafe-contract
   suppressions.
 
-Empty seed ledgers are intentional: they make future exceptions explicit without
-claiming current retained debt.
+Do not seed empty debt or suppression ledgers. Create them when there is a real
+exception to own or enough volume that splitting the ledger improves review.
 
 ## Review-fast rule
 

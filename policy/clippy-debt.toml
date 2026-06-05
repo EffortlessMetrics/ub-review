@@ -1,5 +1,0 @@
-schema_version = 1
-
-# No active Clippy policy debt is intentionally retained in this seed ledger.
-# Add [[debt]] entries before carrying broad allows, delayed lint flips, or
-# other durable lint-policy gaps.
