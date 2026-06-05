@@ -1173,6 +1173,38 @@ struct ToolStatusEntry {
     artifact_paths: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ToolGateOutcomeArtifact {
+    schema: &'static str,
+    runtime_profile: String,
+    outcomes: Vec<ToolGateOutcomeEntry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ToolGateOutcomeEntry {
+    schema: &'static str,
+    tool: String,
+    policy: ToolGatePolicy,
+    required: bool,
+    planned_run: bool,
+    sensor_status: String,
+    sensor_reason: String,
+    sensor_receipt_path: String,
+    status_source: &'static str,
+    outcome: String,
+    evaluated: bool,
+    reason: String,
+    metrics: ToolGateOutcomeMetrics,
+    source_artifacts: Vec<String>,
+    packet_policy: &'static str,
+    gate_policy: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct ToolGateOutcomeMetrics {
+    new_unsuppressed: Option<u64>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct LanePlan {
     id: String,
@@ -4077,6 +4109,7 @@ fn write_tool_status_artifacts(
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
     fs::write(review_dir.join("tool-status.json"), bytes)?;
+    write_tool_gate_outcome_artifacts(out, config, profile, &artifact)?;
     Ok(())
 }
 
@@ -4148,6 +4181,187 @@ fn tool_status_artifact(
         runtime_profile: profile.name.clone(),
         tools,
     }
+}
+
+fn write_tool_gate_outcome_artifacts(
+    out: &Path,
+    config: &Config,
+    profile: &Profile,
+    tool_status: &ToolStatusArtifact,
+) -> Result<()> {
+    let artifact = tool_gate_outcome_artifact(out, config, profile, tool_status);
+    let bytes = serde_json::to_vec_pretty(&artifact)?;
+    fs::write(out.join("tool-gate-outcomes.json"), &bytes)?;
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir)?;
+    fs::write(review_dir.join("tool-gate-outcomes.json"), bytes)?;
+    let mut ndjson = String::new();
+    for outcome in &artifact.outcomes {
+        ndjson.push_str(&serde_json::to_string(outcome)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("tool_gate_outcomes.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn tool_gate_outcome_artifact(
+    out: &Path,
+    config: &Config,
+    profile: &Profile,
+    tool_status: &ToolStatusArtifact,
+) -> ToolGateOutcomeArtifact {
+    let status_by_id = tool_status
+        .tools
+        .iter()
+        .map(|entry| (entry.id.as_str(), entry))
+        .collect::<BTreeMap<_, _>>();
+    let outcomes = config
+        .tools
+        .values()
+        .filter_map(|tool| {
+            let policy = tool.gate.clone()?;
+            let status = status_by_id.get(tool.id.as_str());
+            Some(tool_gate_outcome_entry(out, tool, policy, status.copied()))
+        })
+        .collect();
+    ToolGateOutcomeArtifact {
+        schema: "ub-review.tool_gate_outcomes.v1",
+        runtime_profile: profile.name.clone(),
+        outcomes,
+    }
+}
+
+fn tool_gate_outcome_entry(
+    out: &Path,
+    tool: &ToolPolicy,
+    policy: ToolGatePolicy,
+    status: Option<&ToolStatusEntry>,
+) -> ToolGateOutcomeEntry {
+    let sensor_receipt_path = format!("sensors/{}/ub-review-sensor-status.json", tool.id);
+    let gate_decision_path = format!("sensors/{}/gate-decision.json", tool.id);
+    let gate_decision = read_tool_gate_decision(&out.join(&gate_decision_path));
+    let sensor_status = status
+        .map(|entry| entry.status.clone())
+        .unwrap_or_else(|| "missing_status".to_owned());
+    let sensor_reason = status
+        .map(|entry| entry.reason.clone())
+        .unwrap_or_else(|| "tool-status entry missing".to_owned());
+    let required = status.is_some_and(|entry| entry.required);
+    let planned_run = status.is_some_and(|entry| entry.planned_run);
+    let (outcome, evaluated, reason, new_unsuppressed) = match status {
+        None => (
+            "missing_evidence".to_owned(),
+            false,
+            "tool-status entry missing for configured gate policy".to_owned(),
+            None,
+        ),
+        Some(entry) if !entry.planned_run => (
+            "not_evaluated".to_owned(),
+            false,
+            format!("tool gate was not evaluated because {}", entry.reason),
+            None,
+        ),
+        Some(entry) if matches!(entry.status.as_str(), "failed" | "timed_out") => (
+            "failed".to_owned(),
+            true,
+            format!(
+                "tool gate failed because sensor status was `{}`",
+                entry.status
+            ),
+            None,
+        ),
+        Some(entry) if entry.status == "ok" => {
+            evaluate_tool_gate_threshold(tool, &policy, gate_decision.as_ref())
+        }
+        Some(entry) => (
+            "missing_evidence".to_owned(),
+            false,
+            format!(
+                "tool gate could not be evaluated because sensor status was `{}`",
+                entry.status
+            ),
+            None,
+        ),
+    };
+    let mut source_artifacts = vec![sensor_receipt_path.clone(), "tool-status.json".to_owned()];
+    if gate_decision.is_some() {
+        source_artifacts.push(gate_decision_path);
+    }
+    ToolGateOutcomeEntry {
+        schema: "ub-review.tool_gate_outcome.v1",
+        tool: tool.id.clone(),
+        policy,
+        required,
+        planned_run,
+        sensor_status,
+        sensor_reason,
+        sensor_receipt_path,
+        status_source: "tool-status.json",
+        outcome,
+        evaluated,
+        reason,
+        metrics: ToolGateOutcomeMetrics { new_unsuppressed },
+        source_artifacts,
+        packet_policy: "gate-only",
+        gate_policy: "trust-affecting",
+    }
+}
+
+fn evaluate_tool_gate_threshold(
+    tool: &ToolPolicy,
+    policy: &ToolGatePolicy,
+    gate_decision: Option<&ToolGateDecision>,
+) -> (String, bool, String, Option<u64>) {
+    let Some(max_new_unsuppressed) = policy.max_new_unsuppressed else {
+        return (
+            "not_evaluated".to_owned(),
+            false,
+            "configured gate policy has no supported threshold to evaluate".to_owned(),
+            None,
+        );
+    };
+    let Some(decision) = gate_decision else {
+        return (
+            "missing_evidence".to_owned(),
+            false,
+            format!(
+                "`{}` ran ok, but no machine-readable gate-decision receipt was available",
+                tool.id
+            ),
+            None,
+        );
+    };
+    if decision.new_unsuppressed <= max_new_unsuppressed {
+        (
+            "passed".to_owned(),
+            true,
+            format!(
+                "new_unsuppressed={} is within configured maximum {}",
+                decision.new_unsuppressed, max_new_unsuppressed
+            ),
+            Some(decision.new_unsuppressed),
+        )
+    } else {
+        (
+            "failed".to_owned(),
+            true,
+            format!(
+                "new_unsuppressed={} exceeds configured maximum {}",
+                decision.new_unsuppressed, max_new_unsuppressed
+            ),
+            Some(decision.new_unsuppressed),
+        )
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct ToolGateDecision {
+    new_unsuppressed: u64,
+}
+
+fn read_tool_gate_decision(path: &Path) -> Option<ToolGateDecision> {
+    let text = fs::read_to_string(path).ok()?;
+    serde_json::from_str(&text).ok()
 }
 
 fn tool_artifact_paths(id: &str) -> Vec<String> {
@@ -20861,6 +21075,114 @@ mod tests {
     }
 
     #[test]
+    fn tool_gate_outcome_records_missing_threshold_receipt() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let temp = tempfile::tempdir()?;
+        let tool_status =
+            super::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
+        let outcomes = super::tool_gate_outcome_artifact(
+            temp.path(),
+            &config,
+            config.selected_profile()?,
+            &tool_status,
+        );
+        let ripr = outcomes
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.tool == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr gate outcome missing"))?;
+        assert_eq!(ripr.schema, "ub-review.tool_gate_outcome.v1");
+        assert_eq!(ripr.policy.max_new_unsuppressed, Some(0));
+        assert_eq!(ripr.outcome, "missing_evidence");
+        assert!(!ripr.evaluated);
+        assert_eq!(
+            ripr.sensor_receipt_path,
+            "sensors/ripr/ub-review-sensor-status.json"
+        );
+        assert_eq!(ripr.packet_policy, "gate-only");
+        assert_eq!(ripr.gate_policy, "trust-affecting");
+        Ok(())
+    }
+
+    #[test]
+    fn tool_gate_outcome_passes_with_gate_decision_receipt() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let temp = tempfile::tempdir()?;
+        let ripr = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr sensor missing"))?;
+        super::write_sensor_status(
+            temp.path(),
+            ripr,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["ripr".to_owned(), "gate".to_owned()],
+                duration_ms: 12,
+                reason: "ripr gate receipt ok",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let gate_decision = temp.path().join("sensors/ripr/gate-decision.json");
+        fs::write(gate_decision, br#"{"new_unsuppressed":0}"#)?;
+        let tool_status =
+            super::tool_status_artifact(temp.path(), &config, config.selected_profile()?, &plan);
+        let outcomes = super::tool_gate_outcome_artifact(
+            temp.path(),
+            &config,
+            config.selected_profile()?,
+            &tool_status,
+        );
+        let ripr = outcomes
+            .outcomes
+            .iter()
+            .find(|outcome| outcome.tool == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr gate outcome missing"))?;
+        assert_eq!(ripr.sensor_status, "ok");
+        assert_eq!(ripr.outcome, "passed");
+        assert!(ripr.evaluated);
+        assert_eq!(ripr.metrics.new_unsuppressed, Some(0));
+        assert!(
+            ripr.source_artifacts
+                .iter()
+                .any(|artifact| artifact == "sensors/ripr/gate-decision.json")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn baseline_gate_sensor_argvs_match_required_matrix() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
         config.merge_defaults();
@@ -30534,6 +30856,40 @@ index 1111111..2222222 100644
                 .to_string()
                 .contains("questions artifact path collision")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn observation_question_artifacts_bound_model_supplied_filenames() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut observations = vec![test_observation(
+            "opposition",
+            "The lane emitted a long verification question.",
+            "missing-evidence",
+            "open",
+            "low",
+            "medium",
+            "long-question-filename",
+        )];
+        let long_question = format!(
+            "{}terminal-proof-question",
+            "confirm-the-focused-proof-before-upstream-".repeat(12)
+        );
+        observations[0].question = long_question.clone();
+
+        write_observation_artifacts(temp.path(), &observations)?;
+
+        let lane_dir = temp.path().join("questions").join("opposition");
+        let files = fs::read_dir(&lane_dir)?.collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(files.len(), 1);
+        let file_name = files[0].file_name().to_string_lossy().to_string();
+        let expected_stem = super::sanitize_artifact_name(&long_question);
+        assert_eq!(expected_stem.len(), super::ARTIFACT_NAME_MAX_CHARS);
+        assert_eq!(file_name, format!("{expected_stem}.json"));
+        assert!(file_name.len() <= super::ARTIFACT_NAME_MAX_CHARS + ".json".len());
+
+        let artifact: serde_json::Value = serde_json::from_slice(&fs::read(files[0].path())?)?;
+        assert_eq!(artifact["question"], long_question);
         Ok(())
     }
 

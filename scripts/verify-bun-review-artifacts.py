@@ -797,6 +797,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "resolved-plan.json",
         "resolved-tools.json",
         "tool-status.json",
+        "tool-gate-outcomes.json",
         "running-summary.md",
         "review/shared_context.md",
         "review/shared_context_cache_block.md",
@@ -807,6 +808,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/terminal_state.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
+        "review/tool-gate-outcomes.json",
         "review/provider-preflight-status.json",
         "review/model_stages.json",
         "review/metrics.json",
@@ -842,6 +844,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "proof_requests.ndjson",
         "proof_tasks.ndjson",
         "proof_receipts.ndjson",
+        "tool_gate_outcomes.ndjson",
         "resource_leases.ndjson",
     ]:
         require_file(root / path)
@@ -4365,6 +4368,130 @@ def require_tool_registry_artifacts(root: pathlib.Path) -> None:
 
     if "coverage" in status_by_id:
         require_coverage_status_artifact(root, status_by_id["coverage"])
+    require_tool_gate_outcome_artifacts(root, resolved_by_id, status_by_id, runtime_profile)
+
+
+def require_tool_gate_outcome_artifacts(
+    root: pathlib.Path,
+    resolved_by_id: dict[str, dict],
+    status_by_id: dict[str, dict],
+    runtime_profile: str,
+) -> None:
+    outcomes = load_json(root / "tool-gate-outcomes.json")
+    review_outcomes = load_json(root / "review/tool-gate-outcomes.json")
+    if outcomes != review_outcomes:
+        fail("tool-gate-outcomes.json does not match review/tool-gate-outcomes.json")
+    if outcomes.get("schema") != "ub-review.tool_gate_outcomes.v1":
+        fail("tool-gate-outcomes.json has wrong schema")
+    if outcomes.get("runtime_profile") != runtime_profile:
+        fail("tool-gate-outcomes.json runtime_profile does not match resolved-tools.json")
+    outcome_entries = outcomes.get("outcomes")
+    if not isinstance(outcome_entries, list):
+        fail("tool-gate-outcomes.json outcomes is not an array")
+    gated_tools = {
+        tool_id: entry
+        for tool_id, entry in resolved_by_id.items()
+        if entry.get("gate") is not None
+    }
+    if len(outcome_entries) != len(gated_tools):
+        fail("tool-gate-outcomes.json outcome count does not match configured tool gates")
+    by_tool: dict[str, dict] = {}
+    for entry in outcome_entries:
+        require_tool_gate_outcome_entry(entry)
+        tool = entry["tool"]
+        if tool in by_tool:
+            fail(f"duplicate tool gate outcome for {tool}")
+        by_tool[tool] = entry
+    missing = sorted(set(gated_tools) - set(by_tool))
+    extra = sorted(set(by_tool) - set(gated_tools))
+    if missing:
+        fail(f"tool-gate-outcomes.json missing gated tools: {', '.join(missing)}")
+    if extra:
+        fail(f"tool-gate-outcomes.json has ungated tools: {', '.join(extra)}")
+    for tool_id, resolved_entry in gated_tools.items():
+        outcome = by_tool[tool_id]
+        status_entry = status_by_id.get(tool_id)
+        if status_entry is None:
+            fail(f"tool-gate-outcomes.json references missing status tool {tool_id}")
+        if outcome.get("policy") != resolved_entry.get("gate"):
+            fail(f"tool-gate-outcomes.json policy for {tool_id} does not match resolved-tools.json")
+        if outcome.get("required") != status_entry.get("required"):
+            fail(f"tool-gate-outcomes.json required for {tool_id} does not match tool-status.json")
+        if outcome.get("planned_run") != status_entry.get("planned_run"):
+            fail(f"tool-gate-outcomes.json planned_run for {tool_id} does not match tool-status.json")
+        if outcome.get("sensor_status") != status_entry.get("status"):
+            fail(f"tool-gate-outcomes.json sensor_status for {tool_id} does not match tool-status.json")
+        if outcome.get("sensor_reason") != status_entry.get("reason"):
+            fail(f"tool-gate-outcomes.json sensor_reason for {tool_id} does not match tool-status.json")
+        expected_receipt = f"sensors/{tool_id}/ub-review-sensor-status.json"
+        if outcome.get("sensor_receipt_path") != expected_receipt:
+            fail(f"tool-gate-outcomes.json sensor receipt path for {tool_id} is invalid")
+        source_artifacts = outcome.get("source_artifacts")
+        if expected_receipt not in source_artifacts:
+            fail(f"tool-gate-outcomes.json source_artifacts missing sensor receipt for {tool_id}")
+        if "tool-status.json" not in source_artifacts:
+            fail(f"tool-gate-outcomes.json source_artifacts missing tool-status for {tool_id}")
+
+    lines = [line for line in read_text(root / "tool_gate_outcomes.ndjson").splitlines() if line.strip()]
+    if len(lines) != len(outcome_entries):
+        fail("tool_gate_outcomes.ndjson line count does not match tool-gate-outcomes.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid tool_gate_outcomes.ndjson line {index + 1}: {error}")
+        if parsed != outcome_entries[index]:
+            fail(f"tool_gate_outcomes.ndjson line {index + 1} does not match JSON artifact")
+
+
+def require_tool_gate_outcome_entry(entry: dict) -> None:
+    if not isinstance(entry, dict):
+        fail(f"tool gate outcome is not an object: {entry!r}")
+    if entry.get("schema") != "ub-review.tool_gate_outcome.v1":
+        fail(f"tool gate outcome has wrong schema: {entry!r}")
+    for field in [
+        "tool",
+        "sensor_status",
+        "sensor_reason",
+        "sensor_receipt_path",
+        "status_source",
+        "outcome",
+        "reason",
+        "packet_policy",
+        "gate_policy",
+    ]:
+        if not isinstance(entry.get(field), str) or not entry[field]:
+            fail(f"tool gate outcome missing string field {field}: {entry!r}")
+    if entry.get("outcome") not in {"passed", "failed", "not_evaluated", "missing_evidence"}:
+        fail(f"tool gate outcome has unsupported outcome: {entry!r}")
+    if entry.get("evaluated") not in {True, False}:
+        fail(f"tool gate outcome evaluated is not boolean: {entry!r}")
+    if entry.get("required") not in {True, False}:
+        fail(f"tool gate outcome required is not boolean: {entry!r}")
+    if entry.get("planned_run") not in {True, False}:
+        fail(f"tool gate outcome planned_run is not boolean: {entry!r}")
+    if entry.get("status_source") != "tool-status.json":
+        fail(f"tool gate outcome status_source is invalid: {entry!r}")
+    if entry.get("packet_policy") != "gate-only":
+        fail(f"tool gate outcome packet_policy is invalid: {entry!r}")
+    if entry.get("gate_policy") != "trust-affecting":
+        fail(f"tool gate outcome gate_policy is invalid: {entry!r}")
+    source_artifacts = entry.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not all(
+        isinstance(item, str) and item for item in source_artifacts
+    ):
+        fail(f"tool gate outcome source_artifacts is not a string array: {entry!r}")
+    metrics = entry.get("metrics")
+    if not isinstance(metrics, dict):
+        fail(f"tool gate outcome metrics is not an object: {entry!r}")
+    new_unsuppressed = metrics.get("new_unsuppressed")
+    if new_unsuppressed is not None and (
+        not isinstance(new_unsuppressed, int)
+        or isinstance(new_unsuppressed, bool)
+        or new_unsuppressed < 0
+    ):
+        fail(f"tool gate outcome new_unsuppressed metric is invalid: {entry!r}")
+    require_tool_gate_policy("tool-gate-outcomes.json", entry["tool"], entry.get("policy"))
 
 
 def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
@@ -4619,6 +4746,8 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "running-summary.md",
         root / "work_queue.json",
         root / "work_events.ndjson",
+        root / "tool-gate-outcomes.json",
+        root / "tool_gate_outcomes.ndjson",
         root / "review/shared_context.md",
         root / "review/pr_thread_context.json",
         root / "review/terminal_state.json",
@@ -4632,6 +4761,7 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/post-stderr.txt",
         root / "review/resource_leases.json",
         root / "review/resource_plan.md",
+        root / "review/tool-gate-outcomes.json",
         root / "resource_leases.ndjson",
     ]
     paths.extend((root / "lanes").glob("*.md"))

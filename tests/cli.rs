@@ -159,6 +159,7 @@ fn active_len_tracks_view_after_resize() {
         "resolved-plan.json",
         "resolved-tools.json",
         "tool-status.json",
+        "tool-gate-outcomes.json",
         "running-summary.md",
         "sensors/tokmd/ub-review-sensor-status.json",
         "sensors/cargo-allow/ub-review-sensor-status.json",
@@ -175,6 +176,7 @@ fn active_len_tracks_view_after_resize() {
         "review/terminal_state.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
+        "review/tool-gate-outcomes.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/scheduler.json",
@@ -207,6 +209,7 @@ fn active_len_tracks_view_after_resize() {
         "proof_requests.ndjson",
         "proof_tasks.ndjson",
         "proof_receipts.ndjson",
+        "tool_gate_outcomes.ndjson",
         "witnesses.ndjson",
         "resource_leases.ndjson",
         "review/github-review-skip.json",
@@ -467,6 +470,30 @@ fn active_len_tracks_view_after_resize() {
     let root_tool_status: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("tool-status.json"))?)?;
     assert_eq!(root_tool_status, tool_status);
+    let tool_gate_outcomes: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/tool-gate-outcomes.json"))?)?;
+    assert_eq!(
+        tool_gate_outcomes["schema"],
+        "ub-review.tool_gate_outcomes.v1"
+    );
+    assert_eq!(tool_gate_outcomes["runtime_profile"], "gh-runner");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&fs::read(
+            out.join("tool-gate-outcomes.json")
+        )?)?,
+        tool_gate_outcomes
+    );
+    let outcome_lines = fs::read_to_string(out.join("tool_gate_outcomes.ndjson"))?
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count();
+    assert_eq!(
+        outcome_lines,
+        tool_gate_outcomes["outcomes"]
+            .as_array()
+            .map(std::vec::Vec::len)
+            .unwrap_or_default()
+    );
     let capped_out = temp.path().join("packet-capped");
     run(
         temp.path(),
