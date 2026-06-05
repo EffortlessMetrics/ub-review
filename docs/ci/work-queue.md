@@ -110,6 +110,12 @@ review/metrics.json
 events.ndjson
 ```
 
+Sensor queue tasks are generated from the tool registry. `tool-status.json`
+must mirror the stable tool metadata from `resolved-tools.json`, including
+timeout, artifact budget, lease flag, gate policy, and artifact paths. The
+artifact verifier rejects drift between those files because the queue cannot be
+audited if status receipts describe a different tool plan.
+
 The PR body gets only decision-relevant findings, questions, proof results,
 refutations, and trust-affecting evidence gaps. It does not list the queue,
 tool table, lane roster, command logs, or generic residual risk.
