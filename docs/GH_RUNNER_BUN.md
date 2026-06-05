@@ -25,8 +25,10 @@ The action builds the packet without sensor secrets. In `posting: review` mode,
 the Bun workflow gives it the scoped `github.token` so it can submit one grouped
 Pull Request Review. MiniMax M3 lanes use `secrets.MINIMAX_API_KEY`; GLM is
 skipped for v0. `secrets.OPENCODE` is reserved for optional direct provider
-canary/deep modes. The calling workflow still owns uploading `target/ub-review`
-as the durable artifact.
+canary/deep modes. The action maps them into `UB_REVIEW_MINIMAX_API_KEY` and
+`UB_REVIEW_OPENCODE_API_KEY`; `ub-review doctor` reports only present/missing
+status for those env vars. The calling workflow still owns uploading
+`target/ub-review` as the durable artifact.
 
 The `core` hosted-runner tool bundle attempts `tokmd` `1.12.0`,
 `cargo-allow`, `ripr`, `unsafe-review`, `ast-grep`, and `actionlint`. Missing

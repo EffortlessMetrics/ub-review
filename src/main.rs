@@ -3353,6 +3353,17 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
             }
         }
     }
+    println!();
+    println!("Providers:");
+    for provider in [ModelProvider::MiniMaxDirect, ModelProvider::OpenCodeGo] {
+        let env_name = model_api_key_env(provider);
+        let status = if env_value_present(env_name) {
+            "present"
+        } else {
+            "missing"
+        };
+        println!("  {:<16} {:<8} env={}", provider.key(), status, env_name);
+    }
     if !missing_required.is_empty() {
         bail!(
             "required core review tools missing from standard image: {}",
