@@ -97,6 +97,12 @@ wait does not masquerade as consumed local proof time. The product value comes
 from overlap: models investigate while tools produce receipts and the compiler
 turns only decision-relevant evidence into review output.
 
+The queue policy is documented in
+[ci/work-queue.md](ci/work-queue.md): guaranteed baseline tasks start with
+include-if-ready evidence, adaptive proof continues under lease, late receipts
+route only to consuming lanes, and the final compiler decides whether anything
+earns PR-body space.
+
 ## Judgment layer
 
 Review judgment automation means the system decides:

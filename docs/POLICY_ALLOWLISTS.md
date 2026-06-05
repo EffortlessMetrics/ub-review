@@ -30,6 +30,12 @@ Do not add separate per-surface ledgers by default. Split `allow.toml` only when
 the repo has enough real exception volume that a narrower ledger improves
 reviewability.
 
+`policy/clippy-lints.toml` may record active and targeted lint policy because it
+is not an exception ledger. `policy/clippy-debt.toml`,
+`policy/ripr-suppressions.toml`, and
+`policy/unsafe-review-suppressions.toml` should be created only when there is
+real retained debt or a reviewed suppression to own.
+
 ## Receipt quality
 
 Good reasons are specific and auditable, for example:

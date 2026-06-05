@@ -31,9 +31,10 @@ remaining product/tool work back to the correct lanes.
   published version.
 - PR #204: Bun artifact verifier rejects inline review boilerplate and CI runs
   the verifier self-test.
-- Bun PR #47: the Bun gate is pinned to
-  `EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6` with
-  a successful `UB evidence packet / gh-runner` run.
+- Bun PR #49: the Bun gate is pinned to
+  `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
+  a successful `UB evidence packet / gh-runner` run, terminal state
+  `sufficient`, artifact-only post skip, and verifier pass.
 
 ## Adoption checklist
 

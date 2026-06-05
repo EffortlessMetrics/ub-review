@@ -39,26 +39,27 @@ Parked follow-ups:
 
 ## Current Bun gate pin
 
-Date: 2026-06-04
+Date: 2026-06-05
 Repo: `EffortlessSteven/bun`
-PR: `#47`
-Pin: `EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6`
-Run: `26959434377`
-Artifact: `ub-review-packet-47`
+PR: `#49`
+Pin: `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`
+Run: `26991938752`
+Artifact: `ub-review-packet-49`
 
 Acted on:
 
-- The Bun workflow pin advanced after `ub-review` PR #212 and PR #214.
+- The Bun workflow pin advanced after `ub-review` PR #251 suppressed
+  artifact-only body failures.
 - The `UB evidence packet / gh-runner` job passed on the new pin.
-- The packet artifact uploaded and was not expired at merge time.
-- The packet verifier passed with zero inline comments and `tokmd` status `ok`.
-- The packet includes `evidence_stream_started` for the role-stream event
-  contract.
-- The packet records `run_pass` as `opened` in review and metrics artifacts.
+- The packet verifier passed after artifact download.
+- The packet terminal state was `sufficient`.
+- `github-review-skip.json` and `post-result.json` recorded an artifact-only
+  skip instead of posting no-value review text.
 
 Prompt/compiler follow-up:
 
-- Keep provider failures under missing or failed evidence only.
+- Keep artifact-only output as a successful gate state, not a review-body
+  failure.
 - Keep the strict verifier as the release proof for Bun fork runs.
 
 ## PR #28 Markdown RAB review coordination notes
