@@ -1045,7 +1045,30 @@ def require_profile_artifacts(
         )
     if resolved_plan.get("runtime_profile") != runtime_profile:
         fail("resolved-plan.json runtime_profile does not match resolved-profile.json")
+    require_gate_config("resolved-profile.json", resolved_profile.get("gate"))
+    require_gate_config("resolved-plan.json", resolved_plan.get("gate"))
+    if resolved_profile.get("gate") != resolved_plan.get("gate"):
+        fail("resolved-plan.json gate does not match resolved-profile.json")
     return resolved_profile, resolved_plan
+
+
+def require_gate_config(path: str, gate: object) -> None:
+    if not isinstance(gate, dict):
+        fail(f"{path} gate is not an object")
+    for field in ["required_check", "synchronize_mode"]:
+        if not isinstance(gate.get(field), str) or not gate[field]:
+            fail(f"{path} gate.{field} is invalid: {gate!r}")
+    for field in ["target_minutes", "hard_timeout_minutes"]:
+        value = gate.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            fail(f"{path} gate.{field} is invalid: {gate!r}")
+    if gate["hard_timeout_minutes"] < gate["target_minutes"]:
+        fail(f"{path} gate hard_timeout_minutes is below target_minutes: {gate!r}")
+    post_review_on = gate.get("post_review_on")
+    if not isinstance(post_review_on, list) or not all(
+        isinstance(item, str) and item for item in post_review_on
+    ):
+        fail(f"{path} gate.post_review_on is not a string array: {gate!r}")
 
 
 def require_review(
@@ -4241,6 +4264,12 @@ def require_tool_registry_artifacts(root: pathlib.Path) -> None:
     missing_status = sorted(set(resolved_by_id) - set(status_by_id))
     if missing_status:
         fail(f"tool-status.json missing resolved tools: {', '.join(missing_status)}")
+    for tool_id, resolved_entry in resolved_by_id.items():
+        status_entry = status_by_id.get(tool_id)
+        if status_entry is None:
+            continue
+        if status_entry.get("gate") != resolved_entry.get("gate"):
+            fail(f"tool-status.json gate policy for {tool_id} does not match resolved-tools.json")
 
     for sensor in SENSORS:
         if sensor not in resolved_by_id:
@@ -4283,8 +4312,31 @@ def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
             isinstance(item, str) and item for item in artifact_paths
         ):
             fail(f"{path} {tool_id} artifact_paths is not a string array")
+        gate = entry.get("gate")
+        if gate is not None:
+            require_tool_gate_policy(path, tool_id, gate)
         by_id[tool_id] = entry
     return by_id
+
+
+def require_tool_gate_policy(path: str, tool_id: str, gate: object) -> None:
+    if not isinstance(gate, dict):
+        fail(f"{path} {tool_id} gate is not an object")
+    scope = gate.get("scope")
+    if scope is not None and (not isinstance(scope, str) or not scope):
+        fail(f"{path} {tool_id} gate.scope is invalid: {gate!r}")
+    max_new_unsuppressed = gate.get("max_new_unsuppressed")
+    if max_new_unsuppressed is not None and (
+        not isinstance(max_new_unsuppressed, int)
+        or isinstance(max_new_unsuppressed, bool)
+        or max_new_unsuppressed < 0
+    ):
+        fail(f"{path} {tool_id} gate.max_new_unsuppressed is invalid: {gate!r}")
+    unknown = sorted(set(gate) - {"scope", "max_new_unsuppressed"})
+    if unknown:
+        fail(f"{path} {tool_id} gate has unsupported field(s): {', '.join(unknown)}")
+    if not gate:
+        fail(f"{path} {tool_id} gate is empty")
 
 
 def require_coverage_status_artifact(root: pathlib.Path, tool_status: dict) -> None:
