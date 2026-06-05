@@ -35,6 +35,8 @@ APPROVAL_LINES = {
 }
 MAX_PR_REVIEW_BODY_BYTES = 6_000
 MAX_PR_REVIEW_BODY_BULLETS = 12
+ARTIFACT_NAME_MAX_CHARS = 96
+ARTIFACT_NAME_HASH_CHARS = 16
 SECRET_VALUE_NAMES = [
     "github_token",
     "GITHUB_TOKEN",
@@ -4304,7 +4306,14 @@ def require_proof_request_group_schema(group: dict) -> None:
 
 
 def sanitize_artifact_name(value: str) -> str:
-    return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in value)
+    sanitized = "".join(
+        ch if (ch.isascii() and ch.isalnum()) or ch in "-_" else "-" for ch in value
+    )
+    if len(sanitized) <= ARTIFACT_NAME_MAX_CHARS:
+        return sanitized
+    digest = hashlib.sha256(value.encode()).hexdigest()
+    prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1
+    return f"{sanitized[:prefix_len]}-{digest[:ARTIFACT_NAME_HASH_CHARS]}"
 
 
 def require_sensor_receipts(root: pathlib.Path) -> None:
@@ -5000,6 +5009,18 @@ def self_test_tool_gate_outcome_false_pass_fails() -> None:
     require_tool_gate_outcome_consistency(entry)
 
 
+def self_test_sanitize_artifact_name_bounds_long_values() -> None:
+    raw = "candidate-" + ("generated-id-segment-" * 24)
+    sanitized = sanitize_artifact_name(raw)
+    expected_suffix = hashlib.sha256(raw.encode()).hexdigest()[:ARTIFACT_NAME_HASH_CHARS]
+    if len(sanitized) > ARTIFACT_NAME_MAX_CHARS:
+        fail("artifact name sanitizer did not bound long value")
+    if not sanitized.endswith(f"-{expected_suffix}"):
+        fail("artifact name sanitizer did not use stable hash suffix")
+    if sanitize_artifact_name("source-route/question one") != "source-route-question-one":
+        fail("artifact name sanitizer changed safe replacement behavior")
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
@@ -5435,6 +5456,7 @@ def run_self_tests() -> None:
         "passed with new_unsuppressed 1 above threshold 0",
         self_test_tool_gate_outcome_false_pass_fails,
     )
+    self_test_sanitize_artifact_name_bounds_long_values()
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
     require_skipped_payload_contract(
         {"github_review_json": None},
