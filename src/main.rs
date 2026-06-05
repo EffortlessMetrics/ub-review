@@ -6340,6 +6340,9 @@ fn write_review_artifacts(
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
     let pr_thread_context = collect_pr_thread_context(root, args)?;
+    let profile = config.selected_profile()?;
+    let mut proof_requests = Vec::new();
+    append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
     let shared_context = render_shared_context(
         root,
         out,
@@ -6349,6 +6352,8 @@ fn write_review_artifacts(
         running_summary,
         args,
         &pr_thread_context,
+        profile,
+        &proof_requests,
     )?;
     fs::write(review_dir.join("shared_context.md"), &shared_context)?;
     fs::write(
@@ -6385,10 +6390,7 @@ fn write_review_artifacts(
     let mut summary_only_findings = Vec::new();
     let mut inline_comments = Vec::new();
     let mut model_observations = Vec::new();
-    let mut proof_requests = Vec::new();
     let mut model_calls_used = 0usize;
-    let profile = config.selected_profile()?;
-    append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
     let seeded_proof_requests = proof_requests.clone();
 
     let mut proof_result = ProofBrokerResult::default();
@@ -12604,6 +12606,8 @@ fn render_shared_context(
     running_summary: &str,
     args: &RunArgs,
     pr_thread_context: &PrThreadContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
 ) -> Result<String> {
     let mut text = String::new();
     text.push_str("# Shared UB Review Context\n\n");
@@ -12668,6 +12672,14 @@ fn render_shared_context(
             escape_md(reason)
         ));
     }
+    text.push_str("\n## Initial Work Queue\n\n");
+    text.push_str(&render_initial_work_queue_context(
+        out,
+        plan,
+        diff,
+        profile,
+        proof_requests,
+    )?);
     text.push_str(&format!(
         "\n## {} Review Posture\n\n",
         diff_class_posture_heading(diff.diff_class)
@@ -12684,6 +12696,118 @@ fn render_shared_context(
     }
     text.push_str("```\n");
     Ok(text)
+}
+
+fn render_initial_work_queue_context(
+    out: &Path,
+    plan: &Plan,
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+) -> Result<String> {
+    let sensor_tasks = plan
+        .sensors
+        .iter()
+        .map(|sensor| {
+            (
+                work_queue_task_from_sensor(out, sensor),
+                sensor.reason.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let proof_output = build_proof_planner_output(diff, profile, proof_requests)?;
+    let proof_tasks = proof_output
+        .proof_tasks
+        .iter()
+        .map(|task| {
+            (
+                work_queue_task_from_proof_task(task),
+                format!("{} {}", task.kind, task.purpose),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut tasks = Vec::with_capacity(sensor_tasks.len() + proof_tasks.len());
+    tasks.extend(sensor_tasks);
+    tasks.extend(proof_tasks);
+
+    let mut counts = BTreeMap::new();
+    for (task, _) in &tasks {
+        *counts
+            .entry(task.initial_packet_status.as_str())
+            .or_insert(0usize) += 1;
+    }
+
+    let mut text = String::new();
+    text.push_str(&format!(
+        "- Ready for initial packet: `{}`\n",
+        counts
+            .get("ready_for_initial_packet")
+            .copied()
+            .unwrap_or_default()
+    ));
+    text.push_str(&format!(
+        "- Pending initial packet: `{}`\n",
+        counts
+            .get("pending_initial_packet")
+            .copied()
+            .unwrap_or_default()
+    ));
+    text.push_str(&format!(
+        "- Not initial packet: `{}`\n",
+        counts
+            .get("not_initial_packet")
+            .copied()
+            .unwrap_or_default()
+    ));
+    text.push_str("- Rule: pending work is unfinished, not missing evidence.\n");
+    render_initial_work_queue_task_group(
+        &mut text,
+        "Ready Initial Packet Receipts",
+        &tasks,
+        "ready_for_initial_packet",
+    );
+    render_initial_work_queue_task_group(
+        &mut text,
+        "Pending Initial Packet Tasks",
+        &tasks,
+        "pending_initial_packet",
+    );
+    Ok(text)
+}
+
+fn render_initial_work_queue_task_group(
+    text: &mut String,
+    heading: &str,
+    tasks: &[(WorkQueueTaskArtifact, String)],
+    status: &str,
+) {
+    const MAX_QUEUE_ITEMS: usize = 8;
+    text.push_str(&format!("\n### {heading}\n\n"));
+    let matching = tasks
+        .iter()
+        .filter(|(task, _)| task.initial_packet_status == status)
+        .collect::<Vec<_>>();
+    if matching.is_empty() {
+        text.push_str("- None.\n");
+        return;
+    }
+    for (task, detail) in matching.iter().take(MAX_QUEUE_ITEMS) {
+        text.push_str(&format!(
+            "- `{}` (`{}`, `{}`) -> `{}`; consumers: `{}`; {}\n",
+            task.id,
+            task.packet_policy,
+            task.gate_policy,
+            task.receipt_path,
+            task.consumers.join(", "),
+            escape_md(detail)
+        ));
+    }
+    let remaining = matching.len().saturating_sub(MAX_QUEUE_ITEMS);
+    if remaining > 0 {
+        text.push_str(&format!(
+            "- `{remaining}` more task(s) are listed in `work_queue.json`.\n"
+        ));
+    }
 }
 
 fn write_shared_context_cache_artifacts(
