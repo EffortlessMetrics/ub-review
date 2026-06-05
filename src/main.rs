@@ -6343,15 +6343,33 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     })
 }
 
+const MAX_PR_REVIEW_BODY_BYTES: usize = 6_000;
+const MAX_PR_REVIEW_BODY_BULLETS: usize = 12;
+
 fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
     let text = error.to_string();
-    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
+    text.contains("artifact-only boilerplate")
+        || text.contains("refuted-only artifact note")
+        || text.contains("not concise enough")
 }
 
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
     let trimmed = body.trim();
     if trimmed.is_empty() {
         return Ok(());
+    }
+    if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
+        bail!(
+            "github review body is not concise enough: {} bytes over max {}",
+            trimmed.len(),
+            MAX_PR_REVIEW_BODY_BYTES
+        );
+    }
+    let bullet_count = pr_body_bullet_count(trimmed);
+    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
+        bail!(
+            "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+        );
     }
     if has_forbidden_pr_review_boilerplate(trimmed) {
         bail!("github review body contains artifact-only boilerplate");
@@ -6392,6 +6410,15 @@ fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Resu
         }
     }
     Ok(())
+}
+
+fn pr_body_bullet_count(body: &str) -> usize {
+    body.lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            line.starts_with("- ") || line.starts_with("* ")
+        })
+        .count()
 }
 
 fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
@@ -24133,6 +24160,27 @@ index 1111111..2222222 100644
             err.to_string().contains("artifact-only boilerplate"),
             "{err:#}"
         );
+
+        review.body = format!(
+            "## Decision\n\n- Needs focused cleanup before merge.\n\n## Verification questions\n\n{}",
+            (1..=13)
+                .map(|index| format!("- Confirm decision-relevant proof item {index}."))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("overlong bullet list unexpectedly passed"))?;
+        assert!(err.to_string().contains("not concise enough"), "{err:#}");
+
+        review.body = format!(
+            "## Decision\n\n- Needs focused cleanup before merge.\n\n## Evidence gaps\n\n- {}",
+            "proof gap ".repeat(800)
+        );
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("oversized body unexpectedly passed"))?;
+        assert!(err.to_string().contains("not concise enough"), "{err:#}");
 
         review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
         let err = validate_github_review_payload(&review)

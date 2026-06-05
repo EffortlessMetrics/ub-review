@@ -32,6 +32,8 @@ APPROVAL_LINES = {
     "no actionable findings",
     "no actionable",
 }
+MAX_PR_REVIEW_BODY_BYTES = 6_000
+MAX_PR_REVIEW_BODY_BULLETS = 12
 SECRET_VALUE_NAMES = [
     "github_token",
     "GITHUB_TOKEN",
@@ -218,6 +220,18 @@ def has_reviewer_value_heading(body: str) -> bool:
 
 def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
     lowered = body.lower()
+    body_bytes = len(body.strip().encode("utf-8"))
+    if body_bytes > MAX_PR_REVIEW_BODY_BYTES:
+        fail(
+            f"{path} is not concise enough: "
+            f"{body_bytes} bytes over max {MAX_PR_REVIEW_BODY_BYTES}"
+        )
+    bullet_count = pr_body_bullet_count(body)
+    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS:
+        fail(
+            f"{path} is not concise enough: "
+            f"{bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+        )
     if is_workflow_trust_posture_review_noise(lowered):
         fail(f"{path} contains artifact-only workflow trust posture prose")
     if is_refuted_only_pr_body(lowered):
@@ -294,6 +308,14 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
             f"unsupported sibling completeness claim leaked into {path}; "
             "report scan coverage as a verification question instead"
         )
+
+
+def pr_body_bullet_count(body: str) -> int:
+    return sum(
+        1
+        for line in body.splitlines()
+        if line.lstrip().startswith("- ") or line.lstrip().startswith("* ")
+    )
 
 
 def is_workflow_trust_posture_review_noise(text: str) -> bool:
@@ -3870,6 +3892,35 @@ def run_self_tests() -> None:
                 "## Verification questions\n\n"
                 "- Confirm the cached prior observation still matches; "
                 "the refuter demoted inline candidate because Gate proof is pending."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "too many PR body bullets",
+        "not concise enough",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs focused cleanup before merge.\n\n"
+                "## Verification questions\n\n"
+                + "\n".join(
+                    f"- Confirm decision-relevant proof item {index}."
+                    for index in range(1, 14)
+                )
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "oversized PR body",
+        "not concise enough",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs focused cleanup before merge.\n\n"
+                "## Evidence gaps\n\n"
+                f"- {'proof gap ' * 800}"
             ),
             pathlib.Path("review/github-review.json"),
         ),

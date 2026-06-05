@@ -3,6 +3,11 @@
 The PR review is a decision memo. No word earns a place unless it changes what
 the reviewer should do next.
 
+Default hard limits:
+
+- at most 6 KB of PR body text;
+- at most 12 top-level bullets.
+
 ## Runner Rule
 
 Use the box intelligently while it is live:
