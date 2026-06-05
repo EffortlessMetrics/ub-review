@@ -1962,9 +1962,13 @@ def routed_status_for_proof_receipt(receipt: dict) -> str:
     result = receipt["result"]
     if result in {"discriminating", "head_passed", "head_failed"}:
         return "tool-confirmed"
-    if result == "non_discriminating":
-        return "residual-risk"
-    if result in {"base_patch_failed", "timed_out", "skipped_budget", "skipped_profile"}:
+    if result in {
+        "non_discriminating",
+        "base_patch_failed",
+        "timed_out",
+        "skipped_budget",
+        "skipped_profile",
+    }:
         return "missing-evidence"
     return "recorded"
 
@@ -4311,7 +4315,7 @@ def sanitize_artifact_name(value: str) -> str:
     )
     if len(sanitized) <= ARTIFACT_NAME_MAX_CHARS:
         return sanitized
-    digest = hashlib.sha256(value.encode()).hexdigest()
+    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
     prefix_len = ARTIFACT_NAME_MAX_CHARS - ARTIFACT_NAME_HASH_CHARS - 1
     return f"{sanitized[:prefix_len]}-{digest[:ARTIFACT_NAME_HASH_CHARS]}"
 
@@ -4982,6 +4986,30 @@ def self_test_tool_status_metadata_mismatch_fails() -> None:
     require_tool_status_matches_resolved("ripr", resolved_entry, status_entry)
 
 
+def self_test_non_discriminating_routes_as_missing_evidence() -> None:
+    status = routed_status_for_proof_receipt(
+        {
+            "result": "non_discriminating",
+        }
+    )
+    if status != "missing-evidence":
+        fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
+
+
+def self_test_sanitize_artifact_name_matches_rust_contract() -> None:
+    raw = "confirm-the-focused-proof-before-upstream-" * 12 + "terminal-proof-question"
+    sanitized = sanitize_artifact_name(raw)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    if len(sanitized) != ARTIFACT_NAME_MAX_CHARS:
+        fail(f"sanitized artifact name length is {len(sanitized)}, expected {ARTIFACT_NAME_MAX_CHARS}")
+    if not sanitized.endswith("-" + digest[:ARTIFACT_NAME_HASH_CHARS]):
+        fail("sanitized artifact name does not include expected hash suffix")
+    if sanitize_artifact_name("source-route/question one") != "source-route-question-one":
+        fail("short artifact name sanitization drifted from Rust")
+    if sanitize_artifact_name("évidence") != "-vidence":
+        fail("non-ASCII artifact name sanitization drifted from Rust")
+
+
 def self_test_tool_gate_outcome_false_pass_fails() -> None:
     entry = {
         "schema": "ub-review.tool_gate_outcome.v1",
@@ -5012,7 +5040,9 @@ def self_test_tool_gate_outcome_false_pass_fails() -> None:
 def self_test_sanitize_artifact_name_bounds_long_values() -> None:
     raw = "candidate-" + ("generated-id-segment-" * 24)
     sanitized = sanitize_artifact_name(raw)
-    expected_suffix = hashlib.sha256(raw.encode()).hexdigest()[:ARTIFACT_NAME_HASH_CHARS]
+    expected_suffix = hashlib.sha256(raw.encode("utf-8")).hexdigest()[
+        :ARTIFACT_NAME_HASH_CHARS
+    ]
     if len(sanitized) > ARTIFACT_NAME_MAX_CHARS:
         fail("artifact name sanitizer did not bound long value")
     if not sanitized.endswith(f"-{expected_suffix}"):
@@ -5446,6 +5476,8 @@ def run_self_tests() -> None:
         self_test_missing_nonempty_candidate_dir_fails,
     )
     self_test_coverage_sidecar_receipts()
+    self_test_non_discriminating_routes_as_missing_evidence()
+    self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
         "tool status metadata mismatch",
         "tool-status.json timeout_sec for ripr does not match resolved-tools.json",
