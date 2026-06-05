@@ -6342,11 +6342,15 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
             return Err(err).with_context(|| "validate pull request review body policy");
         }
     }
+    let pr_inline_comments: &[ReviewInlineComment] = if suppressed_artifact_only_pr_body {
+        &[]
+    } else {
+        input.inline_comments
+    };
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
-        comments: input
-            .inline_comments
+        comments: pr_inline_comments
             .iter()
             .map(|comment| GitHubReviewComment {
                 path: comment.path.clone(),
@@ -6356,13 +6360,14 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
             })
             .collect(),
     };
-    let should_prepare_github_review = should_prepare_github_review_payload(
-        input.args,
-        input.inline_comments,
-        input.summary_only_findings,
-        input.proof_receipts,
-        &pr_body,
-    );
+    let should_prepare_github_review = !suppressed_artifact_only_pr_body
+        && should_prepare_github_review_payload(
+            input.args,
+            pr_inline_comments,
+            input.summary_only_findings,
+            input.proof_receipts,
+            &pr_body,
+        );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
     } else if suppressed_artifact_only_pr_body {
@@ -6376,7 +6381,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         review_payload_status,
         should_prepare_github_review,
         pr_body: &pr_body,
-        inline_comments: input.inline_comments,
+        inline_comments: pr_inline_comments,
         summary_only_findings: input.summary_only_findings,
         model_lanes: input.model_lanes,
         missing_or_failed_sensor_evidence: input.missing_or_failed_sensor_evidence,
@@ -6392,15 +6397,33 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     })
 }
 
+const MAX_PR_REVIEW_BODY_BYTES: usize = 6_000;
+const MAX_PR_REVIEW_BODY_BULLETS: usize = 12;
+
 fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
     let text = error.to_string();
-    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
+    text.contains("artifact-only boilerplate")
+        || text.contains("refuted-only artifact note")
+        || text.contains("not concise enough")
 }
 
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
     let trimmed = body.trim();
     if trimmed.is_empty() {
         return Ok(());
+    }
+    if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
+        bail!(
+            "github review body is not concise enough: {} bytes over max {}",
+            trimmed.len(),
+            MAX_PR_REVIEW_BODY_BYTES
+        );
+    }
+    let bullet_count = pr_body_bullet_count(trimmed);
+    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
+        bail!(
+            "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+        );
     }
     if has_forbidden_pr_review_boilerplate(trimmed) {
         bail!("github review body contains artifact-only boilerplate");
@@ -6441,6 +6464,15 @@ fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Resu
         }
     }
     Ok(())
+}
+
+fn pr_body_bullet_count(body: &str) -> usize {
+    body.lines()
+        .filter(|line| {
+            let line = line.trim_start();
+            line.starts_with("- ") || line.starts_with("* ")
+        })
+        .count()
 }
 
 fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
@@ -24267,6 +24299,27 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = format!(
+            "## Decision\n\n- Needs focused cleanup before merge.\n\n## Verification questions\n\n{}",
+            (1..=13)
+                .map(|index| format!("- Confirm decision-relevant proof item {index}."))
+                .collect::<Vec<_>>()
+                .join("\n")
+        );
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("overlong bullet list unexpectedly passed"))?;
+        assert!(err.to_string().contains("not concise enough"), "{err:#}");
+
+        review.body = format!(
+            "## Decision\n\n- Needs focused cleanup before merge.\n\n## Evidence gaps\n\n- {}",
+            "proof gap ".repeat(800)
+        );
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("oversized body unexpectedly passed"))?;
+        assert!(err.to_string().contains("not concise enough"), "{err:#}");
+
         review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -25877,6 +25930,54 @@ UB_REVIEW_HTTP_STATUS:429
         assert_eq!(surface.terminal_state.status, "sufficient");
         assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_suppressed_pr_body_drops_inline_comments_for_posting() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let inline_comments = (0..13)
+            .map(|index| ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/main.rs".to_owned(),
+                line: 100 + index,
+                side: "RIGHT".to_owned(),
+                body: format!("Confirm concise-review guard boundary {index}."),
+                evidence: "generated regression fixture".to_owned(),
+            })
+            .collect::<Vec<_>>();
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(!surface.terminal_state.reviewer_value_present);
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
+        assert!(
+            surface
+                .artifact_body
+                .contains("Confirm concise-review guard boundary 0")
+        );
         Ok(())
     }
 
