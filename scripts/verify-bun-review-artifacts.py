@@ -315,6 +315,8 @@ def is_workflow_trust_posture_review_noise(text: str) -> bool:
         text
     ) or is_current_pin_consistency_followup_noise(
         text
+    ) or is_workflow_pin_lockstep_no_value_summary_noise(
+        text
     )
 
 
@@ -567,16 +569,73 @@ def is_current_pin_consistency_followup_noise(text: str) -> bool:
     says_future_or_parked = (
         "future repin" in text
         or "future pin" in text
+        or "partial repin" in text
         or "parked for follow-up" in text
+        or "parked for lint-rule" in text
+        or "lint-rule follow-up" in text
         or "follow-up lint rule" in text
         or "follow-up lint" in text
         or "lint rule or script" in text
     )
     says_currently_consistent = (
         "current state is consistent" in text
+        or "current state consistent" in text
+        or "current pr state is consistent" in text
         or "not actionable in this pr" in text
     )
     return mentions_cache_pin and says_future_or_parked and says_currently_consistent
+
+
+def is_workflow_pin_lockstep_no_value_summary_noise(text: str) -> bool:
+    workflow_scope = (
+        "workflow" in text
+        or "ub-review" in text
+        or "actionlint" in text
+        or "paths-ignore" in text
+        or "droid" in text
+    )
+    mentions_lockstep_pin = (
+        "pin lockstep" in text
+        or "lockstep sha pin" in text
+        or "pin bump is lockstep" in text
+        or "pin/uses ref consistent" in text
+        or (
+            "cache key/restore-keys" in text
+            and (
+                "prefix match" in text
+                or "prefix is coupled" in text
+                or "updated in lockstep" in text
+                or "must be updated in lockstep" in text
+            )
+        )
+        or (
+            "cache key" in text
+            and "restore-keys" in text
+            and "uses:" in text
+            and "lockstep" in text
+        )
+    )
+    says_no_current_issue = (
+        "old pin absent" in text
+        or "current state is consistent" in text
+        or "current state consistent" in text
+        or "current pr state is consistent" in text
+        or "no blocker" in text
+        or "not a blocker" in text
+        or "no other third-party actions changed" in text
+        or "no syntactic regression" in text
+        or "no source, no permissions, no token, no checkout changes" in text
+        or (
+            "no new" in text
+            and (
+                "permission" in text
+                or "token" in text
+                or "third-party action" in text
+                or "checkout" in text
+            )
+        )
+    )
+    return workflow_scope and mentions_lockstep_pin and says_no_current_issue
 
 
 def is_unsupported_sibling_completeness_overclaim(text: str) -> bool:
@@ -1595,6 +1654,7 @@ def is_pr_body_artifact_only_observation(observation: dict) -> bool:
         or is_workflow_paths_ignore_no_posture_noise(text)
         or is_actionlint_semantic_skip_proof_noise(text)
         or is_current_pin_consistency_followup_noise(text)
+        or is_workflow_pin_lockstep_no_value_summary_noise(text)
         or is_pr_body_meta_review_noise(text)
         or (
             observation["kind"] == "false-premise"
@@ -4030,6 +4090,26 @@ def run_self_tests() -> None:
                 "dry-run or pull_request_target guard) executed for the "
                 "paths-ignore change; semantic skip behavior on Droid lane "
                 "unproven beyond actionlint parse."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "workflow lockstep summary review prose",
+        "workflow trust posture prose",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Decision\n\n"
+                "- Needs one verification check before upstream.\n\n"
+                "## Verification questions\n\n"
+                "- Workflow-pinning lane for PR #49. Two workflow YAML files "
+                "touched. Pin lockstep verified across 3 sites, old pin absent, "
+                "cache key/restore-keys prefix match, no other third-party "
+                "actions changed.\n\n"
+                "## Parked follow-ups\n\n"
+                "- Cache key/restore-keys prefix is coupled to action SHA; any "
+                "future partial repin silently mismatches restore. Current state "
+                "consistent, parked for lint-rule follow-up."
             ),
             pathlib.Path("review/github-review.json"),
         ),

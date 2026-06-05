@@ -15507,6 +15507,7 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || is_workflow_paths_ignore_no_posture_noise(&text)
         || is_actionlint_semantic_skip_proof_noise(&text)
         || is_current_pin_consistency_followup_noise(&text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
 }
 
@@ -15691,6 +15692,7 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || is_workflow_paths_ignore_no_posture_noise(&text)
         || is_actionlint_semantic_skip_proof_noise(&text)
         || is_current_pin_consistency_followup_noise(&text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
         || (observation.kind == "false-premise"
             && (text.contains("short-prefix")
@@ -15802,6 +15804,7 @@ fn is_workflow_trust_posture_review_noise(text: &str) -> bool {
         || is_workflow_paths_ignore_no_posture_noise(text)
         || is_actionlint_semantic_skip_proof_noise(text)
         || is_current_pin_consistency_followup_noise(text)
+        || is_workflow_pin_lockstep_no_value_summary_noise(text)
 }
 
 fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
@@ -15956,13 +15959,54 @@ fn is_current_pin_consistency_followup_noise(text: &str) -> bool {
         && (text.contains("action sha") || text.contains("repin") || text.contains("uses:"));
     let says_future_or_parked = text.contains("future repin")
         || text.contains("future pin")
+        || text.contains("partial repin")
         || text.contains("parked for follow-up")
+        || text.contains("parked for lint-rule")
+        || text.contains("lint-rule follow-up")
         || text.contains("follow-up lint rule")
         || text.contains("follow-up lint")
         || text.contains("lint rule or script");
-    let says_currently_consistent =
-        text.contains("current state is consistent") || text.contains("not actionable in this pr");
+    let says_currently_consistent = text.contains("current state is consistent")
+        || text.contains("current state consistent")
+        || text.contains("current pr state is consistent")
+        || text.contains("not actionable in this pr");
     mentions_cache_pin && says_future_or_parked && says_currently_consistent
+}
+
+fn is_workflow_pin_lockstep_no_value_summary_noise(text: &str) -> bool {
+    let workflow_scope = text.contains("workflow")
+        || text.contains("ub-review")
+        || text.contains("actionlint")
+        || text.contains("paths-ignore")
+        || text.contains("droid");
+    let mentions_lockstep_pin = text.contains("pin lockstep")
+        || text.contains("lockstep sha pin")
+        || text.contains("pin bump is lockstep")
+        || text.contains("pin/uses ref consistent")
+        || (text.contains("cache key/restore-keys")
+            && (text.contains("prefix match")
+                || text.contains("prefix is coupled")
+                || text.contains("updated in lockstep")
+                || text.contains("must be updated in lockstep")))
+        || (text.contains("cache key")
+            && text.contains("restore-keys")
+            && text.contains("uses:")
+            && text.contains("lockstep"));
+    let says_no_current_issue = text.contains("old pin absent")
+        || text.contains("current state is consistent")
+        || text.contains("current state consistent")
+        || text.contains("current pr state is consistent")
+        || text.contains("no blocker")
+        || text.contains("not a blocker")
+        || text.contains("no other third-party actions changed")
+        || text.contains("no syntactic regression")
+        || text.contains("no source, no permissions, no token, no checkout changes")
+        || (text.contains("no new")
+            && (text.contains("permission")
+                || text.contains("token")
+                || text.contains("third-party action")
+                || text.contains("checkout")));
+    workflow_scope && mentions_lockstep_pin && says_no_current_issue
 }
 
 fn is_residual_risk_observation(observation: &ObservationGroup) -> bool {
@@ -23286,6 +23330,17 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        review.body = "## Decision\n\n- Needs one verification check before upstream.\n\n## Verification questions\n\n- Workflow-pinning lane for PR #49. Two workflow YAML files touched. Pin lockstep verified across 3 sites, old pin absent, cache key/restore-keys prefix match, no other third-party actions changed.\n\n## Parked follow-ups\n\n- Cache key/restore-keys prefix is coupled to action SHA; any future partial repin silently mismatches restore. Current state consistent, parked for lint-rule follow-up.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| {
+                anyhow::anyhow!("workflow lockstep summary review unexpectedly passed")
+            })?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
         review.body = "## Confirmed findings\n\n- CodeRabbit's review-comment at ub-review-packet.yml:58 asserts the PR gate target SHA is 892e1bb44b7cb24753b7701b405d078f4ef11ee1, not be524219e33ff37edeab61ddc28c01250a08b492 used in the diff. If that claim is correct the workflow pin does not match the upstream gate.\n\n## Evidence gaps\n\n- CodeRabbit review-comment on .github/workflows/ub-review-packet.yml:58, scripted check showing 0 references to 892e1bb44b... in the file; PR body and droid-ub/droid-tests receipts only confirm internal lockstep, not match to gate target.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -25524,6 +25579,90 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(body.is_empty());
         assert!(!body.contains("## Refuted"));
         assert!(!body.contains("widens the workflow permission"));
+    }
+
+    #[test]
+    fn pr_review_body_keeps_workflow_lockstep_summaries_artifact_only() {
+        let mut diff = test_diff();
+        diff.diff_class = DiffClass::WorkflowTooling;
+        diff.changed_files = vec![
+            ".github/workflows/droid-focused-review.yml".to_owned(),
+            ".github/workflows/ub-review-packet.yml".to_owned(),
+        ];
+        diff.patch = concat!(
+            " pull_request:\n",
+            "   paths-ignore:\n",
+            "+    - \".github/workflows/ub-review-packet.yml\"\n",
+            "+          key: ub-review-gh-runner-v2-cec5b07457f99e652a500dffc603f98e6082a7f7-${{ runner.os }}-rust-1.95-core\n",
+            "+            ub-review-gh-runner-v2-cec5b07457f99e652a500dffc603f98e6082a7f7-${{ runner.os }}-rust-1.95-\n",
+            "+        uses: EffortlessMetrics/ub-review@cec5b07457f99e652a500dffc603f98e6082a7f7\n",
+        )
+        .to_owned();
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-permissions".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "workflow-permissions lane: paths-ignore addition cannot alter token scopes/permissions; pin bump is lockstep across cache key, restore-keys prefix, and uses: reference. No new third-party action, no pull_request_target, no checkout credential persistence vector. Residual risk: cache key/pin coupling is a parked follow-up; no blocker.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow-pinning lane for PR #49. Two workflow YAML files touched. Pin lockstep verified for cec5b07457f99e652a500dffc603f98e6082a7f7 across 3 sites, old pin absent, cache key/restore-keys prefix match, no other third-party actions changed.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Workflow lint proof lane: actionlint receipt ok, no focused smoke proof available, no syntactic regression. Pin lockstep and paths-ignore semantics covered by seeded thread; CodeRabbit stale SHA comment is stale (current head re-pinned to cec5b074).".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "Cache key/restore-keys prefix is coupled to action SHA; any future partial repin silently mismatches restore. Current state consistent, parked for lint-rule follow-up.".to_owned(),
+                evidence: "diff: cache key, restore-keys prefix, uses: all reference cec5b074 in lockstep".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Opposition lane for workflow/tooling: paths-ignore addition + lockstep SHA pin. Actionlint ok. No source, no permissions, no token, no checkout changes. No blocker.".to_owned(),
+                evidence: "lane model summary".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-opposition".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Residual workflow risk: cache key/restore-keys prefix is manually coupled to action SHA. Partial repin silently breaks cache restore. Parked for follow-up lint rule.".to_owned(),
+                evidence: "cache key/restore-keys must be updated in lockstep with uses: pin; no automated guard exists; current PR state is consistent".to_owned(),
+            },
+        ];
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &diff,
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &summary_only_findings,
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Workflow-pinning lane"));
+        assert!(!body.contains("Pin lockstep verified"));
+        assert!(!body.contains("Current state consistent"));
+        assert!(!body.contains("No blocker"));
+        assert!(!body.contains("cache key/restore-keys"));
     }
 
     #[test]
