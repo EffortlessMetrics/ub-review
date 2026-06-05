@@ -16188,6 +16188,8 @@ fn is_pr_body_artifact_only_finding(finding: &SummaryOnlyFinding) -> bool {
         || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_workflow_paths_ignore_no_posture_noise(&text)
         || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_non_workflow_verifier_scope_noise(&text)
+        || is_self_test_meta_review_noise(&text)
         || is_current_pin_consistency_followup_noise(&text)
         || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
@@ -16373,6 +16375,8 @@ fn is_pr_body_artifact_only_observation(observation: &ObservationGroup) -> bool 
         || is_workflow_tool_status_artifact_gap_noise(&text)
         || is_workflow_paths_ignore_no_posture_noise(&text)
         || is_actionlint_semantic_skip_proof_noise(&text)
+        || is_non_workflow_verifier_scope_noise(&text)
+        || is_self_test_meta_review_noise(&text)
         || is_current_pin_consistency_followup_noise(&text)
         || is_workflow_pin_lockstep_no_value_summary_noise(&text)
         || is_pr_body_meta_review_noise(&text)
@@ -16427,6 +16431,7 @@ fn is_pr_body_meta_review_noise(text: &str) -> bool {
             && text.contains("40 hex")
             && text.contains("non-zero"))
         || (text.contains("sha were 39-hex") && text.contains("all-zero"))
+        || is_self_test_meta_review_noise(text)
         || is_checkout_persistence_no_change_noise(text)
         || text.contains("actionlint ran ok")
 }
@@ -16502,6 +16507,8 @@ fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
         || text.contains("40-hex")
         || text.contains("all-zero");
     let says_no_defect = text.contains("no pinning defect introduced")
+        || text.contains("no actionable finding")
+        || text.contains("nothing to pin-review")
         || text.contains("pinning posture preserved")
         || text.contains("sha-pinning control remains effective")
         || text.contains("sha-pinning control is effective")
@@ -16515,6 +16522,10 @@ fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
         || text.contains("identical in posture")
         || text.contains("byte-identical")
         || text.contains("repo-level policy item")
+        || text.contains("no action versions")
+        || text.contains("no action references")
+        || text.contains("no workflow yaml")
+        || text.contains("no github actions yaml")
         || text.contains("unchanged from prior pin")
         || text.contains("net new secret/permission surface")
         || text.contains("net new secret surface")
@@ -16522,6 +16533,50 @@ fn is_no_finding_workflow_pin_summary_noise(text: &str) -> bool {
         || text.contains("no permission, token-scope")
         || text.contains("no blocker introduced");
     mentions_pin && (says_no_defect || says_not_current_diff)
+}
+
+fn is_non_workflow_verifier_scope_noise(text: &str) -> bool {
+    let verifier_script = text.contains("scripts/verify-bun-review-artifacts.py")
+        || text.contains("python verifier")
+        || text.contains("python-only")
+        || text.contains("python script");
+    let workflow_not_changed = text.contains("no .github/workflows")
+        || text.contains("no github actions yaml")
+        || text.contains("no workflow yaml")
+        || text.contains("no workflow file")
+        || text.contains("no workflow files changed")
+        || text.contains("no action versions")
+        || text.contains("no action references")
+        || text.contains("no actions, reusable workflows")
+        || text.contains("no workflow trigger")
+        || text.contains("diff does not modify any github actions yaml");
+    let says_scope_only = text.contains("actionlint")
+        || text.contains("zizmor")
+        || text.contains("pinning")
+        || text.contains("permissions")
+        || text.contains("token-scope")
+        || text.contains("out of scope")
+        || text.contains("not applicable")
+        || text.contains("not a trust gap")
+        || text.contains("no actionable finding")
+        || text.contains("nothing to pin-review")
+        || text.contains("surfaces are limited")
+        || text.contains("validator script itself");
+    verifier_script && workflow_not_changed && says_scope_only
+}
+
+fn is_self_test_meta_review_noise(text: &str) -> bool {
+    let mentions_self_test = text.contains("self-test")
+        || text.contains("run_self_tests")
+        || text.contains("--self-test")
+        || text.contains("tempfile.temporarydirectory");
+    let says_meta = text.contains("receipt not in seeded thread")
+        || text.contains("pr body asserts")
+        || text.contains("focused smoke proof pattern")
+        || text.contains("suitable for python change verification")
+        || text.contains("confirm new self-tests")
+        || text.contains("if --self-test is not executed in ci");
+    mentions_self_test && says_meta
 }
 
 fn is_stale_external_bot_objection_noise(text: &str) -> bool {
@@ -16581,10 +16636,18 @@ fn is_workflow_tool_status_artifact_gap_noise(text: &str) -> bool {
     let local_actionlint_gap = text.contains("actionlint")
         && text.contains("not installed locally")
         && (text.contains("local pre-push run") || text.contains("ub-review gate"));
+    let non_workflow_lint_skip = text.contains("actionlint")
+        && (text.contains("zizmor") || text.contains("shellcheck"))
+        && (text.contains("skipped") || text.contains("disabled"))
+        && (text.contains("no .github diff")
+            || text.contains("no workflow")
+            || text.contains("consumer workflow")
+            || text.contains("invokes this script"));
     (actionlint_ok && (not_inlined || yaml_pin))
         || (skipped_heavy && yaml_pin)
         || disabled_workflow_tools
         || local_actionlint_gap
+        || non_workflow_lint_skip
         || ((text.contains("parked follow-up") || text.contains("not a blocker"))
             && actionlint_ok
             && yaml_pin)
@@ -26045,6 +26108,117 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(!body.contains("actionlint/zizmor"));
         assert!(!body.contains("## Residual risk"));
         assert!(!body.contains("A human should still inspect"));
+    }
+
+    #[test]
+    fn verifier_script_scope_noise_stays_artifact_only() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let mut plan = test_plan(Vec::new());
+        plan.diff_class = DiffClass::WorkflowTooling;
+        plan.lanes = super::default_lanes_for_diff_class(DiffClass::WorkflowTooling);
+        let diff = DiffContext {
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["scripts/verify-bun-review-artifacts.py".to_owned()],
+            patch: "+import tempfile\n".to_owned(),
+            flags: classify_diff(
+                &["scripts/verify-bun-review-artifacts.py".to_owned()],
+                "+import tempfile\n",
+            ),
+            diff_class: DiffClass::WorkflowTooling,
+        };
+        let model_lanes = vec![model_lane_receipt("workflow-proof", "ok")];
+        let summary_only_findings = vec![
+            SummaryOnlyFinding {
+                lane: "workflow-pinning".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "workflow-pinning lane has no actionable finding: no action versions, runner images, or setup steps were modified by this Python-only diff.".to_owned(),
+                evidence: "Changed files: scripts/verify-bun-review-artifacts.py; no workflow YAML changes.".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "workflow-proof".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "No workflow lint proof is applicable because the PR diff does not modify any GitHub Actions YAML. Actionlint availability is not a trust gap for this PR.".to_owned(),
+                evidence: "Changed files=1, scripts/verify-bun-review-artifacts.py; actionlint skipped because no workflow files changed.".to_owned(),
+            },
+        ];
+        let self_test_coverage = test_observation(
+            "workflow-proof",
+            "New self-tests use tempfile.TemporaryDirectory and assert both happy-path and failure-path via expect_self_test_failure; this is a focused smoke proof pattern suitable for Python change verification.",
+            "test-gap",
+            "open",
+            "low",
+            "medium",
+            "self-test-coverage",
+        );
+        let mut actionlint_skip = test_observation(
+            "workflow-pinning",
+            "actionlint/zizmor skipped and shellcheck disabled, so pinning of any third-party action in the consumer workflow that invokes this script is unverified by sensors for this run.",
+            "missing-evidence",
+            "open",
+            "low",
+            "medium",
+            "wp.missing.actionlint-zizmor",
+        );
+        actionlint_skip.path = Some("scripts/verify-bun-review-artifacts.py".to_owned());
+        actionlint_skip.evidence = vec![
+            "actionlint skipped (no .github diff), zizmor and shellcheck disabled by config."
+                .to_owned(),
+        ];
+        let mut python_only_scope = test_observation(
+            "workflow-opposition",
+            "Diff is Python-only in scripts/; no GitHub Actions YAML, permissions, triggers, or action pins touched, so workflow/tooling opposition surfaces are limited to the validator script itself.",
+            "verification-question",
+            "open",
+            "medium",
+            "medium-high",
+            "empty-candidates-dir-acceptance",
+        );
+        python_only_scope.path = Some("scripts/verify-bun-review-artifacts.py".to_owned());
+        let self_test_receipt = test_observation(
+            "proof-planner",
+            "Self-test wiring is in run_self_tests; if --self-test is not executed in CI, the new branches are unverified at gate time. PR body asserts it ran, but receipt not in seeded thread.",
+            "verification-question",
+            "open",
+            "medium",
+            "medium",
+            "proof-planner.self-test-evidence",
+        );
+        let observations = vec![
+            self_test_coverage,
+            actionlint_skip,
+            python_only_scope,
+            self_test_receipt,
+        ];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &summary_only_findings,
+            observations: &observations,
+            proof_receipts: &[],
+        })?;
+
+        assert!(
+            !surface.should_prepare_github_review,
+            "{}",
+            surface.github_review.body
+        );
+        assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
+        assert!(surface.artifact_body.contains("workflow-pinning lane"));
+        Ok(())
     }
 
     #[test]
