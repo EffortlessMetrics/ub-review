@@ -859,6 +859,7 @@ struct ToolPolicy {
     class: ToolClass,
     weight: u32,
     default: Trigger,
+    required: bool,
     timeout_sec: u64,
     artifact_budget_mb: u64,
     requires_lease: bool,
@@ -992,6 +993,7 @@ struct SensorPlan {
     command: String,
     run: bool,
     reason: String,
+    required: bool,
     timeout_sec: u64,
     class: ToolClass,
     weight: u32,
@@ -1011,6 +1013,7 @@ struct ResolvedToolEntry {
     class: ToolClass,
     command: String,
     required_if: Trigger,
+    required: bool,
     required_reason: String,
     runtime_profile: String,
     enabled: bool,
@@ -1035,6 +1038,7 @@ struct ToolStatusEntry {
     class: ToolClass,
     command: String,
     required_if: Trigger,
+    required: bool,
     required_reason: String,
     runtime_profile: String,
     planned_run: bool,
@@ -2707,6 +2711,7 @@ impl Default for ToolPolicy {
             class: ToolClass::Static,
             weight: 1,
             default: Trigger::Never,
+            required: false,
             timeout_sec: 120,
             artifact_budget_mb: 64,
             requires_lease: false,
@@ -3750,6 +3755,7 @@ fn resolved_tools_artifact(
                 class: tool.class,
                 command: tool.command.clone(),
                 required_if: tool.default,
+                required: planned.is_some_and(|sensor| sensor.required),
                 required_reason: trigger_description(tool.default).to_owned(),
                 runtime_profile: profile.name.clone(),
                 enabled: tool.enabled,
@@ -3816,6 +3822,7 @@ fn tool_status_artifact(
                 class: planned.map(|sensor| sensor.class).unwrap_or(tool.class),
                 command: tool.command.clone(),
                 required_if: tool.default,
+                required: planned.is_some_and(|sensor| sensor.required),
                 required_reason: trigger_description(tool.default).to_owned(),
                 runtime_profile: profile.name.clone(),
                 planned_run: planned.is_some_and(|sensor| sensor.run),
@@ -3853,6 +3860,7 @@ fn tool_artifact_paths(id: &str) -> Vec<String> {
         command: id.to_owned(),
         run: false,
         reason: String::new(),
+        required: false,
         timeout_sec: 0,
         class: ToolClass::Static,
         weight: 0,
@@ -4598,39 +4606,53 @@ fn plan_tool(
     guard_ok: bool,
     allow_heavy: bool,
 ) -> SensorPlan {
+    let required = tool_required_for_diff(tool, diff);
     if !tool.enabled {
-        return skipped(tool, "disabled by config");
+        return skipped(tool, "disabled by config", required);
     }
     if tool.requires_lease && !allow_heavy {
-        return skipped(tool, "heavy/manual witness requires --allow-heavy");
+        return skipped(
+            tool,
+            "heavy/manual witness requires --allow-heavy",
+            required,
+        );
     }
     if matches!(tool.class, ToolClass::Test) && profile.limits.tests == 0 {
-        return skipped(tool, "profile disables test leases");
+        return skipped(tool, "profile disables test leases", required);
     }
     if matches!(tool.class, ToolClass::Build) && profile.limits.builds == 0 {
-        return skipped(tool, "profile disables build leases");
+        return skipped(tool, "profile disables build leases", required);
     }
     if !guard_ok && !matches!(tool.class, ToolClass::Packet) {
-        return skipped(tool, "box guard failed; only packet generation is allowed");
+        return skipped(
+            tool,
+            "box guard failed; only packet generation is allowed",
+            required,
+        );
     }
     match trigger_match(tool.default, &diff.flags) {
         Some(reason) => {
             if tool.id == "cargo-allow" && !cargo_allow_policy_config_exists(root) {
-                return skipped(tool, "cargo-allow policy config not found");
+                return skipped(tool, "cargo-allow policy config not found", required);
             }
             SensorPlan {
                 id: tool.id.clone(),
                 command: tool.command.clone(),
                 run: true,
                 reason,
+                required,
                 timeout_sec: tool.timeout_sec.min(profile.budgets.default_timeout_sec),
                 class: tool.class,
                 weight: tool.weight,
                 requires_lease: tool.requires_lease,
             }
         }
-        None => skipped(tool, "trigger did not match this diff"),
+        None => skipped(tool, "trigger did not match this diff", false),
     }
+}
+
+fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
+    tool.required && trigger_match(tool.default, &diff.flags).is_some()
 }
 
 fn cargo_allow_policy_config_exists(root: &Path) -> bool {
@@ -4639,12 +4661,13 @@ fn cargo_allow_policy_config_exists(root: &Path) -> bool {
         .any(|path| root.join(path).is_file())
 }
 
-fn skipped(tool: &ToolPolicy, reason: &str) -> SensorPlan {
+fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
     SensorPlan {
         id: tool.id.clone(),
         command: tool.command.clone(),
         run: false,
         reason: reason.to_owned(),
+        required,
         timeout_sec: tool.timeout_sec,
         class: tool.class,
         weight: tool.weight,
@@ -5461,6 +5484,7 @@ fn write_sensor_status(
         "timeout_sec": sensor.timeout_sec,
         "class": sensor.class,
         "requires_lease": sensor.requires_lease,
+        "required": sensor.required,
     });
     fs::write(
         dir.join("ub-review-sensor-status.json"),
@@ -6423,6 +6447,13 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
             "artifact-only",
             "Dry run requested; this run produced artifacts but no reviewer-facing review.",
         )
+    } else if matches!(input.args.mode, RunMode::IntelligentCi)
+        && has_required_sensor_evidence_gap(input.plan, input.missing_or_failed_sensor_evidence)
+    {
+        (
+            "failed-to-review",
+            "A required intelligent-ci sensor was missing, skipped, failed, or timed out, so the gate did not reach a sufficient review state.",
+        )
     } else if matches!(input.args.model_mode, ModelMode::Off) {
         (
             "artifact-only",
@@ -6460,6 +6491,14 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
         inline_comments: input.inline_comments.len(),
         summary_only_findings: input.summary_only_findings.len(),
     }
+}
+
+fn has_required_sensor_evidence_gap(plan: &Plan, issues: &[SensorEvidenceIssue]) -> bool {
+    issues.iter().any(|issue| {
+        plan.sensors
+            .iter()
+            .any(|sensor| sensor.id == issue.sensor && sensor.required)
+    })
 }
 
 fn model_lane_is_usable_for_terminal_state(receipt: &ModelLaneReceipt) -> bool {
@@ -12576,7 +12615,10 @@ fn is_sensor_evidence_issue(sensor: &SensorPlan, status: &str, reason: &str) -> 
 }
 
 fn is_sensor_skipped_evidence_issue(sensor: &SensorPlan, reason: &str) -> bool {
-    sensor.run || reason == "dry-run; sensor not executed" || reason.starts_with("box guard failed")
+    sensor.required
+        || sensor.run
+        || reason == "dry-run; sensor not executed"
+        || reason.starts_with("box guard failed")
 }
 
 fn model_issue_from_receipt(receipt: &ModelLaneReceipt) -> ModelEvidenceIssue {
@@ -18248,6 +18290,7 @@ fn tool(
         class,
         weight,
         default: trigger,
+        required: false,
         timeout_sec,
         artifact_budget_mb,
         requires_lease,
@@ -18955,6 +18998,119 @@ mod tests {
     }
 
     #[test]
+    fn required_tool_policy_applies_only_when_trigger_matches() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut config = Config::default();
+        let actionlint = config
+            .tools
+            .get_mut("actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint tool missing"))?;
+        actionlint.required = true;
+        config
+            .tools
+            .get_mut("ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr tool missing"))?
+            .required = true;
+        config
+            .tools
+            .get_mut("unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("unsafe-review tool missing"))?
+            .required = true;
+
+        let workflow_files = vec![".github/workflows/ci.yml".to_owned()];
+        let workflow_flags = classify_diff(&workflow_files, "+name: ci");
+        let workflow_diff = DiffContext {
+            base: "HEAD~1".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: workflow_files,
+            patch: "+name: ci".to_owned(),
+            diff_class: classify_diff_class(
+                &[".github/workflows/ci.yml".to_owned()],
+                &workflow_flags,
+            ),
+            flags: workflow_flags,
+        };
+
+        let workflow_plan = super::build_plan(
+            &config,
+            &Profile::default(),
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: None,
+                free_disk_mb: None,
+                load_1m: None,
+                github_actions: false,
+            },
+            &workflow_diff,
+            temp.path(),
+            false,
+        );
+        let workflow_actionlint = workflow_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("actionlint not planned"))?;
+        assert!(workflow_actionlint.required);
+        assert!(workflow_actionlint.run);
+        let resolved_tools =
+            super::resolved_tools_artifact(&config, &Profile::default(), &workflow_plan);
+        let resolved_actionlint = resolved_tools
+            .tools
+            .iter()
+            .find(|tool| tool.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("resolved actionlint tool missing"))?;
+        assert!(resolved_actionlint.required);
+        assert!(resolved_actionlint.planned_run);
+
+        let source_diff = test_diff();
+        let source_plan = super::build_plan(
+            &config,
+            &Profile::default(),
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: None,
+                free_disk_mb: None,
+                load_1m: None,
+                github_actions: false,
+            },
+            &source_diff,
+            temp.path(),
+            false,
+        );
+        let source_actionlint = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("source actionlint not planned"))?;
+        assert!(!source_actionlint.required);
+        assert!(!source_actionlint.run);
+        assert_eq!(source_actionlint.reason, "trigger did not match this diff");
+        let source_ripr = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("source ripr not planned"))?;
+        assert!(source_ripr.required);
+        assert!(source_ripr.run);
+        let source_unsafe_review = source_plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("source unsafe-review not planned"))?;
+        assert!(source_unsafe_review.required);
+        assert!(source_unsafe_review.run);
+        let source_resolved =
+            super::resolved_tools_artifact(&config, &Profile::default(), &source_plan);
+        let source_resolved_actionlint = source_resolved
+            .tools
+            .iter()
+            .find(|tool| tool.id == "actionlint")
+            .ok_or_else(|| anyhow::anyhow!("source resolved actionlint missing"))?;
+        assert!(!source_resolved_actionlint.required);
+        Ok(())
+    }
+
+    #[test]
     fn actionlint_sensor_uses_json_template_format() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -19460,6 +19616,55 @@ mod tests {
         assert_eq!(issues[0].sensor, "tokmd");
         assert_eq!(issues[0].status, "skipped");
         assert_eq!(issues[0].reason, "dry-run; sensor not executed");
+        Ok(())
+    }
+
+    #[test]
+    fn skipped_required_sensor_is_missing_review_evidence() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        required_actionlint.reason = "disabled by config".to_owned();
+        let mut trigger_skipped = sensor_plan("ripr", "ripr", false);
+        trigger_skipped.reason = "trigger did not match this diff".to_owned();
+
+        write_sensor_status(
+            &out,
+            &required_actionlint,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["actionlint".to_owned()],
+                duration_ms: 0,
+                reason: "disabled by config",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let required_status: serde_json::Value = serde_json::from_slice(&fs::read(
+            out.join("sensors/actionlint/ub-review-sensor-status.json"),
+        )?)?;
+        assert_eq!(required_status["required"], true);
+        write_sensor_status(
+            &out,
+            &trigger_skipped,
+            SensorStatusWrite {
+                status: "skipped",
+                argv: &["ripr".to_owned()],
+                duration_ms: 0,
+                reason: "trigger did not match this diff",
+                exit_code: None,
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![required_actionlint, trigger_skipped]);
+
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].sensor, "actionlint");
+        assert_eq!(issues[0].status, "skipped");
+        assert_eq!(issues[0].reason, "disabled by config");
         Ok(())
     }
 
@@ -24394,6 +24599,56 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn terminal_state_fails_intelligent_ci_required_sensor_gap() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        let plan = test_plan(vec![required_actionlint]);
+        let model_lanes = vec![model_lane_receipt("workflow-permissions", "ok")];
+        let missing_sensor = vec![SensorEvidenceIssue {
+            sensor: "actionlint".to_owned(),
+            status: "skipped".to_owned(),
+            reason: "disabled by config".to_owned(),
+        }];
+
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &missing_sensor,
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(state.status, "failed-to-review");
+        assert_eq!(state.evidence_gaps, 1);
+
+        args.mode = RunMode::ReviewByok;
+        let review_byok_state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            plan: &plan,
+            review_payload_status: "skipped_empty_smoke",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &[],
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &missing_sensor,
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &[],
+        });
+
+        assert_eq!(review_byok_state.status, "sufficient");
+        assert_eq!(review_byok_state.evidence_gaps, 1);
+    }
+
+    #[test]
     fn terminal_state_keeps_model_off_runs_artifact_only() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.model_mode = ModelMode::Off;
@@ -27378,6 +27633,7 @@ index 1111111..2222222 100644
             command: command.to_owned(),
             run,
             reason: "test reason".to_owned(),
+            required: false,
             timeout_sec: 1,
             class: ToolClass::Static,
             weight: 1,
