@@ -821,6 +821,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
+        "review/resolved_candidates.json",
         "review/final_compiler_input.json",
         "review/witnesses.json",
         "review/witness_registry.json",
@@ -836,6 +837,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "follow_up_results.ndjson",
         "follow_up_outputs.ndjson",
         "model_stages.ndjson",
+        "resolved_candidates.ndjson",
         "witnesses.ndjson",
         "proof_requests.ndjson",
         "proof_tasks.ndjson",
@@ -1279,6 +1281,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_model_stage_artifacts(root, review, follow_up_results)
     follow_up_outputs = require_follow_up_outputs(root, follow_up_results)
     follow_up_evidence = require_follow_up_evidence(root, follow_up_outputs)
+    require_resolved_candidate_artifacts(root, follow_up_results, follow_up_outputs)
     require_final_compiler_input(root, review, follow_up_evidence)
     require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
@@ -2793,6 +2796,264 @@ def require_follow_up_evidence(root: pathlib.Path, outputs: list[dict]) -> dict:
         if values != expected:
             fail(f"follow-up evidence {field} does not match flattened outputs")
     return evidence
+
+
+def require_resolved_candidate_artifacts(
+    root: pathlib.Path, follow_up_results: list[dict], follow_up_outputs: list[dict]
+) -> None:
+    candidates = load_json(root / "review/candidates.json")
+    resolved = load_json(root / "review/resolved_candidates.json")
+    if not isinstance(resolved, list):
+        fail("review/resolved_candidates.json is not an array")
+    expected = expected_resolved_candidate_records(
+        candidates, follow_up_results, follow_up_outputs
+    )
+    if resolved != expected:
+        fail("review/resolved_candidates.json does not match candidates plus follow-up outputs")
+    lines = [
+        line
+        for line in read_text(root / "resolved_candidates.ndjson").splitlines()
+        if line.strip()
+    ]
+    if len(lines) != len(resolved):
+        fail("resolved_candidates.ndjson line count does not match review/resolved_candidates.json")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid resolved_candidates.ndjson line {index + 1}: {error}")
+        if parsed != resolved[index]:
+            fail(f"resolved_candidates.ndjson line {index + 1} does not match JSON artifact")
+        require_resolved_candidate_schema(parsed)
+
+
+def expected_resolved_candidate_records(
+    candidates: list[dict], follow_up_results: list[dict], follow_up_outputs: list[dict]
+) -> list[dict]:
+    result_task_ids = {result["task_id"] for result in follow_up_results}
+    records = []
+    for candidate in candidates:
+        linked = [
+            output
+            for output in follow_up_outputs
+            if output["task_id"] in result_task_ids
+            and candidate["id"] in output.get("candidate_ids", [])
+        ]
+        record = resolved_candidate_record(candidate, linked)
+        records.append(record)
+    return records
+
+
+def resolved_candidate_record(candidate: dict, follow_up_outputs: list[dict]) -> dict:
+    resolved_status, resolved_disposition, resolution_source, reason, evidence = (
+        resolve_candidate_from_follow_ups(candidate, follow_up_outputs)
+    )
+    return {
+        "schema": "ub-review.resolved_candidate.v1",
+        "candidate_id": candidate["id"],
+        "lane": candidate["lane"],
+        "source": candidate["source"],
+        "original_status": candidate["status"],
+        "original_disposition": candidate["disposition"],
+        "resolved_status": resolved_status,
+        "resolved_disposition": resolved_disposition,
+        "resolution_source": resolution_source,
+        "source_artifacts": [
+            "review/candidates.json",
+            "review/follow_up_results.json",
+            "review/follow_up_outputs.json",
+        ],
+        "reason": reason,
+        "follow_up_task_ids": unique_output_values(follow_up_outputs, "task_id"),
+        "follow_up_stages": unique_output_values(follow_up_outputs, "stage"),
+        "follow_up_statuses": unique_output_values(follow_up_outputs, "status"),
+        "evidence": evidence,
+    }
+
+
+def unique_output_values(outputs: list[dict], field: str) -> list[str]:
+    values = []
+    for output in outputs:
+        value = output[field]
+        if value not in values:
+            values.append(value)
+    return values
+
+
+def resolve_candidate_from_follow_ups(
+    candidate: dict, follow_up_outputs: list[dict]
+) -> tuple[str, str, str, str, list[str]]:
+    if not follow_up_outputs:
+        return (
+            "unchanged",
+            candidate["disposition"],
+            "candidate",
+            "no candidate-targeted follow-up output",
+            [f"Original candidate disposition `{candidate['disposition']}`"],
+        )
+    signals = resolved_candidate_signals(follow_up_outputs)
+    if signals:
+        dispositions = {signal["disposition"] for signal in signals}
+        if len(dispositions) > 1:
+            return (
+                "conflicting",
+                candidate["disposition"],
+                "orchestrator-follow-up",
+                "candidate-targeted follow-ups produced conflicting disposition signals",
+                [
+                    item
+                    for signal in signals
+                    for item in signal["evidence"]
+                ],
+            )
+        signal = signals[0]
+        return (
+            "resolved",
+            signal["disposition"],
+            "orchestrator-follow-up",
+            signal["reason"],
+            signal["evidence"],
+        )
+    evidence = [
+        f"Follow-up task `{output['task_id']}` stage `{output['stage']}` status `{output['status']}`"
+        for output in follow_up_outputs
+    ]
+    if any(output["status"] in {"ok", "degraded"} for output in follow_up_outputs):
+        return (
+            "unresolved",
+            candidate["disposition"],
+            "orchestrator-follow-up",
+            "candidate-targeted follow-up ran without a refuted, parked, or dropped disposition",
+            evidence,
+        )
+    return (
+        "follow-up-unavailable",
+        candidate["disposition"],
+        "orchestrator-follow-up",
+        "candidate-targeted follow-up did not produce usable model output",
+        evidence,
+    )
+
+
+def resolved_candidate_signals(follow_up_outputs: list[dict]) -> list[dict]:
+    signals = []
+    for output in follow_up_outputs:
+        evidence = follow_up_refuted_evidence(output)
+        if evidence is not None:
+            signals.append(
+                {
+                    "disposition": "refuted",
+                    "reason": f"follow-up task `{output['task_id']}` refuted the candidate",
+                    "evidence": evidence,
+                }
+            )
+    for output in follow_up_outputs:
+        evidence = follow_up_parked_evidence(output)
+        if evidence is not None:
+            signals.append(
+                {
+                    "disposition": "parked-follow-up",
+                    "reason": f"follow-up task `{output['task_id']}` parked the candidate",
+                    "evidence": evidence,
+                }
+            )
+    for output in follow_up_outputs:
+        evidence = follow_up_dropped_evidence(output)
+        if evidence is not None:
+            signals.append(
+                {
+                    "disposition": "dropped",
+                    "reason": f"follow-up task `{output['task_id']}` dropped the candidate",
+                    "evidence": evidence,
+                }
+            )
+    return signals
+
+
+def follow_up_refuted_evidence(output: dict) -> list[str] | None:
+    if any(observation_is_refuted(observation) for observation in output["observations"]):
+        return [f"Follow-up `{output['task_id']}` emitted a refuted/resolved observation"]
+    for finding in output["summary_only_findings"]:
+        if candidate_disposition_for_summary_finding(finding) == "refuted":
+            return [f"Follow-up summary: {finding['reason']}"]
+    return None
+
+
+def follow_up_parked_evidence(output: dict) -> list[str] | None:
+    if any(observation_is_parked(observation) for observation in output["observations"]):
+        return [f"Follow-up `{output['task_id']}` emitted a parked observation"]
+    for finding in output["summary_only_findings"]:
+        if candidate_disposition_for_summary_finding(finding) == "parked-follow-up":
+            return [f"Follow-up summary: {finding['reason']}"]
+    return None
+
+
+def follow_up_dropped_evidence(output: dict) -> list[str] | None:
+    for finding in output["summary_only_findings"]:
+        if candidate_disposition_for_summary_finding(finding) == "dropped":
+            return [f"Follow-up summary: {finding['reason']}"]
+    return None
+
+
+def observation_is_refuted(observation: dict) -> bool:
+    return observation.get("status") == "refuted"
+
+
+def observation_is_parked(observation: dict) -> bool:
+    return observation.get("status") == "parked"
+
+
+def require_resolved_candidate_schema(record: dict) -> None:
+    if record.get("schema") != "ub-review.resolved_candidate.v1":
+        fail(f"resolved candidate has wrong schema: {record!r}")
+    for field in [
+        "candidate_id",
+        "lane",
+        "source",
+        "original_status",
+        "original_disposition",
+        "resolved_status",
+        "resolved_disposition",
+        "resolution_source",
+        "reason",
+    ]:
+        if not isinstance(record.get(field), str) or not record[field]:
+            fail(f"resolved candidate {field} is missing or empty: {record!r}")
+    if record["resolved_status"] not in {
+        "unchanged",
+        "resolved",
+        "unresolved",
+        "follow-up-unavailable",
+        "conflicting",
+    }:
+        fail(f"resolved candidate status is unsupported: {record!r}")
+    if record["resolved_disposition"] not in {
+        "inline",
+        "summary-only",
+        "parked-follow-up",
+        "refuted",
+        "dropped",
+    }:
+        fail(f"resolved candidate disposition is unsupported: {record!r}")
+    if record["resolution_source"] not in {"candidate", "orchestrator-follow-up"}:
+        fail(f"resolved candidate source is unsupported: {record!r}")
+    if record.get("source_artifacts") != [
+        "review/candidates.json",
+        "review/follow_up_results.json",
+        "review/follow_up_outputs.json",
+    ]:
+        fail(f"resolved candidate source_artifacts are unsupported: {record!r}")
+    for field in [
+        "follow_up_task_ids",
+        "follow_up_stages",
+        "follow_up_statuses",
+        "evidence",
+    ]:
+        values = record.get(field)
+        if not isinstance(values, list) or not all(
+            isinstance(value, str) and value for value in values
+        ):
+            fail(f"resolved candidate {field} is not a string array: {record!r}")
 
 
 def require_final_compiler_input(

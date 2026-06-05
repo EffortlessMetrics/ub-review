@@ -1889,6 +1889,25 @@ struct CandidateRecord {
     side: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct ResolvedCandidateRecord {
+    schema: String,
+    candidate_id: String,
+    lane: String,
+    source: String,
+    original_status: String,
+    original_disposition: String,
+    resolved_status: String,
+    resolved_disposition: String,
+    resolution_source: String,
+    source_artifacts: Vec<String>,
+    reason: String,
+    follow_up_task_ids: Vec<String>,
+    follow_up_stages: Vec<String>,
+    follow_up_statuses: Vec<String>,
+    evidence: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct OrchestratorPlanArtifact {
     schema: String,
@@ -6247,6 +6266,9 @@ fn write_review_artifacts(
     )?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
+    let resolved_candidates =
+        resolved_candidate_records(&candidates, &follow_up_results, &follow_up_outputs);
+    write_resolved_candidate_artifacts(out, &resolved_candidates)?;
     write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args)?;
     write_shared_context_cache_artifacts(
         out,
@@ -7966,6 +7988,256 @@ fn write_follow_up_output_artifacts(out: &Path, outputs: &[FollowUpOutputRecord]
     }
     fs::write(out.join("follow_up_outputs.ndjson"), ndjson)?;
     Ok(())
+}
+
+fn write_resolved_candidate_artifacts(
+    out: &Path,
+    records: &[ResolvedCandidateRecord],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("resolved_candidates.json"),
+        serde_json::to_vec_pretty(records)?,
+    )?;
+    let mut ndjson = String::new();
+    for record in records {
+        ndjson.push_str(&serde_json::to_string(record)?);
+        ndjson.push('\n');
+    }
+    fs::write(out.join("resolved_candidates.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn resolved_candidate_records(
+    candidates: &[CandidateRecord],
+    follow_up_results: &[FollowUpResult],
+    follow_up_outputs: &[FollowUpOutputRecord],
+) -> Vec<ResolvedCandidateRecord> {
+    let follow_up_result_task_ids = follow_up_results
+        .iter()
+        .map(|result| result.task_id.clone())
+        .collect::<BTreeSet<_>>();
+    candidates
+        .iter()
+        .map(|candidate| {
+            let linked_outputs = follow_up_outputs
+                .iter()
+                .filter(|output| {
+                    follow_up_result_task_ids.contains(&output.task_id)
+                        && output.candidate_ids.iter().any(|id| id == &candidate.id)
+                })
+                .collect::<Vec<_>>();
+            resolved_candidate_record(candidate, &linked_outputs)
+        })
+        .collect()
+}
+
+fn resolved_candidate_record(
+    candidate: &CandidateRecord,
+    follow_up_outputs: &[&FollowUpOutputRecord],
+) -> ResolvedCandidateRecord {
+    let follow_up_task_ids = unique_follow_up_values(follow_up_outputs, |output| &output.task_id);
+    let follow_up_stages = unique_follow_up_values(follow_up_outputs, |output| &output.stage);
+    let follow_up_statuses = unique_follow_up_values(follow_up_outputs, |output| &output.status);
+    let (resolved_status, resolved_disposition, resolution_source, reason, evidence) =
+        resolve_candidate_from_follow_ups(candidate, follow_up_outputs);
+    ResolvedCandidateRecord {
+        schema: "ub-review.resolved_candidate.v1".to_owned(),
+        candidate_id: candidate.id.clone(),
+        lane: candidate.lane.clone(),
+        source: candidate.source.clone(),
+        original_status: candidate.status.clone(),
+        original_disposition: candidate.disposition.clone(),
+        resolved_status,
+        resolved_disposition,
+        resolution_source,
+        source_artifacts: vec![
+            "review/candidates.json".to_owned(),
+            "review/follow_up_results.json".to_owned(),
+            "review/follow_up_outputs.json".to_owned(),
+        ],
+        reason,
+        follow_up_task_ids,
+        follow_up_stages,
+        follow_up_statuses,
+        evidence,
+    }
+}
+
+fn unique_follow_up_values<F>(follow_up_outputs: &[&FollowUpOutputRecord], value: F) -> Vec<String>
+where
+    F: Fn(&FollowUpOutputRecord) -> &String,
+{
+    let mut values = Vec::new();
+    for output in follow_up_outputs {
+        let value = value(output).clone();
+        if !values.contains(&value) {
+            values.push(value);
+        }
+    }
+    values
+}
+
+fn resolve_candidate_from_follow_ups(
+    candidate: &CandidateRecord,
+    follow_up_outputs: &[&FollowUpOutputRecord],
+) -> (String, String, String, String, Vec<String>) {
+    if follow_up_outputs.is_empty() {
+        return (
+            "unchanged".to_owned(),
+            candidate.disposition.clone(),
+            "candidate".to_owned(),
+            "no candidate-targeted follow-up output".to_owned(),
+            vec![format!(
+                "Original candidate disposition `{}`",
+                candidate.disposition
+            )],
+        );
+    }
+
+    let mut signals = resolved_candidate_signals(follow_up_outputs);
+    if !signals.is_empty() {
+        let dispositions = signals
+            .iter()
+            .map(|signal| signal.disposition)
+            .collect::<BTreeSet<_>>();
+        if dispositions.len() > 1 {
+            return (
+                "conflicting".to_owned(),
+                candidate.disposition.clone(),
+                "orchestrator-follow-up".to_owned(),
+                "candidate-targeted follow-ups produced conflicting disposition signals".to_owned(),
+                signals
+                    .into_iter()
+                    .flat_map(|signal| signal.evidence)
+                    .collect(),
+            );
+        }
+        let signal = signals.remove(0);
+        return (
+            "resolved".to_owned(),
+            signal.disposition.to_owned(),
+            "orchestrator-follow-up".to_owned(),
+            signal.reason,
+            signal.evidence,
+        );
+    }
+
+    let evidence = follow_up_outputs
+        .iter()
+        .map(|output| {
+            format!(
+                "Follow-up task `{}` stage `{}` status `{}`",
+                output.task_id, output.stage, output.status
+            )
+        })
+        .collect::<Vec<_>>();
+    if follow_up_outputs
+        .iter()
+        .any(|output| matches!(output.status.as_str(), "ok" | "degraded"))
+    {
+        (
+            "unresolved".to_owned(),
+            candidate.disposition.clone(),
+            "orchestrator-follow-up".to_owned(),
+            "candidate-targeted follow-up ran without a refuted, parked, or dropped disposition"
+                .to_owned(),
+            evidence,
+        )
+    } else {
+        (
+            "follow-up-unavailable".to_owned(),
+            candidate.disposition.clone(),
+            "orchestrator-follow-up".to_owned(),
+            "candidate-targeted follow-up did not produce usable model output".to_owned(),
+            evidence,
+        )
+    }
+}
+
+struct ResolvedCandidateSignal {
+    disposition: &'static str,
+    reason: String,
+    evidence: Vec<String>,
+}
+
+fn resolved_candidate_signals(
+    follow_up_outputs: &[&FollowUpOutputRecord],
+) -> Vec<ResolvedCandidateSignal> {
+    let mut signals = Vec::new();
+    for output in follow_up_outputs {
+        if let Some(evidence) = follow_up_refuted_evidence(output) {
+            signals.push(ResolvedCandidateSignal {
+                disposition: "refuted",
+                reason: format!("follow-up task `{}` refuted the candidate", output.task_id),
+                evidence,
+            });
+        }
+    }
+    for output in follow_up_outputs {
+        if let Some(evidence) = follow_up_parked_evidence(output) {
+            signals.push(ResolvedCandidateSignal {
+                disposition: "parked-follow-up",
+                reason: format!("follow-up task `{}` parked the candidate", output.task_id),
+                evidence,
+            });
+        }
+    }
+    for output in follow_up_outputs {
+        if let Some(evidence) = follow_up_dropped_evidence(output) {
+            signals.push(ResolvedCandidateSignal {
+                disposition: "dropped",
+                reason: format!("follow-up task `{}` dropped the candidate", output.task_id),
+                evidence,
+            });
+        }
+    }
+    signals
+}
+
+fn follow_up_refuted_evidence(output: &FollowUpOutputRecord) -> Option<Vec<String>> {
+    if output.observations.iter().any(observation_is_refuted) {
+        return Some(vec![format!(
+            "Follow-up `{}` emitted a refuted/resolved observation",
+            output.task_id
+        )]);
+    }
+    output
+        .summary_only_findings
+        .iter()
+        .find(|finding| candidate_disposition_for_summary_finding(finding) == "refuted")
+        .map(|finding| vec![format!("Follow-up summary: {}", finding.reason)])
+}
+
+fn follow_up_parked_evidence(output: &FollowUpOutputRecord) -> Option<Vec<String>> {
+    if output.observations.iter().any(observation_is_parked) {
+        return Some(vec![format!(
+            "Follow-up `{}` emitted a parked observation",
+            output.task_id
+        )]);
+    }
+    output
+        .summary_only_findings
+        .iter()
+        .find(|finding| candidate_disposition_for_summary_finding(finding) == "parked-follow-up")
+        .map(|finding| vec![format!("Follow-up summary: {}", finding.reason)])
+}
+
+fn follow_up_dropped_evidence(output: &FollowUpOutputRecord) -> Option<Vec<String>> {
+    output
+        .summary_only_findings
+        .iter()
+        .find(|finding| candidate_disposition_for_summary_finding(finding) == "dropped")
+        .map(|finding| vec![format!("Follow-up summary: {}", finding.reason)])
+}
+
+fn observation_is_refuted(observation: &Observation) -> bool {
+    observation.status == "refuted"
+}
+
+fn observation_is_parked(observation: &Observation) -> bool {
+    observation.status == "parked"
 }
 
 fn write_model_stage_artifacts(
@@ -19685,29 +19957,29 @@ mod tests {
     use anyhow::{Context as _, Result, bail};
 
     use super::{
-        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CommandStatus, Config,
-        DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FollowUpQuestionTask,
-        GitHubReview, GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
-        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
-        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
-        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
-        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
-        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
-        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
-        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
-        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
-        apply_model_output, apply_plan_selectors, apply_refuter_output,
-        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
-        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
+        CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
+        FollowUpOutputRecord, FollowUpQuestionTask, GitHubReview, GitHubReviewComment,
+        LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCandidateComment,
+        ModelCandidateFinding, ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection,
+        ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
+        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
+        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
+        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
+        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
+        STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue, SensorPlan,
+        SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
         follow_up_output_record, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
@@ -19717,18 +19989,18 @@ mod tests {
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
-        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_command_to_files, run_refuter_pass, run_sensor, runtime_profile_from_toml,
-        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
-        standard_minimax_lanes, validate_failed_objection, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
-        write_witness_artifacts,
+        resolved_candidate_records, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
+        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
+        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
+        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
+        write_candidate_artifacts, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
+        write_sensor_status, write_witness_artifacts,
     };
 
     #[test]
@@ -29261,6 +29533,194 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn resolved_candidate_records_capture_follow_up_dispositions() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let candidates = vec![
+            test_candidate_record("candidate-unchanged"),
+            test_candidate_record("candidate-unavailable"),
+            test_candidate_record("candidate-unresolved"),
+            test_candidate_record("candidate-refuted"),
+            test_candidate_record("candidate-parked"),
+            test_candidate_record("candidate-dropped"),
+            test_candidate_record("candidate-conflicting"),
+            test_candidate_record("candidate-resolved-kind-open"),
+            test_candidate_record("candidate-parked-kind-open"),
+        ];
+        let outputs = vec![
+            test_follow_up_output_for_candidate(
+                "follow-unavailable",
+                &candidates[1].id,
+                "skipped_budget",
+                Vec::new(),
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-unresolved",
+                &candidates[2].id,
+                "ok",
+                Vec::new(),
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-refuted",
+                &candidates[3].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-refuted",
+                    "The proof receipt resolves this candidate.",
+                    "resolved-check",
+                    "refuted",
+                    "low",
+                    "high",
+                    "candidate-refuted",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-parked",
+                &candidates[4].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-parked",
+                    "The sibling route is parked behind a helper.",
+                    "parked-follow-up",
+                    "parked",
+                    "low",
+                    "medium",
+                    "candidate-parked",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-dropped",
+                &candidates[5].id,
+                "ok",
+                Vec::new(),
+                vec![SummaryOnlyFinding {
+                    lane: "orchestrator-follow-up-follow-dropped".to_owned(),
+                    severity: "low".to_owned(),
+                    confidence: "high".to_owned(),
+                    reason: "duplicate inline candidate merged after tertiary review".to_owned(),
+                    evidence: "duplicate evidence".to_owned(),
+                }],
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-conflict-refuted",
+                &candidates[6].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-conflict-refuted",
+                    "One follow-up refutes this candidate.",
+                    "false-premise",
+                    "refuted",
+                    "low",
+                    "high",
+                    "candidate-conflict-refuted",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-conflict-parked",
+                &candidates[6].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-conflict-parked",
+                    "Another follow-up parks this candidate.",
+                    "parked-follow-up",
+                    "parked",
+                    "low",
+                    "medium",
+                    "candidate-conflict-parked",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-resolved-kind-open",
+                &candidates[7].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-resolved-kind-open",
+                    "The proof receipt may resolve this candidate, but status stayed open.",
+                    "resolved-check",
+                    "open",
+                    "low",
+                    "medium",
+                    "candidate-resolved-kind-open",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-parked-kind-open",
+                &candidates[8].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-parked-kind-open",
+                    "The sibling route may be parked, but status stayed open.",
+                    "parked-follow-up",
+                    "open",
+                    "low",
+                    "medium",
+                    "candidate-parked-kind-open",
+                )],
+                Vec::new(),
+            ),
+        ];
+        let results = outputs
+            .iter()
+            .map(|output| {
+                let mut result =
+                    test_follow_up_result(&output.task_id, &output.group_id, &output.status);
+                result.stage = output.stage.clone();
+                result.disposition = output.disposition.clone();
+                result.evidence_need = output.evidence_need.clone();
+                result.candidate_ids = output.candidate_ids.clone();
+                result.observation_group_ids = output.observation_group_ids.clone();
+                result
+            })
+            .collect::<Vec<_>>();
+
+        let records = resolved_candidate_records(&candidates, &results, &outputs);
+        assert_eq!(records.len(), candidates.len());
+        assert_eq!(records[0].resolved_status, "unchanged");
+        assert_eq!(records[0].resolution_source, "candidate");
+        assert_eq!(records[1].resolved_status, "follow-up-unavailable");
+        assert_eq!(records[2].resolved_status, "unresolved");
+        assert_eq!(records[3].resolved_status, "resolved");
+        assert_eq!(records[3].resolved_disposition, "refuted");
+        assert_eq!(records[4].resolved_status, "resolved");
+        assert_eq!(records[4].resolved_disposition, "parked-follow-up");
+        assert_eq!(records[5].resolved_status, "resolved");
+        assert_eq!(records[5].resolved_disposition, "dropped");
+        assert_eq!(records[6].resolved_status, "conflicting");
+        assert_eq!(records[6].resolved_disposition, "summary-only");
+        assert_eq!(records[7].resolved_status, "unresolved");
+        assert_eq!(records[7].resolved_disposition, "summary-only");
+        assert_eq!(records[8].resolved_status, "unresolved");
+        assert_eq!(records[8].resolved_disposition, "summary-only");
+        assert_eq!(
+            records[6].source_artifacts,
+            vec![
+                "review/candidates.json".to_owned(),
+                "review/follow_up_results.json".to_owned(),
+                "review/follow_up_outputs.json".to_owned()
+            ]
+        );
+
+        write_resolved_candidate_artifacts(temp.path(), &records)?;
+        let written: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/resolved_candidates.json"),
+        )?)?;
+        let lines = fs::read_to_string(temp.path().join("resolved_candidates.ndjson"))?;
+        let ndjson = lines
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        assert_eq!(written.as_array().map(Vec::len), Some(candidates.len()));
+        assert_eq!(written.as_array().cloned().unwrap_or_default(), ndjson);
+        Ok(())
+    }
+
+    #[test]
     fn observation_artifacts_include_aggregate_and_lane_ndjson() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let review = super::ReviewArtifacts {
@@ -29826,6 +30286,50 @@ index 1111111..2222222 100644
             response_shape: None,
             fallback_from: None,
             cache_usage: super::ModelCacheUsage::default(),
+        }
+    }
+
+    fn test_candidate_record(id: &str) -> CandidateRecord {
+        CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: id.to_owned(),
+            lane: "tests-oracle".to_owned(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            disposition: "summary-only".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            claim: format!("Candidate {id} needs follow-up classification."),
+            evidence: "test candidate evidence".to_owned(),
+            path: None,
+            line: None,
+            side: None,
+        }
+    }
+
+    fn test_follow_up_output_for_candidate(
+        task_id: &str,
+        candidate_id: &str,
+        status: &str,
+        observations: Vec<Observation>,
+        summary_only_findings: Vec<SummaryOnlyFinding>,
+    ) -> FollowUpOutputRecord {
+        FollowUpOutputRecord {
+            schema: "ub-review.follow_up_output.v1".to_owned(),
+            task_id: task_id.to_owned(),
+            group_id: format!("group-{candidate_id}"),
+            stage: "tertiary".to_owned(),
+            disposition: "summary-only".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            candidate_ids: vec![candidate_id.to_owned()],
+            observation_group_ids: Vec::new(),
+            model_lane: format!("orchestrator-follow-up-{task_id}"),
+            status: status.to_owned(),
+            reason: "test follow-up output".to_owned(),
+            inline_comments: Vec::new(),
+            summary_only_findings,
+            observations,
+            proof_requests: Vec::new(),
         }
     }
 
