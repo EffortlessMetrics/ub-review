@@ -24,6 +24,17 @@ include_provider_table = "on_failure"
 include_sensor_table = "on_failure"
 include_execution_summary = "none"
 
+[gate]
+required_check = "ub-review/gate"
+target_minutes = 30
+hard_timeout_minutes = 60
+post_review_on = ["opened", "ready_for_review"]
+synchronize_mode = "gate-only"
+
+[tools.ripr.gate]
+scope = "on-diff"
+max_new_unsuppressed = 0
+
 # Keep the first GH-runner pass lean. Missing commands are already treated as
 # explicit missing evidence, but disabling uncommon tools keeps the plan quieter.
 [tools.semgrep]
