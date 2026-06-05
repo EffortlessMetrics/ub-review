@@ -43,6 +43,10 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
 - PR #270: `resolved_candidates` records candidate disposition after follow-up
   outputs, and the verifier rejects open follow-up observations being promoted
   into resolved dispositions.
+- Coverage sidecar receipt layer: the local coverage sensor now writes
+  `coverage-summary.json`, `changed-lines.json`, and `upload.json` sidecars, and
+  the verifier checks that each stays execution telemetry rather than a
+  correctness claim.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
