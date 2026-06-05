@@ -148,6 +148,12 @@ dropped, unavailable, or conflicting state for audit.
 gates. It is separate from `tool-status`: a sensor can run successfully while
 the configured gate remains missing evidence, not evaluated, or failed.
 
+`work_queue.json` and `work_events.ndjson` must include
+`initial_packet_status` for each task. Use `ready_for_initial_packet` only when
+the receipt exists before the queue is written; use `pending_initial_packet` for
+planned initial or late-follow-up work that still needs a receipt; use
+`not_initial_packet` for skipped or artifact-only tasks.
+
 ## PR Body Contract
 
 Reviewer-facing text is not an audit log. It may contain:

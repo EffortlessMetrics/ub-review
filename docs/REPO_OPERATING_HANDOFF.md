@@ -63,6 +63,13 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   evidence, and the verifier rejects impossible tool-gate pass/fail claims.
 - PR #279: the self gate no longer subscribes to `pull_request.synchronize`;
   opened and ready-for-review remain the default review-producing passes.
+- PR #282: the artifact verifier treats raw `OPENCODE` assignments as secret
+  leaks while allowing GitHub secret placeholders, and its observation
+  artifact-only routing matches the Rust orchestrator for verifier/self-test
+  meta noise.
+- PR #283: `work_queue.json` and `work_events.ndjson` record
+  `initial_packet_status` so the first packet can distinguish ready receipts,
+  pending initial work, pending late follow-up work, and non-initial tasks.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
