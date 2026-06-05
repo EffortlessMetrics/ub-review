@@ -112,6 +112,8 @@ target/ub-review/
     terminal_state.json
     metrics.json
     candidates.json
+    orchestrator_plan.json
+    final_orchestrator_plan.json
     follow_up_results.json
     follow_up_outputs.json
     resolved_candidates.json

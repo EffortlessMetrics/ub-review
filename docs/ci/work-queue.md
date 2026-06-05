@@ -116,6 +116,7 @@ review/receipt_routes.json
 review/resource_leases.json
 review/model_stages.json
 review/resolved_candidates.json
+review/final_orchestrator_plan.json
 review/final_compiler_input.json
 model_stages.ndjson
 resolved_candidates.ndjson

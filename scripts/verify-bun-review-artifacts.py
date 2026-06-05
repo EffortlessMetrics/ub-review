@@ -835,6 +835,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/merged_observations.json",
         "review/dropped_observations.json",
         "review/orchestrator_plan.json",
+        "review/final_orchestrator_plan.json",
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
@@ -1553,10 +1554,42 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
     observations = load_json(root / "review/unique_observations.json")
     proof_receipts = load_json(root / "review/proof_receipts.json")
     resource_leases = load_json(root / "review/resource_leases.json")
+    receipt_routes = load_json(root / "review/receipt_routes.json")
+    routes = receipt_routes.get("routes") if isinstance(receipt_routes, dict) else None
+    if not isinstance(routes, list):
+        fail("review/receipt_routes.json routes is not an array")
+    follow_up_receipt_ids = {
+        route.get("receipt_id")
+        for route in routes
+        if isinstance(route, dict) and route.get("phase") == "follow-up-receipt"
+    }
+    pre_follow_up_receipts = [
+        receipt
+        for receipt in proof_receipts
+        if receipt.get("id") not in follow_up_receipt_ids
+    ]
+    pre_follow_up_receipt_ids = {
+        receipt["id"] for receipt in pre_follow_up_receipts if isinstance(receipt, dict)
+    }
+    pre_follow_up_leases = [
+        lease
+        for lease in resource_leases
+        if lease.get("consumer") in pre_follow_up_receipt_ids
+    ]
     plan = load_json(root / "review/orchestrator_plan.json")
-    expected = expected_orchestrator_plan(candidates, observations, proof_receipts, resource_leases)
+    expected = expected_orchestrator_plan(
+        candidates, observations, pre_follow_up_receipts, pre_follow_up_leases
+    )
     if plan != expected:
-        fail("review/orchestrator_plan.json does not match candidate/observation evidence routing")
+        fail("review/orchestrator_plan.json does not match pre-follow-up evidence routing")
+    final_plan = load_json(root / "review/final_orchestrator_plan.json")
+    final_expected = expected_orchestrator_plan(
+        candidates, observations, proof_receipts, resource_leases
+    )
+    if final_plan != final_expected:
+        fail(
+            "review/final_orchestrator_plan.json does not match final candidate/observation evidence routing"
+        )
 
     lines = [line for line in read_text(root / "follow_up_questions.ndjson").splitlines() if line.strip()]
     tasks = plan["follow_up_tasks"]
@@ -1570,6 +1603,7 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
         if parsed != tasks[index]:
             fail(f"follow_up_questions.ndjson line {index + 1} does not match orchestrator plan")
     require_orchestrator_plan_schema(plan)
+    require_orchestrator_plan_schema(final_plan)
 
 
 def expected_orchestrator_plan(
@@ -3421,6 +3455,7 @@ def require_final_compiler_input(
         "review/follow_up_evidence.json",
         "review/proof_receipts.json",
         "review/receipt_routes.json",
+        "review/final_orchestrator_plan.json",
     ]:
         if source not in source_artifacts:
             fail(f"final compiler input missing source artifact {source}")
