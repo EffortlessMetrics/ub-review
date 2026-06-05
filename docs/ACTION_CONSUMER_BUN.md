@@ -21,7 +21,7 @@ invariant, PR shape, and proof rules.
     posting: review
     mode: review-byok
     github-token: ${{ github.token }}
-    minimax-api-key: ${{ secrets.MINIMAX }}
+    minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
     minimax-provider-kind: anthropic
     model-mode: auto
     depth: standard
@@ -40,8 +40,9 @@ pin is `804d198b5a15a0df94bb4f43750dba71165916cd`; update it only after this
 repo's verifier passes and the Bun consumer workflow uploads a valid packet.
 
 GLM is skipped for v0. The Bun v0 cutover workflow uses direct MiniMax M3 for
-all model lanes. OpenCode Go remains optional for later direct provider
-canary/deep modes; `ub-review` does not invoke the OpenCode agent harness.
+all model lanes through `secrets.MINIMAX_API_KEY`. OpenCode Go remains optional
+for later direct provider canary/deep modes through `secrets.OPENCODE`;
+`ub-review` does not invoke the OpenCode agent harness.
 Use `depth: quick`, `standard`, or `deep` for preset lane/model-call pressure;
 keep raw lane/model budget overrides on `standard`.
 For focused reruns, `lanes`, `except-lanes`, `tools`, and `except-tools` accept

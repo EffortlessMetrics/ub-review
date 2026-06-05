@@ -24583,7 +24583,7 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
-        review.body = "## Confirmed findings\n\n- Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned();
+        review.body = "## Confirmed findings\n\n- Ub-review action receives secrets.MINIMAX_API_KEY and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
             .ok_or_else(|| anyhow::anyhow!("standing workflow trust prose unexpectedly passed"))?;
@@ -26770,7 +26770,7 @@ UB_REVIEW_HTTP_STATUS:429
                 lane: "workflow-pinning".to_owned(),
                 severity: "medium".to_owned(),
                 confidence: "medium-high".to_owned(),
-                reason: "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned(),
+                reason: "Ub-review action receives secrets.MINIMAX_API_KEY and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.".to_owned(),
                 evidence: "The diff is an atomic ub-review SHA/cache-key bump; the with: block is unchanged.".to_owned(),
             },
             SummaryOnlyFinding {
@@ -26833,7 +26833,7 @@ UB_REVIEW_HTTP_STATUS:429
             ),
             test_observation(
                 "workflow-pinning",
-                "Ub-review action receives secrets.MINIMAX and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.",
+                "Ub-review action receives secrets.MINIMAX_API_KEY and github.token at runtime; a malicious or compromised dad0f23 would exfiltrate these. Pinning to SHA is correct posture but does not eliminate upstream trust.",
                 "security-risk",
                 "open",
                 "medium",
