@@ -3,6 +3,7 @@
 This handoff packages the repo-operating work landed from the web-Codex PR
 queue. Use it to apply the same baseline to other Rust repos and to hand the
 remaining product/tool work back to the correct lanes.
+For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
 
 ## Landed layers
 

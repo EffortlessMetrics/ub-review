@@ -8,6 +8,8 @@ https://github.com/EffortlessMetrics/ub-review
 
 Current development should happen through small PRs against `main`. Do not treat
 `origin/main` as an empty bootstrap target.
+For non-Bun Rust repos adopting the same operating baseline, use
+[PORTING_BASELINE.md](PORTING_BASELINE.md).
 
 ## Local verification
 
