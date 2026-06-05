@@ -17,14 +17,15 @@ Current supported shape:
 - full packet artifacts, including `review/post-result.json` or `review/post-error.json`
 - standard-image doctor fails missing core tools and stale `tokmd` versions
 - Bun consumer workflow example using
-  `EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6`
+  `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`
 
 Before tagging `v0`, prove the same commit on:
 
 1. the locked CI gate;
 2. the local action smoke workflow;
 3. a live MiniMax model smoke run with repository secrets;
-4. a real Bun fork draft PR that posts one grouped review and uploads a complete packet.
+4. a real Bun fork draft PR that posts one grouped review, or records an
+   artifact-only skip, and uploads a complete packet.
 
 After those checks pass, move the Bun workflow to the verified commit SHA. Tags
 are release rollouts; the daily Bun hunt should stay on the latest known-good

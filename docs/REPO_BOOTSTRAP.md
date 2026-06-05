@@ -34,16 +34,18 @@ using `examples/bun/.github/workflows/ub-review-packet.yml` from this repository
 The Bun gate should use a verified commit SHA:
 
 ```yaml
-uses: EffortlessMetrics/ub-review@da14100f862610477e27948719bf5f0d222d27e6
+uses: EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd
 ```
 
-The current known-good pin is `da14100f862610477e27948719bf5f0d222d27e6`.
+The current known-good pin is `804d198b5a15a0df94bb4f43750dba71165916cd`.
 Move it only after a draft Bun UB PR proves:
 
-- one grouped Pull Request Review is posted or a `post-error.json` receipt explains why not;
+- one grouped Pull Request Review is posted, or `github-review-skip.json` plus
+  `post-result.json` proves an artifact-only skip;
 - `target/ub-review/running-summary.md` exists;
 - `target/ub-review/review/review.md` exists;
-- `target/ub-review/review/github-review.json` exists;
+- `target/ub-review/review/github-review.json` exists only when reviewer-value
+  content survives compilation;
 - `target/ub-review/input/diff.patch` exists;
 - sensor receipts exist under `target/ub-review/sensors/*/ub-review-sensor-status.json`;
 - missing sensors or model lanes are explicit missing evidence, not clean results.
