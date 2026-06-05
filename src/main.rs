@@ -28835,7 +28835,16 @@ index 1111111..2222222 100644
         let mut refuter = model_lane_receipt("refuter", "ok");
         refuter.reason = "completed".to_owned();
         let model_lanes = vec![model_lane_receipt("tests-oracle", "ok"), planner, refuter];
-        let secondary = test_follow_up_result("follow-secondary", "group-secondary", "ok");
+        let mut secondary = test_follow_up_result("follow-secondary", "group-secondary", "ok");
+        secondary.duration_ms = Some(123);
+        secondary.http_status = Some(200);
+        secondary.response_shape = Some("anthropic".to_owned());
+        secondary.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(1000),
+            output_tokens: Some(25),
+            cache_creation_input_tokens: Some(900),
+            cache_read_input_tokens: Some(100),
+        };
         let mut tertiary = test_follow_up_result("follow-tertiary", "group-tertiary", "skipped");
         tertiary.stage = "tertiary".to_owned();
         let follow_up_results = vec![secondary, tertiary];
@@ -28855,6 +28864,17 @@ index 1111111..2222222 100644
         assert_eq!(records[3].source, "orchestrator-follow-up");
         assert_eq!(records[3].stage, "secondary");
         assert_eq!(records[3].task_id.as_deref(), Some("follow-secondary"));
+        assert_eq!(records[3].provider, "minimax");
+        assert_eq!(records[3].duration_ms, Some(123));
+        assert_eq!(records[3].http_status, Some(200));
+        assert_eq!(records[3].response_shape.as_deref(), Some("anthropic"));
+        assert_eq!(records[3].cache_usage.input_tokens, Some(1000));
+        assert_eq!(records[3].cache_usage.output_tokens, Some(25));
+        assert_eq!(
+            records[3].cache_usage.cache_creation_input_tokens,
+            Some(900)
+        );
+        assert_eq!(records[3].cache_usage.cache_read_input_tokens, Some(100));
         assert_eq!(records[4].source, "orchestrator-follow-up");
         assert_eq!(records[4].stage, "tertiary");
         assert_eq!(records[4].task_id.as_deref(), Some("follow-tertiary"));
