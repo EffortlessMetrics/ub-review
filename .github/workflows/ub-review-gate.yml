@@ -1,0 +1,71 @@
+name: ub-review/gate
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: ub-review-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: ub-review/gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Run ub-review gate
+        uses: ./
+        with:
+          config: profiles/ub-review-self.toml
+          profile: gh-runner-full
+          runtime-profile: gh-runner-full
+          mode: intelligent-ci
+          run-pass: auto
+          root: .
+          out: target/ub-review
+          github-token: ${{ github.token }}
+          posting: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review') && 'review' || 'artifact-only' }}
+          model-mode: ${{ github.event_name == 'pull_request' && github.event.action == 'synchronize' && 'off' || 'auto' }}
+          depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
+          provider-policy: primary-with-fallback
+          minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
+          minimax-provider-kind: anthropic
+          minimax-model: MiniMax-M3
+          opencode-api-key: ${{ secrets.OPENCODE }}
+          opencode-model: mimo-v2.5
+          opencode-endpoint-kind: auto
+
+      - name: Verify ub-review artifacts
+        if: always()
+        run: >
+          python scripts/verify-bun-review-artifacts.py target/ub-review
+          --expected-review-profile ub-review-self
+          --expected-repo-kind ub-review
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ub-review-gate
+          path: target/ub-review
+          if-no-files-found: error

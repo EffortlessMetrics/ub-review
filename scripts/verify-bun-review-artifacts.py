@@ -974,7 +974,9 @@ def require_summary(root: pathlib.Path) -> None:
     no_standalone_approval_line(summary, summary_path)
 
 
-def require_profile_artifacts(root: pathlib.Path) -> tuple[dict, dict]:
+def require_profile_artifacts(
+    root: pathlib.Path, expected_review_profile: str, expected_repo_kind: str
+) -> tuple[dict, dict]:
     resolved_profile = load_json(root / "resolved-profile.json")
     resolved_plan = load_json(root / "resolved-plan.json")
     if not isinstance(resolved_profile, dict):
@@ -985,26 +987,42 @@ def require_profile_artifacts(root: pathlib.Path) -> tuple[dict, dict]:
         fail("resolved-profile.json has wrong schema")
     if resolved_plan.get("schema") != "ub-review.resolved_plan.v1":
         fail("resolved-plan.json has wrong schema")
-    if resolved_profile.get("selected_review_profile") != "bun-ub-v0":
-        fail("resolved-profile.json selected_review_profile is not bun-ub-v0")
+    if resolved_profile.get("selected_review_profile") != expected_review_profile:
+        fail(
+            "resolved-profile.json selected_review_profile expected "
+            f"{expected_review_profile}, got {resolved_profile.get('selected_review_profile')!r}"
+        )
     review_profile = resolved_profile.get("review_profile")
     if not isinstance(review_profile, dict):
         fail("resolved-profile.json review_profile is not an object")
-    if review_profile.get("name") != "bun-ub-v0":
-        fail("resolved-profile.json review_profile.name is not bun-ub-v0")
-    if review_profile.get("repo_kind") != "bun":
-        fail("resolved-profile.json review_profile.repo_kind is not bun")
+    if review_profile.get("name") != expected_review_profile:
+        fail(
+            "resolved-profile.json review_profile.name expected "
+            f"{expected_review_profile}, got {review_profile.get('name')!r}"
+        )
+    if review_profile.get("repo_kind") != expected_repo_kind:
+        fail(
+            "resolved-profile.json review_profile.repo_kind expected "
+            f"{expected_repo_kind}, got {review_profile.get('repo_kind')!r}"
+        )
     runtime_profile = resolved_profile.get("selected_runtime_profile")
     if not isinstance(runtime_profile, str) or not runtime_profile:
         fail("resolved-profile.json selected_runtime_profile is invalid")
-    if resolved_plan.get("review_profile") != "bun-ub-v0":
-        fail("resolved-plan.json review_profile is not bun-ub-v0")
+    if resolved_plan.get("review_profile") != expected_review_profile:
+        fail(
+            "resolved-plan.json review_profile expected "
+            f"{expected_review_profile}, got {resolved_plan.get('review_profile')!r}"
+        )
     if resolved_plan.get("runtime_profile") != runtime_profile:
         fail("resolved-plan.json runtime_profile does not match resolved-profile.json")
     return resolved_profile, resolved_plan
 
 
-def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
+def require_review(
+    root: pathlib.Path,
+    max_inline_comments: int | None,
+    expected_review_profile: str,
+) -> dict:
     review = load_json(root / "review/review.json")
     review_body = read_text(root / "review/review.md")
     shared_context = read_text(root / "review/shared_context.md")
@@ -1015,9 +1033,9 @@ def require_review(root: pathlib.Path, max_inline_comments: int | None) -> dict:
     ):
         fail("review.json shared_context_id is not a 64-character hex digest")
     require_run_mode(review.get("mode"), "review.json mode")
-    if review.get("review_profile") != "bun-ub-v0":
+    if review.get("review_profile") != expected_review_profile:
         fail(
-            "review.json review_profile expected bun-ub-v0, "
+            f"review.json review_profile expected {expected_review_profile}, "
             f"got {review.get('review_profile')!r}"
         )
     if review.get("posting") not in {"review", "artifact-only"}:
@@ -4238,6 +4256,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--min-ok-model-lanes", type=int, default=0)
     parser.add_argument("--max-inline-comments", type=int)
     parser.add_argument("--require-no-model-evidence-failures", action="store_true")
+    parser.add_argument("--expected-review-profile", default="bun-ub-v0")
+    parser.add_argument("--expected-repo-kind", default="bun")
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv[1:])
 
@@ -4254,10 +4274,14 @@ def main(argv: list[str]) -> int:
 
     require_common_tree(root)
     require_summary(root)
-    require_profile_artifacts(root)
+    require_profile_artifacts(
+        root, args.expected_review_profile, args.expected_repo_kind
+    )
     require_sensor_receipts(root)
     require_tool_registry_artifacts(root)
-    review = require_review(root, args.max_inline_comments)
+    review = require_review(
+        root, args.max_inline_comments, args.expected_review_profile
+    )
     metrics = require_metrics(root, review)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
     if args.require_no_model_evidence_failures:
@@ -4275,8 +4299,9 @@ def main(argv: list[str]) -> int:
     merged_observations = load_json(root / "review/merged_observations.json")
     dropped_observations = load_json(root / "review/dropped_observations.json")
     print(
-        "Bun review artifact contract verified: "
+        "review artifact contract verified: "
         f"root={root} "
+        f"review_profile={args.expected_review_profile} "
         f"shared_context={review['shared_context_id']} "
         f"inline_comments={len(review.get('inline_comments', []))} "
         f"observations={len(observations)} "

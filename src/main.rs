@@ -167,6 +167,7 @@ impl ReviewDepth {
 enum ModelProviderPolicy {
     Auto,
     MinimaxPrimary,
+    PrimaryWithFallback,
     MinimaxOnly,
     OpencodeGoCanary,
     OpencodeGoWide,
@@ -177,6 +178,7 @@ impl ModelProviderPolicy {
         match self {
             Self::Auto => "auto",
             Self::MinimaxPrimary => "minimax-primary",
+            Self::PrimaryWithFallback => "primary-with-fallback",
             Self::MinimaxOnly => "minimax-only",
             Self::OpencodeGoCanary => "opencode-go-canary",
             Self::OpencodeGoWide => "opencode-go-wide",
@@ -5177,6 +5179,48 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--output".to_owned(),
             dir.join("cargo-allow.md").display().to_string(),
         ],
+        "cargo-fmt" => vec![
+            "cargo".to_owned(),
+            "fmt".to_owned(),
+            "--all".to_owned(),
+            "--check".to_owned(),
+        ],
+        "cargo-check" => vec![
+            "cargo".to_owned(),
+            "check".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "cargo-test" => vec![
+            "cargo".to_owned(),
+            "test".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "cargo-clippy" => vec![
+            "cargo".to_owned(),
+            "clippy".to_owned(),
+            "--workspace".to_owned(),
+            "--all-targets".to_owned(),
+            "--locked".to_owned(),
+            "--".to_owned(),
+            "-D".to_owned(),
+            "warnings".to_owned(),
+        ],
+        "cargo-doc" => vec![
+            "cargo".to_owned(),
+            "doc".to_owned(),
+            "--workspace".to_owned(),
+            "--no-deps".to_owned(),
+            "--locked".to_owned(),
+        ],
+        "artifact-verifier" => vec![
+            "python".to_owned(),
+            "scripts/verify-bun-review-artifacts.py".to_owned(),
+            "--self-test".to_owned(),
+        ],
         "ast-grep" => {
             let config = root.join("tools/ub-rules/sgconfig.yml");
             if config.exists() {
@@ -6963,6 +7007,7 @@ struct ObservationInput<'a> {
 
 fn make_observation(input: ObservationInput<'_>) -> Observation {
     let path = input.path.cloned();
+    let line = input.line.filter(|line| *line > 0);
     let fingerprint_input = format!(
         "{}\n{}\n{}\n{}\n{:?}\n{:?}\n{}",
         input.lane,
@@ -6970,7 +7015,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
         input.status,
         input.claim,
         path,
-        input.line,
+        line,
         input.evidence.join("\n")
     );
     let fingerprint = sha256_hex(fingerprint_input.as_bytes());
@@ -6986,7 +7031,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
         severity: input.severity.to_owned(),
         confidence: input.confidence.to_owned(),
         path: path.clone(),
-        line: input.line,
+        line,
         fingerprint,
         evidence: input.evidence,
         dedupe_key: input
@@ -6995,7 +7040,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned)
             .unwrap_or_else(|| {
-                observation_dedupe_key(input.lane, input.kind, path.as_deref(), input.line)
+                observation_dedupe_key(input.lane, input.kind, path.as_deref(), line)
             }),
         source: input.source.to_owned(),
     }
@@ -12505,12 +12550,21 @@ fn proof_planner_lane() -> LanePlan {
 }
 
 fn model_assignments(plan: &Plan, args: &RunArgs) -> Result<Vec<ModelAssignment>> {
+    model_assignments_with_key_state(plan, args, model_api_key_present(ModelProvider::OpenCodeGo))
+}
+
+fn model_assignments_with_key_state(
+    plan: &Plan,
+    args: &RunArgs,
+    opencode_key_present: bool,
+) -> Result<Vec<ModelAssignment>> {
     let lanes = selected_review_lanes_for_args(plan, args)?;
     let assignments = lanes
         .into_iter()
         .map(|lane| {
             let spec = provider_spec_for_lane(&lane, args);
-            let fallback = fallback_provider_spec_for_lane(&lane, &spec, args);
+            let fallback =
+                fallback_provider_spec_for_lane(&lane, &spec, args, opencode_key_present);
             ModelAssignment {
                 lane,
                 spec,
@@ -12549,6 +12603,7 @@ fn provider_spec_for_lane_with_key_state(
         }
         ModelProviderPolicy::Auto
         | ModelProviderPolicy::MinimaxPrimary
+        | ModelProviderPolicy::PrimaryWithFallback
         | ModelProviderPolicy::OpencodeGoCanary
         | ModelProviderPolicy::OpencodeGoWide => direct_minimax_spec(args),
     }
@@ -12558,12 +12613,27 @@ fn fallback_provider_spec_for_lane(
     lane: &LanePlan,
     spec: &ProviderSpec,
     args: &RunArgs,
+    opencode_key_present: bool,
 ) -> Option<ProviderSpec> {
     if spec.provider == ModelProvider::OpenCodeGo && lane.id == "opposition" {
-        Some(direct_minimax_spec(args))
-    } else {
-        None
+        return Some(direct_minimax_spec(args));
     }
+    if spec.provider == ModelProvider::MiniMaxDirect
+        && matches!(
+            args.provider_policy,
+            ModelProviderPolicy::PrimaryWithFallback
+        )
+    {
+        if !opencode_key_present {
+            return None;
+        }
+        return Some(if is_opencode_fast_lane(&lane.id) {
+            opencode_flash_spec(args)
+        } else {
+            opencode_canary_spec(args)
+        });
+    }
+    None
 }
 
 fn direct_minimax_spec(args: &RunArgs) -> ProviderSpec {
@@ -18648,6 +18718,72 @@ fn builtin_tools() -> Vec<ToolPolicy> {
             false,
         ),
         tool(
+            "cargo-fmt",
+            "cargo",
+            ToolClass::Build,
+            1,
+            Trigger::Always,
+            120,
+            32,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-check",
+            "cargo",
+            ToolClass::Build,
+            4,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-test",
+            "cargo",
+            ToolClass::Test,
+            8,
+            Trigger::Always,
+            900,
+            256,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-clippy",
+            "cargo",
+            ToolClass::Build,
+            6,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "cargo-doc",
+            "cargo",
+            ToolClass::Build,
+            4,
+            Trigger::Always,
+            600,
+            128,
+            false,
+            true,
+        ),
+        tool(
+            "artifact-verifier",
+            "python",
+            ToolClass::Static,
+            2,
+            Trigger::Always,
+            120,
+            32,
+            false,
+            true,
+        ),
+        tool(
             "coverage",
             "cargo",
             ToolClass::Coverage,
@@ -18967,25 +19103,27 @@ mod tests {
         ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
         ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
         ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext,
-        Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
-        ResourceLease, ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy,
-        ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth, ReviewInlineComment,
-        ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
-        builtin_profiles, cap_review_body, classify_diff, classify_diff_class, classify_proof_cost,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, extract_model_content, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        model_api_url, model_assignments, model_auth_header, model_json_payload, model_lane,
+        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
+        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
+        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
+        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput,
+        ToolClass, append_follow_up_evidence_witnesses, append_follow_up_proof_requests,
+        apply_model_output, apply_plan_selectors, apply_refuter_output,
+        apply_runtime_profile_limits, build_candidate_records, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
         model_request_payload, model_response_shape, normalize_run_args,
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
@@ -19372,6 +19510,175 @@ mod tests {
                 && action.contains("--run-pass \"${{ inputs['run-pass'] }}\""),
             "the action should pass event action and resolved pass input into ub-review run"
         );
+    }
+
+    #[test]
+    fn ub_review_gate_workflow_matches_self_profile_post_policy() {
+        let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
+        let profile = include_str!("../profiles/ub-review-self.toml");
+        assert!(
+            workflow.contains("types: [opened, ready_for_review, synchronize]"),
+            "self gate should run review passes on opened/ready and gate-only synchronize"
+        );
+        assert!(
+            !workflow.contains("reopened"),
+            "self gate review triggers should match the profile post_review_on list"
+        );
+        assert!(
+            profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
+            "self profile should declare the same PR review passes"
+        );
+        assert!(
+            workflow.contains(
+                "github.event.action == 'opened' || github.event.action == 'ready_for_review'"
+            ),
+            "posting expression should be limited to the profile review passes"
+        );
+        assert!(
+            workflow.contains("github.event.action == 'synchronize' && 'off' || 'auto'"),
+            "synchronize should keep producing artifact-only gate evidence with models off"
+        );
+    }
+
+    #[test]
+    fn ub_review_self_profile_loads_baseline_gate_tools() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        assert_eq!(config.review_profile, "ub-review-self");
+        assert_eq!(config.profile, "gh-runner-full");
+        for id in [
+            "cargo-fmt",
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "artifact-verifier",
+            "ripr",
+            "unsafe-review",
+            "ast-grep",
+            "cargo-allow",
+            "actionlint",
+        ] {
+            let tool = config
+                .tools
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("missing self-profile tool {id}"))?;
+            assert!(tool.enabled, "{id} should be enabled");
+        }
+        let coverage = config
+            .tools
+            .get("coverage")
+            .ok_or_else(|| anyhow::anyhow!("missing self-profile coverage tool"))?;
+        assert!(
+            !coverage.enabled,
+            "coverage is a leased heavy witness and should not run in the default self gate"
+        );
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        for id in [
+            "cargo-fmt",
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "artifact-verifier",
+        ] {
+            let sensor = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing planned sensor {id}"))?;
+            assert!(sensor.run, "{id} should run in every self gate");
+            assert!(
+                sensor.required,
+                "{id} should be a required self gate sensor"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn baseline_gate_sensor_argvs_match_required_matrix() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let cases = [
+            ("cargo-fmt", vec!["cargo", "fmt", "--all", "--check"]),
+            (
+                "cargo-check",
+                vec!["cargo", "check", "--workspace", "--all-targets", "--locked"],
+            ),
+            (
+                "cargo-test",
+                vec!["cargo", "test", "--workspace", "--all-targets", "--locked"],
+            ),
+            (
+                "cargo-clippy",
+                vec![
+                    "cargo",
+                    "clippy",
+                    "--workspace",
+                    "--all-targets",
+                    "--locked",
+                    "--",
+                    "-D",
+                    "warnings",
+                ],
+            ),
+            (
+                "cargo-doc",
+                vec!["cargo", "doc", "--workspace", "--no-deps", "--locked"],
+            ),
+            (
+                "artifact-verifier",
+                vec![
+                    "python",
+                    "scripts/verify-bun-review-artifacts.py",
+                    "--self-test",
+                ],
+            ),
+        ];
+        for (id, expected) in cases {
+            let sensor = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing planned sensor {id}"))?;
+            assert!(sensor.run, "{id} should run in the self-gate plan");
+            let argv = super::build_sensor_argv(
+                Path::new("."),
+                Path::new("target/ub-review/sensors/x"),
+                sensor,
+                &plan,
+            );
+            assert_eq!(argv, expected);
+        }
+        Ok(())
     }
 
     #[test]
@@ -24623,6 +24930,65 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn primary_with_fallback_routes_canary_and_fast_fallbacks() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.lane_width = 10;
+        args.opencode_model = "mimo-v2.5".to_owned();
+        let assignments = model_assignments_with_key_state(&test_plan(Vec::new()), &args, true)?;
+
+        let security = assignments
+            .iter()
+            .find(|assignment| assignment.lane.id == "security")
+            .ok_or_else(|| anyhow::anyhow!("security lane missing"))?;
+        assert_eq!(security.spec.provider, ModelProvider::MiniMaxDirect);
+        assert_eq!(
+            security.fallback.as_ref().map(|spec| spec.provider),
+            Some(ModelProvider::OpenCodeGo)
+        );
+        assert_eq!(
+            security.fallback.as_ref().map(|spec| spec.model.as_str()),
+            Some("mimo-v2.5")
+        );
+        let primary = direct_minimax_spec(&args);
+        let canary = fallback_provider_spec_for_lane(&lane_plan("security"), &primary, &args, true)
+            .ok_or_else(|| anyhow::anyhow!("security fallback missing"))?;
+        assert_eq!(canary.provider, ModelProvider::OpenCodeGo);
+        assert_eq!(canary.model, "mimo-v2.5");
+
+        let fast =
+            fallback_provider_spec_for_lane(&lane_plan("summary-pressure"), &primary, &args, true)
+                .ok_or_else(|| anyhow::anyhow!("fast fallback missing"))?;
+        assert_eq!(fast.provider, ModelProvider::OpenCodeGo);
+        assert_eq!(fast.model, "deepseek-v4-flash");
+        Ok(())
+    }
+
+    #[test]
+    fn primary_with_fallback_does_not_plan_missing_opencode_fallbacks() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.lane_width = 10;
+        args.opencode_model = "mimo-v2.5".to_owned();
+        let assignments = model_assignments_with_key_state(&test_plan(Vec::new()), &args, false)?;
+
+        let security = assignments
+            .iter()
+            .find(|assignment| assignment.lane.id == "security")
+            .ok_or_else(|| anyhow::anyhow!("security lane missing"))?;
+        assert_eq!(security.spec.provider, ModelProvider::MiniMaxDirect);
+        assert!(security.fallback.is_none());
+        assert!(assignments.iter().all(|assignment| {
+            assignment
+                .fallback
+                .as_ref()
+                .map(|fallback| fallback.provider)
+                != Some(ModelProvider::OpenCodeGo)
+        }));
+        Ok(())
+    }
+
+    #[test]
     fn provider_policy_opencode_wide_uses_flash_for_fast_lanes() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::OpencodeGoWide;
@@ -28560,6 +28926,33 @@ index 1111111..2222222 100644
             dedupe_key: dedupe_key.to_owned(),
             source: "model-observation".to_owned(),
         }
+    }
+
+    #[test]
+    fn observation_artifacts_normalize_zero_line_to_absent() {
+        let path = "src/main.rs".to_owned();
+        let observation = make_observation(ObservationInput {
+            index: 0,
+            lane: "source-route",
+            question: "source-route",
+            claim: "model supplied a non-positive observation line",
+            kind: "false-premise",
+            status: "refuted",
+            severity: "low",
+            confidence: "high",
+            path: Some(&path),
+            line: Some(0),
+            evidence: vec!["model observation fixture".to_owned()],
+            dedupe_key: None,
+            source: "model-observation",
+        });
+
+        assert_eq!(observation.path.as_deref(), Some("src/main.rs"));
+        assert_eq!(observation.line, None);
+        assert_eq!(
+            observation.dedupe_key,
+            "false-premise:source-route".to_owned()
+        );
     }
 
     fn lane_plan(id: &str) -> LanePlan {

@@ -146,7 +146,7 @@ inputs:
     default: ''
     required: false
   provider-policy:
-    description: 'Provider policy: minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
+    description: 'Provider policy: primary-with-fallback, minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
     default: minimax-primary
     required: false
   lane-width:
