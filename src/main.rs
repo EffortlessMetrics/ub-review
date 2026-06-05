@@ -7265,6 +7265,7 @@ struct TerminalStateInput<'a> {
     missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
     proof_receipts: &'a [ProofReceipt],
+    final_follow_up_tasks: usize,
 }
 
 fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalState {
