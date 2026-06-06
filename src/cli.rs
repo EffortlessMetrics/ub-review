@@ -184,6 +184,31 @@ impl RunMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum FailOnGate {
+    Auto,
+    True,
+    False,
+}
+
+impl FailOnGate {
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::True => "true",
+            Self::False => "false",
+        }
+    }
+
+    pub(crate) fn resolved(self, mode: RunMode) -> bool {
+        match self {
+            Self::True => true,
+            Self::False => false,
+            Self::Auto => matches!(mode, RunMode::IntelligentCi),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RunPass {
     Auto,
@@ -363,6 +388,17 @@ pub(crate) struct RunArgs {
     /// Model execution mode.
     #[arg(long, value_enum, default_value = "auto", env = "UB_REVIEW_MODEL_MODE")]
     pub(crate) model_mode: ModelMode,
+    /// Gate enforcement. When this resolves to true and review/gate_outcome.json
+    /// records a `fail` conclusion, `run` exits non-zero (exit code 1) after all
+    /// artifacts are written. `auto` resolves to true for --mode intelligent-ci
+    /// and false otherwise.
+    #[arg(
+        long = "fail-on-gate",
+        value_enum,
+        default_value = "auto",
+        env = "UB_REVIEW_FAIL_ON_GATE"
+    )]
+    pub(crate) fail_on_gate: FailOnGate,
     #[command(flatten)]
     pub(crate) selectors: SelectorArgs,
     /// Review depth selector. Nonstandard depths expand to lane/model budgets.

@@ -193,6 +193,10 @@ inputs:
     description: Fail the action when posting the grouped PR review fails.
     default: 'false'
     required: false
+  fail-on-gate:
+    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step exits non-zero when review/gate_outcome.json records a fail conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
+    default: auto
+    required: false
   github-summary:
     description: Append running-summary.md to GITHUB_STEP_SUMMARY.
     default: 'true'
@@ -232,6 +236,9 @@ outputs:
   post-stderr-path:
     description: Path to the GitHub review post stderr artifact.
     value: ${{ steps.paths.outputs.post-stderr-path }}
+  gate-outcome-path:
+    description: Path to the deterministic gate verdict artifact.
+    value: ${{ steps.paths.outputs.gate-outcome-path }}
 
 runs:
   using: composite
@@ -483,6 +490,9 @@ runs:
           esac
         fi
 
+        # Gate enforcement is deferred to the final "Enforce gate outcome"
+        # step so a failing gate cannot skip PR review posting; the binary
+        # itself therefore always runs with --fail-on-gate false here.
         "${{ steps.runner.outputs.bin }}" run \
           --config "$config_path" \
           --profile "${{ inputs.profile }}" \
@@ -494,6 +504,7 @@ runs:
           --mode "${{ inputs.mode }}" \
           --run-pass "${{ inputs['run-pass'] }}" \
           --model-mode "${{ inputs['model-mode'] }}" \
+          --fail-on-gate false \
           --depth "${{ inputs.depth }}" \
           --lanes "${{ inputs.lanes }}" \
           --except-lanes "${{ inputs['except-lanes'] }}" \
@@ -557,3 +568,59 @@ runs:
         echo "post-payload-path=${{ inputs.out }}/review/github-review-post-payload.json" >> "$GITHUB_OUTPUT"
         echo "post-stdout-path=${{ inputs.out }}/review/post-stdout.json" >> "$GITHUB_OUTPUT"
         echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
+        echo "gate-outcome-path=${{ inputs.out }}/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
+
+    - name: Enforce gate outcome
+      shell: bash
+      env:
+        UB_REVIEW_FAIL_ON_GATE: ${{ inputs['fail-on-gate'] }}
+        UB_REVIEW_MODE: ${{ inputs.mode }}
+        UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
+      run: |
+        set -euo pipefail
+
+        fail_on_gate="${UB_REVIEW_FAIL_ON_GATE:-auto}"
+        mode="${UB_REVIEW_MODE:-review-byok}"
+        gate_path="$UB_REVIEW_GATE_OUTCOME_PATH"
+
+        # Mirror the Rust FailOnGate::resolved semantics exactly:
+        # auto enforces the gate iff mode=intelligent-ci.
+        case "$fail_on_gate" in
+          true)
+            enforce=true
+            ;;
+          false)
+            enforce=false
+            ;;
+          auto)
+            if [[ "$mode" == "intelligent-ci" ]]; then
+              enforce=true
+            else
+              enforce=false
+            fi
+            ;;
+          *)
+            echo "::error::unknown fail-on-gate '$fail_on_gate'; expected auto, true, or false"
+            exit 1
+            ;;
+        esac
+
+        if [[ "$enforce" != "true" ]]; then
+          echo "gate enforcement is off (fail-on-gate=$fail_on_gate, mode=$mode); not enforcing $gate_path"
+          exit 0
+        fi
+
+        if [[ ! -f "$gate_path" ]]; then
+          echo "::error::gate enforcement is on but $gate_path is missing"
+          exit 1
+        fi
+
+        conclusion="$(jq -r '.conclusion // empty' "$gate_path")"
+        if [[ "$conclusion" != "fail" ]]; then
+          echo "gate conclusion is '${conclusion:-unknown}' in $gate_path; check stays green"
+          exit 0
+        fi
+
+        reasons="$(jq -r '[.reasons[]?.id] | join(", ")' "$gate_path")"
+        echo "::error::ub-review gate failed (blocking reasons: ${reasons:-none}); receipts are in $gate_path"
+        exit 1

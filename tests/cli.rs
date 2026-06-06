@@ -174,6 +174,7 @@ fn active_len_tracks_view_after_resize() {
         "review/cache_events.ndjson",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
+        "review/gate_outcome.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
         "review/tool-gate-outcomes.json",
@@ -608,6 +609,13 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(terminal_state, review["terminal_state"]);
     assert_eq!(terminal_state["schema"], "ub-review.terminal_state.v1");
     assert_eq!(terminal_state["status"], "artifact-only");
+    let gate_outcome: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert_eq!(gate_outcome["schema"], "ub-review.gate_outcome.v1");
+    assert_eq!(gate_outcome["conclusion"], "pass");
+    assert_eq!(gate_outcome["terminal_status"], terminal_state["status"]);
+    assert_eq!(gate_outcome["reasons"], serde_json::json!([]));
+    assert_eq!(gate_outcome["tool_gates"]["evaluated"], 0);
     let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
     assert!(shared_context.contains("- Changed languages: `rust`"));
     assert!(shared_context.contains("- Changed surfaces: `source, tests`"));

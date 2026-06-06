@@ -404,6 +404,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `ledger-path` | empty | Optional read-only UB ledger path. |
 | `ledger-max-bytes` | `65536` | Maximum ledger context bytes. |
 | `fail-on-post-error` | `false` | Fail the action when PR review posting fails. |
+| `fail-on-gate` | `auto` | Gate enforcement: `auto`, `true`, or `false`. The action's final `Enforce gate outcome` step fails the check when `review/gate_outcome.json` records a `fail` conclusion and enforcement resolves to `true`; artifacts, the job summary, and PR review posting always complete first. `auto` resolves to `true` for `mode=intelligent-ci` and `false` otherwise. |
 | `github-summary` | `true` | Append running summary to job summary. |
 
 ## Repo Config Proof Policy
@@ -444,6 +445,7 @@ required = true
 | `post-payload-path` | Exact grouped review payload submitted to GitHub. |
 | `post-stdout-path` | GitHub post response body artifact. |
 | `post-stderr-path` | GitHub post stderr artifact. |
+| `gate-outcome-path` | Deterministic gate verdict `review/gate_outcome.json`. |
 
 ## Bootstrap note
 
