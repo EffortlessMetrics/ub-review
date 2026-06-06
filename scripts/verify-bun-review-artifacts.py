@@ -3565,13 +3565,48 @@ def require_resolved_candidate_schema(record: dict) -> None:
             fail(f"resolved candidate {field} is not a string array: {record!r}")
 
 
+def follow_up_resolved_away_candidate_ids(resolved_candidates: list) -> list[str]:
+    """Candidate ids the follow-up pass resolved to refuted or dropped.
+
+    Mirrors the Rust `follow_up_resolved_away_candidate_ids` contract: only an
+    explicit `resolved` status with a `refuted` or `dropped` disposition loses
+    its review surface; `parked-follow-up` resolutions keep theirs.
+    """
+    return [
+        record.get("candidate_id")
+        for record in resolved_candidates
+        if isinstance(record, dict)
+        and record.get("resolved_status") == "resolved"
+        and record.get("resolved_disposition") in ("refuted", "dropped")
+    ]
+
+
+def candidate_matches_inline_comment(candidate: dict, comment: dict) -> bool:
+    return (
+        candidate.get("source") == "inline-comment"
+        and candidate.get("lane") == comment.get("lane")
+        and candidate.get("path") == comment.get("path")
+        and candidate.get("line") == comment.get("line")
+        and candidate.get("claim") == comment.get("body")
+    )
+
+
+def candidate_matches_summary_finding(candidate: dict, finding: dict) -> bool:
+    return (
+        candidate.get("source") == "summary-only-finding"
+        and candidate.get("lane") == finding.get("lane")
+        and candidate.get("claim") == finding.get("reason")
+        and candidate.get("evidence") == finding.get("evidence")
+    )
+
+
 def require_final_compiler_input(
     root: pathlib.Path, review: dict, follow_up_evidence: dict
 ) -> None:
     final_input = load_json(root / "review/final_compiler_input.json")
     if not isinstance(final_input, dict):
         fail("review/final_compiler_input.json is not an object")
-    if final_input.get("schema") != "ub-review.final_compiler_input.v1":
+    if final_input.get("schema") != "ub-review.final_compiler_input.v2":
         fail(f"final compiler input has wrong schema: {final_input!r}")
     if final_input.get("phase") != "final":
         fail(f"final compiler input phase expected final: {final_input!r}")
@@ -3581,6 +3616,7 @@ def require_final_compiler_input(
     for source in [
         "review/review.json",
         "review/follow_up_evidence.json",
+        "review/resolved_candidates.json",
         "review/proof_receipts.json",
         "review/receipt_routes.json",
         "review/final_orchestrator_plan.json",
@@ -3591,6 +3627,7 @@ def require_final_compiler_input(
         "model_lanes",
         "missing_or_failed_sensor_evidence",
         "missing_or_failed_model_evidence",
+        "follow_up_resolved_candidate_ids",
         "inline_comments",
         "summary_only_findings",
         "observations",
@@ -3602,18 +3639,58 @@ def require_final_compiler_input(
         "model_lanes",
         "missing_or_failed_sensor_evidence",
         "missing_or_failed_model_evidence",
-        "inline_comments",
         "proof_receipts",
     ]:
         if final_input.get(field) != review.get(field, []):
             fail(f"final compiler input {field} does not match review.json")
-    expected_summary = list(review.get("summary_only_findings", [])) + list(
-        follow_up_evidence.get("summary_only_findings", [])
-    )
+
+    # v2 contract: the final compiler input excludes review surfaces for
+    # candidates the follow-up pass resolved to refuted or dropped, and it
+    # must name exactly those candidate ids.
+    candidates = load_json(root / "review/candidates.json")
+    if not isinstance(candidates, list):
+        fail("review/candidates.json is not an array")
+    resolved_candidates = load_json(root / "review/resolved_candidates.json")
+    if not isinstance(resolved_candidates, list):
+        fail("review/resolved_candidates.json is not an array")
+    expected_resolved_away = follow_up_resolved_away_candidate_ids(resolved_candidates)
+    if final_input.get("follow_up_resolved_candidate_ids") != expected_resolved_away:
+        fail(
+            "final compiler input follow_up_resolved_candidate_ids does not "
+            "match resolved_candidates.json refuted/dropped resolutions"
+        )
+    resolved_away = [
+        candidate
+        for candidate in candidates
+        if isinstance(candidate, dict)
+        and candidate.get("id") in set(expected_resolved_away)
+    ]
+    expected_inline = [
+        comment
+        for comment in review.get("inline_comments", [])
+        if not any(
+            candidate_matches_inline_comment(candidate, comment)
+            for candidate in resolved_away
+        )
+    ]
+    if final_input.get("inline_comments") != expected_inline:
+        fail(
+            "final compiler input inline_comments does not match review.json "
+            "minus follow-up-resolved candidates"
+        )
+    expected_summary = [
+        finding
+        for finding in review.get("summary_only_findings", [])
+        if not any(
+            candidate_matches_summary_finding(candidate, finding)
+            for candidate in resolved_away
+        )
+    ] + list(follow_up_evidence.get("summary_only_findings", []))
     if final_input.get("summary_only_findings") != expected_summary:
         fail(
             "final compiler input summary_only_findings does not match "
-            "review.json plus follow_up_evidence"
+            "review.json minus follow-up-resolved candidates plus "
+            "follow_up_evidence"
         )
     expected_observations = list(review.get("observations", [])) + list(
         follow_up_evidence.get("observations", [])
@@ -5408,6 +5485,78 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
 
 
+def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
+    resolved = [
+        {
+            "candidate_id": "candidate-0000-refuted",
+            "resolved_status": "resolved",
+            "resolved_disposition": "refuted",
+        },
+        {
+            "candidate_id": "candidate-0001-parked",
+            "resolved_status": "resolved",
+            "resolved_disposition": "parked-follow-up",
+        },
+        {
+            "candidate_id": "candidate-0002-dropped",
+            "resolved_status": "resolved",
+            "resolved_disposition": "dropped",
+        },
+        {
+            "candidate_id": "candidate-0003-conflicting",
+            "resolved_status": "conflicting",
+            "resolved_disposition": "refuted",
+        },
+        {
+            "candidate_id": "candidate-0004-unchanged",
+            "resolved_status": "unchanged",
+            "resolved_disposition": "summary-only",
+        },
+    ]
+    resolved_away = follow_up_resolved_away_candidate_ids(resolved)
+    if resolved_away != ["candidate-0000-refuted", "candidate-0002-dropped"]:
+        fail(
+            "follow-up resolved-away filter drifted from the Rust contract: "
+            f"{resolved_away!r}"
+        )
+    candidate = {
+        "source": "summary-only-finding",
+        "lane": "tests-oracle",
+        "claim": "The new test may also pass on base.",
+        "evidence": "test sensor receipt",
+    }
+    finding = {
+        "lane": "tests-oracle",
+        "reason": "The new test may also pass on base.",
+        "evidence": "test sensor receipt",
+    }
+    if not candidate_matches_summary_finding(candidate, finding):
+        fail("summary candidate matcher rejected its own surface")
+    if candidate_matches_summary_finding(
+        candidate, dict(finding, reason="The new test proves the patch.")
+    ):
+        fail("summary candidate matcher matched a reworded finding")
+    inline_candidate = {
+        "source": "inline-comment",
+        "lane": "ub-active-view",
+        "path": "src/lib.rs",
+        "line": 7,
+        "claim": "[ub-active-view] The reborrow may alias the active view.",
+    }
+    inline_comment = {
+        "lane": "ub-active-view",
+        "path": "src/lib.rs",
+        "line": 7,
+        "body": "[ub-active-view] The reborrow may alias the active view.",
+    }
+    if not candidate_matches_inline_comment(inline_candidate, inline_comment):
+        fail("inline candidate matcher rejected its own surface")
+    if candidate_matches_inline_comment(
+        inline_candidate, dict(inline_comment, line=8)
+    ):
+        fail("inline candidate matcher matched a moved comment")
+
+
 def self_test_sanitize_artifact_name_matches_rust_contract() -> None:
     raw = "confirm-the-focused-proof-before-upstream-" * 12 + "terminal-proof-question"
     sanitized = sanitize_artifact_name(raw)
@@ -5999,6 +6148,7 @@ def run_self_tests() -> None:
     )
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
+    self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
         "tool status metadata mismatch",
