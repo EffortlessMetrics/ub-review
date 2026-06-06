@@ -65,8 +65,9 @@ not fail the gate.
 
 Exit-code contract: `ub-review run --mode intelligent-ci` exits non-zero when
 the gate conclusion is `fail`. The action exposes `fail-on-gate` (default
-`true` for `intelligent-ci`, `false` for `review-byok`) and a `gate-outcome`
-output path. Posting failures keep the separate `fail-on-post-error` input;
+`true` for `intelligent-ci`, `false` for `review-byok`) and a
+`gate-outcome-path` output path. Posting failures keep the separate
+`fail-on-post-error` input;
 posting trouble is not gate trouble.
 
 `gate_outcome.json` minimum fields:
