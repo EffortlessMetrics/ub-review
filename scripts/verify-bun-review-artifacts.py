@@ -17,10 +17,18 @@ from typing import Any, Callable
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
 RUN_MODE_VALUES = {"review-byok", "intelligent-ci"}
-RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
+RUN_PASS_VALUES = {
+    "opened",
+    "reopened",
+    "ready_for_review",
+    "synchronize",
+    "pull_request_other",
+    "manual",
+}
 SKIPPED_REVIEW_PAYLOAD_STATUSES = {
     "skipped_empty_smoke",
     "skipped_artifact_only_body",
+    "skipped_pass_policy",
 }
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"
@@ -228,61 +236,84 @@ def has_reviewer_value_heading(body: str) -> bool:
     )
 
 
-def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
+def require_pr_review_body_policy(
+    body: str, path: pathlib.Path, waive_suppressible: bool = False
+) -> None:
+    """Enforce the PR body contract.
+
+    `waive_suppressible` mirrors the Rust suppressor waiver: when the
+    effective `[review_body].summary_only_body` is a posting posture
+    (`post_substantive`/`post_all`), the run deliberately posted a body the
+    suppressor would have withheld, so the suppressible classes (conciseness,
+    boilerplate phrases and noise classifiers, refuted-only notes) are not
+    re-litigated here. The structural walls (status-section headings and
+    execution-summary labels, which rendered PR bodies never carry) stay in
+    force.
+    """
     lowered = body.lower()
-    body_bytes = len(body.strip().encode("utf-8"))
-    if body_bytes > MAX_PR_REVIEW_BODY_BYTES:
-        fail(
-            f"{path} is not concise enough: "
-            f"{body_bytes} bytes over max {MAX_PR_REVIEW_BODY_BYTES}"
-        )
-    bullet_count = pr_body_bullet_count(body)
-    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS:
-        fail(
-            f"{path} is not concise enough: "
-            f"{bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
-        )
-    if is_workflow_trust_posture_review_noise(lowered):
-        fail(f"{path} contains artifact-only workflow trust posture prose")
-    if is_refuted_only_pr_body(lowered):
-        fail(f"{path} contains refuted-only artifact note")
-    for phrase in [
-        "no blocking finding after",
-        "no blocking ub finding",
-        "no actionable findings",
-        "a human should still inspect",
-        "human should still review",
-        "residual risk remains for human review",
-        "bounded review",
-        "cached prior observation",
-        "refuter demoted inline candidate",
-        "gate proof is pending",
-        "cannot perform from cached context",
-        "commit-existence/ancestry proof",
-        "upstream commit-existence",
-        "general bot output",
-        "pr-body contract hardening",
-        "actionlint ran ok",
-        "pre-existing, not a diff target",
-        "identical to prior pin",
-        "no widened attack surface",
-        "standing-repo concern",
-        "lane transcript",
-        "lane roster",
-        "model lane roster",
-        "raw observations",
-        "provider preflight",
-        "provider status",
-        "sensor status",
-        "shared context hash",
-        "cache manifest",
-        "runtime profile",
-        "review payload status",
-        "terminal state",
-        "github-review-skip",
-    ]:
-        if phrase in lowered:
-            fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
+    if not waive_suppressible:
+        body_bytes = len(body.strip().encode("utf-8"))
+        if body_bytes > MAX_PR_REVIEW_BODY_BYTES:
+            fail(
+                f"{path} is not concise enough: "
+                f"{body_bytes} bytes over max {MAX_PR_REVIEW_BODY_BYTES}"
+            )
+        bullet_count = pr_body_bullet_count(body)
+        if bullet_count > MAX_PR_REVIEW_BODY_BULLETS:
+            fail(
+                f"{path} is not concise enough: "
+                f"{bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+            )
+        if is_workflow_trust_posture_review_noise(lowered):
+            fail(f"{path} contains artifact-only workflow trust posture prose")
+        if is_refuted_only_pr_body(lowered):
+            fail(f"{path} contains refuted-only artifact note")
+        for phrase in [
+            "no blocking finding after",
+            "no blocking ub finding",
+            "no actionable findings",
+            "a human should still inspect",
+            "human should still review",
+            "residual risk remains for human review",
+            "bounded review",
+            "cached prior observation",
+            "refuter demoted inline candidate",
+            "gate proof is pending",
+            "cannot perform from cached context",
+            "commit-existence/ancestry proof",
+            "upstream commit-existence",
+            "general bot output",
+            "pr-body contract hardening",
+            "actionlint ran ok",
+            "pre-existing, not a diff target",
+            "identical to prior pin",
+            "no widened attack surface",
+            "standing-repo concern",
+            "lane transcript",
+            "lane roster",
+            "model lane roster",
+            "raw observations",
+            "provider preflight",
+            "provider status",
+            "sensor status",
+            "shared context hash",
+            "cache manifest",
+            "runtime profile",
+            "review payload status",
+            "terminal state",
+            "github-review-skip",
+        ]:
+            if phrase in lowered:
+                fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
+        if "## Residual risk" in body:
+            fail(
+                f"{path} contains artifact-only status section: '## Residual risk'"
+            )
+        if is_unsupported_sibling_completeness_overclaim(body):
+            fail(
+                f"unsupported sibling completeness claim leaked into {path}; "
+                "report scan coverage as a verification question instead"
+            )
     for heading in [
         "## Model lanes",
         "## Model lane status",
@@ -294,7 +325,6 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
         "## Sensors",
         "## Sensor status",
         "## Sensor receipts",
-        "## Residual risk",
     ]:
         if heading in body:
             fail(f"{path} contains artifact-only status section: {heading!r}")
@@ -313,11 +343,32 @@ def require_pr_review_body_policy(body: str, path: pathlib.Path) -> None:
     ]:
         if label in body:
             fail(f"{path} contains execution summary boilerplate: {label!r}")
-    if is_unsupported_sibling_completeness_overclaim(body):
-        fail(
-            f"unsupported sibling completeness claim leaked into {path}; "
-            "report scan coverage as a verification question instead"
-        )
+
+
+SUMMARY_ONLY_BODY_VALUES = {"suppress", "post_substantive", "post_all"}
+
+
+def effective_summary_only_body(root: pathlib.Path) -> str:
+    """`[review_body].summary_only_body` from the run's effective-config.json.
+
+    Missing, unreadable, or unknown values fall back to the conservative
+    `suppress` posture (the Rust loader receipts unknown values as policy
+    errors and runs with the same default).
+    """
+    path = root / "effective-config.json"
+    if not path.is_file():
+        return "suppress"
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return "suppress"
+    if not isinstance(config, dict):
+        return "suppress"
+    review_body = config.get("review_body")
+    if not isinstance(review_body, dict):
+        return "suppress"
+    value = review_body.get("summary_only_body")
+    return value if value in SUMMARY_ONLY_BODY_VALUES else "suppress"
 
 
 def pr_body_bullet_count(body: str) -> int:
@@ -1214,7 +1265,11 @@ def require_review(
         if not isinstance(body, str) or not has_reviewer_value_heading(body):
             fail("github-review.json body is missing reviewer-value content")
         no_standalone_approval_line(body, github_review_path)
-        require_pr_review_body_policy(body, github_review_path)
+        require_pr_review_body_policy(
+            body,
+            github_review_path,
+            waive_suppressible=effective_summary_only_body(root) != "suppress",
+        )
         comments = github_review.get("comments")
         if not isinstance(comments, list):
             fail("github-review.json comments is not an array")
@@ -5688,6 +5743,56 @@ def run_self_tests() -> None:
             pathlib.Path("review/github-review.json"),
         ),
     )
+    summary_only_waived_body = (
+        "## Confirmed findings\n\n"
+        "- [opposition] Residual risk remains for human review in the resize path."
+    )
+    expect_self_test_failure(
+        "summary-only boilerplate body without waiver",
+        "artifact-only boilerplate",
+        lambda: require_pr_review_body_policy(
+            summary_only_waived_body, pathlib.Path("review/github-review.json")
+        ),
+    )
+    require_pr_review_body_policy(
+        summary_only_waived_body,
+        pathlib.Path("review/github-review.json"),
+        waive_suppressible=True,
+    )
+    expect_self_test_failure(
+        "summary-only waiver keeps status-section wall",
+        "artifact-only status section",
+        lambda: require_pr_review_body_policy(
+            "## Confirmed findings\n\n- A finding.\n\n## Sensor status\n\n- ok",
+            pathlib.Path("review/github-review.json"),
+            waive_suppressible=True,
+        ),
+    )
+    expect_self_test_failure(
+        "summary-only waiver keeps execution-summary wall",
+        "execution summary boilerplate",
+        lambda: require_pr_review_body_policy(
+            "## Confirmed findings\n\n- A finding.\n\nRuntime: `31s`",
+            pathlib.Path("review/github-review.json"),
+            waive_suppressible=True,
+        ),
+    )
+    with tempfile.TemporaryDirectory() as summary_only_tempdir:
+        summary_only_root = pathlib.Path(summary_only_tempdir)
+        if effective_summary_only_body(summary_only_root) != "suppress":
+            fail("self-test missing effective-config should default to suppress")
+        write_self_test_json(
+            summary_only_root / "effective-config.json",
+            {"review_body": {"summary_only_body": "post_substantive"}},
+        )
+        if effective_summary_only_body(summary_only_root) != "post_substantive":
+            fail("self-test post_substantive effective config was not honored")
+        write_self_test_json(
+            summary_only_root / "effective-config.json",
+            {"review_body": {"summary_only_body": "post-everything"}},
+        )
+        if effective_summary_only_body(summary_only_root) != "suppress":
+            fail("self-test unknown summary_only_body should fall back to suppress")
     expect_self_test_failure(
         "workflow tool-status gap prose",
         "workflow trust posture prose",

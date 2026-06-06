@@ -218,7 +218,9 @@ impl FailOnGate {
 pub(crate) enum RunPass {
     Auto,
     Opened,
+    Reopened,
     ReadyForReview,
+    Synchronize,
     PullRequestOther,
     Manual,
 }
@@ -228,9 +230,24 @@ impl RunPass {
         match self {
             Self::Auto => "auto",
             Self::Opened => "opened",
+            Self::Reopened => "reopened",
             Self::ReadyForReview => "ready_for_review",
+            Self::Synchronize => "synchronize",
             Self::PullRequestOther => "pull_request_other",
             Self::Manual => "manual",
+        }
+    }
+
+    /// The `pull_request` event action this pass corresponds to, matching the
+    /// `[gate].post_review_on` vocabulary. Catch-all and non-PR passes have no
+    /// single event action.
+    pub(crate) fn event_action(self) -> Option<&'static str> {
+        match self {
+            Self::Opened => Some("opened"),
+            Self::Reopened => Some("reopened"),
+            Self::ReadyForReview => Some("ready_for_review"),
+            Self::Synchronize => Some("synchronize"),
+            Self::Auto | Self::PullRequestOther | Self::Manual => None,
         }
     }
 }
@@ -239,11 +256,13 @@ pub(crate) fn parse_run_pass(value: &str) -> std::result::Result<RunPass, String
     match value.trim() {
         "auto" => Ok(RunPass::Auto),
         "opened" => Ok(RunPass::Opened),
+        "reopened" => Ok(RunPass::Reopened),
         "ready_for_review" | "ready-for-review" => Ok(RunPass::ReadyForReview),
+        "synchronize" => Ok(RunPass::Synchronize),
         "pull_request_other" | "pull-request-other" => Ok(RunPass::PullRequestOther),
         "manual" => Ok(RunPass::Manual),
         other => Err(format!(
-            "unsupported run pass `{other}`; expected auto, opened, ready_for_review, pull_request_other, or manual"
+            "unsupported run pass `{other}`; expected auto, opened, reopened, ready_for_review, synchronize, pull_request_other, or manual"
         )),
     }
 }

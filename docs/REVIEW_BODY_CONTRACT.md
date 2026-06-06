@@ -81,6 +81,22 @@ Artifact-only:
 No PR post.
 ```
 
+## Summary-Only Suppressor Policy
+
+When reviewer-value content survives compilation but the rendered PR body is
+classified as no-value boilerplate, `[review_body].summary_only_body` decides
+what happens:
+
+- `suppress` (consumer default): withhold the PR post; the skip receipt names
+  this policy value and the summary-only/substantive finding counts;
+- `post_substantive`: post when at least one summary-only finding is
+  substantive — severity medium+ or confidence medium-high+, excluding pure
+  lane-status notes;
+- `post_all`: post whenever any summary-only finding exists.
+
+Unknown values are policy parse errors and become receipted gate reasons. The
+structural walls (status tables, execution summaries) hold under every value.
+
 ## Banned In PR Commentary
 
 - no-finding boilerplate;

@@ -24,6 +24,12 @@ include_successful_lane_table = false
 include_provider_table = "on_failure"
 include_sensor_table = "on_failure"
 include_execution_summary = "none"
+# Dogfood posture: when the boilerplate suppressor would withhold the PR body,
+# post it anyway if at least one summary-only finding is substantive (severity
+# medium+ or confidence medium-high+, excluding pure lane-status notes). This
+# keeps review output visible for calibration without pure-noise bodies.
+# Consumer repos keep the conservative "suppress" default.
+summary_only_body = "post_substantive"
 
 # Self-gate proof stream: baseline CI commands are sensors so they run inside
 # ub-review/gate instead of as independent required PR jobs.

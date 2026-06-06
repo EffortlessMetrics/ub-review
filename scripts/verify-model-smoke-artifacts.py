@@ -13,7 +13,14 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
+RUN_PASS_VALUES = {
+    "opened",
+    "reopened",
+    "ready_for_review",
+    "synchronize",
+    "pull_request_other",
+    "manual",
+}
 
 
 def require_run_pass(value, label: str) -> str:
