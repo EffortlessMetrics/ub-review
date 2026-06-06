@@ -6105,9 +6105,11 @@ fn pass_policy_permits_review_post(
     }
     match run_pass.event_action() {
         Some(action) => post_review_on.iter().any(|allowed| allowed == action),
-        // `Auto` is resolved before compilation; treat a leak like `Manual`
-        // rather than silently dropping an explicitly requested review post.
-        None => matches!(run_pass, RunPass::Manual | RunPass::Auto),
+        // Only an explicit operator request (`manual`) bypasses the profile
+        // pass list. `Auto` must be resolved before compilation; if it leaks
+        // here, denying the post is the safe failure (gate inline finding on
+        // run 27053765285: an Auto leak would post on every profile).
+        None => matches!(run_pass, RunPass::Manual),
     }
 }
 
@@ -27920,6 +27922,14 @@ index 1111111..2222222 100644
             PostingMode::Review,
             super::RunPass::Manual,
             &two_pass
+        ));
+        // An unresolved `auto` leaking into compilation must DENY, not post:
+        // admitting it would post on every profile regardless of
+        // post_review_on (gate inline finding on run 27053765285).
+        assert!(!super::pass_policy_permits_review_post(
+            PostingMode::Review,
+            super::RunPass::Auto,
+            &every_pass
         ));
         // posting=artifact-only never posts, so payload preparation stays
         // unrestricted for every pass.
