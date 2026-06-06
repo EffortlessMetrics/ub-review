@@ -761,6 +761,26 @@ Acceptance:
 - a deliberately broken PR goes red with a receipted reason;
 - the audit-ci report for this repo justified the fold with receipts.
 
+Verified red/green gate evidence (PR #305):
+
+- break: a `[[lane]]` entry in `policy/ci-lanes.toml` omitted its required
+  `reason` field, failing the `policy-check` `[[proof.required]]` task;
+- red: run `27069200002` on head `1b1b708` concluded `failure`;
+  `review/gate_outcome.json` recorded `conclusion: fail` with exactly one
+  reason — kind `required-proof`, id `policy-check`, receipt
+  `review/proof_receipts.json#proof-build-58fe49dac211` — and the receipt's
+  stderr leaf `proof/proof-build-58fe49dac211/head/stderr.txt` names the
+  missing field (exit 1, 3.1s);
+- scoping: the TOML-only diff matched only `policy-check`
+  (`required_proof.matched: 1`); the Rust-scoped `cargo-check` and
+  `cargo-doc` proofs did not fire;
+- a real coverage sensor failure (exit code 101) on the red run stayed
+  advisory (`evidence_gaps_advisory: 1`) and did not flip the verdict; the
+  sensor recovered to `ok` on the green run without intervention;
+- green: run `27069711280` on the revert head `870e2e2` concluded `success`
+  with `gate_outcome.json` `conclusion: pass`, `required_proof.passed: 1`,
+  and zero evidence gaps.
+
 ### 27. rust-test-proof profile and multi-repo rollout
 
 A generic Rust profile (required proof: fmt/check/test/clippy; adaptive:
