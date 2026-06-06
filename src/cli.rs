@@ -29,6 +29,8 @@ pub(crate) enum Command {
     Summary(SummaryArgs),
     /// Submit a prepared GitHub pull request review.
     Post(PostArgs),
+    /// Write a read-only CI right-sizing report under `<out>/ci-audit/`.
+    AuditCi(AuditCiArgs),
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -559,4 +561,33 @@ pub(crate) struct PostArgs {
     /// Return a failing exit code when posting fails.
     #[arg(long)]
     pub(crate) fail_on_post_error: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct AuditCiArgs {
+    /// Repository root containing .github/workflows.
+    #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
+    pub(crate) root: PathBuf,
+    /// Output run directory. Artifacts land under `<out>/ci-audit/`.
+    #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
+    pub(crate) out: PathBuf,
+    /// owner/repo. Defaults to GITHUB_REPOSITORY, else the git origin remote.
+    #[arg(long, env = "GITHUB_REPOSITORY")]
+    pub(crate) repo: Option<String>,
+    /// GitHub token for read-only API calls. Tokenless runs degrade to inventory-only.
+    // Ambient GITHUB_TOKEN (not UB_REVIEW_GITHUB_TOKEN) is intentional here:
+    // audit-ci is the adoption wedge and must work with the token a runner or
+    // `gh` shell already exports, with zero ub-review-specific setup.
+    #[arg(long = "github-token", env = "GITHUB_TOKEN")]
+    pub(crate) github_token: Option<String>,
+    /// GitHub API base URL.
+    #[arg(
+        long = "github-api-url",
+        default_value = "https://api.github.com",
+        env = "UB_REVIEW_GITHUB_API_URL"
+    )]
+    pub(crate) github_api_url: String,
+    /// History window in days.
+    #[arg(long = "window-days", default_value_t = 90)]
+    pub(crate) window_days: u32,
 }
