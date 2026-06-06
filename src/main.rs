@@ -5753,7 +5753,7 @@ fn write_review_artifacts(
         &review.resource_leases,
     );
     write_observation_artifacts(out, &observations)?;
-    write_orchestrator_artifacts(out, &orchestrator_plan)?;
+    write_orchestrator_artifacts(out, &orchestrator_plan, &review.proof_receipts)?;
     finish_run_loop(
         event_log,
         run_started,
@@ -7975,7 +7975,11 @@ fn final_follow_up_task_resolved_by_tool_proof(task: &FollowUpQuestionTask) -> b
             .any(|evidence| evidence.kind == "proof-receipt" && evidence.status == "tool-confirmed")
 }
 
-fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> Result<()> {
+fn write_orchestrator_artifacts(
+    out: &Path,
+    plan: &OrchestratorPlanArtifact,
+    proof_receipts: &[ProofReceipt],
+) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     fs::write(
@@ -7989,7 +7993,7 @@ fn write_orchestrator_artifacts(out: &Path, plan: &OrchestratorPlanArtifact) -> 
         ndjson.push('\n');
     }
     fs::write(out.join("follow_up_questions.ndjson"), ndjson)?;
-    write_follow_up_question_packets(out, &plan.follow_up_tasks)?;
+    write_follow_up_question_packets(out, &plan.follow_up_tasks, proof_receipts)?;
     Ok(())
 }
 
@@ -8517,7 +8521,11 @@ fn write_follow_up_evidence_artifact(
     Ok(())
 }
 
-fn write_follow_up_question_packets(out: &Path, tasks: &[FollowUpQuestionTask]) -> Result<()> {
+fn write_follow_up_question_packets(
+    out: &Path,
+    tasks: &[FollowUpQuestionTask],
+    proof_receipts: &[ProofReceipt],
+) -> Result<()> {
     let follow_up_dir = out.join("questions").join("orchestrator-follow-up");
     if follow_up_dir.exists() {
         fs::remove_dir_all(&follow_up_dir)
@@ -8529,7 +8537,10 @@ fn write_follow_up_question_packets(out: &Path, tasks: &[FollowUpQuestionTask]) 
     fs::create_dir_all(&follow_up_dir)
         .with_context(|| format!("create {}", follow_up_dir.display()))?;
     for task in tasks {
-        let packet = follow_up_question_packet(task);
+        // Excerpts are resolved at packet-write time so the packet artifact
+        // records exactly the prompt the model later receives.
+        let excerpts = routed_receipt_excerpts_for_task(out, task, proof_receipts);
+        let packet = follow_up_question_packet(task, &excerpts);
         fs::write(
             follow_up_dir.join(format!("{}.json", sanitize_artifact_name(&task.id))),
             serde_json::to_vec_pretty(&packet)?,
@@ -8538,7 +8549,10 @@ fn write_follow_up_question_packets(out: &Path, tasks: &[FollowUpQuestionTask]) 
     Ok(())
 }
 
-fn follow_up_question_packet(task: &FollowUpQuestionTask) -> FollowUpQuestionPacket<'_> {
+fn follow_up_question_packet<'a>(
+    task: &'a FollowUpQuestionTask,
+    routed_excerpts: &BTreeMap<String, String>,
+) -> FollowUpQuestionPacket<'a> {
     FollowUpQuestionPacket {
         schema: "ub-review.follow_up_question_packet.v1",
         id: task.id.as_str(),
@@ -8554,11 +8568,14 @@ fn follow_up_question_packet(task: &FollowUpQuestionTask) -> FollowUpQuestionPac
         question: task.question.as_str(),
         status: task.status.as_str(),
         source_artifact: "review/orchestrator_plan.json",
-        prompt: render_follow_up_question_prompt(task),
+        prompt: render_follow_up_question_prompt(task, routed_excerpts),
     }
 }
 
-fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
+fn render_follow_up_question_prompt(
+    task: &FollowUpQuestionTask,
+    routed_excerpts: &BTreeMap<String, String>,
+) -> String {
     let mut prompt = String::new();
     prompt.push_str("Follow-up question task\n\n");
     prompt.push_str(&format!("- Task: `{}`\n", task.id));
@@ -8596,6 +8613,12 @@ fn render_follow_up_question_prompt(task: &FollowUpQuestionTask) -> String {
                 evidence.artifact,
                 evidence.reason
             ));
+            if let Some(excerpt) = routed_excerpts.get(&evidence.id) {
+                prompt.push_str(
+                    "  Receipt content (bounded command-output tails; full streams in the artifact):\n",
+                );
+                prompt.push_str(excerpt);
+            }
         }
         prompt.push('\n');
     }
@@ -8787,6 +8810,97 @@ fn routed_evidence_for_group(
         }
     }
     routed
+}
+
+/// Byte caps for routed receipt-content tails. The second model turn judges
+/// proof it was routed, so prompts carry bounded command-output tails instead
+/// of only artifact pointers (the runner owns the read; direct provider lanes
+/// cannot open files mid-call). stderr gets the larger budget: failure text
+/// lives there.
+const ROUTED_RECEIPT_STDERR_TAIL_BYTES: usize = 1200;
+const ROUTED_RECEIPT_STDOUT_TAIL_BYTES: usize = 600;
+
+/// Bounded content excerpt for a routed proof receipt, or `None` for
+/// non-receipt evidence kinds and unknown receipt ids. Each command
+/// contributes its status line plus lossy-decoded byte tails of stderr and
+/// stdout with explicit truncation markers, so follow-up packets stay
+/// bounded no matter how loud the proof command was.
+fn routed_proof_receipt_excerpt(
+    out: &Path,
+    evidence: &OrchestratorRoutedEvidence,
+    proof_receipts: &[ProofReceipt],
+) -> Option<String> {
+    if evidence.kind != "proof-receipt" {
+        return None;
+    }
+    let receipt = proof_receipts
+        .iter()
+        .find(|receipt| receipt.id == evidence.id)?;
+    let mut excerpt = String::new();
+    for command in &receipt.commands {
+        excerpt.push_str(&format!(
+            "  command `{}` side=`{}` status=`{}` exit={:?}\n",
+            command.command, command.side, command.status, command.exit_code
+        ));
+        for (label, relative, cap) in [
+            ("stderr", &command.stderr, ROUTED_RECEIPT_STDERR_TAIL_BYTES),
+            ("stdout", &command.stdout, ROUTED_RECEIPT_STDOUT_TAIL_BYTES),
+        ] {
+            if relative.is_empty() {
+                continue;
+            }
+            match fs::read(out.join(relative)) {
+                Ok(bytes) if bytes.is_empty() => {
+                    excerpt.push_str(&format!("    {label}: (empty)\n"));
+                }
+                Ok(bytes) => {
+                    let truncated = bytes.len() > cap;
+                    let mut start = bytes.len().saturating_sub(cap);
+                    // Trim forward to a UTF-8 boundary so a mid-character
+                    // byte cut cannot produce lossy-decode drift against the
+                    // verifier's Python mirror of this excerpt.
+                    while start < bytes.len() && (bytes[start] & 0xC0) == 0x80 {
+                        start += 1;
+                    }
+                    let tail = String::from_utf8_lossy(&bytes[start..]);
+                    if truncated {
+                        excerpt.push_str(&format!(
+                            "    {label} (last {cap} bytes of {total}):\n",
+                            total = bytes.len()
+                        ));
+                    } else {
+                        excerpt.push_str(&format!("    {label}:\n"));
+                    }
+                    for line in tail.lines() {
+                        excerpt.push_str("      ");
+                        excerpt.push_str(line);
+                        excerpt.push('\n');
+                    }
+                }
+                Err(_) => {
+                    // An unreadable stream is reported, never silently
+                    // dropped: the model should know the excerpt is partial.
+                    excerpt.push_str(&format!("    {label}: (unavailable at `{relative}`)\n"));
+                }
+            }
+        }
+    }
+    (!excerpt.is_empty()).then_some(excerpt)
+}
+
+/// Per-evidence-id excerpts for one follow-up task.
+fn routed_receipt_excerpts_for_task(
+    out: &Path,
+    task: &FollowUpQuestionTask,
+    proof_receipts: &[ProofReceipt],
+) -> BTreeMap<String, String> {
+    task.routed_evidence
+        .iter()
+        .filter_map(|evidence| {
+            routed_proof_receipt_excerpt(out, evidence, proof_receipts)
+                .map(|excerpt| (evidence.id.clone(), excerpt))
+        })
+        .collect()
 }
 
 fn proof_receipt_routes_to_lanes(receipt: &ProofReceipt, lanes: &[String]) -> bool {
@@ -33630,7 +33744,7 @@ index 1111111..2222222 100644
             status: "planned".to_owned(),
             reason: "test long follow-up artifact path".to_owned(),
         };
-        super::write_follow_up_question_packets(temp.path(), std::slice::from_ref(&task))?;
+        super::write_follow_up_question_packets(temp.path(), std::slice::from_ref(&task), &[])?;
         let packet_path = temp
             .path()
             .join(super::follow_up_packet_artifact_path(&task));
@@ -33641,6 +33755,108 @@ index 1111111..2222222 100644
             follow_up_model_lane_id(&task).len()
                 <= "orchestrator-follow-up-".len() + super::ARTIFACT_NAME_MAX_CHARS
         );
+        Ok(())
+    }
+
+    #[test]
+    fn follow_up_packet_prompt_carries_bounded_routed_receipt_content() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let proof_dir = temp
+            .path()
+            .join("proof")
+            .join("proof-build-abc")
+            .join("head");
+        fs::create_dir_all(&proof_dir)?;
+        // stderr larger than the tail cap proves bounding; stdout small and
+        // fully included.
+        let loud = "assertion failed: the focused proof exposed the gap\n".repeat(60);
+        fs::write(proof_dir.join("stderr.txt"), &loud)?;
+        fs::write(proof_dir.join("stdout.txt"), "running 1 test\n")?;
+
+        let mut receipt = test_red_green_proof_receipt("head_failed", "failed");
+        receipt.id = "proof-build-abc".to_owned();
+        receipt.commands = vec![ProofCommandReceipt {
+            side: "head".to_owned(),
+            command: "cargo test focused_case".to_owned(),
+            env: BTreeMap::new(),
+            status: "failed".to_owned(),
+            exit_code: Some(101),
+            timed_out: false,
+            timeout_sec: 60,
+            duration_ms: 1_200,
+            stdout: "proof/proof-build-abc/head/stdout.txt".to_owned(),
+            stderr: "proof/proof-build-abc/head/stderr.txt".to_owned(),
+            reason: "exit code Some(101)".to_owned(),
+        }];
+
+        let task = FollowUpQuestionTask {
+            schema: "ub-review.follow_up_question_task.v1".to_owned(),
+            id: "follow-up-receipt-content".to_owned(),
+            group_id: "group-receipt-content".to_owned(),
+            stage: "tertiary".to_owned(),
+            stage_reason: "routed evidence arrived".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            disposition: "summary-only".to_owned(),
+            candidate_ids: Vec::new(),
+            observation_group_ids: Vec::new(),
+            routed_evidence: vec![super::proof_receipt_routed_evidence(&receipt)],
+            question: "Does the failed focused proof confirm the concern?".to_owned(),
+            status: "planned".to_owned(),
+            reason: "test routed receipt content".to_owned(),
+        };
+        super::write_follow_up_question_packets(
+            temp.path(),
+            std::slice::from_ref(&task),
+            std::slice::from_ref(&receipt),
+        )?;
+        let packet_path = temp
+            .path()
+            .join(super::follow_up_packet_artifact_path(&task));
+        let packet: serde_json::Value = serde_json::from_slice(&fs::read(packet_path)?)?;
+        let prompt = packet["prompt"].as_str().unwrap_or_default();
+        assert!(
+            prompt.contains("Receipt content (bounded command-output tails"),
+            "prompt should carry the receipt content block: {prompt}"
+        );
+        assert!(
+            prompt.contains("assertion failed: the focused proof exposed the gap"),
+            "prompt should carry the stderr tail"
+        );
+        assert!(
+            prompt.contains(&format!(
+                "stderr (last {} bytes of {}):",
+                super::ROUTED_RECEIPT_STDERR_TAIL_BYTES,
+                loud.len()
+            )),
+            "oversized stderr must be explicitly truncated: {prompt}"
+        );
+        assert!(
+            prompt.contains("running 1 test"),
+            "prompt should carry the small stdout in full"
+        );
+        assert!(
+            prompt.contains(
+                "command `cargo test focused_case` side=`head` status=`failed` exit=Some(101)"
+            ),
+            "prompt should carry the command status line: {prompt}"
+        );
+
+        // A task with no matching receipt renders metadata only, no content
+        // block.
+        let mut bare = task.clone();
+        bare.id = "follow-up-no-content".to_owned();
+        bare.routed_evidence[0].id = "proof-unknown".to_owned();
+        super::write_follow_up_question_packets(
+            temp.path(),
+            std::slice::from_ref(&bare),
+            std::slice::from_ref(&receipt),
+        )?;
+        let bare_packet: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path()
+                .join(super::follow_up_packet_artifact_path(&bare)),
+        )?)?;
+        let bare_prompt = bare_packet["prompt"].as_str().unwrap_or_default();
+        assert!(!bare_prompt.contains("Receipt content"));
         Ok(())
     }
 
@@ -34004,7 +34220,7 @@ index 1111111..2222222 100644
             &proof_receipts,
             &resource_leases,
         );
-        write_orchestrator_artifacts(temp.path(), &plan)?;
+        write_orchestrator_artifacts(temp.path(), &plan, &proof_receipts)?;
 
         let aggregate: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path().join("review/orchestrator_plan.json"),
@@ -34485,7 +34701,7 @@ index 1111111..2222222 100644
         }];
         let observations = Vec::new();
         let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[]);
-        write_orchestrator_artifacts(temp.path(), &initial_plan)?;
+        write_orchestrator_artifacts(temp.path(), &initial_plan, &[])?;
         let mut late_receipt = test_red_green_proof_receipt("discriminating", "failed");
         late_receipt.id = "proof-follow-up-late".to_owned();
         late_receipt.requested_by = vec!["tests-oracle".to_owned()];
