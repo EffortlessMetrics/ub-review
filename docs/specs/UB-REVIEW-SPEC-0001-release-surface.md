@@ -158,7 +158,6 @@ What does success look like in ten minutes?
   evaluated on zero production runs — the sensor never produces
   `sensors/ripr/gate-decision.json` (#316). The threshold mechanism itself is
   tested; the ripr receipt chain is not yet real.
-- `gate-outcome-path` action output: named by the roadmap, not yet in code.
 - `setup-ci`: no command, no implementation; contract-first spec only.
 
 ## Spec index and authoring sequence
