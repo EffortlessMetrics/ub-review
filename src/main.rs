@@ -14090,7 +14090,13 @@ fn is_model_skipped_evidence_issue(receipt: &ModelLaneReceipt) -> bool {
     receipt.status == "skipped"
         && matches!(
             receipt.reason.as_str(),
+            // The wave-loop sweep writes the budget-only phrasing; the
+            // "or inline comment cap" variant is the legacy phrasing kept so
+            // older receipts still classify. Without the current string,
+            // budget-skipped lanes (including a starved fallback retry)
+            // silently vanished from missing model evidence.
             "model-mode off"
+                | "model call budget reached before lane execution"
                 | "model call budget or inline comment cap reached before lane execution"
                 | "model call budget exhausted before refuter pass"
         )
@@ -27518,6 +27524,132 @@ index 1111111..2222222 100644
             missing_or_failed_model_evidence.is_empty(),
             "a recovered lane is not a model evidence gap: {missing_or_failed_model_evidence:?}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn model_lane_queued_retry_starved_by_budget_is_skipped_not_leaked() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        // Exactly one call of budget: the primary attempt consumes it, the
+        // queued fallback retry can never run. The loop must terminate and
+        // the lane must end terminal (skipped/budget), never silently
+        // `planned`.
+        args.max_model_calls = 1;
+        args.model_concurrency = 2;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = vec![ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: Some(fallback),
+        }];
+        let preflights = vec![preflight_ok_receipt(&primary)];
+        let mut model_lanes = vec![model_lane_receipt("security", "planned")];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            |_context, _model_dir, tasks| {
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| ModelLaneTaskResult {
+                        index: task.index,
+                        result: Err(anyhow::anyhow!(
+                            "model curl: http status Some(429) too many requests"
+                        )),
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(
+            calls, 1,
+            "budget caps the retry; calls never exceed max_model_calls"
+        );
+        assert_eq!(
+            model_lanes[0].status, "skipped",
+            "a starved retry is terminal, not leaked as planned"
+        );
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn model_lane_retryable_failure_without_fallback_is_terminal() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 2;
+        let primary = direct_minimax_spec(&args);
+        let assignments = vec![ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: None,
+        }];
+        let preflights = vec![preflight_ok_receipt(&primary)];
+        let mut model_lanes = vec![model_lane_receipt("security", "planned")];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            |_context, _model_dir, tasks| {
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| ModelLaneTaskResult {
+                        index: task.index,
+                        result: Err(anyhow::anyhow!(
+                            "model curl: http status Some(429) too many requests"
+                        )),
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(calls, 1, "no fallback means no retry");
+        assert_eq!(model_lanes[0].status, "rate_limited");
+        assert_eq!(model_lanes[0].fallback_from, None);
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
         Ok(())
     }
 

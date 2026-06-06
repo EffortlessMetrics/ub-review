@@ -2877,10 +2877,28 @@ path = "src/lib.rs"
     );
     assert_eq!(ub_lane["http_status"], 200);
     assert_eq!(ub_lane["response_shape"], "openai");
+    // The degraded-but-contentful lane is not an evidence gap; the five
+    // lanes skipped by the one-call budget are, and must be recorded as
+    // missing model evidence rather than silently dropped.
+    let model_evidence = review["missing_or_failed_model_evidence"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("missing_or_failed_model_evidence missing"))?;
     assert!(
-        review["missing_or_failed_model_evidence"]
-            .as_array()
-            .is_some_and(|issues| issues.is_empty())
+        model_evidence
+            .iter()
+            .all(|issue| issue["lane"].as_str() != Some("ub")),
+        "the degraded ub lane must not be a model evidence gap: {model_evidence:?}"
+    );
+    assert_eq!(
+        model_evidence.len(),
+        5,
+        "budget-skipped lanes are missing model evidence: {model_evidence:?}"
+    );
+    assert!(
+        model_evidence.iter().all(|issue| issue["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("model call budget"))),
+        "every gap is the budget skip, not a failure: {model_evidence:?}"
     );
     assert!(
         review["observations"]
@@ -2911,7 +2929,9 @@ path = "src/lib.rs"
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
     assert_eq!(metrics["models"]["model_lane_status_counts"]["degraded"], 1);
     assert_eq!(metrics["models"]["model_lane_calls_attempted"], 1);
-    assert_eq!(metrics["missing_or_failed_model_evidence"], 0);
+    // Five lanes were budget-skipped by --max-model-calls 1; each is missing
+    // model evidence in the metrics, matching review.json above.
+    assert_eq!(metrics["missing_or_failed_model_evidence"], 5);
     assert!(!out.join("review/github-review.json").exists());
     assert!(out.join("review/github-review-skip.json").exists());
     let pr_body = fs::read_to_string(out.join("review/review.md"))?;
