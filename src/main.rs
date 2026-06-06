@@ -2004,6 +2004,10 @@ struct ModelRunContext<'a> {
     shared_context: &'a str,
     args: &'a RunArgs,
     line_map: &'a BTreeSet<(String, u32)>,
+    /// Provider API-key presence check. Production passes
+    /// `env_value_present`; tests inject a constant so lane scheduling and
+    /// runtime fallback can be exercised without mutating process env.
+    key_present: fn(&str) -> bool,
 }
 
 struct RefuterRunContext<'a> {
@@ -5544,6 +5548,7 @@ fn write_review_artifacts(
                     shared_context: &shared_context,
                     args,
                     line_map: &line_map,
+                    key_present: env_value_present,
                 },
                 &mut model_lanes,
                 &mut missing_or_failed_model_evidence,
@@ -14267,16 +14272,79 @@ fn run_available_model_lanes(
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
 ) -> Result<usize> {
+    run_available_model_lanes_with_runner(
+        context,
+        model_lanes,
+        missing_or_failed_model_evidence,
+        inline_comments,
+        summary_only_findings,
+        model_observations,
+        proof_requests,
+        run_model_lane_tasks,
+    )
+}
+
+/// Wave-loop core with an injectable task runner, mirroring the proof
+/// broker's `_with_runner` seam: production passes `run_model_lane_tasks`;
+/// tests inject deterministic results to exercise scheduling and the runtime
+/// fallback retry path without network or env mutation.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
+fn run_available_model_lanes_with_runner(
+    context: ModelRunContext<'_>,
+    model_lanes: &mut [ModelLaneReceipt],
+    missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+    model_observations: &mut Vec<Observation>,
+    proof_requests: &mut Vec<ProofRequest>,
+    runner: impl Fn(&ModelRunContext<'_>, &Path, Vec<ModelLaneTask>) -> Result<Vec<ModelLaneTaskResult>>,
+) -> Result<usize> {
     let model_dir = context.review_dir.join("model");
     fs::create_dir_all(&model_dir)?;
     let mut calls = 0usize;
     let mut next_assignment = 0usize;
+    // Runtime fallback retry state: a lane whose primary call failed with a
+    // retryable class (rate limit, timeout, server error) is queued here with
+    // its fallback spec forced, so the next wave re-runs it on the fallback
+    // instead of letting `selected_provider_spec` re-pick the degraded
+    // primary. One retry per lane; retries spend the same `max_model_calls`
+    // budget as first attempts.
+    let mut forced_specs: Vec<Option<ProviderSpec>> = vec![None; context.assignments.len()];
+    let mut retry_queue: Vec<usize> = Vec::new();
     loop {
-        if calls >= context.args.max_model_calls || next_assignment >= context.assignments.len() {
+        if calls >= context.args.max_model_calls
+            || (next_assignment >= context.assignments.len() && retry_queue.is_empty())
+        {
             break;
         }
 
         let mut wave = Vec::new();
+        // Drain fallback retries first: their primary failure is already
+        // known, so they are the wave's most valuable slots.
+        while wave.len() < context.args.model_concurrency
+            && calls + wave.len() < context.args.max_model_calls
+            && !retry_queue.is_empty()
+        {
+            let index = retry_queue.remove(0);
+            let assignment = &context.assignments[index];
+            let receipt = &mut model_lanes[index];
+            let Some(spec) = forced_specs[index].clone() else {
+                continue;
+            };
+            receipt.fallback_from = Some(assignment.spec.label());
+            receipt.provider = spec.provider.key().to_owned();
+            receipt.model = spec.model.clone();
+            receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
+            receipt.status = "running".to_owned();
+            wave.push(ModelLaneTask {
+                index,
+                lane: assignment.lane.clone(),
+                spec,
+            });
+        }
         while wave.len() < context.args.model_concurrency
             && calls + wave.len() < context.args.max_model_calls
             && next_assignment < context.assignments.len()
@@ -14308,7 +14376,7 @@ fn run_available_model_lanes(
             receipt.model = spec.model.clone();
             receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             let env_name = model_api_key_env(spec.provider);
-            if !env_value_present(env_name) {
+            if !(context.key_present)(env_name) {
                 let key_label = model_api_key_label(spec.provider);
                 receipt.status = "missing_key".to_owned();
                 receipt.reason = format!(
@@ -14331,7 +14399,7 @@ fn run_available_model_lanes(
         }
 
         calls += wave.len();
-        let mut results = run_model_lane_tasks(&context, &model_dir, wave)?;
+        let mut results = runner(&context, &model_dir, wave)?;
         results.sort_by_key(|result| result.index);
         for task_result in results {
             let receipt = &mut model_lanes[task_result.index];
@@ -14344,7 +14412,11 @@ fn run_available_model_lanes(
                             "contentful lane output was preserved as degraded evidence".to_owned();
                     } else {
                         receipt.status = "ok".to_owned();
-                        receipt.reason = "completed".to_owned();
+                        receipt.reason = if forced_specs[task_result.index].is_some() {
+                            "completed after runtime fallback retry".to_owned()
+                        } else {
+                            "completed".to_owned()
+                        };
                     }
                     receipt.duration_ms = Some(outcome.duration_ms);
                     receipt.http_status = outcome.http_status;
@@ -14364,10 +14436,35 @@ fn run_available_model_lanes(
                     );
                 }
                 Err(err) => {
-                    receipt.status = classify_model_error(&err);
-                    receipt.reason = format!("{err:#}");
-                    receipt.http_status = http_status_from_error(&err);
-                    missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+                    let status = classify_model_error(&err);
+                    let http_status = http_status_from_error(&err);
+                    let assignment = &context.assignments[task_result.index];
+                    if let Some(fallback) = runtime_fallback_retry_spec(
+                        assignment,
+                        receipt,
+                        forced_specs[task_result.index].is_some(),
+                        &status,
+                        http_status,
+                        context.key_present,
+                    ) {
+                        // Transient primary failure with an available
+                        // fallback: queue one retry instead of failing the
+                        // lane. The model-evidence issue is recorded only if
+                        // the retry itself fails or never gets budget.
+                        receipt.status = "planned".to_owned();
+                        receipt.reason = format!(
+                            "retrying on fallback {} after primary {status}: {err:#}",
+                            fallback.label()
+                        );
+                        receipt.http_status = http_status;
+                        forced_specs[task_result.index] = Some(fallback);
+                        retry_queue.push(task_result.index);
+                    } else {
+                        receipt.status = status;
+                        receipt.reason = format!("{err:#}");
+                        receipt.http_status = http_status;
+                        missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
+                    }
                 }
             }
         }
@@ -15258,6 +15355,39 @@ fn apply_proof_planner_model_output(
             proof_requests,
         },
     );
+}
+
+/// Decide whether a failed lane call earns one runtime fallback retry.
+///
+/// Preflight-time fallback (`selected_provider_spec`) covers a primary that
+/// is already down before the run; this covers the temporal gap after a
+/// passing preflight — concurrent lanes consume quota, so later lanes can be
+/// rate limited mid-run. Retryable classes are transient provider failures
+/// only: rate limiting, timeouts, and HTTP 5xx. Auth failures, parse
+/// failures, and bad envelopes are deterministic and never retried. A lane
+/// already running on its fallback (preflight fallback set `fallback_from`,
+/// or a prior runtime retry) is terminal: there is no second fallback.
+fn runtime_fallback_retry_spec(
+    assignment: &ModelAssignment,
+    receipt: &ModelLaneReceipt,
+    already_retried: bool,
+    status: &str,
+    http_status: Option<u16>,
+    key_present: fn(&str) -> bool,
+) -> Option<ProviderSpec> {
+    if already_retried || receipt.fallback_from.is_some() {
+        return None;
+    }
+    let retryable = matches!(status, "rate_limited" | "timed_out")
+        || (status == "failed" && http_status.is_some_and(|code| code >= 500));
+    if !retryable {
+        return None;
+    }
+    let fallback = assignment.fallback.as_ref()?;
+    if !key_present(model_api_key_env(fallback.provider)) {
+        return None;
+    }
+    Some(fallback.clone())
 }
 
 fn selected_provider_spec(
@@ -21732,29 +21862,29 @@ mod tests {
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
         FailOnGate, FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GateOutcomeInput,
         GitHubReview, GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
-        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
-        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
-        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
-        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
-        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
-        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
-        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
-        classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
-        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
+        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
+        ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
+        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
+        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
+        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
+        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
+        TerminalStateInput, ToolClass, ToolGateOutcomeEntry, ToolGateOutcomeMetrics,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_final_orchestrator_plan, build_gate_outcome,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_tokmd_sensor_commands, build_witness_records, builtin_profiles,
+        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_gate_check, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
         follow_up_output_record, follow_up_resolved_away_candidate_ids, github_review_skip_path,
         http_status_from_error, is_model_receipt_evidence_issue, make_observation, model_api_url,
@@ -21765,16 +21895,17 @@ mod tests {
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
         resolved_candidate_records, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_gate_failure_message,
-        run_refuter_pass, run_sensor, runtime_profile_from_toml, runtime_profile_override,
-        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
-        validate_failed_objection, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
+        run_available_model_lanes, run_available_model_lanes_with_runner, run_command_to_files,
+        run_gate_failure_message, run_refuter_pass, run_sensor, runtime_fallback_retry_spec,
+        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
+        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
+        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
+        write_candidate_artifacts, write_final_orchestrator_artifact,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
@@ -27138,6 +27269,7 @@ index 1111111..2222222 100644
                 shared_context: "shared context",
                 args: &args,
                 line_map: &line_map,
+                key_present: |_| true,
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -27164,6 +27296,290 @@ index 1111111..2222222 100644
             missing_or_failed_model_evidence
                 .iter()
                 .all(|issue| !issue.reason.contains("inline comment cap"))
+        );
+        Ok(())
+    }
+
+    fn empty_lane_output() -> LaneModelOutput {
+        LaneModelOutput {
+            summary: None,
+            inline_comments: Vec::new(),
+            candidate_findings: Vec::new(),
+            summary_only_findings: Vec::new(),
+            observations: Vec::new(),
+            failed_objections: Vec::new(),
+            proof_requests: Vec::new(),
+            degraded: false,
+        }
+    }
+
+    fn preflight_ok_receipt(spec: &super::ProviderSpec) -> super::ProviderPreflightReceipt {
+        super::ProviderPreflightReceipt {
+            provider: spec.provider.key().to_owned(),
+            model: spec.model.clone(),
+            endpoint_kind: spec.endpoint_kind.key().to_owned(),
+            status: "ok".to_owned(),
+            reason: "preflight ok".to_owned(),
+            duration_ms: Some(1),
+            http_status: Some(200),
+            response_shape: Some("anthropic-messages".to_owned()),
+            cache_usage: ModelCacheUsage::default(),
+        }
+    }
+
+    #[test]
+    fn runtime_fallback_retry_spec_only_retries_transient_primary_failures() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignment = ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: Some(fallback.clone()),
+        };
+        let receipt = model_lane_receipt("security", "running");
+        let key_present: fn(&str) -> bool = |_| true;
+        let key_absent: fn(&str) -> bool = |_| false;
+
+        // Transient classes retry on the fallback spec.
+        for (status, http) in [
+            ("rate_limited", Some(429)),
+            ("timed_out", None),
+            ("failed", Some(500)),
+            ("failed", Some(503)),
+        ] {
+            let spec = runtime_fallback_retry_spec(
+                &assignment,
+                &receipt,
+                false,
+                status,
+                http,
+                key_present,
+            );
+            assert_eq!(
+                spec.as_ref().map(|spec| spec.provider),
+                Some(ModelProvider::OpenCodeGo),
+                "{status} {http:?} should retry on the fallback"
+            );
+        }
+
+        // Deterministic failures never retry.
+        for (status, http) in [
+            ("auth_failed", Some(401)),
+            ("invalid_json", Some(200)),
+            ("bad_envelope", Some(200)),
+            ("failed", Some(404)),
+            ("failed", None),
+        ] {
+            assert!(
+                runtime_fallback_retry_spec(
+                    &assignment,
+                    &receipt,
+                    false,
+                    status,
+                    http,
+                    key_present
+                )
+                .is_none(),
+                "{status} {http:?} must not retry"
+            );
+        }
+
+        // One retry per lane; a lane already on its fallback is terminal.
+        assert!(
+            runtime_fallback_retry_spec(
+                &assignment,
+                &receipt,
+                true,
+                "rate_limited",
+                Some(429),
+                key_present
+            )
+            .is_none()
+        );
+        let mut fallback_receipt = model_lane_receipt("security", "running");
+        fallback_receipt.fallback_from = Some(primary.label());
+        assert!(
+            runtime_fallback_retry_spec(
+                &assignment,
+                &fallback_receipt,
+                false,
+                "rate_limited",
+                Some(429),
+                key_present
+            )
+            .is_none()
+        );
+
+        // No fallback key, or no fallback at all: terminal.
+        assert!(
+            runtime_fallback_retry_spec(
+                &assignment,
+                &receipt,
+                false,
+                "rate_limited",
+                Some(429),
+                key_absent
+            )
+            .is_none()
+        );
+        let no_fallback = ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary,
+            fallback: None,
+        };
+        assert!(
+            runtime_fallback_retry_spec(
+                &no_fallback,
+                &receipt,
+                false,
+                "rate_limited",
+                Some(429),
+                key_present
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn model_lane_rate_limited_primary_retries_once_on_fallback() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 2;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = vec![ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: Some(fallback.clone()),
+        }];
+        let preflights = vec![preflight_ok_receipt(&primary)];
+        let mut model_lanes = vec![model_lane_receipt("security", "planned")];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            |_context, _model_dir, tasks| {
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let result = match task.spec.provider {
+                            ModelProvider::MiniMaxDirect => Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            )),
+                            ModelProvider::OpenCodeGo => Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            }),
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(calls, 2, "primary attempt plus one fallback retry");
+        assert_eq!(model_lanes[0].status, "ok");
+        assert_eq!(
+            model_lanes[0].reason,
+            "completed after runtime fallback retry"
+        );
+        assert_eq!(model_lanes[0].provider, fallback.provider.key());
+        assert_eq!(model_lanes[0].fallback_from, Some(primary.label()));
+        assert!(
+            missing_or_failed_model_evidence.is_empty(),
+            "a recovered lane is not a model evidence gap: {missing_or_failed_model_evidence:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn model_lane_failed_fallback_retry_is_terminal() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 2;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = vec![ModelAssignment {
+            lane: lane_plan("security"),
+            spec: primary.clone(),
+            fallback: Some(fallback),
+        }];
+        let preflights = vec![preflight_ok_receipt(&primary)];
+        let mut model_lanes = vec![model_lane_receipt("security", "planned")];
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let line_map = BTreeSet::new();
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            |_context, _model_dir, tasks| {
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| ModelLaneTaskResult {
+                        index: task.index,
+                        result: Err(anyhow::anyhow!(
+                            "model curl: http status Some(429) too many requests"
+                        )),
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(calls, 2, "exactly one retry; the loop must terminate");
+        assert_eq!(model_lanes[0].status, "rate_limited");
+        assert_eq!(model_lanes[0].fallback_from, Some(primary.label()));
+        assert_eq!(
+            missing_or_failed_model_evidence.len(),
+            1,
+            "the terminal failure is recorded once as a model evidence gap"
         );
         Ok(())
     }
