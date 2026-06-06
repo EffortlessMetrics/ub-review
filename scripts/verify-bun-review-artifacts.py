@@ -5576,6 +5576,142 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
 
 
+def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
+    """Loop-closure pin for #314: a refuted candidate's surface reaching the
+    final compiler input must redden the verifier, end to end - not just the
+    Rust filter test and the Python matcher self-test separately."""
+    import tempfile
+
+    candidate = {
+        "schema": "ub-review.candidate.v1",
+        "id": "candidate-0000-refuted1234",
+        "lane": "tests-oracle",
+        "source": "summary-only-finding",
+        "status": "summary-only",
+        "disposition": "summary-only",
+        "severity": "medium",
+        "confidence": "medium",
+        "claim": "The new test may also pass on base.",
+        "evidence": "test sensor receipt",
+    }
+    refuted_finding = {
+        "lane": "tests-oracle",
+        "severity": "medium",
+        "confidence": "medium",
+        "reason": "The new test may also pass on base.",
+        "evidence": "test sensor receipt",
+    }
+    resolved = [
+        {
+            "candidate_id": candidate["id"],
+            "resolved_status": "resolved",
+            "resolved_disposition": "refuted",
+        }
+    ]
+    review = {
+        "model_lanes": [],
+        "missing_or_failed_sensor_evidence": [],
+        "missing_or_failed_model_evidence": [],
+        "inline_comments": [],
+        "summary_only_findings": [refuted_finding],
+        "observations": [],
+        "proof_receipts": [],
+    }
+    follow_up_evidence = {"summary_only_findings": [], "observations": []}
+
+    def final_input(overrides: dict) -> dict:
+        base = {
+            "schema": "ub-review.final_compiler_input.v2",
+            "phase": "final",
+            "source_artifacts": [
+                "review/review.json",
+                "review/follow_up_evidence.json",
+                "review/resolved_candidates.json",
+                "review/proof_receipts.json",
+                "review/receipt_routes.json",
+                "review/final_orchestrator_plan.json",
+            ],
+            "model_lanes": [],
+            "missing_or_failed_sensor_evidence": [],
+            "missing_or_failed_model_evidence": [],
+            "follow_up_resolved_candidate_ids": [candidate["id"]],
+            "inline_comments": [],
+            # Correct filtered value would be []: the only summary finding
+            # belongs to the refuted candidate.
+            "summary_only_findings": [],
+            "observations": [],
+            "proof_receipts": [],
+        }
+        base.update(overrides)
+        return base
+
+    cases = [
+        (
+            "leaked refuted summary surface",
+            {"summary_only_findings": [refuted_finding]},
+            "minus follow-up-resolved candidates",
+        ),
+        (
+            "leaked refuted inline surface",
+            {
+                "inline_comments": [
+                    {
+                        "lane": "tests-oracle",
+                        "path": "src/lib.rs",
+                        "line": 7,
+                        "body": "The new test may also pass on base.",
+                    }
+                ]
+            },
+            "inline_comments does not match review.json",
+        ),
+        (
+            "resolved-away ids drifted from resolved_candidates.json",
+            {"follow_up_resolved_candidate_ids": []},
+            "follow_up_resolved_candidate_ids does not",
+        ),
+    ]
+    for label, overrides, expected_message in cases:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            review_dir = root / "review"
+            review_dir.mkdir()
+            (review_dir / "candidates.json").write_text(
+                json.dumps([candidate]), encoding="utf-8"
+            )
+            (review_dir / "resolved_candidates.json").write_text(
+                json.dumps(resolved), encoding="utf-8"
+            )
+            (review_dir / "proof_receipts.json").write_text("[]", encoding="utf-8")
+            leak = final_input(overrides)
+            if label == "leaked refuted inline surface":
+                # An inline leak needs the review side to carry the inline
+                # comment too; the candidate that refutes it must match it.
+                review_inline = dict(review, inline_comments=leak["inline_comments"])
+                inline_candidate = dict(
+                    candidate,
+                    source="inline-comment",
+                    path="src/lib.rs",
+                    line=7,
+                )
+                (review_dir / "candidates.json").write_text(
+                    json.dumps([inline_candidate]), encoding="utf-8"
+                )
+                case_review = review_inline
+            else:
+                case_review = review
+            (review_dir / "final_compiler_input.json").write_text(
+                json.dumps(leak), encoding="utf-8"
+            )
+            expect_self_test_failure(
+                f"final-compiler-input {label}",
+                expected_message,
+                lambda root=root, case_review=case_review: require_final_compiler_input(
+                    root, case_review, follow_up_evidence
+                ),
+            )
+
+
 def self_test_routed_receipt_excerpt_matches_rust_contract() -> None:
     import tempfile
 
@@ -6294,6 +6430,7 @@ def run_self_tests() -> None:
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_routed_receipt_excerpt_matches_rust_contract()
+    self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
         "tool status metadata mismatch",

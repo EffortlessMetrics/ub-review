@@ -5689,6 +5689,15 @@ fn write_review_artifacts(
         "coordination",
         "preliminary",
     )?;
+    // Invariant (#314): candidates are built from the same inline-comment
+    // and summary-finding values the final compile later filters through
+    // `candidate_matches_inline_comment` / `candidate_matches_summary_finding`.
+    // No dedupe, trim, or other normalization may run between this point and
+    // that filter - the matchers compare exact fields, and a normalized
+    // surface would fail the match OPEN, letting a refuted candidate post.
+    // The verifier's negative self-test pins the closed loop from the other
+    // side: a leaked refuted surface in final_compiler_input.json reds the
+    // gate's verifier step.
     let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
     write_candidate_artifacts(out, &candidates)?;
     let candidates = read_candidate_records(out)?;
