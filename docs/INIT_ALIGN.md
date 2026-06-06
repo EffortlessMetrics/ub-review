@@ -127,6 +127,42 @@ The careful de-bloat analysis exists to produce exactly these two lists from a
 bloated CI: collapse a pile of parallel required checks into ONE tight required
 floor plus a structured suggested catalog the LLM draws from.
 
+### 4. Beyond the catalog: LLM-devised PR-specific checks
+
+The suggested list is a starting catalog, not a ceiling. From the PR diff and
+repo context the LLM can also devise checks nobody pre-listed: a diff that
+touches a parser can trigger a targeted fuzz of that parser; an FFI seam can
+trigger that boundary's test; a config change can trigger its validation. So the
+runtime fill is required (always) + suggested-catalog picks + LLM-devised
+PR-specific checks — all advisory, all inside the same time budget.
+
+This is the most powerful part of the model and the part that most needs rails:
+the LLM is now choosing commands to run, influenced by PR-controlled diff
+content, on a runner that may hold org secrets. A hostile or prompt-injected
+diff could steer a devised command toward exfiltration (`curl ... | sh`, dumping
+`$SECRETS`). The capability is only safe behind a hard execution boundary:
+
+- **No secrets in the devised-execution environment.** Devised checks run in a
+  sandbox with no access to provider keys or tokens; the secret-bearing posting
+  step is a separate context. Compromising a devised command must not reach a
+  secret.
+- **Read-only analysis allowlist.** Only vetted command families (grep, build,
+  test, lint, scan) — never network egress, writes outside scratch, or arbitrary
+  exec. The diff influences *which* allowlisted check runs, never an open shell.
+- **Provenance and logging.** Every devised check is marked LLM-devised +
+  diff-influenced (untrusted input) and logged with what ran and why, so the set
+  of executed commands is auditable, never a coin flip.
+- **Advisory and budget-bounded.** Devised checks never block the merge and count
+  against the target/cap like any other fill.
+- **Fork PRs already skip the advisory layer** (no secrets); the sandbox and
+  allowlist are still required for trusted same-repo PRs, because the live risk
+  is injection inside an otherwise-legitimate diff.
+
+Same risk class as unsafe-review's `confirm --allow-heavy` provenance work
+([unsafe-review-swarm #1514](https://github.com/EffortlessMetrics/unsafe-review-swarm/issues/1514)),
+at a larger surface: the power is diff-tailored checking; the discipline is
+sandbox + allowlist + provenance + advisory-only.
+
 ### Budget-bounded fills: target and cap
 
 The suggested-fill selection is time-budgeted and configurable per repo. Two
