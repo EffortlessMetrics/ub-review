@@ -1,7 +1,8 @@
-# ub-review self-dogfood profile.
-# One required GitHub check runs these proof-stream receipts under
-# ub-review/gate; the standalone CI and coverage workflows are folded into it,
-# so the gate is the only PR check.
+# Repo gate policy for EffortlessMetrics/ub-review (self-dogfood).
+# This root config is the explicit contract the gate enforces: one required
+# GitHub check (ub-review/gate) runs these proof-stream receipts; the
+# standalone CI and coverage workflows are folded into it. Moved from
+# profiles/ub-review-self.toml so repo policy lives where consumers put it.
 
 review_profile = "ub-review-self"
 profile = "gh-runner-full"
@@ -230,11 +231,12 @@ enabled = true
 required_check = "ub-review/gate"
 target_minutes = 30
 hard_timeout_minutes = 60
-# Dogfood posture: this repo posts the grouped review on every PR pass so
-# review bodies and inline comments stay visible for calibration. Consumer
-# repos keep the two-pass default (see configs/ub-review.example.toml).
-post_review_on = ["opened", "reopened", "ready_for_review", "synchronize"]
-synchronize_mode = "review"
+# Review posting is reserved for the passes where a reviewer first looks at
+# the PR; synchronize and reopened passes still run the full gate (every head
+# SHA gets a verdict) but stay gate-only so push storms do not become an
+# inbox tax. Diagnostics for quiet passes live in artifacts.
+post_review_on = ["opened", "ready_for_review"]
+synchronize_mode = "gate-only"
 
 [providers]
 policy = "primary-with-fallback"

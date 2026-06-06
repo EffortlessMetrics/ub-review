@@ -773,7 +773,7 @@ impl Config {
 /// Top-level keys `Config` deserializes. Unknown top-level keys are stripped
 /// and recorded as `PolicyError` receipts so a misspelled section (for
 /// example `[gatee]` or `[prooof]`) can never silently de-fang repo policy.
-/// `providers` is reserved: `profiles/ub-review-self.toml` documents the
+/// `providers` is reserved: `.ub-review.toml` documents the
 /// roadmap provider-policy surface there while provider selection still comes
 /// from CLI flags, so it is tolerated without a receipt.
 const KNOWN_TOP_LEVEL_KEYS: &[&str] = &[
