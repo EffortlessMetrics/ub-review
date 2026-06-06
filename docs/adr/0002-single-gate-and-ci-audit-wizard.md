@@ -97,42 +97,52 @@ bug in the gate, not a finding.
 ### 2. CI audit wizard
 
 A new read-only subcommand, `ub-review audit-ci`, and a later PR-emitting
-wizard mode build the adoption path. The deterministic/judgment split follows
-repo doctrine:
+wizard mode build the adoption path. The framing is **right-sizing**, not
+downgrading: less fixed CI, more useful proof. The deterministic/judgment
+split follows repo doctrine:
 
 ```text
 inventory  (deterministic): parse .github/workflows/*.yml — jobs, triggers,
-            matrices, timeouts, secrets; read branch protection for which
-            checks are actually required
-evidence   (deterministic): GitHub run history — per-job duration percentiles,
-            PR failure rate, flake rate (fail→rerun→pass), failure correlation
-            (did this job ever fail independently?), runner-minutes/month
-judgment   (bounded model lane, optional): classify each job into a tier
-output     (audit-ci): one report artifact, no mutation
-output     (wizard):   one PR with .ub-review.toml + workflow edits + the
-            branch-protection change spelled out, every recommendation citing
-            its receipt
+            matrices, timeouts, permissions, secrets; read branch
+            protection/rulesets for which checks are actually required
+history    (deterministic): GitHub run history — duration percentiles,
+            failure/cancellation/flake rates, rerun→pass patterns,
+            runner-minutes/month, and the independent merge-decision signal
+            (did this job ever fail when all cheaper jobs passed?)
+judgment   (bounded model lane, optional): classify jobs into tiers over the
+            deterministic receipts only — the model must not invent facts
+audit-ci   read-only report artifacts, no mutation of any repo file
+setup-ci   one migration PR (or --print-pr): .ub-review.toml + minimal
+            workflow edits + the exact branch-protection change spelled out,
+            every recommendation citing its receipt
 ```
 
 Recommendation tiers:
 
 ```text
-keep-required    cheap, deterministic, high-signal (fmt/check/clippy/focused tests)
-adaptive         expensive, diff-class-dependent — routed through the proof
-                 planner and [[proof.required]] / required_if triggers
-label-gated      heavy witnesses (Miri, ASAN, mutation) — risk packs
-flag-for-human   security-relevant jobs (CodeQL, secret scanning, provenance)
-                 are never auto-downgraded, only annotated
+keep-required                cheap, deterministic, high-signal, foundational
+move-to-ub-review-required   still runs every PR, but inside ub-review/gate
+                             as [[proof.required]]
+adaptive                     run when diff class / paths warrant it
+label-gated                  heavy witnesses (Miri, ASAN, mutation) — risk packs
+nightly-release              valuable but not per-PR
+advisory                     useful signal, never branch-protection material
+flag-for-human               security, secrets, compliance, signing, deploy,
+                             provenance, or unclear ownership — never
+                             auto-right-sized
 ```
 
 Survivorship rule: "this job caught nothing in 90 days" is not sufficient
-evidence to downgrade. The report must state both what a job is positioned to
+evidence to right-size. The report must state both what a job is positioned to
 catch (from its triggers and paths) and what it has caught (from history). The
 judgment lane weighs both; conservative defaults; the maintainer reviews the PR.
 
-The wizard PR cannot change branch protection (admin API, not repo files); it
-carries the exact required-checks change in its body, or a follow-up step
-applies it with explicit permission.
+The migration PR cannot change branch protection (admin API, not repo files);
+it carries the exact required-checks change in
+`docs/ci/branch-protection-change.md` and the PR body. A later
+`setup-ci --apply-branch-protection` may apply it with an explicitly granted
+admin token — a separate explicit command, never a default. Full artifact and
+PR contracts: [../CI_AUDIT_WIZARD.md](../CI_AUDIT_WIZARD.md).
 
 ### 3. Out-of-the-box posture
 
@@ -152,7 +162,7 @@ Model lanes are additive judgment, never load-bearing for the verdict.
    EffortlessMetrics/ub-review; ci.yml jobs fold into the gate
 5. generic rust-test-proof profile; roll out to the owner's other
    Rust repos (tokmd, ripr, unsafe-review, cargo-allow lanes)
-6. wizard PR mode, calibrated on the receipts from steps 3-5
+6. setup-ci migration PR mode, calibrated on the receipts from steps 3-5
 ```
 
 Each step is one review-fast PR with verifier coverage for any new artifact

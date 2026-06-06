@@ -736,14 +736,17 @@ Acceptance:
 
 ### 25. audit-ci read-only report
 
-`ub-review audit-ci`: workflow inventory, run-history evidence, tiered
+`ub-review audit-ci`: workflow inventory, run/check history, cost and
+correlation receipts (independent merge-decision signal), tiered right-sizing
 recommendations per the contract doc. First run target: this repository.
 
 Acceptance:
 
-- inventory/evidence/recommendations/report artifacts match their schemas;
+- inventory/history/costs/correlation/recommendations/report artifacts match
+  their schemas;
 - no mutation of any repo file;
 - tokenless runs degrade to inventory-only with explicit evidence gaps;
+- the model lane classifies over deterministic receipts only;
 - security-relevant jobs are always `flag-for-human`.
 
 ### 26. Dogfood: single required check on this repo
@@ -770,17 +773,22 @@ Acceptance:
 - `model-mode: off` is a fully supported tier with a useful gate;
 - each onboarded repo keeps one required check only.
 
-### 28. Wizard PR mode
+### 28. setup-ci migration PR mode
 
-The LLM-backed setup wizard: read the repo's existing workflows and run
-history, emit one recommendation PR per the wizard PR contract.
+`ub-review setup-ci` (and `--print-pr`): read the audit-ci receipts, emit one
+migration PR per the contract — `.ub-review.toml`, minimal workflow edits,
+`docs/ci/branch-protection-change.md` with the exact required-checks change.
+Branch protection is never mutated by the PR; a later explicit
+`setup-ci --apply-branch-protection` may apply it with an admin token.
 
 Acceptance:
 
 - every recommendation cites an evidence receipt;
-- security jobs are never auto-downgraded;
+- security jobs are never auto-right-sized;
 - the PR passes the repo's pre-existing CI before any branch-protection change;
-- the rollback section is complete.
+- the rollback section is complete;
+- no broad workflow rewrites — minimal edits implementing accepted
+  recommendations only.
 
 ## Later profiles
 
