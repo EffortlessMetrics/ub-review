@@ -42,7 +42,13 @@ fn main() -> Result<()> {
         Command::Doctor(args) => cmd_doctor(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
-        Command::Run(args) => cmd_run(*args),
+        Command::Run(args) => {
+            let completion = cmd_run(*args)?;
+            if let Some(message) = run_gate_failure_message(&completion) {
+                bail!("{message}");
+            }
+            Ok(())
+        }
         Command::Summary(args) => cmd_summary(args),
         Command::Post(args) => cmd_post(args),
     }
@@ -378,6 +384,41 @@ struct ReviewTerminalState {
     final_follow_up_tasks: usize,
     inline_comments: usize,
     summary_only_findings: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GateOutcome {
+    schema: String,
+    conclusion: String,
+    terminal_status: String,
+    reasons: Vec<GateReason>,
+    required_proof: GateRequiredProofCounts,
+    tool_gates: GateToolGateCounts,
+    evidence_gaps_blocking: usize,
+    evidence_gaps_advisory: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GateReason {
+    kind: String,
+    id: String,
+    detail: String,
+    receipt: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+struct GateRequiredProofCounts {
+    matched: usize,
+    passed: usize,
+    failed: usize,
+    skipped: usize,
+}
+
+#[derive(Clone, Copy, Debug, Default, Serialize)]
+struct GateToolGateCounts {
+    evaluated: usize,
+    passed: usize,
+    failed: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2402,7 +2443,26 @@ fn cmd_plan(args: PlanArgs) -> Result<()> {
     Ok(())
 }
 
-fn cmd_run(args: RunArgs) -> Result<()> {
+/// Result of a completed `run` invocation. All artifacts are written before
+/// this value is returned; `main` turns it into the process exit decision so a
+/// failing gate can never truncate artifacts.
+struct RunCompletion {
+    gate_conclusion: String,
+    fail_on_gate: bool,
+    run_dir: PathBuf,
+}
+
+fn run_gate_failure_message(completion: &RunCompletion) -> Option<String> {
+    if !completion.fail_on_gate || completion.gate_conclusion != "fail" {
+        return None;
+    }
+    Some(format!(
+        "gate conclusion is `fail`; receipts are in review/gate_outcome.json under {}",
+        completion.run_dir.display()
+    ))
+}
+
+fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
     let run_pass = resolved_run_pass(args.run_pass);
@@ -2467,7 +2527,7 @@ fn cmd_run(args: RunArgs) -> Result<()> {
         args.review.out.join("running-summary.md"),
         &preliminary_summary,
     )?;
-    write_review_artifacts(
+    let gate_outcome = write_review_artifacts(
         &args.review.root,
         &args.review.out,
         &config,
@@ -2492,7 +2552,11 @@ fn cmd_run(args: RunArgs) -> Result<()> {
     )?;
     println!("wrote {}", args.review.out.display());
     println!("open {}/running-summary.md", args.review.out.display());
-    Ok(())
+    Ok(RunCompletion {
+        gate_conclusion: gate_outcome.conclusion,
+        fail_on_gate: args.fail_on_gate.resolved(args.mode),
+        run_dir: args.review.out,
+    })
 }
 
 fn normalize_run_args(mut args: RunArgs) -> Result<RunArgs> {
@@ -4080,10 +4144,19 @@ fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
     tool.required && trigger_match(tool.default, &diff.flags).is_some()
 }
 
+/// Repo-native cargo-allow ledger that wins over cargo-allow's default
+/// config discovery (`policy/allow.toml`, `.cargo/allow.toml`, `allow.toml`).
+const CARGO_ALLOW_NATIVE_LEDGER: &str = "policy/cargo-allow.toml";
+
 fn cargo_allow_policy_config_exists(root: &Path) -> bool {
-    ["policy/allow.toml", "cargo-allow.toml", ".cargo-allow.toml"]
-        .iter()
-        .any(|path| root.join(path).is_file())
+    [
+        CARGO_ALLOW_NATIVE_LEDGER,
+        "policy/allow.toml",
+        ".cargo/allow.toml",
+        "allow.toml",
+    ]
+    .iter()
+    .any(|path| root.join(path).is_file())
 }
 
 fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
@@ -4578,18 +4651,33 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--base".to_owned(),
             plan.base.clone(),
         ],
-        "cargo-allow" => vec![
-            "cargo-allow".to_owned(),
-            "check".to_owned(),
-            "--mode".to_owned(),
-            "no-new".to_owned(),
-            "--format".to_owned(),
-            "markdown".to_owned(),
-            "--receipt".to_owned(),
-            dir.join("cargo-allow.receipt.json").display().to_string(),
-            "--output".to_owned(),
-            dir.join("cargo-allow.md").display().to_string(),
-        ],
+        "cargo-allow" => {
+            let mut argv = vec!["cargo-allow".to_owned(), "check".to_owned()];
+            // Prefer the repo's native cargo-allow ledger over cargo-allow's
+            // default discovery. `policy/allow.toml` can be an xtask-owned
+            // repo-policy ledger in a different dialect that squats
+            // cargo-allow's default search path, which makes `check` fail on
+            // an unsupported schema instead of reading a genuine ledger.
+            // https://github.com/EffortlessMetrics/cargo-allow/issues/1465
+            //
+            // No `--mode` is passed: cargo-allow defaults to the
+            // policy-configured source-tree gate mode, so the repo ledger
+            // decides whether the check is enforcing or audit-stage.
+            let explicit_config = root.join(CARGO_ALLOW_NATIVE_LEDGER);
+            if explicit_config.is_file() {
+                argv.push("--config".to_owned());
+                argv.push(explicit_config.display().to_string());
+            }
+            argv.extend([
+                "--format".to_owned(),
+                "markdown".to_owned(),
+                "--receipt".to_owned(),
+                dir.join("cargo-allow.receipt.json").display().to_string(),
+                "--output".to_owned(),
+                dir.join("cargo-allow.md").display().to_string(),
+            ]);
+            argv
+        }
         "cargo-fmt" => vec![
             "cargo".to_owned(),
             "fmt".to_owned(),
@@ -5217,7 +5305,7 @@ fn write_review_artifacts(
     run_started: &Instant,
     run_loop_tracker: &mut RunLoopTracker,
     elapsed: Duration,
-) -> Result<()> {
+) -> Result<GateOutcome> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
     let pr_thread_context = collect_pr_thread_context(root, args)?;
@@ -5728,6 +5816,29 @@ fn write_review_artifacts(
         review_dir.join("terminal_state.json"),
         serde_json::to_vec_pretty(&review.terminal_state)?,
     )?;
+    let gate_outcome = build_gate_outcome(GateOutcomeInput {
+        args,
+        plan,
+        terminal_state: &review.terminal_state,
+        proof_requests: &review.proof_requests,
+        proof_receipts: &review.proof_receipts,
+        missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
+        missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
+    });
+    fs::write(
+        review_dir.join("gate_outcome.json"),
+        serde_json::to_vec_pretty(&gate_outcome)?,
+    )?;
+    event_log.append(
+        "gate_outcome",
+        serde_json::json!({
+            "conclusion": gate_outcome.conclusion,
+            "terminal_status": gate_outcome.terminal_status,
+            "reasons": gate_outcome.reasons.len(),
+            "fail_on_gate": args.fail_on_gate.key(),
+            "fail_on_gate_resolved": args.fail_on_gate.resolved(args.mode),
+        }),
+    )?;
     fs::write(
         review_dir.join("provider-preflight-status.json"),
         serde_json::to_vec_pretty(&review.provider_preflights)?,
@@ -5741,7 +5852,7 @@ fn write_review_artifacts(
             build_github_review_skip_receipt(args, &review),
         )?;
     }
-    Ok(())
+    Ok(gate_outcome)
 }
 
 fn should_prepare_github_review_payload(
@@ -6195,12 +6306,179 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
     }
 }
 
+/// Shared predicate for gate blocking and terminal-state routing: a sensor
+/// evidence issue is blocking material only when the plan marks that sensor as
+/// required. Keeping one helper prevents the two call sites from drifting.
+fn sensor_issue_is_required(plan: &Plan, issue: &SensorEvidenceIssue) -> bool {
+    plan.sensors
+        .iter()
+        .any(|sensor| sensor.id == issue.sensor && sensor.required)
+}
+
 fn has_required_sensor_evidence_gap(plan: &Plan, issues: &[SensorEvidenceIssue]) -> bool {
-    issues.iter().any(|issue| {
-        plan.sensors
-            .iter()
-            .any(|sensor| sensor.id == issue.sensor && sensor.required)
-    })
+    issues
+        .iter()
+        .any(|issue| sensor_issue_is_required(plan, issue))
+}
+
+const GATE_OUTCOME_SCHEMA: &str = "ub-review.gate_outcome.v1";
+const REQUIRED_PROOF_POLICY_LANE: &str = "intelligent-ci-policy";
+
+struct GateOutcomeInput<'a> {
+    args: &'a RunArgs,
+    plan: &'a Plan,
+    terminal_state: &'a ReviewTerminalState,
+    proof_requests: &'a [ProofRequest],
+    proof_receipts: &'a [ProofReceipt],
+    missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
+    missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum RequiredProofClass {
+    Passed,
+    Failed,
+    Skipped,
+}
+
+/// Derive the deterministic gate verdict from the terminal state, required
+/// [[proof.required]] receipts, and required-sensor evidence gaps. Model output
+/// never feeds this verdict directly: only policy-configured required proof
+/// requests count, never model-flagged ones, and every fail reason points at an
+/// existing receipt artifact.
+fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
+    let mut reasons = Vec::new();
+    let mut required_proof = GateRequiredProofCounts::default();
+    for request in input
+        .proof_requests
+        .iter()
+        .filter(|request| proof_request_is_gate_required(request))
+    {
+        required_proof.matched += 1;
+        let receipt = input.proof_receipts.iter().find(|receipt| {
+            receipt
+                .request_ids
+                .iter()
+                .any(|request_id| request_id == &request.id)
+        });
+        let Some(receipt) = receipt else {
+            required_proof.skipped += 1;
+            continue;
+        };
+        match required_proof_receipt_class(receipt) {
+            RequiredProofClass::Passed => required_proof.passed += 1,
+            RequiredProofClass::Skipped => required_proof.skipped += 1,
+            RequiredProofClass::Failed => {
+                // One reason per failed required request, keyed by its policy
+                // identifier, so `required_proof.failed` and the blocking
+                // reasons always count the same per-request way.
+                required_proof.failed += 1;
+                reasons.push(GateReason {
+                    kind: "required-proof".to_owned(),
+                    id: required_proof_reason_id(request),
+                    detail: required_proof_failure_detail(receipt),
+                    receipt: format!("review/proof_receipts.json#{}", receipt.id),
+                });
+            }
+        }
+    }
+
+    let enforce_required_sensors = matches!(input.args.mode, RunMode::IntelligentCi);
+    let mut evidence_gaps_blocking = 0;
+    let mut evidence_gaps_advisory = input.missing_or_failed_model_evidence.len();
+    for issue in input.missing_or_failed_sensor_evidence {
+        if enforce_required_sensors && sensor_issue_is_required(input.plan, issue) {
+            evidence_gaps_blocking += 1;
+            reasons.push(GateReason {
+                kind: "required-sensor".to_owned(),
+                id: issue.sensor.clone(),
+                detail: format!(
+                    "required sensor evidence gap (status `{}`): {}",
+                    issue.status, issue.reason
+                ),
+                receipt: required_sensor_gap_receipt(issue),
+            });
+        } else {
+            evidence_gaps_advisory += 1;
+        }
+    }
+
+    // The gate fails if and only if deterministic blocking reasons exist.
+    // A `failed-to-review` terminal status without blocking reasons is the
+    // model-availability case (missing provider keys or a provider outage);
+    // per ADR 0002 that degrades the review but never fails the gate, and the
+    // gap stays visible through `evidence_gaps_advisory`. Genuine internal
+    // failures abort the run with a non-zero exit through `anyhow` before
+    // gate construction, so they never reach this point.
+    let conclusion = if reasons.is_empty() { "pass" } else { "fail" };
+
+    GateOutcome {
+        schema: GATE_OUTCOME_SCHEMA.to_owned(),
+        conclusion: conclusion.to_owned(),
+        terminal_status: input.terminal_state.status.clone(),
+        reasons,
+        required_proof,
+        // Placeholder until repo-configured gate policy lands (roadmap #24).
+        tool_gates: GateToolGateCounts::default(),
+        evidence_gaps_blocking,
+        evidence_gaps_advisory,
+    }
+}
+
+/// Only policy-configured [[proof.required]] requests count toward the gate.
+/// Model lanes can also mark proof requests as required, but model output must
+/// never feed the gate verdict directly.
+fn proof_request_is_gate_required(request: &ProofRequest) -> bool {
+    request.required && request.lane == REQUIRED_PROOF_POLICY_LANE
+}
+
+fn required_proof_receipt_class(receipt: &ProofReceipt) -> RequiredProofClass {
+    match receipt.result.as_str() {
+        "head_passed" | "discriminating" => RequiredProofClass::Passed,
+        "head_failed" | "timed_out" => RequiredProofClass::Failed,
+        // Missing receipts, `skipped_budget`, `skipped_profile`,
+        // `non_discriminating`, and `base_patch_failed` stay non-blocking for
+        // now: a dry run must not redden the gate. The full evidence-gap
+        // policy is roadmap #24.
+        _ => RequiredProofClass::Skipped,
+    }
+}
+
+/// Blocking reasons are keyed by the policy/request identifier (for example
+/// `cargo-check`), so a red check names the failed requirement rather than an
+/// internal request id.
+fn required_proof_reason_id(request: &ProofRequest) -> String {
+    request
+        .requested_by
+        .iter()
+        .find_map(|requester| requester.strip_prefix("proof-policy:"))
+        .map(str::to_owned)
+        .unwrap_or_else(|| request.id.clone())
+}
+
+fn required_proof_failure_detail(receipt: &ProofReceipt) -> String {
+    let detail = receipt
+        .commands
+        .iter()
+        .find(|command| command.side == "head")
+        .or_else(|| receipt.commands.first())
+        .map(|command| format!("`{}` {}", command.command, proof_command_status(command)))
+        .unwrap_or_else(|| receipt.reason.clone());
+    if receipt.result == "timed_out" && !detail.contains("timed") {
+        format!("{detail} (proof timed out)")
+    } else {
+        detail
+    }
+}
+
+/// A `receipt-absent` issue means the sensor never wrote its status receipt,
+/// so the reason points at the terminal state instead of a nonexistent file.
+fn required_sensor_gap_receipt(issue: &SensorEvidenceIssue) -> String {
+    if issue.status == "receipt-absent" {
+        "review/terminal_state.json".to_owned()
+    } else {
+        format!("sensors/{}/ub-review-sensor-status.json", issue.sensor)
+    }
 }
 
 fn model_lane_is_usable_for_terminal_state(receipt: &ModelLaneReceipt) -> bool {
@@ -15507,8 +15785,8 @@ fn configured_required_proof_requests(
             let index = start_index + offset;
             let policy_label = proof_policy_requester(policy, offset);
             build_proof_request(
-                "intelligent-ci-policy",
-                vec!["intelligent-ci-policy".to_owned(), policy_label],
+                REQUIRED_PROOF_POLICY_LANE,
+                vec![REQUIRED_PROOF_POLICY_LANE.to_owned(), policy_label],
                 &policy.command,
                 &policy.reason,
                 "configured proof policy missing reason",
@@ -18670,6 +18948,20 @@ fn render_review_efficiency_section(text: &mut String, out: &Path) {
         "- Loop detail: model `{model_wall}`, local proof `{proof_wall}`, compiler `{compiler_wall}`\n"
     ));
     text.push_str(&format!("- Terminal state: `{terminal_state}`\n"));
+    if let Some(gate) = read_gate_outcome(out) {
+        let conclusion = gate
+            .get("conclusion")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("unknown");
+        let blocking_reasons = gate
+            .get("reasons")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len)
+            .unwrap_or(0);
+        text.push_str(&format!(
+            "- Gate: `{conclusion}` with `{blocking_reasons}` blocking reasons (`review/gate_outcome.json`)\n"
+        ));
+    }
     text.push_str(&format!(
         "- Model lanes: `{usable_lanes}/{total_lanes}` usable (`{ok_lanes}` ok, `{degraded_lanes}` degraded)\n"
     ));
@@ -18712,6 +19004,11 @@ fn format_json_status_counts(counts: &serde_json::Map<String, serde_json::Value>
 
 fn read_review_metrics(out: &Path) -> Option<serde_json::Value> {
     let text = fs::read_to_string(out.join("review/metrics.json")).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+fn read_gate_outcome(out: &Path) -> Option<serde_json::Value> {
+    let text = fs::read_to_string(out.join("review/gate_outcome.json")).ok()?;
     serde_json::from_str(&text).ok()
 }
 
@@ -19237,22 +19534,23 @@ mod tests {
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
-        FollowUpOutputRecord, FollowUpQuestionTask, GitHubReview, GitHubReviewComment,
-        LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCandidateComment,
-        ModelCandidateFinding, ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection,
-        ModelLaneReceipt, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
-        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS,
-        STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue, SensorPlan,
-        SensorStatusWrite, SummaryOnlyFinding, TerminalStateInput, ToolClass,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_final_orchestrator_plan, build_orchestrator_plan,
+        FollowUpOutputRecord, FollowUpQuestionTask, GateOutcomeInput, GitHubReview,
+        GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
+        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
+        ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
+        ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode, PrDecisionContext,
+        PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt, ProofReceipt,
+        ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
+        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
+        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
         build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
         build_witness_records, builtin_profiles, cap_review_body, classify_diff,
         classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
@@ -19269,16 +19567,16 @@ mod tests {
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
         resolved_candidate_records, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_command_to_files, run_refuter_pass, run_sensor,
-        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_final_orchestrator_artifact,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        run_available_model_lanes, run_command_to_files, run_gate_failure_message,
+        run_refuter_pass, run_sensor, runtime_profile_from_toml, runtime_profile_override,
+        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
@@ -20193,8 +20491,6 @@ mod tests {
             vec![
                 "cargo-allow".to_owned(),
                 "check".to_owned(),
-                "--mode".to_owned(),
-                "no-new".to_owned(),
                 "--format".to_owned(),
                 "markdown".to_owned(),
                 "--receipt".to_owned(),
@@ -20210,6 +20506,48 @@ mod tests {
                 "stderr.txt".to_owned(),
                 "cargo-allow.md".to_owned(),
                 "cargo-allow.receipt.json".to_owned(),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cargo_allow_sensor_command_pins_native_ledger_when_present() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        fs::create_dir_all(root.join("policy"))?;
+        // A repo-policy ledger in a foreign dialect squatting cargo-allow's
+        // default discovery path must not be what the sensor reads.
+        fs::write(root.join("policy/allow.toml"), "schema_version = \"1\"\n")?;
+        fs::write(
+            root.join(super::CARGO_ALLOW_NATIVE_LEDGER),
+            "schema_version = \"0.1\"\npolicy = \"cargo-allow\"\n",
+        )?;
+        let out = root.join("out");
+        let plan = test_plan(vec![sensor_plan("cargo-allow", "cargo-allow", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("cargo-allow sensor missing"))?;
+        let dir = out.join("sensors/cargo-allow");
+        let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "cargo-allow".to_owned(),
+                "check".to_owned(),
+                "--config".to_owned(),
+                root.join(super::CARGO_ALLOW_NATIVE_LEDGER)
+                    .display()
+                    .to_string(),
+                "--format".to_owned(),
+                "markdown".to_owned(),
+                "--receipt".to_owned(),
+                dir.join("cargo-allow.receipt.json").display().to_string(),
+                "--output".to_owned(),
+                dir.join("cargo-allow.md").display().to_string(),
             ]
         );
         Ok(())
@@ -26423,6 +26761,527 @@ UB_REVIEW_HTTP_STATUS:429
         assert!(state.reviewer_value_present);
     }
 
+    fn required_policy_proof_request(id: &str) -> ProofRequest {
+        ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: id.to_owned(),
+            lane: "intelligent-ci-policy".to_owned(),
+            requested_by: vec![
+                "intelligent-ci-policy".to_owned(),
+                "proof-policy:cargo-check".to_owned(),
+            ],
+            command: "cargo check --workspace --locked".to_owned(),
+            reason: "Required Rust workspace check for intelligent CI.".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 300,
+            required: true,
+            status: "requested".to_owned(),
+        }
+    }
+
+    #[test]
+    fn gate_outcome_maps_terminal_states_deterministically() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        // Without deterministic blocking reasons every terminal status passes,
+        // including `failed-to-review` (the model-availability case).
+        for status in [
+            "sufficient",
+            "artifact-only",
+            "needs-reviewer-attention",
+            "failed-to-review",
+        ] {
+            let terminal_state = test_terminal_state(status);
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+            });
+
+            assert_eq!(gate.schema, "ub-review.gate_outcome.v1");
+            assert_eq!(gate.conclusion, "pass", "terminal status {status}");
+            assert_eq!(gate.terminal_status, status);
+            assert_eq!(gate.tool_gates.evaluated, 0);
+            assert!(gate.reasons.is_empty(), "terminal status {status}");
+        }
+    }
+
+    #[test]
+    fn gate_outcome_passes_on_model_unavailability() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut terminal_state = test_terminal_state("failed-to-review");
+        terminal_state.usable_model_lanes = 0;
+        terminal_state.model_lanes = 0;
+        terminal_state.proof_receipts = 0;
+        let model_issues = vec![ModelEvidenceIssue {
+            lane: "tests-oracle".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "missing_key".to_owned(),
+            reason: "no provider key configured".to_owned(),
+        }];
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &model_issues,
+        });
+
+        assert_eq!(gate.conclusion, "pass");
+        assert_eq!(gate.terminal_status, "failed-to-review");
+        assert!(gate.reasons.is_empty());
+        assert_eq!(gate.evidence_gaps_blocking, 0);
+        assert_eq!(gate.evidence_gaps_advisory, 1);
+    }
+
+    #[test]
+    fn gate_outcome_fails_on_required_proof_failure_with_receipt() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let request = required_policy_proof_request("proof-0000-cargocheck");
+        let mut receipt = test_proof_receipt("head_failed", "failed");
+        receipt.request_ids = vec![request.id.clone()];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&receipt),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.required_proof.matched, 1);
+        assert_eq!(gate.required_proof.failed, 1);
+        assert_eq!(gate.required_proof.passed, 0);
+        assert_eq!(gate.required_proof.skipped, 0);
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "required-proof");
+        assert_eq!(gate.reasons[0].id, "cargo-check");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            format!("review/proof_receipts.json#{}", receipt.id)
+        );
+        assert!(!gate.reasons[0].detail.is_empty());
+    }
+
+    #[test]
+    fn gate_outcome_fails_on_required_proof_timeout_with_receipt() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let request = required_policy_proof_request("proof-0000-cargocheck");
+        let mut receipt = test_proof_receipt("timed_out", "timed_out");
+        receipt.request_ids = vec![request.id.clone()];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&receipt),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.required_proof.matched, 1);
+        assert_eq!(gate.required_proof.failed, 1);
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "required-proof");
+        assert_eq!(gate.reasons[0].id, "cargo-check");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            format!("review/proof_receipts.json#{}", receipt.id)
+        );
+        assert!(
+            gate.reasons[0].detail.contains("timed"),
+            "timeout detail: {}",
+            gate.reasons[0].detail
+        );
+    }
+
+    #[test]
+    fn gate_outcome_emits_one_reason_per_failed_required_request() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let check_request = required_policy_proof_request("proof-0000-cargocheck");
+        let mut clippy_request = required_policy_proof_request("proof-0001-cargoclippy");
+        clippy_request.requested_by = vec![
+            "intelligent-ci-policy".to_owned(),
+            "proof-policy:cargo-clippy".to_owned(),
+        ];
+        let mut receipt = test_proof_receipt("head_failed", "failed");
+        receipt.request_ids = vec![check_request.id.clone(), clippy_request.id.clone()];
+        let requests = vec![check_request, clippy_request];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &requests,
+            proof_receipts: std::slice::from_ref(&receipt),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.required_proof.matched, 2);
+        assert_eq!(gate.required_proof.failed, 2);
+        assert_eq!(gate.reasons.len(), gate.required_proof.failed);
+        let ids = gate
+            .reasons
+            .iter()
+            .map(|reason| reason.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(ids, ["cargo-check", "cargo-clippy"]);
+        for reason in &gate.reasons {
+            assert_eq!(
+                reason.receipt,
+                format!("review/proof_receipts.json#{}", receipt.id)
+            );
+        }
+    }
+
+    #[test]
+    fn gate_outcome_counts_passed_and_skipped_required_proof_without_failing() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let passed_request = required_policy_proof_request("proof-0000-passed");
+        let budget_request = required_policy_proof_request("proof-0001-budget");
+        let unproven_request = required_policy_proof_request("proof-0002-unproven");
+        let mut passed_receipt = test_proof_receipt("head_passed", "passed");
+        passed_receipt.id = "proof-receipt-passed".to_owned();
+        passed_receipt.request_ids = vec![passed_request.id.clone()];
+        let mut budget_receipt = test_proof_receipt("skipped_budget", "skipped");
+        budget_receipt.id = "proof-receipt-budget".to_owned();
+        budget_receipt.request_ids = vec![budget_request.id.clone()];
+        let requests = vec![passed_request, budget_request, unproven_request];
+        let receipts = vec![passed_receipt, budget_receipt];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &requests,
+            proof_receipts: &receipts,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "pass");
+        assert_eq!(gate.required_proof.matched, 3);
+        assert_eq!(gate.required_proof.passed, 1);
+        assert_eq!(gate.required_proof.failed, 0);
+        assert_eq!(gate.required_proof.skipped, 2);
+        assert!(gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn gate_outcome_ignores_model_flagged_required_proof() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut request = required_policy_proof_request("proof-0000-model");
+        request.lane = "tests-oracle".to_owned();
+        request.requested_by = vec!["tests-oracle".to_owned()];
+        let mut receipt = test_proof_receipt("head_failed", "failed");
+        receipt.request_ids = vec![request.id.clone()];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&receipt),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "pass");
+        assert_eq!(gate.required_proof.matched, 0);
+        assert!(gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn gate_outcome_fails_on_required_sensor_gap_with_receipt() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        let plan = test_plan(vec![required_actionlint]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "actionlint".to_owned(),
+            status: "skipped".to_owned(),
+            reason: "disabled by config".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("failed-to-review");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.evidence_gaps_blocking, 1);
+        assert_eq!(gate.evidence_gaps_advisory, 0);
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "required-sensor");
+        assert_eq!(gate.reasons[0].id, "actionlint");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "sensors/actionlint/ub-review-sensor-status.json"
+        );
+
+        args.mode = RunMode::ReviewByok;
+        let terminal_state = test_terminal_state("sufficient");
+        let review_byok_gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(review_byok_gate.conclusion, "pass");
+        assert_eq!(review_byok_gate.evidence_gaps_blocking, 0);
+        assert_eq!(review_byok_gate.evidence_gaps_advisory, 1);
+        assert!(review_byok_gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn gate_outcome_points_receipt_absent_sensor_gap_at_terminal_state() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        let plan = test_plan(vec![required_actionlint]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "actionlint".to_owned(),
+            status: "receipt-absent".to_owned(),
+            reason: "sensor wrote no status receipt".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("failed-to-review");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "required-sensor");
+        assert_eq!(gate.reasons[0].id, "actionlint");
+        assert_eq!(gate.reasons[0].receipt, "review/terminal_state.json");
+    }
+
+    #[test]
+    fn gate_outcome_keeps_missing_model_evidence_advisory() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(vec![sensor_plan("ripr", "ripr", true)]);
+        let sensor_issues = vec![SensorEvidenceIssue {
+            sensor: "ripr".to_owned(),
+            status: "missing".to_owned(),
+            reason: "command not found".to_owned(),
+        }];
+        let model_issues = vec![ModelEvidenceIssue {
+            lane: "tests-oracle".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "missing_key".to_owned(),
+            reason: "no provider key configured".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &sensor_issues,
+            missing_or_failed_model_evidence: &model_issues,
+        });
+
+        assert_eq!(gate.conclusion, "pass");
+        assert_eq!(gate.evidence_gaps_blocking, 0);
+        assert_eq!(gate.evidence_gaps_advisory, 2);
+        assert!(gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn gate_outcome_fail_reasons_always_carry_receipts() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
+        required_actionlint.required = true;
+        let plan = test_plan(vec![required_actionlint]);
+        let request = required_policy_proof_request("proof-0000-cargocheck");
+        let mut receipt = test_proof_receipt("head_failed", "failed");
+        receipt.request_ids = vec![request.id.clone()];
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "actionlint".to_owned(),
+            status: "failed".to_owned(),
+            reason: "exit 1".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("failed-to-review");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&receipt),
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.reasons.len(), 2);
+        for reason in &gate.reasons {
+            assert!(!reason.receipt.trim().is_empty(), "reason {}", reason.id);
+        }
+        assert!(
+            gate.reasons.iter().all(|reason| reason.kind != "internal"),
+            "specific reasons must replace the internal fallback"
+        );
+    }
+
+    #[test]
+    fn fail_on_gate_resolves_auto_by_mode() {
+        assert_eq!(super::FailOnGate::Auto.key(), "auto");
+        assert_eq!(super::FailOnGate::True.key(), "true");
+        assert_eq!(super::FailOnGate::False.key(), "false");
+        assert!(super::FailOnGate::Auto.resolved(RunMode::IntelligentCi));
+        assert!(!super::FailOnGate::Auto.resolved(RunMode::ReviewByok));
+        assert!(super::FailOnGate::True.resolved(RunMode::ReviewByok));
+        assert!(super::FailOnGate::True.resolved(RunMode::IntelligentCi));
+        assert!(!super::FailOnGate::False.resolved(RunMode::IntelligentCi));
+        assert!(!super::FailOnGate::False.resolved(RunMode::ReviewByok));
+        assert_eq!(
+            <super::FailOnGate as clap::ValueEnum>::from_str("auto", true),
+            Ok(super::FailOnGate::Auto)
+        );
+        assert_eq!(
+            <super::FailOnGate as clap::ValueEnum>::from_str("true", true),
+            Ok(super::FailOnGate::True)
+        );
+        assert_eq!(
+            <super::FailOnGate as clap::ValueEnum>::from_str("false", true),
+            Ok(super::FailOnGate::False)
+        );
+    }
+
+    #[test]
+    fn run_gate_failure_message_names_gate_outcome_artifact() {
+        let failing = RunCompletion {
+            gate_conclusion: "fail".to_owned(),
+            fail_on_gate: true,
+            run_dir: Path::new("target/ub-review").to_path_buf(),
+        };
+        let message = run_gate_failure_message(&failing);
+        assert!(
+            message
+                .as_deref()
+                .is_some_and(|message| message.contains("review/gate_outcome.json"))
+        );
+
+        let tolerated = RunCompletion {
+            gate_conclusion: "fail".to_owned(),
+            fail_on_gate: false,
+            run_dir: Path::new("target/ub-review").to_path_buf(),
+        };
+        assert!(run_gate_failure_message(&tolerated).is_none());
+
+        let passing = RunCompletion {
+            gate_conclusion: "pass".to_owned(),
+            fail_on_gate: true,
+            run_dir: Path::new("target/ub-review").to_path_buf(),
+        };
+        assert!(run_gate_failure_message(&passing).is_none());
+    }
+
+    #[test]
+    fn write_review_artifacts_records_gate_outcome_before_run_exit_decision() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let config = Config::default();
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let mut args = test_run_args(out.clone());
+        args.model_mode = ModelMode::Off;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let run_started = Instant::now();
+        let mut run_loop_tracker = super::RunLoopTracker::new();
+
+        let gate_outcome = write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &test_box_state(),
+            &plan,
+            "running summary",
+            &args,
+            &event_log,
+            &run_started,
+            &mut run_loop_tracker,
+            std::time::Duration::from_secs(5),
+        )?;
+
+        let written: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+        assert_eq!(written["schema"], "ub-review.gate_outcome.v1");
+        assert_eq!(written["conclusion"], "pass");
+        assert_eq!(written["terminal_status"], "artifact-only");
+        assert_eq!(written["conclusion"], gate_outcome.conclusion.as_str());
+        assert_eq!(written["tool_gates"]["evaluated"], 0);
+        let events = fs::read_to_string(out.join("events.ndjson"))?;
+        assert!(events.contains("\"kind\":\"gate_outcome\""));
+        assert!(events.contains("\"conclusion\":\"pass\""));
+        let summary = render_summary(&out, &plan, &diff)?;
+        assert!(
+            summary
+                .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
+        );
+        Ok(())
+    }
+
     #[test]
     fn compiler_surface_keeps_refuted_only_follow_up_artifact_only() -> Result<()> {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
@@ -30736,6 +31595,7 @@ index 1111111..2222222 100644
             mode: RunMode::ReviewByok,
             run_pass: super::RunPass::Auto,
             model_mode: ModelMode::Auto,
+            fail_on_gate: super::FailOnGate::Auto,
             selectors: SelectorArgs::default(),
             depth: ReviewDepth::Standard,
             max_inline_comments: 8,

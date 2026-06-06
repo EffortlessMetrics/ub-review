@@ -1,0 +1,46 @@
+# cargo-allow source-exception ledger (cargo-allow native dialect, schema 0.1).
+#
+# This file exists so the cargo-allow sensor reads a genuine cargo-allow
+# policy instead of `policy/allow.toml`, which is the xtask-owned repo-policy
+# ledger in a different dialect that happens to squat cargo-allow's default
+# discovery path. See:
+# https://github.com/EffortlessMetrics/cargo-allow/issues/1465
+#
+# The ledger is intentionally empty: workspace lints in Cargo.toml forbid the
+# panic family (unwrap/expect/panic/todo/dbg) outright, so there are no
+# sanctioned exceptions to record. The binding no-panic gate for this repo is
+# the Cargo.toml lint wall plus `cargo xtask policy-check`.
+#
+# default_mode is `audit` (report-only) because cargo-allow's claim surface is
+# wider than this repo's policy: it also counts indexing, string slicing,
+# `unreachable!`, `#[expect(...)]` attributes, and every non-Rust file as
+# findings that would need ledger entries. Those surfaces are governed by the
+# repo-policy ledger (`policy/allow.toml`) and Cargo.toml lints instead, so
+# cargo-allow runs as an audit-stage inventory sensor until this repo adopts
+# its selector model with genuine entries.
+
+schema_version = "0.1"
+policy = "cargo-allow"
+owner = "ub-review/core"
+status = "advisory"
+
+[workspace]
+root = "."
+inventory = "git-tracked"
+default_mode = "audit"
+ignored = [".git/**", "target/**"]
+generated = ["target/**", "vendor/**"]
+
+[requirements]
+owner_required = true
+reason_required = true
+classification_required = true
+evidence_required = false
+expires_or_review_after_required = true
+allow_bare_allow_attributes = false
+lint_policy_id_required = false
+stale_entries_fail = false
+
+[requirements.unsafe]
+evidence_required = true
+safety_comment_required = false

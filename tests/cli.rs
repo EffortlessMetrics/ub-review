@@ -174,6 +174,7 @@ fn active_len_tracks_view_after_resize() {
         "review/cache_events.ndjson",
         "review/pr_thread_context.json",
         "review/terminal_state.json",
+        "review/gate_outcome.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
         "review/tool-gate-outcomes.json",
@@ -608,6 +609,13 @@ fn active_len_tracks_view_after_resize() {
     assert_eq!(terminal_state, review["terminal_state"]);
     assert_eq!(terminal_state["schema"], "ub-review.terminal_state.v1");
     assert_eq!(terminal_state["status"], "artifact-only");
+    let gate_outcome: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert_eq!(gate_outcome["schema"], "ub-review.gate_outcome.v1");
+    assert_eq!(gate_outcome["conclusion"], "pass");
+    assert_eq!(gate_outcome["terminal_status"], terminal_state["status"]);
+    assert_eq!(gate_outcome["reasons"], serde_json::json!([]));
+    assert_eq!(gate_outcome["tool_gates"]["evaluated"], 0);
     let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
     assert!(shared_context.contains("- Changed languages: `rust`"));
     assert!(shared_context.contains("- Changed surfaces: `source, tests`"));
@@ -1136,6 +1144,11 @@ fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
             "warm",
             "--config",
             path_str(&config)?,
+            // Pin the profile: auto box detection resolves differently on
+            // runners with the full sensor image installed (gh-runner-full),
+            // and this test asserts the manifest profile value.
+            "--profile",
+            "gh-runner",
             "--root",
             path_str(&repo)?,
             "--base",
@@ -3558,10 +3571,13 @@ fn spawn_fake_openai_provider_with_contents_and_delay(
 
 fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
     static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    CLI_SUBPROCESS_TEST_LOCK
+    // Recover a poisoned lock instead of erroring: one failing test must
+    // produce one failure receipt, not cascade into every later subprocess
+    // test in the suite.
+    Ok(CLI_SUBPROCESS_TEST_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .map_err(|_| anyhow::anyhow!("CLI subprocess test lock poisoned"))
+        .unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 fn fake_openai_lane_content() -> String {
@@ -3633,8 +3649,29 @@ fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result
         .map_err(|_| anyhow::anyhow!("fake provider thread panicked"))?
 }
 
+/// Builds a child command with every ambient `UB_REVIEW_*` variable scrubbed.
+///
+/// When the dogfood gate runs this suite, the surrounding GitHub Actions step
+/// exports `UB_REVIEW_PROFILE`, `UB_REVIEW_RUNTIME_PROFILE`,
+/// `UB_REVIEW_TOOL_BUNDLE`, and friends. The spawned `ub-review` binary picks
+/// those up through clap `env = "UB_REVIEW_..."` fallbacks, so nested test
+/// runs silently resolve a gh-runner profile and assertions about default
+/// profile output fail only inside the gate. Scrubbing the prefix first keeps
+/// tests hermetic; explicit per-test envs are applied afterwards and still
+/// win.
+fn isolated_command(program: &str, cwd: &Path) -> Command {
+    let mut command = Command::new(program);
+    command.current_dir(cwd);
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("UB_REVIEW_") {
+            command.env_remove(&name);
+        }
+    }
+    command
+}
+
 fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
-    let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    let output = isolated_command(program, cwd).args(args).output()?;
     if output.status.success() {
         return Ok(());
     }
@@ -3648,8 +3685,8 @@ fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
 }
 
 fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)]) -> Result<()> {
-    let mut command = Command::new(program);
-    command.args(args).current_dir(cwd);
+    let mut command = isolated_command(program, cwd);
+    command.args(args);
     for (name, value) in envs {
         command.env(name, value);
     }
@@ -3672,8 +3709,8 @@ fn run_capture_with_env(
     args: &[&str],
     envs: &[(&str, &str)],
 ) -> Result<String> {
-    let mut command = Command::new(program);
-    command.args(args).current_dir(cwd);
+    let mut command = isolated_command(program, cwd);
+    command.args(args);
     for (name, value) in envs {
         command.env(name, value);
     }
@@ -3690,7 +3727,7 @@ fn run_capture_with_env(
 }
 
 fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    let output = isolated_command(program, cwd).args(args).output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",
@@ -3707,8 +3744,8 @@ fn run_expect_failure_with_env(
     args: &[&str],
     envs: &[(&str, &str)],
 ) -> Result<String> {
-    let mut command = Command::new(program);
-    command.args(args).current_dir(cwd);
+    let mut command = isolated_command(program, cwd);
+    command.args(args);
     for (name, value) in envs {
         command.env(name, value);
     }

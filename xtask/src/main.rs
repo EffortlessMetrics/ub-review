@@ -215,8 +215,13 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         &[
             "cargo-allow",
             "check",
-            "--mode",
-            "no-new",
+            // Point cargo-allow at the repo's native 0.1 ledger explicitly;
+            // its default discovery would pick up `policy/allow.toml`, which
+            // is the xtask-owned repo-policy ledger in a different dialect.
+            // No `--mode`: the ledger's default_mode governs.
+            // https://github.com/EffortlessMetrics/cargo-allow/issues/1465
+            "--config",
+            "policy/cargo-allow.toml",
             "--format",
             "markdown",
             "--receipt",
@@ -810,6 +815,7 @@ fn run_relevant_tool(
 fn relevant_cargo_allow(changed: &[ChangedFile]) -> bool {
     changed.iter().any(|file| {
         file.path == "policy/allow.toml"
+            || file.path == "policy/cargo-allow.toml"
             || file.path.ends_with(".rs")
             || file.path.ends_with("Cargo.toml")
     })
@@ -1679,10 +1685,20 @@ fn validate_ci_risk_packs(path: &Path, report: &mut PolicyReport) -> Result<()> 
 }
 
 fn require_schema_version(table: &Map<String, Value>, path: &Path) -> Result<()> {
-    let version = require_integer(table, path, "schema_version")?;
-    if version != 1 {
+    // The installed cargo-allow release deserializes schema_version as a
+    // string, so the ledger records `"1"`; accept the legacy integer form too
+    // so older ledgers keep validating.
+    let version = table
+        .get("schema_version")
+        .with_context(|| format!("{} missing `schema_version`", path.display()))?;
+    let matches_v1 = match version {
+        Value::String(text) => text == "1",
+        Value::Integer(number) => *number == 1,
+        _ => false,
+    };
+    if !matches_v1 {
         bail!(
-            "{} expected schema_version = 1, found {version}",
+            "{} expected schema_version = \"1\", found {version}",
             path.display()
         );
     }

@@ -712,8 +712,8 @@ artifact contracts: [CI_AUDIT_WIZARD.md](CI_AUDIT_WIZARD.md).
 
 Write `review/gate_outcome.json` (`ub-review.gate_outcome.v1`) derived from the
 terminal state, required-proof receipts, and tool gate outcomes. Add the
-exit-code contract and the `fail-on-gate` action input with a `gate-outcome`
-output.
+exit-code contract and the `fail-on-gate` action input with a
+`gate-outcome-path` output.
 
 Acceptance:
 
