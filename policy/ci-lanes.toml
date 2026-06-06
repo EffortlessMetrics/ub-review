@@ -31,3 +31,13 @@ when = "main/nightly/label"
 target_required = false
 implemented = false
 reason = "Coverage, mutation, fuzz, feature matrix, Docker, and release dry-run lanes stay strong but are label or schedule gated."
+
+# DELIBERATE BREAK for the roadmap #26 red/green dogfood proof: this entry is
+# missing its required `reason` field, so `cargo xtask policy-check` (a
+# [[proof.required]] task of the self gate) must fail and turn ub-review/gate
+# red with a receipted required-proof reason. Reverted later in this same PR.
+[[lane]]
+id = "gate-red-proof"
+when = "pull_request"
+target_required = false
+implemented = false
