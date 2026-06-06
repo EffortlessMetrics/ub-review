@@ -104,8 +104,10 @@ this repository's own file is the production example):
   threshold on a *required* tool could not be evaluated. Defaults preserve
   pre-policy gate behavior; repos opt into stricter posture explicitly.
 
-Run inputs: action `mode: intelligent-ci` (action.yml; `review-direct` is an
-alias), `fail-on-gate` (`auto`/`true`/`false`), `run-pass: auto` resolved
+Run inputs: action `mode: intelligent-ci` (action.yml; legacy `review-direct`
+is an alias of `review-byok`, not of `intelligent-ci` — it never enforces
+under `fail-on-gate` `auto`), `fail-on-gate` (`auto`/`true`/`false`),
+`run-pass: auto` resolved
 from `github.event.action` via `UB_REVIEW_GITHUB_EVENT_ACTION` (action.yml).
 Model keys are optional inputs; their absence degrades the review, never the
 verdict.
@@ -151,27 +153,38 @@ Reason kinds (src/main.rs gate outcome construction; docs/adr/0002):
 
 ```text
 required-proof      a matched [[proof.required]] task failed (head_failed,
-                    timed_out), or — only under required_proof_unproven —
-                    went unproven
+                    timed_out)
 tool-gate           a configured [tools.*.gate] threshold was evaluated and
-                    exceeded, or — only under tool_gate_missing_evidence on a
-                    required tool — could not be evaluated
+                    exceeded
 required-sensor     a required sensor's matched trigger produced no evidence
                     (receipt-absent, failed, skipped, timed-out);
                     intelligent-ci mode only
-blocking-finding    a finding class the repo policy marked blocking = true
-                    (never model output alone)
+blocking-finding    today emitted only by the two [gate.blocking] evidence
+                    opt-ins (required_proof_unproven,
+                    tool_gate_missing_evidence); per-finding-class
+                    blocking = true markers are ADR 0002 intent, deferred
+                    until findings carry deterministic per-class receipts
+                    (src/config.rs GateBlockingPolicy)
 policy              the repo wrote a malformed policy section; parse errors
                     are receipted gate failures, not silent defaults
-internal            a failure that makes the review untrustworthy
+internal            declared in the ADR 0002 schema; no run today writes it,
+                    because internal failures abort before gate construction
+                    and surface as a missing artifact the fail-closed
+                    gate-check rejects
 ```
+
+The two `[gate.blocking]` opt-ins surface as `blocking-finding` reasons, not
+as `required-proof`/`tool-gate` kinds — automation keying on reason kinds
+must expect that.
 
 Every `fail` reason carries a receipt pointer into existing artifacts: proof
 reasons point into `review/proof_receipts.json#<id>`, required-sensor reasons
 point at `sensors/<id>/ub-review-sensor-status.json` (or
 `review/terminal_state.json` when the receipt itself is absent), tool-gate
-reasons route through `sensors/<tool>/gate-decision.json`. A red gate with no
-receipt is a bug in the gate, not a finding (docs/adr/0002).
+reasons point at `review/tool-gate-outcomes.json#<tool>`, whose entry's
+`source_artifacts` chain to `sensors/<tool>/gate-decision.json` when the
+sensor produced one. A red gate with no receipt is a bug in the gate, not a
+finding (docs/adr/0002).
 
 Proof receipt classification (src/main.rs `required_proof_receipt_class`):
 
@@ -195,12 +208,14 @@ Blocks (turns `ub-review/gate` red):
 a matched [[proof.required]] task that failed
 an evaluated [tools.*.gate] threshold that was exceeded
 a required sensor evidence gap whose trigger matched   (intelligent-ci only)
-a blocking finding per explicit repo policy markers
 a policy parse error on a policy section the repo wrote
-an internal failure that makes the review untrustworthy
+an internal failure (aborts the run; the check goes red via the
+  missing-artifact fail-closed path, not via a kind: internal reason)
 required-proof-unproven / tool-gate-missing-evidence    (only when the repo
                                                          opted in via
-                                                         [gate.blocking])
+                                                         [gate.blocking];
+                                                         surfaces as
+                                                         blocking-finding)
 ```
 
 Never reds (docs/adr/0002; src/main.rs gate outcome logic never reads
@@ -379,8 +394,9 @@ What can break the gate?
 Only repo-written policy outcomes: failed required proof from
 `[[proof.required]]` (lane `intelligent-ci-policy`), an exceeded
 `[tools.*.gate]` threshold, required-sensor evidence gaps (intelligent-ci
-mode), explicit blocking markers, policy parse errors, internal failures —
-plus the two `[gate.blocking]` opt-ins if the repo enables them.
+mode), policy parse errors, internal failures via the missing-artifact
+fail-closed path — plus the two `[gate.blocking]` opt-ins if the repo
+enables them (surfacing as `blocking-finding` reasons).
 
 What is only advisory?
 Everything model- or provider-shaped, optional sensor gaps, non-required

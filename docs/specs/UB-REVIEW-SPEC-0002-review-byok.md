@@ -81,7 +81,9 @@ Provider secrets:
   verification (scripts/verify-bun-review-artifacts.py `SECRET_VALUE_NAMES`).
 
 Default lanes are diff-class adaptive (src/main.rs `review_lanes_for_width`,
-`default_lanes_for_diff_class`; lane definitions in src/builtin.rs):
+`default_lanes_for_diff_class`; the six builtin base lanes in
+src/builtin.rs, the widened 10/20 and non-UB diff-class lane sets in
+src/main.rs):
 
 ```text
 source-UB diffs      ub, source-route, tests, arch, opposition, security
@@ -158,7 +160,9 @@ model lane receipts              provider, model, endpoint_kind, status
                                  (ok | degraded | missing_key | failed |
                                  invalid_json | timed_out | rate_limited |
                                  auth_failed | bad_envelope |
-                                 preflight_failed), fallback_from
+                                 preflight_failed | skipped), fallback_from;
+                                 skipped = budget exhausted before execution,
+                                 still a recorded evidence gap
 running-summary.md               must include a "Missing evidence" section
                                  (verifier-required heading)
 ```
