@@ -796,10 +796,11 @@ Verified single-gate state (2026-06-06):
 - the audit-ci right-sizing report (#299) and the CI fold (#300, #301)
   carry the receipts that justified the single gate.
 
-Rollback: re-add the previous workflows' checks to
-`required_status_checks.contexts` via the same branch-protection endpoint;
-the folded commands still exist as `[[proof.required]]` tasks and required
-tools in `.ub-review.toml`, and no standalone workflow was deleted.
+Rollback: restore `ci.yml`/`coverage.yml` from git history (the #301 fold
+deleted the workflow files while preserving their commands inside the gate
+as `[[proof.required]]` tasks and required tools in `.ub-review.toml`),
+then re-add their checks to `required_status_checks.contexts` via the same
+branch-protection endpoint.
 
 ### 27. rust-test-proof profile and multi-repo rollout
 
