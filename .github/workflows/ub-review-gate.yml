@@ -1,8 +1,16 @@
 name: ub-review/gate
 
+# Dogfood posture: this repo runs its own gate on every PR pass, including
+# synchronize — the gate must report on every head SHA before it can be the
+# only required check, and posting is on for every pass so review bodies and
+# inline comments are visible for calibration. The compiler's skip logic
+# still suppresses no-value posts, and inline candidates still pass the
+# diff-line guardrails. The two-pass artifact-leaning default (ADR 0001)
+# remains the documented consumer posture; this repo deliberately buys more
+# verification and more visible output.
 on:
   pull_request:
-    types: [opened, ready_for_review]
+    types: [opened, reopened, ready_for_review, synchronize]
   workflow_dispatch:
 
 permissions:
@@ -45,7 +53,7 @@ jobs:
           root: .
           out: target/ub-review
           github-token: ${{ github.token }}
-          posting: ${{ github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'ready_for_review') && 'review' || 'artifact-only' }}
+          posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
           model-mode: auto
           depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
           provider-policy: primary-with-fallback
