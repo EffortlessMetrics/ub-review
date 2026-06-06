@@ -31,7 +31,7 @@ cargo xtask precommit             # fmt/check/clippy-on-diff + sensor receipts i
 
 Two-member workspace:
 
-- **`src/main.rs`** — currently the entire `ub-review` binary in one ~31k-line file. This is tech debt, not a design goal: modularizing it into submodules is wanted. When touching it, prefer extracting coherent seams into `src/` submodules over growing the monolith. Landmarks until then: subcommands `init`, `doctor`, `cache`, `plan`, `run`, `summary`, `post` dispatch from `main()` to `cmd_*` functions (~line 3300+); inline unit tests start at `mod tests` near line 20800.
+- **`src/main.rs`** — the `ub-review` binary core, still ~29k lines and being modularized phase by phase (pure code motion, one PR per phase). Done: `src/cli.rs` (CLI/arg types), `src/config.rs` (config-file format layer), `src/builtin.rs` (builtin profiles/tools/lanes) — wired via `mod x; use x::*;` so the giant inline `mod tests` keeps resolving through `use super::{...}`. Planned next: `diff.rs`/`plan.rs`, then `sensors.rs`/`model_api.rs`/`github.rs`, then `proof.rs`/`review.rs`. When touching `main.rs`, prefer extracting coherent seams over growing the monolith. Subcommands `init`, `doctor`, `cache`, `plan`, `run`, `summary`, `post` dispatch from `main()` to `cmd_*` functions; inline unit tests are the `mod tests` at the bottom.
 - **`xtask/`** — repo-local policy orchestration (`policy-check`, `policy-inventory`, `precommit`). It aggregates external tools (`cargo-allow`, `ripr`, `unsafe-review`); do not reimplement them inside it.
 
 Configuration data, not code, drives behavior:
