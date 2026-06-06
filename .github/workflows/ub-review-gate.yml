@@ -17,6 +17,8 @@ permissions:
   contents: read
   pull-requests: write
   checks: write
+  # OIDC for the post-gate Codecov upload of the coverage sensor's lcov receipt.
+  id-token: write
 
 concurrency:
   group: ub-review-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -42,6 +44,11 @@ jobs:
         with:
           cache-on-failure: true
 
+      # The leased coverage sensor runs `cargo llvm-cov` inside the gate
+      # (folded from the standalone coverage workflow).
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
       - name: Run ub-review gate
         uses: ./
         with:
@@ -50,6 +57,8 @@ jobs:
           runtime-profile: gh-runner-full
           mode: intelligent-ci
           run-pass: auto
+          # Lease the heavy witness classes so the enabled coverage sensor runs.
+          allow-heavy: 'true'
           root: .
           out: target/ub-review
           github-token: ${{ github.token }}
@@ -70,6 +79,19 @@ jobs:
           python scripts/verify-bun-review-artifacts.py target/ub-review
           --expected-review-profile ub-review-self
           --expected-repo-kind ub-review
+
+      # Folded from the standalone coverage workflow: same OIDC upload, now
+      # pointed at the coverage sensor's lcov receipt under target/ub-review.
+      # fail_ci_if_error stays false: with ub-review/gate as the only required
+      # check, a codecov.io outage must not block merges — coverage execution
+      # truth lives in the sensor receipt; the upload is telemetry.
+      - name: Upload coverage
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          use_oidc: true
+          files: target/ub-review/sensors/coverage/lcov.info
+          fail_ci_if_error: false
 
       - uses: actions/upload-artifact@v7
         if: always()
