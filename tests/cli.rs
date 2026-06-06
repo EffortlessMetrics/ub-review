@@ -3746,7 +3746,10 @@ fn synchronize_pass_honors_profile_post_review_on_policy() -> Result<()> {
     let every_pass_config = temp.path().join("every-pass.toml");
     fs::write(
         &every_pass_config,
-        "[gate]\npost_review_on = [\"opened\", \"reopened\", \"ready_for_review\", \"synchronize\"]\nsynchronize_mode = \"review\"\n",
+        r#"[gate]
+post_review_on = ["opened", "reopened", "ready_for_review", "synchronize"]
+synchronize_mode = "review"
+"#,
     )?;
     run(
         temp.path(),
