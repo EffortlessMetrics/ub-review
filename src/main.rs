@@ -3461,6 +3461,20 @@ struct ToolGateDecision {
     new_unsuppressed: u64,
 }
 
+/// ripr's `check --format badge-json` receipt, the shape the tool actually
+/// ships (#316). Only the structure the threshold needs is bound: the
+/// schema_version string floats across ripr releases (0.3 in 0.5.0, 0.5 in
+/// 0.8.0), so the badge contract keys on the counts block, not the version.
+#[derive(Clone, Debug, Deserialize)]
+struct RiprBadgeReceipt {
+    counts: RiprBadgeCounts,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RiprBadgeCounts {
+    unsuppressed_exposure_gaps: u64,
+}
+
 enum ToolGateDecisionState {
     Missing,
     Malformed(String),
@@ -3475,9 +3489,18 @@ fn read_tool_gate_decision(path: &Path) -> ToolGateDecisionState {
         Ok(text) => text,
         Err(err) => return ToolGateDecisionState::Malformed(err.to_string()),
     };
-    match serde_json::from_str(&text) {
+    // Native shape first ({"new_unsuppressed": N}), then ripr's badge-json
+    // (the receipt the tool actually ships, copied verbatim from sensor
+    // stdout). Anything else stays malformed -> missing_evidence; a receipt
+    // that parses as neither must never read as clean.
+    match serde_json::from_str::<ToolGateDecision>(&text) {
         Ok(decision) => ToolGateDecisionState::Present(decision),
-        Err(err) => ToolGateDecisionState::Malformed(err.to_string()),
+        Err(native_err) => match serde_json::from_str::<RiprBadgeReceipt>(&text) {
+            Ok(badge) => ToolGateDecisionState::Present(ToolGateDecision {
+                new_unsuppressed: badge.counts.unsuppressed_exposure_gaps,
+            }),
+            Err(_) => ToolGateDecisionState::Malformed(native_err.to_string()),
+        },
     }
 }
 
@@ -4583,6 +4606,15 @@ fn run_sensor(
             } else {
                 "failed"
             };
+            // ripr emits its badge-json receipt on stdout; the verbatim bytes
+            // become the gate-decision receipt so the threshold evaluates
+            // against exactly what the tool shipped (#316). Copy only on ok:
+            // a failed or timed-out sensor must stay missing evidence, never
+            // a half-written receipt.
+            if sensor.id == "ripr" && status == "ok" {
+                fs::copy(&stdout_path, dir.join("gate-decision.json"))
+                    .with_context(|| format!("copy {} gate receipt", sensor.id))?;
+            }
             write_sensor_status(
                 out,
                 sensor,
@@ -4757,6 +4789,19 @@ fn run_tokmd_sensor(
     Ok(())
 }
 
+/// Path to a run input artifact (`<out>/input/<name>`) derived from a sensor
+/// dir (`<out>/sensors/<id>`), for sensors that consume the run's own inputs.
+fn sensor_run_input_path(sensor_dir: &Path, name: &str) -> String {
+    sensor_dir
+        .parent()
+        .and_then(Path::parent)
+        .unwrap_or(sensor_dir)
+        .join("input")
+        .join(name)
+        .display()
+        .to_string()
+}
+
 fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) -> Vec<String> {
     match sensor.id.as_str() {
         "tokmd" => vec![
@@ -4772,15 +4817,23 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--out".to_owned(),
             dir.display().to_string(),
         ],
+        // `ripr check --diff` against the run's own diff.patch is the receipt
+        // producer for the [tools.ripr.gate] threshold: badge-json carries the
+        // unsuppressed-exposure counter the gate evaluates (#316). The old
+        // `ripr first-pr` invocation only assembled a packet from artifacts
+        // that nothing had generated, so the configured threshold never
+        // evaluated in production.
         "ripr" => vec![
             "ripr".to_owned(),
-            "first-pr".to_owned(),
+            "check".to_owned(),
             "--root".to_owned(),
             root.display().to_string(),
-            "--base".to_owned(),
-            plan.base.clone(),
-            "--head".to_owned(),
-            plan.head.clone(),
+            "--diff".to_owned(),
+            sensor_run_input_path(dir, "diff.patch"),
+            "--mode".to_owned(),
+            "ready".to_owned(),
+            "--format".to_owned(),
+            "badge-json".to_owned(),
         ],
         "unsafe-review" => vec![
             "unsafe-review".to_owned(),
@@ -5320,6 +5373,9 @@ fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "cargo-allow.md".to_owned(),
             "cargo-allow.receipt.json".to_owned(),
         ]),
+        // The badge-json receipt copied verbatim from sensor stdout; the
+        // [tools.ripr.gate] threshold evaluates against it (#316).
+        "ripr" => outputs.push("gate-decision.json".to_owned()),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
         "coverage" => outputs.extend([
             "status.json".to_owned(),
@@ -19901,6 +19957,39 @@ fn render_evidence_sections(text: &mut String, out: &Path, plan: &Plan) {
         }
     }
 
+    // Configured-but-unevaluated required tool gates are the alarm class
+    // from #316: the repo's policy text promised a threshold and the run
+    // produced no verdict for it. Surface that beside missing sensor
+    // evidence so the gap cannot idle quietly in artifacts again.
+    if let Ok(bytes) = fs::read(out.join("tool-gate-outcomes.json"))
+        && let Ok(artifact) = serde_json::from_slice::<serde_json::Value>(&bytes)
+        && let Some(outcomes) = artifact.get("outcomes").and_then(|value| value.as_array())
+    {
+        for entry in outcomes {
+            let required = entry
+                .get("required")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            let evaluated = entry
+                .get("evaluated")
+                .and_then(|value| value.as_bool())
+                .unwrap_or(false);
+            if required && !evaluated {
+                let tool = entry
+                    .get("tool")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("unknown-tool");
+                let reason = entry
+                    .get("reason")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("no reason recorded");
+                missing.push(format!(
+                    "{tool} gate threshold configured but not evaluated; reason: {reason}."
+                ));
+            }
+        }
+    }
+
     text.push_str("\n## Available evidence\n\n");
     if available.is_empty() {
         text.push_str("- No sensor evidence completed successfully.\n");
@@ -20112,6 +20201,12 @@ const CORE_REVIEW_TOOLS: [&str; 6] = [
     "actionlint",
 ];
 const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
+// ripr and unsafe-review were the unpinned sensors: the install script took
+// crates.io latest, so image and local drifted apart silently (#316 — the
+// dogfooded local ripr 0.5.0 lacked the subcommand the image's newer ripr
+// accepted). Pins move together with scripts/install-gh-runner-tools.sh.
+const STANDARD_IMAGE_RIPR_VERSION: &str = "0.8.0";
+const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.3";
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)
@@ -20120,6 +20215,8 @@ fn is_core_review_tool(tool_id: &str) -> bool {
 fn expected_standard_image_tool_version(tool_id: &str) -> Option<&'static str> {
     match tool_id {
         "tokmd" => Some(STANDARD_IMAGE_TOKMD_VERSION),
+        "ripr" => Some(STANDARD_IMAGE_RIPR_VERSION),
+        "unsafe-review" => Some(STANDARD_IMAGE_UNSAFE_REVIEW_VERSION),
         _ => None,
     }
 }
@@ -22809,6 +22906,110 @@ mod tests {
     }
 
     #[test]
+    fn tool_gate_outcome_evaluates_ripr_badge_json_receipt() -> Result<()> {
+        // The receipt ripr actually ships (#316): `check --format badge-json`
+        // copied verbatim from sensor stdout. Shape captured from ripr 0.8.0;
+        // the parser keys on the counts block, not the floating
+        // schema_version.
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let cases = [(0u64, "passed", true), (3u64, "failed", true)];
+        for (gaps, expected_outcome, expected_evaluated) in cases {
+            let temp = tempfile::tempdir()?;
+            let ripr = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == "ripr")
+                .ok_or_else(|| anyhow::anyhow!("ripr sensor missing"))?;
+            super::write_sensor_status(
+                temp.path(),
+                ripr,
+                SensorStatusWrite {
+                    status: "ok",
+                    argv: &["ripr".to_owned(), "check".to_owned()],
+                    duration_ms: 12,
+                    reason: "completed",
+                    exit_code: Some(0),
+                    timed_out: false,
+                },
+            )?;
+            let badge = format!(
+                r#"{{"schema_version":"0.5","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"{gaps}","status":"pass","color":"brightgreen","counts":{{"unsuppressed_exposure_gaps":{gaps},"unsuppressed_test_efficiency_findings":0,"analyzed_findings":246}},"policy":{{"include_unknowns":false,"fail_on_nonzero":false}},"warnings":[]}}"#
+            );
+            fs::write(temp.path().join("sensors/ripr/gate-decision.json"), badge)?;
+            let tool_status = super::tool_status_artifact(
+                temp.path(),
+                &config,
+                config.selected_profile()?,
+                &plan,
+            );
+            let outcomes = super::tool_gate_outcome_artifact(
+                temp.path(),
+                &config,
+                config.selected_profile()?,
+                &tool_status,
+            );
+            let ripr_outcome = outcomes
+                .outcomes
+                .iter()
+                .find(|outcome| outcome.tool == "ripr")
+                .ok_or_else(|| anyhow::anyhow!("ripr gate outcome missing"))?;
+            assert_eq!(ripr_outcome.outcome, expected_outcome, "gaps={gaps}");
+            assert_eq!(ripr_outcome.evaluated, expected_evaluated, "gaps={gaps}");
+            assert_eq!(ripr_outcome.metrics.new_unsuppressed, Some(gaps));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn evidence_sections_surface_unevaluated_required_tool_gates() -> Result<()> {
+        // #316's alarm class: repo policy configured a required tool gate and
+        // the run produced no verdict for it. The running summary must say so
+        // under Missing evidence, not let the gap idle in artifacts.
+        let temp = tempfile::tempdir()?;
+        fs::write(
+            temp.path().join("tool-gate-outcomes.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.tool_gate_outcomes.v1",
+                "outcomes": [{
+                    "schema": "ub-review.tool_gate_outcome.v1",
+                    "tool": "ripr",
+                    "required": true,
+                    "evaluated": false,
+                    "outcome": "missing_evidence",
+                    "reason": "`ripr` ran ok, but no machine-readable gate-decision receipt was available"
+                }]
+            }))?,
+        )?;
+        let plan = test_plan(Vec::new());
+        let mut text = String::new();
+        super::render_evidence_sections(&mut text, temp.path(), &plan);
+        assert!(
+            text.contains("ripr gate threshold configured but not evaluated"),
+            "missing-evidence section must name the unevaluated gate: {text}"
+        );
+        assert!(
+            text.contains("no machine-readable gate-decision receipt"),
+            "the entry carries the outcome reason: {text}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn tool_gate_outcome_records_malformed_gate_decision_receipt() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
@@ -22943,6 +23144,41 @@ mod tests {
             );
             assert_eq!(argv, expected);
         }
+
+        // The ripr sensor is the gate-receipt producer (#316): check mode
+        // against the run's own diff.patch, badge-json on stdout.
+        let ripr = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "ripr")
+            .ok_or_else(|| anyhow::anyhow!("missing planned sensor ripr"))?;
+        assert!(ripr.run, "ripr should run in the self-gate plan");
+        let argv = super::build_sensor_argv(
+            Path::new("."),
+            Path::new("target/ub-review/sensors/x"),
+            ripr,
+            &plan,
+        );
+        let diff_path = Path::new("target/ub-review")
+            .join("input")
+            .join("diff.patch")
+            .display()
+            .to_string();
+        assert_eq!(
+            argv,
+            vec![
+                "ripr".to_owned(),
+                "check".to_owned(),
+                "--root".to_owned(),
+                ".".to_owned(),
+                "--diff".to_owned(),
+                diff_path,
+                "--mode".to_owned(),
+                "ready".to_owned(),
+                "--format".to_owned(),
+                "badge-json".to_owned(),
+            ]
+        );
         Ok(())
     }
 
