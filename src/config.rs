@@ -1,0 +1,684 @@
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+
+use crate::{BoxState, DEFAULT_REVIEW_PROFILE, LanePlan, builtin_profiles, builtin_tools};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct Config {
+    pub(crate) review_profile: String,
+    pub(crate) profile: String,
+    pub(crate) repo: RepoConfig,
+    pub(crate) review: ReviewConfig,
+    pub(crate) review_body: ReviewBodyPolicy,
+    pub(crate) gate: GateConfig,
+    pub(crate) proof: ProofPolicyConfig,
+    pub(crate) profiles: BTreeMap<String, Profile>,
+    pub(crate) tools: BTreeMap<String, ToolPolicy>,
+    pub(crate) lanes: Vec<LanePlan>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct RepoConfig {
+    pub(crate) kind: String,
+    pub(crate) ledger: String,
+    pub(crate) base: String,
+    pub(crate) head: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ReviewConfig {
+    pub(crate) posting_engine: String,
+    pub(crate) custom_poster: bool,
+    pub(crate) ban_standalone_approval: bool,
+    pub(crate) require_zero_finding_audit: bool,
+    pub(crate) enable_default_lanes: bool,
+    pub(crate) github_summary: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct GateConfig {
+    pub(crate) required_check: String,
+    pub(crate) target_minutes: u64,
+    pub(crate) hard_timeout_minutes: u64,
+    pub(crate) post_review_on: Vec<String>,
+    pub(crate) synchronize_mode: String,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ProofPolicyConfig {
+    pub(crate) required: Vec<RequiredProofPolicy>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct RequiredProofPolicy {
+    pub(crate) id: String,
+    pub(crate) languages: Vec<String>,
+    pub(crate) diff_classes: Vec<String>,
+    pub(crate) command: String,
+    pub(crate) reason: String,
+    pub(crate) cost: Option<String>,
+    pub(crate) timeout_sec: u64,
+    pub(crate) required: bool,
+    pub(crate) enabled: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ReviewBodyPolicy {
+    pub(crate) include_successful_lane_table: bool,
+    pub(crate) include_provider_table: ReviewBodyTablePolicy,
+    pub(crate) include_sensor_table: ReviewBodyTablePolicy,
+    pub(crate) include_execution_summary: ReviewBodyExecutionSummaryPolicy,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ReviewBodyTablePolicy {
+    Never,
+    #[default]
+    OnFailure,
+    Always,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ReviewBodyExecutionSummaryPolicy {
+    #[default]
+    None,
+    OnFailure,
+    Always,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct Profile {
+    pub(crate) name: String,
+    pub(crate) limits: Limits,
+    pub(crate) guards: Guards,
+    pub(crate) budgets: Budgets,
+    pub(crate) trusted_repo: TrustedRepo,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RuntimeProfileFile {
+    pub(crate) name: String,
+    pub(crate) limits: RuntimeLimitsFile,
+    pub(crate) guards: RuntimeGuardsFile,
+    pub(crate) budgets: RuntimeBudgetsFile,
+    pub(crate) trusted_repo: TrustedRepo,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RuntimeLimitsFile {
+    pub(crate) logical_lanes: usize,
+    pub(crate) llm_in_flight: usize,
+    pub(crate) sensor_jobs: usize,
+    pub(crate) repo_read: usize,
+    pub(crate) raw_file_reads: usize,
+    pub(crate) grep: usize,
+    pub(crate) ast_grep: usize,
+    pub(crate) git: usize,
+    pub(crate) tests: usize,
+    pub(crate) builds: usize,
+    pub(crate) rust_analyzer: usize,
+    pub(crate) summary_writers: usize,
+    pub(crate) patch_writers: usize,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RuntimeGuardsFile {
+    pub(crate) min_free_mem_mb: u64,
+    pub(crate) min_free_disk_mb: u64,
+    pub(crate) max_load_1m: f32,
+}
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct RuntimeBudgetsFile {
+    pub(crate) artifact_budget_mb: u64,
+    pub(crate) scratch_budget_mb: u64,
+    pub(crate) default_timeout_sec: u64,
+    pub(crate) hard_timeout_sec: u64,
+    pub(crate) proof_max_focused_test_files: usize,
+    pub(crate) proof_max_focused_tests: usize,
+    pub(crate) proof_command_timeout_sec: u64,
+    pub(crate) proof_total_timeout_sec: u64,
+    pub(crate) proof_cpu: u32,
+    pub(crate) proof_memory_mb: u64,
+    pub(crate) proof_disk_mb: u64,
+    pub(crate) proof_network: bool,
+    pub(crate) proof_scratch: bool,
+    pub(crate) mutation: bool,
+    pub(crate) sanitizer: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(crate) struct TrustedRepo {
+    pub(crate) pass_triggers: Vec<String>,
+    pub(crate) synchronize: bool,
+    pub(crate) proof_lanes: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(crate) struct Limits {
+    pub(crate) logical_lanes: usize,
+    pub(crate) llm_in_flight: usize,
+    pub(crate) sensor_jobs: usize,
+    pub(crate) repo_read: usize,
+    pub(crate) raw_file_reads: usize,
+    pub(crate) grep: usize,
+    pub(crate) ast_grep: usize,
+    pub(crate) git: usize,
+    pub(crate) tests: usize,
+    pub(crate) builds: usize,
+    pub(crate) rust_analyzer: usize,
+    pub(crate) summary_writers: usize,
+    pub(crate) patch_writers: usize,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(crate) struct Guards {
+    pub(crate) min_free_mem_mb: u64,
+    pub(crate) min_free_disk_mb: u64,
+    pub(crate) max_load_1m: f32,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(default)]
+pub(crate) struct Budgets {
+    pub(crate) artifact_budget_mb: u64,
+    pub(crate) scratch_budget_mb: u64,
+    pub(crate) default_timeout_sec: u64,
+    pub(crate) hard_timeout_sec: u64,
+    pub(crate) proof_max_focused_test_files: usize,
+    pub(crate) proof_max_focused_tests: usize,
+    pub(crate) proof_command_timeout_sec: u64,
+    pub(crate) proof_total_timeout_sec: u64,
+    pub(crate) proof_cpu: u32,
+    pub(crate) proof_memory_mb: u64,
+    pub(crate) proof_disk_mb: u64,
+    pub(crate) proof_network: bool,
+    pub(crate) proof_scratch: bool,
+    pub(crate) mutation: bool,
+    pub(crate) sanitizer: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ToolPolicy {
+    pub(crate) id: String,
+    pub(crate) command: String,
+    pub(crate) class: ToolClass,
+    pub(crate) weight: u32,
+    pub(crate) default: Trigger,
+    pub(crate) required: bool,
+    pub(crate) timeout_sec: u64,
+    pub(crate) artifact_budget_mb: u64,
+    pub(crate) requires_lease: bool,
+    pub(crate) enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) gate: Option<ToolGatePolicy>,
+    #[serde(skip)]
+    pub(crate) provided: ToolPolicyProvided,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct ToolPolicyProvided {
+    pub(crate) id: bool,
+    pub(crate) command: bool,
+    pub(crate) class: bool,
+    pub(crate) weight: bool,
+    pub(crate) default: bool,
+    pub(crate) required: bool,
+    pub(crate) timeout_sec: bool,
+    pub(crate) artifact_budget_mb: bool,
+    pub(crate) requires_lease: bool,
+    pub(crate) enabled: bool,
+    pub(crate) gate: bool,
+}
+
+#[derive(Default, Deserialize)]
+pub(crate) struct ToolPolicyInput {
+    pub(crate) id: Option<String>,
+    pub(crate) command: Option<String>,
+    pub(crate) class: Option<ToolClass>,
+    pub(crate) weight: Option<u32>,
+    pub(crate) default: Option<Trigger>,
+    pub(crate) required: Option<bool>,
+    pub(crate) timeout_sec: Option<u64>,
+    pub(crate) artifact_budget_mb: Option<u64>,
+    pub(crate) requires_lease: Option<bool>,
+    pub(crate) enabled: Option<bool>,
+    pub(crate) gate: Option<ToolGatePolicy>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct ToolGatePolicy {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) scope: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) max_new_unsuppressed: Option<u64>,
+}
+
+impl ToolPolicyProvided {
+    pub(crate) fn all() -> Self {
+        Self {
+            id: true,
+            command: true,
+            class: true,
+            weight: true,
+            default: true,
+            required: true,
+            timeout_sec: true,
+            artifact_budget_mb: true,
+            requires_lease: true,
+            enabled: true,
+            gate: true,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ToolPolicy {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let input = ToolPolicyInput::deserialize(deserializer)?;
+        let defaults = ToolPolicy::default();
+        let provided = ToolPolicyProvided {
+            id: input.id.is_some(),
+            command: input.command.is_some(),
+            class: input.class.is_some(),
+            weight: input.weight.is_some(),
+            default: input.default.is_some(),
+            required: input.required.is_some(),
+            timeout_sec: input.timeout_sec.is_some(),
+            artifact_budget_mb: input.artifact_budget_mb.is_some(),
+            requires_lease: input.requires_lease.is_some(),
+            enabled: input.enabled.is_some(),
+            gate: input.gate.is_some(),
+        };
+        Ok(Self {
+            id: input.id.unwrap_or(defaults.id),
+            command: input.command.unwrap_or(defaults.command),
+            class: input.class.unwrap_or(defaults.class),
+            weight: input.weight.unwrap_or(defaults.weight),
+            default: input.default.unwrap_or(defaults.default),
+            required: input.required.unwrap_or(defaults.required),
+            timeout_sec: input.timeout_sec.unwrap_or(defaults.timeout_sec),
+            artifact_budget_mb: input
+                .artifact_budget_mb
+                .unwrap_or(defaults.artifact_budget_mb),
+            requires_lease: input.requires_lease.unwrap_or(defaults.requires_lease),
+            enabled: input.enabled.unwrap_or(defaults.enabled),
+            gate: input.gate.or(defaults.gate),
+            provided,
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum ToolClass {
+    Packet,
+    #[default]
+    Static,
+    Search,
+    Workflow,
+    Security,
+    Coverage,
+    Test,
+    Build,
+    HeavyWitness,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Trigger {
+    Always,
+    SourceChanged,
+    SourceExceptionChanged,
+    RustBehaviorOrTestsChanged,
+    UnsafeOrNativeRiskChanged,
+    WorkflowChanged,
+    DependencyChanged,
+    ShellChanged,
+    CppChanged,
+    Diff,
+    Manual,
+    #[default]
+    Never,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        let profiles = builtin_profiles()
+            .into_iter()
+            .map(|profile| (profile.name.clone(), profile))
+            .collect();
+        let tools = builtin_tools()
+            .into_iter()
+            .map(|tool| (tool.id.clone(), tool))
+            .collect();
+        Self {
+            review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
+            profile: "gh-runner".to_owned(),
+            repo: RepoConfig::default(),
+            review: ReviewConfig::default(),
+            review_body: ReviewBodyPolicy::default(),
+            gate: GateConfig::default(),
+            proof: ProofPolicyConfig::default(),
+            profiles,
+            tools,
+            lanes: Vec::new(),
+        }
+    }
+}
+
+impl Default for RepoConfig {
+    fn default() -> Self {
+        Self {
+            kind: "bun".to_owned(),
+            ledger: "/home/steven/code/bun-ub-ledger".to_owned(),
+            base: "origin/main".to_owned(),
+            head: "HEAD".to_owned(),
+        }
+    }
+}
+
+impl Default for ReviewConfig {
+    fn default() -> Self {
+        Self {
+            posting_engine: "github-step-summary".to_owned(),
+            custom_poster: false,
+            ban_standalone_approval: true,
+            require_zero_finding_audit: true,
+            enable_default_lanes: true,
+            github_summary: true,
+        }
+    }
+}
+
+impl Default for GateConfig {
+    fn default() -> Self {
+        Self {
+            required_check: "ub-review/gate".to_owned(),
+            target_minutes: 30,
+            hard_timeout_minutes: 60,
+            post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
+            synchronize_mode: "gate-only".to_owned(),
+        }
+    }
+}
+
+impl Default for ReviewBodyPolicy {
+    fn default() -> Self {
+        Self {
+            include_successful_lane_table: false,
+            include_provider_table: ReviewBodyTablePolicy::OnFailure,
+            include_sensor_table: ReviewBodyTablePolicy::OnFailure,
+            include_execution_summary: ReviewBodyExecutionSummaryPolicy::None,
+        }
+    }
+}
+
+impl Default for RequiredProofPolicy {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            languages: Vec::new(),
+            diff_classes: Vec::new(),
+            command: String::new(),
+            reason: String::new(),
+            cost: None,
+            timeout_sec: 300,
+            required: true,
+            enabled: true,
+        }
+    }
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        Self {
+            name: "gh-runner".to_owned(),
+            limits: Limits::default(),
+            guards: Guards::default(),
+            budgets: Budgets::default(),
+            trusted_repo: TrustedRepo::default(),
+        }
+    }
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            logical_lanes: 20,
+            llm_in_flight: 16,
+            sensor_jobs: 4,
+            repo_read: 6,
+            raw_file_reads: 6,
+            grep: 3,
+            ast_grep: 2,
+            git: 2,
+            tests: 2,
+            builds: 0,
+            rust_analyzer: 0,
+            summary_writers: 1,
+            patch_writers: 0,
+        }
+    }
+}
+
+impl Default for Guards {
+    fn default() -> Self {
+        Self {
+            min_free_mem_mb: 1_500,
+            min_free_disk_mb: 4_000,
+            max_load_1m: 6.0,
+        }
+    }
+}
+
+impl Default for Budgets {
+    fn default() -> Self {
+        Self {
+            artifact_budget_mb: 750,
+            scratch_budget_mb: 4_000,
+            default_timeout_sec: 1_800,
+            hard_timeout_sec: 3_600,
+            proof_max_focused_test_files: 3,
+            proof_max_focused_tests: 1,
+            proof_command_timeout_sec: 300,
+            proof_total_timeout_sec: 600,
+            proof_cpu: 2,
+            proof_memory_mb: 2_048,
+            proof_disk_mb: 1_024,
+            proof_network: false,
+            proof_scratch: true,
+            mutation: false,
+            sanitizer: false,
+        }
+    }
+}
+
+impl Default for TrustedRepo {
+    fn default() -> Self {
+        Self {
+            pass_triggers: vec!["opened".to_owned(), "ready_for_review".to_owned()],
+            synchronize: false,
+            proof_lanes: vec![
+                "focused-tests".to_owned(),
+                "base-tests-red-green".to_owned(),
+                "actionlint".to_owned(),
+                "scoped-source-route-checks".to_owned(),
+            ],
+        }
+    }
+}
+
+impl Default for ToolPolicy {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            command: String::new(),
+            class: ToolClass::Static,
+            weight: 1,
+            default: Trigger::Never,
+            required: false,
+            timeout_sec: 120,
+            artifact_budget_mb: 64,
+            requires_lease: false,
+            enabled: true,
+            gate: None,
+            provided: ToolPolicyProvided::default(),
+        }
+    }
+}
+
+impl Config {
+    pub(crate) fn load_or_default(path: &Path, profile_override: Option<&str>) -> Result<Self> {
+        let mut config = if path.exists() {
+            let text =
+                fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+            toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?
+        } else {
+            Self::default()
+        };
+        if let Some(profile) = profile_override {
+            config.profile = profile.to_owned();
+        }
+        config.merge_defaults();
+        if config.profile == "auto" {
+            config.profile = BoxState::detect()?.suggested_profile();
+        }
+        Ok(config)
+    }
+
+    pub(crate) fn merge_defaults(&mut self) {
+        let defaults = Self::default();
+        for (key, profile) in defaults.profiles {
+            self.profiles.entry(key).or_insert(profile);
+        }
+        for (key, default_tool) in defaults.tools {
+            match self.tools.get_mut(&key) {
+                Some(tool) => {
+                    if !tool.provided.id || tool.id.is_empty() {
+                        tool.id = default_tool.id;
+                    }
+                    if !tool.provided.command || tool.command.is_empty() {
+                        tool.command = default_tool.command;
+                    }
+                    if !tool.provided.class {
+                        tool.class = default_tool.class;
+                    }
+                    if !tool.provided.weight || tool.weight == 0 {
+                        tool.weight = default_tool.weight;
+                    }
+                    if !tool.provided.default {
+                        tool.default = default_tool.default;
+                    }
+                    if !tool.provided.required {
+                        tool.required = default_tool.required;
+                    }
+                    if !tool.provided.timeout_sec || tool.timeout_sec == 0 {
+                        tool.timeout_sec = default_tool.timeout_sec;
+                    }
+                    if !tool.provided.artifact_budget_mb || tool.artifact_budget_mb == 0 {
+                        tool.artifact_budget_mb = default_tool.artifact_budget_mb;
+                    }
+                    if !tool.provided.requires_lease {
+                        tool.requires_lease = default_tool.requires_lease;
+                    }
+                    if !tool.provided.enabled {
+                        tool.enabled = default_tool.enabled;
+                    }
+                    if !tool.provided.gate {
+                        tool.gate = default_tool.gate;
+                    }
+                }
+                None => {
+                    self.tools.insert(key, default_tool);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn selected_profile(&self) -> Result<&Profile> {
+        self.profiles
+            .get(&self.profile)
+            .or_else(|| self.profiles.get("gh-runner"))
+            .ok_or_else(|| anyhow::anyhow!("no selected profile and no gh-runner fallback"))
+    }
+}
+
+impl Limits {
+    pub(crate) fn summary_line(&self) -> String {
+        format!(
+            "logical_lanes={} llm={} sensor_jobs={} grep={} tests={} builds={}",
+            self.logical_lanes,
+            self.llm_in_flight,
+            self.sensor_jobs,
+            self.grep,
+            self.tests,
+            self.builds
+        )
+    }
+}
+
+pub(crate) fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
+    let profile: RuntimeProfileFile = toml::from_str(text)?;
+    Ok(Profile {
+        name: profile.name,
+        limits: Limits {
+            logical_lanes: profile.limits.logical_lanes,
+            llm_in_flight: profile.limits.llm_in_flight,
+            sensor_jobs: profile.limits.sensor_jobs,
+            repo_read: profile.limits.repo_read,
+            raw_file_reads: profile.limits.raw_file_reads,
+            grep: profile.limits.grep,
+            ast_grep: profile.limits.ast_grep,
+            git: profile.limits.git,
+            tests: profile.limits.tests,
+            builds: profile.limits.builds,
+            rust_analyzer: profile.limits.rust_analyzer,
+            summary_writers: profile.limits.summary_writers,
+            patch_writers: profile.limits.patch_writers,
+        },
+        guards: Guards {
+            min_free_mem_mb: profile.guards.min_free_mem_mb,
+            min_free_disk_mb: profile.guards.min_free_disk_mb,
+            max_load_1m: profile.guards.max_load_1m,
+        },
+        budgets: Budgets {
+            artifact_budget_mb: profile.budgets.artifact_budget_mb,
+            scratch_budget_mb: profile.budgets.scratch_budget_mb,
+            default_timeout_sec: profile.budgets.default_timeout_sec,
+            hard_timeout_sec: profile.budgets.hard_timeout_sec,
+            proof_max_focused_test_files: profile.budgets.proof_max_focused_test_files,
+            proof_max_focused_tests: profile.budgets.proof_max_focused_tests,
+            proof_command_timeout_sec: profile.budgets.proof_command_timeout_sec,
+            proof_total_timeout_sec: profile.budgets.proof_total_timeout_sec,
+            proof_cpu: profile.budgets.proof_cpu,
+            proof_memory_mb: profile.budgets.proof_memory_mb,
+            proof_disk_mb: profile.budgets.proof_disk_mb,
+            proof_network: profile.budgets.proof_network,
+            proof_scratch: profile.budgets.proof_scratch,
+            mutation: profile.budgets.mutation,
+            sanitizer: profile.budgets.sanitizer,
+        },
+        trusted_repo: profile.trusted_repo,
+    })
+}
