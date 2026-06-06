@@ -706,7 +706,8 @@ Acceptance:
 The target operating state is `ub-review/gate` as the standard and only
 required PR check across the owner's repositories. Decision record:
 [adr/0002-single-gate-and-ci-audit-wizard.md](adr/0002-single-gate-and-ci-audit-wizard.md);
-artifact contracts: [CI_AUDIT_WIZARD.md](CI_AUDIT_WIZARD.md).
+artifact contracts: [CI_AUDIT_WIZARD.md](CI_AUDIT_WIZARD.md); release surface
+specs: [specs/UB-REVIEW-SPEC-0001-release-surface.md](specs/UB-REVIEW-SPEC-0001-release-surface.md).
 
 ### 23. Gate verdict surface
 
