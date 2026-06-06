@@ -8855,7 +8855,14 @@ fn routed_proof_receipt_excerpt(
                 }
                 Ok(bytes) => {
                     let truncated = bytes.len() > cap;
-                    let tail = String::from_utf8_lossy(&bytes[bytes.len().saturating_sub(cap)..]);
+                    let mut start = bytes.len().saturating_sub(cap);
+                    // Trim forward to a UTF-8 boundary so a mid-character
+                    // byte cut cannot produce lossy-decode drift against the
+                    // verifier's Python mirror of this excerpt.
+                    while start < bytes.len() && (bytes[start] & 0xC0) == 0x80 {
+                        start += 1;
+                    }
+                    let tail = String::from_utf8_lossy(&bytes[start..]);
                     if truncated {
                         excerpt.push_str(&format!(
                             "    {label} (last {cap} bytes of {total}):\n",

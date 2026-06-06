@@ -3096,8 +3096,13 @@ def require_follow_up_question_packet_files(
         return
     if not follow_up_dir.is_dir():
         fail("missing questions/orchestrator-follow-up directory")
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    if not isinstance(proof_receipts, list):
+        fail("review/proof_receipts.json is not an array")
     expected = {
-        f"{sanitize_artifact_name(task['id'])}.json": expected_follow_up_question_packet(task)
+        f"{sanitize_artifact_name(task['id'])}.json": expected_follow_up_question_packet(
+            root, task, proof_receipts
+        )
         for task in follow_up_tasks
     }
     actual_files = []
@@ -4017,7 +4022,84 @@ def require_witness_schema(witness: dict) -> None:
         fail(f"witness proof_receipt_id is not string/null: {witness!r}")
 
 
-def expected_follow_up_question_packet(task: dict) -> dict:
+# Byte caps for routed receipt-content tails; must match the Rust constants
+# ROUTED_RECEIPT_STDERR_TAIL_BYTES / ROUTED_RECEIPT_STDOUT_TAIL_BYTES in
+# src/main.rs.
+ROUTED_RECEIPT_STDERR_TAIL_BYTES = 1200
+ROUTED_RECEIPT_STDOUT_TAIL_BYTES = 600
+
+
+def rust_option_i32(value) -> str:
+    """Mirror Rust's `{:?}` formatting of Option<i32>."""
+    return "None" if value is None else f"Some({value})"
+
+
+def rust_lines(text: str) -> list[str]:
+    """Mirror Rust's str::lines(): split on \\n, drop one trailing empty
+    segment, strip one trailing \\r per line."""
+    parts = text.split("\n")
+    if parts and parts[-1] == "":
+        parts.pop()
+    return [part[:-1] if part.endswith("\r") else part for part in parts]
+
+
+def routed_proof_receipt_excerpt(
+    root: pathlib.Path, evidence: dict, proof_receipts: list
+) -> str | None:
+    """Mirror of the Rust routed_proof_receipt_excerpt: bounded command-output
+    tails for a routed proof receipt, byte caps and formatting identical."""
+    if evidence.get("kind") != "proof-receipt":
+        return None
+    receipt = next(
+        (
+            receipt
+            for receipt in proof_receipts
+            if isinstance(receipt, dict) and receipt.get("id") == evidence.get("id")
+        ),
+        None,
+    )
+    if receipt is None:
+        return None
+    excerpt = ""
+    for command in receipt.get("commands", []):
+        excerpt += (
+            f"  command `{command.get('command')}` side=`{command.get('side')}` "
+            f"status=`{command.get('status')}` "
+            f"exit={rust_option_i32(command.get('exit_code'))}\n"
+        )
+        for label, relative, cap in (
+            ("stderr", command.get("stderr", ""), ROUTED_RECEIPT_STDERR_TAIL_BYTES),
+            ("stdout", command.get("stdout", ""), ROUTED_RECEIPT_STDOUT_TAIL_BYTES),
+        ):
+            if not relative:
+                continue
+            try:
+                data = (root / relative).read_bytes()
+            except OSError:
+                excerpt += f"    {label}: (unavailable at `{relative}`)\n"
+                continue
+            if not data:
+                excerpt += f"    {label}: (empty)\n"
+                continue
+            truncated = len(data) > cap
+            start = max(0, len(data) - cap)
+            # Mirror the Rust UTF-8 boundary trim: skip forward past
+            # continuation bytes so both sides decode the same tail.
+            while start < len(data) and (data[start] & 0xC0) == 0x80:
+                start += 1
+            tail = data[start:].decode("utf-8", errors="replace")
+            if truncated:
+                excerpt += f"    {label} (last {cap} bytes of {len(data)}):\n"
+            else:
+                excerpt += f"    {label}:\n"
+            for line in rust_lines(tail):
+                excerpt += f"      {line}\n"
+    return excerpt or None
+
+
+def expected_follow_up_question_packet(
+    root: pathlib.Path, task: dict, proof_receipts: list
+) -> dict:
     return {
         "schema": "ub-review.follow_up_question_packet.v1",
         "id": task["id"],
@@ -4033,11 +4115,13 @@ def expected_follow_up_question_packet(task: dict) -> dict:
         "question": task["question"],
         "status": task["status"],
         "source_artifact": "review/orchestrator_plan.json",
-        "prompt": follow_up_question_prompt(task),
+        "prompt": follow_up_question_prompt(root, task, proof_receipts),
     }
 
 
-def follow_up_question_prompt(task: dict) -> str:
+def follow_up_question_prompt(
+    root: pathlib.Path, task: dict, proof_receipts: list
+) -> str:
     prompt = "Follow-up question task\n\n"
     prompt += f"- Task: `{task['id']}`\n"
     prompt += f"- Group: `{task['group_id']}`\n"
@@ -4061,6 +4145,13 @@ def follow_up_question_prompt(task: dict) -> str:
                 f"status=`{evidence['status']}` result=`{evidence['result']}` "
                 f"artifact=`{evidence['artifact']}` reason={evidence['reason']}\n"
             )
+            excerpt = routed_proof_receipt_excerpt(root, evidence, proof_receipts)
+            if excerpt is not None:
+                prompt += (
+                    "  Receipt content (bounded command-output tails; "
+                    "full streams in the artifact):\n"
+                )
+                prompt += excerpt
         prompt += "\n"
     if task["stage"] == "tertiary":
         prompt += (
@@ -5485,6 +5576,59 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
 
 
+def self_test_routed_receipt_excerpt_matches_rust_contract() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        proof_dir = root / "proof" / "proof-build-abc" / "head"
+        proof_dir.mkdir(parents=True)
+        # newline="" keeps LF untranslated on Windows so the fixture matches
+        # the LF proof streams CI runners write.
+        loud = "assertion failed: the focused proof exposed the gap\n" * 60
+        (proof_dir / "stderr.txt").write_text(loud, encoding="utf-8", newline="")
+        (proof_dir / "stdout.txt").write_text(
+            "running 1 test\n", encoding="utf-8", newline=""
+        )
+        receipt = {
+            "id": "proof-build-abc",
+            "commands": [
+                {
+                    "side": "head",
+                    "command": "cargo test focused_case",
+                    "status": "failed",
+                    "exit_code": 101,
+                    "stdout": "proof/proof-build-abc/head/stdout.txt",
+                    "stderr": "proof/proof-build-abc/head/stderr.txt",
+                }
+            ],
+        }
+        evidence = {"id": "proof-build-abc", "kind": "proof-receipt"}
+        excerpt = routed_proof_receipt_excerpt(root, evidence, [receipt])
+        if excerpt is None:
+            fail("routed receipt excerpt missing for a matching receipt")
+        if (
+            "command `cargo test focused_case` side=`head` status=`failed` "
+            "exit=Some(101)"
+        ) not in excerpt:
+            fail(f"excerpt command line drifted from Rust contract: {excerpt!r}")
+        if (
+            f"stderr (last {ROUTED_RECEIPT_STDERR_TAIL_BYTES} bytes of {len(loud)}):"
+            not in excerpt
+        ):
+            fail(f"excerpt truncation marker drifted from Rust contract: {excerpt!r}")
+        if "      running 1 test\n" not in excerpt:
+            fail(f"small stdout should be included in full: {excerpt!r}")
+        if routed_proof_receipt_excerpt(
+            root, {"id": "proof-unknown", "kind": "proof-receipt"}, [receipt]
+        ) is not None:
+            fail("unknown receipt id must not produce an excerpt")
+        if routed_proof_receipt_excerpt(
+            root, {"id": "lease-1", "kind": "resource-lease"}, [receipt]
+        ) is not None:
+            fail("non-receipt evidence must not produce an excerpt")
+
+
 def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
     resolved = [
         {
@@ -6149,6 +6293,7 @@ def run_self_tests() -> None:
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
+    self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
         "tool status metadata mismatch",
