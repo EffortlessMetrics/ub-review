@@ -342,6 +342,18 @@ ub-review run --posting review --out target/ub-review
 ub-review post --review-json target/ub-review/review/github-review.json
 ```
 
+`ub-review gate-check` enforces a previously recorded gate verdict with the
+same `fail-on-gate` resolution `run` uses (`auto` enforces only for
+`--mode intelligent-ci`). The GitHub action's final `Enforce gate outcome`
+step calls it instead of re-implementing that logic in bash:
+
+```bash
+ub-review gate-check \
+  --gate-outcome target/ub-review/review/gate_outcome.json \
+  --fail-on-gate auto \
+  --mode intelligent-ci
+```
+
 Inline comments are only emitted when they pass the diff-line guardrails:
 repo-relative path, valid `RIGHT` side line from the PR diff, actionable
 severity, high or medium-high confidence, concise body, lane prefix, and
@@ -404,7 +416,7 @@ validates inline candidates, and submits one grouped PR review when configured.
 | `ledger-path` | empty | Optional read-only UB ledger path. |
 | `ledger-max-bytes` | `65536` | Maximum ledger context bytes. |
 | `fail-on-post-error` | `false` | Fail the action when PR review posting fails. |
-| `fail-on-gate` | `auto` | Gate enforcement: `auto`, `true`, or `false`. The action's final `Enforce gate outcome` step fails the check when `review/gate_outcome.json` records a `fail` conclusion and enforcement resolves to `true`; artifacts, the job summary, and PR review posting always complete first. `auto` resolves to `true` for `mode=intelligent-ci` and `false` otherwise. |
+| `fail-on-gate` | `auto` | Gate enforcement: `auto`, `true`, or `false`. The action's final `Enforce gate outcome` step runs `ub-review gate-check`, which fails the check when `review/gate_outcome.json` records a `fail` conclusion and enforcement resolves to `true`; artifacts, the job summary, and PR review posting always complete first. `auto` resolves to `true` for `mode=intelligent-ci` and `false` otherwise. |
 | `github-summary` | `true` | Append running summary to job summary. |
 
 ## Repo Config Proof Policy

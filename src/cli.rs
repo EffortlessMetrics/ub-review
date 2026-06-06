@@ -31,6 +31,9 @@ pub(crate) enum Command {
     Post(PostArgs),
     /// Write a read-only CI right-sizing report under `<out>/ci-audit/`.
     AuditCi(AuditCiArgs),
+    /// Enforce a recorded gate outcome: exit non-zero when enforcement
+    /// resolves on and review/gate_outcome.json records a `fail` conclusion.
+    GateCheck(GateCheckArgs),
 }
 
 #[derive(Clone, Debug, ValueEnum)]
@@ -529,6 +532,33 @@ pub(crate) struct SelectorArgs {
 pub(crate) struct SummaryArgs {
     #[arg(long, default_value = "target/ub-review")]
     pub(crate) run_dir: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct GateCheckArgs {
+    /// Gate outcome artifact written by `ub-review run`.
+    #[arg(
+        long = "gate-outcome",
+        default_value = "target/ub-review/review/gate_outcome.json",
+        env = "UB_REVIEW_GATE_OUTCOME_PATH"
+    )]
+    pub(crate) gate_outcome: PathBuf,
+    /// Gate enforcement. `auto` resolves to true only for --mode intelligent-ci.
+    #[arg(
+        long = "fail-on-gate",
+        value_enum,
+        default_value = "auto",
+        env = "UB_REVIEW_FAIL_ON_GATE"
+    )]
+    pub(crate) fail_on_gate: FailOnGate,
+    /// Run mode used to resolve `auto` enforcement.
+    #[arg(
+        long,
+        value_enum,
+        default_value = "review-byok",
+        env = "UB_REVIEW_MODE"
+    )]
+    pub(crate) mode: RunMode,
 }
 
 #[derive(Debug, Args)]

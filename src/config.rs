@@ -20,6 +20,22 @@ pub(crate) struct Config {
     pub(crate) profiles: BTreeMap<String, Profile>,
     pub(crate) tools: BTreeMap<String, ToolPolicy>,
     pub(crate) lanes: Vec<LanePlan>,
+    /// Malformed gate-policy sections recorded at load time. Serialized into
+    /// `effective-config.json` so the gate's `policy` fail reasons point at a
+    /// receipt that names the parse error (roadmap #24: policy parse errors
+    /// become receipted gate failures, never silent defaults).
+    #[serde(skip_deserializing, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) policy_errors: Vec<PolicyError>,
+}
+
+/// One malformed policy key or section (an unknown top-level key, a `[gate]`
+/// key, a `[tools.<id>]` key, a `[proof]` key, or a `[[proof.required]]`
+/// entry) downgraded from a hard parse failure or a silent drop into a
+/// recorded, gate-failing receipt.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub(crate) struct PolicyError {
+    pub(crate) section: String,
+    pub(crate) detail: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -50,6 +66,30 @@ pub(crate) struct GateConfig {
     pub(crate) hard_timeout_minutes: u64,
     pub(crate) post_review_on: Vec<String>,
     pub(crate) synchronize_mode: String,
+    pub(crate) blocking: GateBlockingPolicy,
+}
+
+/// Repo-policy blocking markers for deterministic evidence classes
+/// (ADR 0002: `blocking = true` comes from repo policy receipts, never from
+/// model output or model confidence). Model-produced finding classes have no
+/// deterministic per-class receipt yet, so candidate/finding blocking markers
+/// stay deferred; these flags cover the evidence classes the gate already
+/// computes deterministically. Both default to `false`, preserving the
+/// pre-policy gate behavior.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub(crate) struct GateBlockingPolicy {
+    /// Block when a matched `[[proof.required]]` policy produced no passing
+    /// receipt (missing receipt, `skipped_budget`, `skipped_profile`,
+    /// `non_discriminating`, `base_patch_failed`).
+    pub(crate) required_proof_unproven: bool,
+    /// Block when a configured `[tools.*.gate]` threshold could not be
+    /// evaluated for a required tool: the sensor failed or timed out without
+    /// producing a verdict, sensor evidence is missing, or the gate-decision
+    /// receipt is missing or malformed. Without this opt-in those gaps stay
+    /// advisory; only an actually-evaluated, actually-exceeded threshold
+    /// blocks unconditionally.
+    pub(crate) tool_gate_missing_evidence: bool,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -59,7 +99,7 @@ pub(crate) struct ProofPolicyConfig {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct RequiredProofPolicy {
     pub(crate) id: String,
     pub(crate) languages: Vec<String>,
@@ -266,6 +306,10 @@ pub(crate) struct ToolPolicyInput {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub(crate) struct ToolGatePolicy {
+    /// Gate scope. `"on-diff"` (thresholds apply to findings the diff
+    /// introduces) is the only scope semantics that exist; repo-wide scoping
+    /// does not exist yet. Values outside `KNOWN_TOOL_GATE_SCOPES` are
+    /// stripped at load time and recorded as `PolicyError` receipts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) scope: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -383,6 +427,7 @@ impl Default for Config {
             profiles,
             tools,
             lanes: Vec::new(),
+            policy_errors: Vec::new(),
         }
     }
 }
@@ -419,6 +464,7 @@ impl Default for GateConfig {
             hard_timeout_minutes: 60,
             post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
             synchronize_mode: "gate-only".to_owned(),
+            blocking: GateBlockingPolicy::default(),
         }
     }
 }
@@ -548,12 +594,56 @@ impl Default for ToolPolicy {
     }
 }
 
+/// Diff-class selector values accepted by `[[proof.required]].diff_classes`.
+/// Mirrors `DiffClass::key` in `main.rs`; a test there pins the two lists
+/// together so an unknown selector can never silently de-fang a policy.
+pub(crate) const KNOWN_POLICY_DIFF_CLASSES: &[&str] = &[
+    "source-ub",
+    "source-general",
+    "tests-only",
+    "workflow/tooling",
+    "docs-only",
+    "artifact-only-smoke",
+];
+
+/// Language selector values accepted by `[[proof.required]].languages`.
+/// Mirrors `language_for_path` in `main.rs` plus the `mixed` marker; a test
+/// there pins the two lists together.
+pub(crate) const KNOWN_POLICY_LANGUAGES: &[&str] = &[
+    "rust",
+    "typescript",
+    "javascript",
+    "c-cpp",
+    "zig",
+    "go",
+    "python",
+    "shell",
+    "yaml",
+    "toml",
+    "json",
+    "markdown",
+    "mixed",
+];
+
+/// Wildcard selector values that match any diff class or language.
+const POLICY_SELECTOR_WILDCARDS: &[&str] = &["*", "any", "all"];
+
+pub(crate) fn normalize_policy_selector(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace('_', "-")
+}
+
+fn known_policy_selector(value: &str, known: &[&str]) -> bool {
+    let normalized = normalize_policy_selector(value);
+    POLICY_SELECTOR_WILDCARDS.contains(&normalized.as_str()) || known.contains(&normalized.as_str())
+}
+
 impl Config {
     pub(crate) fn load_or_default(path: &Path, profile_override: Option<&str>) -> Result<Self> {
         let mut config = if path.exists() {
             let text =
                 fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
-            toml::from_str(&text).with_context(|| format!("parse {}", path.display()))?
+            Self::from_toml_with_policy_receipts(&text)
+                .with_context(|| format!("parse {}", path.display()))?
         } else {
             Self::default()
         };
@@ -564,6 +654,24 @@ impl Config {
         if config.profile == "auto" {
             config.profile = BoxState::detect()?.suggested_profile();
         }
+        Ok(config)
+    }
+
+    /// Parse config TOML while downgrading malformed policy keys (unknown
+    /// top-level keys, `[gate]` keys, `[tools.<id>]` keys, `[proof]` keys,
+    /// and `[[proof.required]]` entries) from hard parse failures or silent
+    /// drops into recorded `policy_errors`. The run proceeds with only the
+    /// offending keys stripped — valid siblings keep working — and
+    /// `build_gate_outcome` turns every recorded error into a `policy` fail
+    /// reason pointing at `effective-config.json`, never a silent default.
+    /// TOML syntax errors and malformed non-policy sections stay hard errors:
+    /// with no parsable document there is no trustworthy config to record a
+    /// receipt against.
+    pub(crate) fn from_toml_with_policy_receipts(text: &str) -> Result<Self> {
+        let mut value: toml::Value = toml::from_str(text)?;
+        let policy_errors = sanitize_policy_sections(&mut value);
+        let mut config: Self = value.try_into()?;
+        config.policy_errors = policy_errors;
         Ok(config)
     }
 
@@ -621,6 +729,336 @@ impl Config {
             .get(&self.profile)
             .or_else(|| self.profiles.get("gh-runner"))
             .ok_or_else(|| anyhow::anyhow!("no selected profile and no gh-runner fallback"))
+    }
+}
+
+/// Top-level keys `Config` deserializes. Unknown top-level keys are stripped
+/// and recorded as `PolicyError` receipts so a misspelled section (for
+/// example `[gatee]` or `[prooof]`) can never silently de-fang repo policy.
+/// `providers` is reserved: `profiles/ub-review-self.toml` documents the
+/// roadmap provider-policy surface there while provider selection still comes
+/// from CLI flags, so it is tolerated without a receipt.
+const KNOWN_TOP_LEVEL_KEYS: &[&str] = &[
+    "review_profile",
+    "profile",
+    "repo",
+    "review",
+    "review_body",
+    "gate",
+    "proof",
+    "profiles",
+    "tools",
+    "lanes",
+    "providers",
+];
+
+/// Keys `ToolPolicyInput` deserializes for a `[tools.<id>]` table. A test in
+/// `main.rs` (`tool_policy_known_keys_match_serialized_fields`) pins this
+/// list to the `ToolPolicy` field set so the two can never drift apart.
+pub(crate) const KNOWN_TOOL_POLICY_KEYS: &[&str] = &[
+    "id",
+    "command",
+    "class",
+    "weight",
+    "default",
+    "required",
+    "timeout_sec",
+    "artifact_budget_mb",
+    "requires_lease",
+    "enabled",
+    "gate",
+];
+
+/// `[tools.<id>.gate]` scope values with defined semantics. `on-diff` is the
+/// only one: repo-wide tool-gate scoping does not exist yet.
+pub(crate) const KNOWN_TOOL_GATE_SCOPES: &[&str] = &["on-diff"];
+
+/// Validate the three gate-policy surfaces (and their containers) inside a
+/// parsed TOML document. The strategy is strip-and-receipt per key: each
+/// unknown or malformed key is removed so the remaining document still
+/// deserializes, valid siblings survive, and one `PolicyError` is recorded
+/// per removed key. Shape mismatches (a non-table `[gate]`, a non-table
+/// `tools.<id>`, `[proof.required]` written as a single table) take the same
+/// receipt path instead of hard parse errors; hard errors stay scoped to TOML
+/// syntax and malformed non-policy sections.
+fn sanitize_policy_sections(value: &mut toml::Value) -> Vec<PolicyError> {
+    let mut errors = Vec::new();
+    let Some(table) = value.as_table_mut() else {
+        return errors;
+    };
+    let unknown_top_level = table
+        .keys()
+        .filter(|key| !KNOWN_TOP_LEVEL_KEYS.contains(&key.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    for key in unknown_top_level {
+        errors.push(PolicyError {
+            section: key.clone(),
+            detail: format!(
+                "unknown top-level config key `{key}`; expected one of: {}",
+                KNOWN_TOP_LEVEL_KEYS.join(", ")
+            ),
+        });
+        table.remove(&key);
+    }
+    sanitize_gate_section(table, &mut errors);
+    sanitize_tools_section(table, &mut errors);
+    sanitize_proof_section(table, &mut errors);
+    errors
+}
+
+/// Per-key validation for `[gate]`: each key is probed as a single-key table
+/// against `GateConfig` (which carries `deny_unknown_fields`), so an unknown
+/// key, a wrong value type, or a malformed `[gate.blocking]` sub-table strips
+/// only the offending key while valid siblings keep working.
+fn sanitize_gate_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    let Some(gate) = table.get_mut("gate") else {
+        return;
+    };
+    let Some(gate_table) = gate.as_table_mut() else {
+        errors.push(PolicyError {
+            section: "gate".to_owned(),
+            detail: format!(
+                "invalid [gate]: expected a table, found {}",
+                gate.type_str()
+            ),
+        });
+        table.remove("gate");
+        return;
+    };
+    let entries = gate_table
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    for (key, entry) in entries {
+        let mut probe = toml::value::Table::new();
+        probe.insert(key.clone(), entry);
+        if let Err(err) = toml::Value::Table(probe).try_into::<GateConfig>() {
+            errors.push(PolicyError {
+                section: format!("gate.{key}"),
+                detail: format!("invalid [gate] key `{key}`: {err}"),
+            });
+            gate_table.remove(&key);
+        }
+    }
+}
+
+/// Per-key validation for every `[tools.<id>]` table: unknown keys (for
+/// example `gates`), wrong value types, non-table tool entries, and a
+/// non-table `[tools]` all become `PolicyError` receipts. The `gate` key is
+/// validated against `ToolGatePolicy` plus the scope allowlist; an invalid
+/// scope strips only `scope` so the threshold siblings keep working under the
+/// only semantics that exist (`on-diff`).
+fn sanitize_tools_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    let Some(tools) = table.get_mut("tools") else {
+        return;
+    };
+    let Some(tools_table) = tools.as_table_mut() else {
+        errors.push(PolicyError {
+            section: "tools".to_owned(),
+            detail: format!(
+                "invalid [tools]: expected a table of [tools.<id>] tables, found {}",
+                tools.type_str()
+            ),
+        });
+        table.remove("tools");
+        return;
+    };
+    let ids = tools_table.keys().cloned().collect::<Vec<_>>();
+    for id in ids {
+        let Some(tool) = tools_table.get_mut(&id) else {
+            continue;
+        };
+        let Some(tool_table) = tool.as_table_mut() else {
+            errors.push(PolicyError {
+                section: format!("tools.{id}"),
+                detail: format!(
+                    "invalid [tools.{id}]: expected a table, found {}",
+                    tool.type_str()
+                ),
+            });
+            tools_table.remove(&id);
+            continue;
+        };
+        let entries = tool_table
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect::<Vec<_>>();
+        for (key, entry) in entries {
+            if key == "gate" {
+                sanitize_tool_gate_value(&id, tool_table, entry, errors);
+                continue;
+            }
+            if !KNOWN_TOOL_POLICY_KEYS.contains(&key.as_str()) {
+                errors.push(PolicyError {
+                    section: format!("tools.{id}.{key}"),
+                    detail: format!(
+                        "unknown [tools.{id}] key `{key}`; expected one of: {}",
+                        KNOWN_TOOL_POLICY_KEYS.join(", ")
+                    ),
+                });
+                tool_table.remove(&key);
+                continue;
+            }
+            let mut probe = toml::value::Table::new();
+            probe.insert(key.clone(), entry);
+            if let Err(err) = toml::Value::Table(probe).try_into::<ToolPolicyInput>() {
+                errors.push(PolicyError {
+                    section: format!("tools.{id}.{key}"),
+                    detail: format!("invalid [tools.{id}] key `{key}`: {err}"),
+                });
+                tool_table.remove(&key);
+            }
+        }
+    }
+}
+
+fn sanitize_tool_gate_value(
+    id: &str,
+    tool_table: &mut toml::value::Table,
+    gate: toml::Value,
+    errors: &mut Vec<PolicyError>,
+) {
+    match gate.try_into::<ToolGatePolicy>() {
+        Err(err) => {
+            errors.push(PolicyError {
+                section: format!("tools.{id}.gate"),
+                detail: format!("invalid [tools.{id}.gate] table: {err}"),
+            });
+            tool_table.remove("gate");
+        }
+        Ok(policy) => {
+            if let Some(scope) = policy.scope.as_deref()
+                && !KNOWN_TOOL_GATE_SCOPES.contains(&scope)
+            {
+                errors.push(PolicyError {
+                    section: format!("tools.{id}.gate.scope"),
+                    detail: format!(
+                        "unknown [tools.{id}.gate] scope `{scope}`; expected one of: {} \
+                         (repo-wide tool-gate scoping does not exist yet)",
+                        KNOWN_TOOL_GATE_SCOPES.join(", ")
+                    ),
+                });
+                if let Some(gate_table) = tool_table
+                    .get_mut("gate")
+                    .and_then(toml::Value::as_table_mut)
+                {
+                    gate_table.remove("scope");
+                }
+            }
+        }
+    }
+}
+
+/// Per-key validation for `[proof]`: unknown keys (for example a misspelled
+/// `[[proof.requierd]]`), a non-table `[proof]`, and `[proof.required]`
+/// written as a single table instead of an array of tables all become
+/// `PolicyError` receipts; well-formed `[[proof.required]]` entries are then
+/// validated individually.
+fn sanitize_proof_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    let Some(proof) = table.get_mut("proof") else {
+        return;
+    };
+    let Some(proof_table) = proof.as_table_mut() else {
+        errors.push(PolicyError {
+            section: "proof".to_owned(),
+            detail: format!(
+                "invalid [proof]: expected a table, found {}",
+                proof.type_str()
+            ),
+        });
+        table.remove("proof");
+        return;
+    };
+    let unknown_keys = proof_table
+        .keys()
+        .filter(|key| key.as_str() != "required")
+        .cloned()
+        .collect::<Vec<_>>();
+    for key in unknown_keys {
+        errors.push(PolicyError {
+            section: format!("proof.{key}"),
+            detail: format!(
+                "unknown [proof] key `{key}`; expected `required` ([[proof.required]] entries)"
+            ),
+        });
+        proof_table.remove(&key);
+    }
+    let Some(required) = proof_table.get_mut("required") else {
+        return;
+    };
+    let Some(required_array) = required.as_array_mut() else {
+        errors.push(PolicyError {
+            section: "proof.required".to_owned(),
+            detail: format!(
+                "invalid [proof.required]: expected an array of tables ([[proof.required]]), \
+                 found {}",
+                required.type_str()
+            ),
+        });
+        proof_table.remove("required");
+        return;
+    };
+    let entries = std::mem::take(required_array);
+    for (index, entry) in entries.into_iter().enumerate() {
+        match validate_required_proof_policy(index, &entry) {
+            Ok(()) => required_array.push(entry),
+            Err(error) => errors.push(error),
+        }
+    }
+}
+
+/// Strict per-entry validation for `[[proof.required]]`: unknown keys, empty
+/// commands, and unknown selector values are policy errors instead of
+/// silently inert policies.
+fn validate_required_proof_policy(
+    index: usize,
+    entry: &toml::Value,
+) -> std::result::Result<(), PolicyError> {
+    let section = required_proof_policy_section(index, entry);
+    let policy: RequiredProofPolicy = entry.clone().try_into().map_err(|err| PolicyError {
+        section: section.clone(),
+        detail: format!("invalid [[proof.required]] entry: {err}"),
+    })?;
+    if policy.command.trim().is_empty() {
+        return Err(PolicyError {
+            section,
+            detail: "[[proof.required]] entry has an empty `command`; a required proof policy \
+                     must name the command it proves"
+                .to_owned(),
+        });
+    }
+    for diff_class in &policy.diff_classes {
+        if !known_policy_selector(diff_class, KNOWN_POLICY_DIFF_CLASSES) {
+            return Err(PolicyError {
+                section,
+                detail: format!(
+                    "unknown diff_classes selector `{diff_class}`; expected a wildcard (*, any, \
+                     all) or one of: {}",
+                    KNOWN_POLICY_DIFF_CLASSES.join(", ")
+                ),
+            });
+        }
+    }
+    for language in &policy.languages {
+        if !known_policy_selector(language, KNOWN_POLICY_LANGUAGES) {
+            return Err(PolicyError {
+                section,
+                detail: format!(
+                    "unknown languages selector `{language}`; expected a wildcard (*, any, all) \
+                     or one of: {}",
+                    KNOWN_POLICY_LANGUAGES.join(", ")
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn required_proof_policy_section(index: usize, entry: &toml::Value) -> String {
+    match entry.get("id").and_then(toml::Value::as_str) {
+        Some(id) if !id.trim().is_empty() => format!("proof.required.{}", id.trim()),
+        _ => format!("proof.required[{index}]"),
     }
 }
 

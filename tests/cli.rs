@@ -3217,6 +3217,460 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn gate_check_exit_codes_follow_fail_on_gate_resolution() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let pass = temp.path().join("gate-pass.json");
+    write_file(
+        &pass,
+        r#"{"schema":"ub-review.gate_outcome.v1","conclusion":"pass","reasons":[]}"#,
+    )?;
+    let fail = temp.path().join("gate-fail.json");
+    write_file(
+        &fail,
+        r#"{
+  "schema": "ub-review.gate_outcome.v1",
+  "conclusion": "fail",
+  "reasons": [
+    {"kind": "required-proof", "id": "cargo-check", "detail": "exit 101", "receipt": "review/proof_receipts.json#x"},
+    {"kind": "tool-gate", "id": "ripr", "detail": "threshold exceeded", "receipt": "review/tool-gate-outcomes.json#ripr"}
+  ]
+}"#,
+    )?;
+    let missing = temp.path().join("absent/gate_outcome.json");
+
+    // Exit 0: passing outcome under enforcement.
+    run(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&pass)?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    // Exit 0: failing outcome with enforcement off (explicit and auto).
+    run(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&fail)?,
+            "--fail-on-gate",
+            "false",
+            "--mode",
+            "intelligent-ci",
+        ],
+    )?;
+    run(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&fail)?,
+            "--fail-on-gate",
+            "auto",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    run(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&missing)?,
+            "--fail-on-gate",
+            "auto",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    // Non-zero: failing outcome with enforcement on names reason ids + path.
+    let enforced = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&fail)?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    assert!(
+        enforced.contains("cargo-check, ripr"),
+        "gate-check output must list blocking reason ids: {enforced}"
+    );
+    assert!(
+        enforced.contains("gate-fail.json"),
+        "gate-check output must name the artifact path: {enforced}"
+    );
+    // Non-zero: auto resolves to enforcement for intelligent-ci.
+    run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&fail)?,
+            "--fail-on-gate",
+            "auto",
+            "--mode",
+            "intelligent-ci",
+        ],
+    )?;
+    // Non-zero: enforcement on with a missing artifact is a hard error.
+    let missing_enforced = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&missing)?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    assert!(
+        missing_enforced.contains("is missing"),
+        "{missing_enforced}"
+    );
+    // Non-zero: enforcement fails closed on any conclusion that is not
+    // exactly `pass` or `fail` (missing key, null, casing drift, other
+    // strings), naming the unexpected value and the artifact path.
+    let weird = temp.path().join("gate-weird.json");
+    for conclusion_json in [r#""error""#, r#""Fail""#, "null"] {
+        write_file(
+            &weird,
+            &format!(
+                r#"{{"schema":"ub-review.gate_outcome.v1","conclusion":{conclusion_json},"reasons":[]}}"#
+            ),
+        )?;
+        let failed_closed = run_expect_failure(
+            temp.path(),
+            bin,
+            &[
+                "gate-check",
+                "--gate-outcome",
+                path_str(&weird)?,
+                "--fail-on-gate",
+                "true",
+                "--mode",
+                "review-byok",
+            ],
+        )?;
+        assert!(
+            failed_closed.contains("unrecognized conclusion"),
+            "conclusion {conclusion_json}: {failed_closed}"
+        );
+        assert!(
+            failed_closed.contains("gate-weird.json"),
+            "conclusion {conclusion_json}: {failed_closed}"
+        );
+        // Exit 0: enforcement off tolerates the same artifact.
+        run(
+            temp.path(),
+            bin,
+            &[
+                "gate-check",
+                "--gate-outcome",
+                path_str(&weird)?,
+                "--fail-on-gate",
+                "false",
+                "--mode",
+                "intelligent-ci",
+            ],
+        )?;
+    }
+    // Non-zero: a schema mismatch fails closed under enforcement even when
+    // the conclusion claims `pass`.
+    let wrong_schema = temp.path().join("gate-wrong-schema.json");
+    write_file(
+        &wrong_schema,
+        r#"{"schema":"ub-review.gate_outcome.v2","conclusion":"pass","reasons":[]}"#,
+    )?;
+    let schema_enforced = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&wrong_schema)?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    assert!(
+        schema_enforced.contains("ub-review.gate_outcome.v2"),
+        "{schema_enforced}"
+    );
+    // Exit 0: the schema drift is informational with enforcement off.
+    run(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&wrong_schema)?,
+            "--fail-on-gate",
+            "false",
+            "--mode",
+            "intelligent-ci",
+        ],
+    )?;
+    // Non-zero: clap rejects unknown fail-on-gate values, replacing the old
+    // bash `*)` case.
+    run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&pass)?,
+            "--fail-on-gate",
+            "sometimes",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    Ok(())
+}
+
+#[test]
+fn run_records_policy_parse_error_as_receipted_gate_failure() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let config = temp.path().join("bad-gate.toml");
+    write_file(
+        &config,
+        r#"profile = "gh-runner"
+
+[gate]
+target_minutes = 45
+
+[tools.ripr.gate]
+max_new = 0
+
+[tools.unsafe-review.gate]
+max_new_unsuppressed = 0
+"#,
+    )?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let out = temp.path().join("packet");
+    // review-byok with fail-on-gate auto (off): the run exits zero but still
+    // records the malformed policy section as a blocking gate reason.
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    let gate: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert_eq!(gate["conclusion"], "fail");
+    assert_eq!(gate["reasons"][0]["kind"], "policy");
+    assert_eq!(gate["reasons"][0]["id"], "tools.ripr.gate");
+    assert_eq!(gate["reasons"][0]["receipt"], "effective-config.json");
+    assert!(
+        gate["reasons"][0]["detail"]
+            .as_str()
+            .is_some_and(|detail| detail.contains("max_new")),
+        "policy detail must name the parse error: {}",
+        gate["reasons"][0]["detail"]
+    );
+    let effective: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
+    assert_eq!(effective["policy_errors"][0]["section"], "tools.ripr.gate");
+    // Valid siblings survive the one malformed [tools.ripr.gate] table: the
+    // [gate] table and the well-formed sibling tool gate are still applied.
+    assert_eq!(effective["gate"]["target_minutes"], 45);
+    assert_eq!(
+        effective["tools"]["unsafe-review"]["gate"]["max_new_unsuppressed"],
+        0
+    );
+
+    // The recorded failure becomes a red check once enforcement is on.
+    let gate_outcome_path = out.join("review/gate_outcome.json");
+    let enforced = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&gate_outcome_path)?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    assert!(enforced.contains("tools.ripr.gate"), "{enforced}");
+
+    // `run --fail-on-gate true` exits non-zero after writing all artifacts.
+    let out_enforced = temp.path().join("packet-enforced");
+    let run_failure = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out_enforced)?,
+            "--fail-on-gate",
+            "true",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    assert!(
+        run_failure.contains("gate conclusion is `fail`"),
+        "{run_failure}"
+    );
+    assert!(out_enforced.join("review/gate_outcome.json").exists());
+    Ok(())
+}
+
+/// Driver for `isolated_command_scrubs_ambient_profile_env_from_child_runs`.
+/// Runs only when re-invoked by that test with `UB_SCRUB_*` coordinates; it
+/// spawns `ub-review plan --write` through the scrubbing `isolated_command`
+/// helper while ambient `UB_REVIEW_*` variables are present in this process.
+#[test]
+#[ignore = "driver: invoked as a subprocess by the env-scrub test"]
+fn env_scrub_driver_invokes_isolated_plan() -> Result<()> {
+    let (Ok(repo), Ok(out)) = (
+        std::env::var("UB_SCRUB_REPO"),
+        std::env::var("UB_SCRUB_OUT"),
+    ) else {
+        return Ok(());
+    };
+    let repo = Path::new(&repo);
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        repo,
+        bin,
+        &[
+            "plan",
+            "--write",
+            "--root",
+            path_str(repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            &out,
+        ],
+    )
+}
+
+#[test]
+fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+    let out = temp.path().join("packet");
+    // Re-invoke this test binary so the gh-runner-full overrides live in the
+    // *parent* process environment around an isolated_command-spawned run,
+    // exactly like the dogfood gate's GitHub Actions step exports them.
+    let driver = std::env::current_exe()?;
+    let output = Command::new(&driver)
+        .arg("env_scrub_driver_invokes_isolated_plan")
+        .arg("--exact")
+        .arg("--ignored")
+        .arg("--nocapture")
+        .env("UB_REVIEW_PROFILE", "gh-runner-full")
+        .env("UB_REVIEW_RUNTIME_PROFILE", "gh-runner-full")
+        .env("UB_SCRUB_REPO", &repo)
+        .env("UB_SCRUB_OUT", &out)
+        .output()?;
+    assert!(
+        output.status.success(),
+        "scrub driver failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let resolved_profile: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("resolved-profile.json"))?)?;
+    // Pin the invariant, not the symptom: ambient UB_REVIEW_* overrides in
+    // the parent environment must never leak into isolated_command children,
+    // so the child resolves gh-runner defaults rather than gh-runner-full.
+    assert_eq!(
+        resolved_profile["selected_profile"], "gh-runner",
+        "ambient UB_REVIEW_PROFILE leaked into an isolated_command child"
+    );
+    assert_eq!(
+        resolved_profile["selected_runtime_profile"], "gh-runner",
+        "ambient UB_REVIEW_RUNTIME_PROFILE leaked into an isolated_command child"
+    );
+    Ok(())
+}
+
+fn init_minimal_repo(repo: &Path) -> Result<()> {
+    write_file(
+        &repo.join("src/lib.rs"),
+        "pub fn answer() -> usize {\n    41\n}\n",
+    )?;
+    run(repo, "git", &["init"])?;
+    run(
+        repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(repo, "git", &["add", "."])?;
+    run(repo, "git", &["commit", "-m", "baseline"])?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        "pub fn answer() -> usize {\n    42\n}\n",
+    )?;
+    run(repo, "git", &["add", "."])?;
+    run(repo, "git", &["commit", "-m", "change"])?;
+    Ok(())
+}
+
 fn write_file(path: &Path, text: &str) -> Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;

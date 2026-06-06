@@ -52,6 +52,117 @@ fn main() -> Result<()> {
         Command::Summary(args) => cmd_summary(args),
         Command::Post(args) => cmd_post(args),
         Command::AuditCi(args) => cmd_audit_ci(args),
+        Command::GateCheck(args) => cmd_gate_check(args),
+    }
+}
+
+/// Minimal read view of `review/gate_outcome.json` for enforcement. The full
+/// `GateOutcome` struct is write-only; enforcement needs only the conclusion
+/// and the blocking reason ids.
+#[derive(Debug, Deserialize)]
+struct GateCheckOutcome {
+    #[serde(default)]
+    schema: Option<String>,
+    #[serde(default)]
+    conclusion: Option<String>,
+    #[serde(default)]
+    reasons: Vec<GateCheckReason>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GateCheckReason {
+    #[serde(default)]
+    id: String,
+}
+
+/// Single source of truth for gate enforcement: resolves `fail-on-gate` with
+/// the same `FailOnGate::resolved` semantics `run` uses, then turns a recorded
+/// `fail` conclusion into a non-zero exit. The action's "Enforce gate outcome"
+/// step calls this instead of re-implementing the resolution in bash.
+///
+/// Enforcement fails closed: only a conclusion of exactly `pass` in an
+/// artifact with the expected schema keeps the check green. A missing key, a
+/// null, casing drift (`Fail`), or any other unrecognized verdict is treated
+/// as a failure naming the unexpected value, so a corrupted or
+/// future-incompatible artifact can never silently pass the gate.
+fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
+    let path = &args.gate_outcome;
+    if !args.fail_on_gate.resolved(args.mode) {
+        // Informational only: with enforcement off nothing fails, but a
+        // schema drift in a readable artifact is still worth a log line.
+        if let Ok(text) = fs::read_to_string(path)
+            && let Ok(outcome) = serde_json::from_str::<GateCheckOutcome>(&text)
+            && outcome.schema.as_deref() != Some(GATE_OUTCOME_SCHEMA)
+        {
+            println!(
+                "note: {} schema is `{}` (expected `{GATE_OUTCOME_SCHEMA}`)",
+                path.display(),
+                outcome.schema.as_deref().unwrap_or("missing")
+            );
+        }
+        println!(
+            "gate enforcement is off (fail-on-gate={}, mode={}); not enforcing {}",
+            args.fail_on_gate.key(),
+            args.mode.key(),
+            path.display()
+        );
+        return Ok(());
+    }
+    if !path.exists() {
+        bail!("gate enforcement is on but {} is missing", path.display());
+    }
+    let text = fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+    let outcome: GateCheckOutcome =
+        serde_json::from_str(&text).with_context(|| format!("parse {}", path.display()))?;
+    let schema = outcome.schema.as_deref().unwrap_or("missing");
+    if schema != GATE_OUTCOME_SCHEMA {
+        let message = format!(
+            "gate enforcement is on but {} has unexpected schema `{schema}` (expected \
+             `{GATE_OUTCOME_SCHEMA}`); failing closed",
+            path.display()
+        );
+        println!("::error::{message}");
+        bail!("{message}");
+    }
+    match outcome.conclusion.as_deref() {
+        Some("pass") => {
+            println!(
+                "gate conclusion is `pass` in {}; check stays green",
+                path.display()
+            );
+            Ok(())
+        }
+        Some("fail") => {
+            let mut reason_ids = outcome
+                .reasons
+                .iter()
+                .map(|reason| reason.id.as_str())
+                .filter(|id| !id.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if reason_ids.is_empty() {
+                reason_ids = "none".to_owned();
+            }
+            let message = format!(
+                "ub-review gate failed (blocking reasons: {reason_ids}); receipts are in {}",
+                path.display()
+            );
+            // GitHub Actions error annotation; the bail below sets the exit code.
+            println!("::error::{message}");
+            bail!("{message}");
+        }
+        other => {
+            let value = other
+                .map(|value| format!("`{value}`"))
+                .unwrap_or_else(|| "missing".to_owned());
+            let message = format!(
+                "gate enforcement is on but {} records unrecognized conclusion {value} \
+                 (expected exactly `pass` or `fail`); failing closed",
+                path.display()
+            );
+            println!("::error::{message}");
+            bail!("{message}");
+        }
     }
 }
 
@@ -2513,7 +2624,8 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
             &event_log,
         )?;
     }
-    write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
+    let tool_gate_outcomes =
+        write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
 
     write_lane_packets(&args.review.out, &diff, &selected_model_lanes, &event_log)?;
     finish_run_loop(
@@ -2535,6 +2647,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &diff,
         &box_state,
         &plan,
+        &tool_gate_outcomes.outcomes,
         &preliminary_summary,
         &args,
         &event_log,
@@ -3045,20 +3158,21 @@ fn resolved_tools_artifact(
     }
 }
 
+/// Writes the tool-status and tool-gate-outcome artifacts and returns the
+/// gate outcomes so `cmd_run` can thread them into the gate verdict.
 fn write_tool_status_artifacts(
     out: &Path,
     config: &Config,
     profile: &Profile,
     plan: &Plan,
-) -> Result<()> {
+) -> Result<ToolGateOutcomeArtifact> {
     let artifact = tool_status_artifact(out, config, profile, plan);
     let bytes = serde_json::to_vec_pretty(&artifact)?;
     fs::write(out.join("tool-status.json"), &bytes)?;
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
     fs::write(review_dir.join("tool-status.json"), bytes)?;
-    write_tool_gate_outcome_artifacts(out, config, profile, &artifact)?;
-    Ok(())
+    write_tool_gate_outcome_artifacts(out, config, profile, &artifact)
 }
 
 fn tool_status_artifact(
@@ -3136,7 +3250,7 @@ fn write_tool_gate_outcome_artifacts(
     config: &Config,
     profile: &Profile,
     tool_status: &ToolStatusArtifact,
-) -> Result<()> {
+) -> Result<ToolGateOutcomeArtifact> {
     let artifact = tool_gate_outcome_artifact(out, config, profile, tool_status);
     let bytes = serde_json::to_vec_pretty(&artifact)?;
     fs::write(out.join("tool-gate-outcomes.json"), &bytes)?;
@@ -3149,7 +3263,7 @@ fn write_tool_gate_outcome_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("tool_gate_outcomes.ndjson"), ndjson)?;
-    Ok(())
+    Ok(artifact)
 }
 
 fn tool_gate_outcome_artifact(
@@ -3213,11 +3327,18 @@ fn tool_gate_outcome_entry(
             format!("tool gate was not evaluated because {}", entry.reason),
             None,
         ),
+        // A sensor that crashed or timed out never produced a verdict, so the
+        // threshold could not be evaluated. That is missing evidence, not a
+        // threshold failure: only an actually-evaluated, actually-exceeded
+        // threshold gets the unconditionally-blocking `failed` outcome.
+        // Missing evidence stays advisory unless repo policy opts required
+        // tools into blocking via [gate.blocking] tool_gate_missing_evidence.
         Some(entry) if matches!(entry.status.as_str(), "failed" | "timed_out") => (
-            "failed".to_owned(),
-            true,
+            "missing_evidence".to_owned(),
+            false,
             format!(
-                "tool gate failed because sensor status was `{}`",
+                "tool gate threshold could not be evaluated because the sensor did not \
+                 produce a verdict (sensor status `{}`)",
                 entry.status
             ),
             None,
@@ -3470,10 +3591,6 @@ fn proof_policy_diff_class_matches(diff_classes: &[String], diff_class: &str) ->
         let candidate = normalize_policy_selector(candidate);
         matches!(candidate.as_str(), "*" | "any" | "all") || candidate == diff_class
     })
-}
-
-fn normalize_policy_selector(value: &str) -> String {
-    value.trim().to_ascii_lowercase().replace('_', "-")
 }
 
 fn resolved_selector_artifact(
@@ -5300,6 +5417,7 @@ fn write_review_artifacts(
     diff: &DiffContext,
     box_state: &BoxState,
     plan: &Plan,
+    tool_gate_outcomes: &[ToolGateOutcomeEntry],
     running_summary: &str,
     args: &RunArgs,
     event_log: &EventLog,
@@ -5819,10 +5937,12 @@ fn write_review_artifacts(
     )?;
     let gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
+        config,
         plan,
         terminal_state: &review.terminal_state,
         proof_requests: &review.proof_requests,
         proof_receipts: &review.proof_receipts,
+        tool_gate_outcomes,
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
     });
@@ -6327,10 +6447,12 @@ const REQUIRED_PROOF_POLICY_LANE: &str = "intelligent-ci-policy";
 
 struct GateOutcomeInput<'a> {
     args: &'a RunArgs,
+    config: &'a Config,
     plan: &'a Plan,
     terminal_state: &'a ReviewTerminalState,
     proof_requests: &'a [ProofRequest],
     proof_receipts: &'a [ProofReceipt],
+    tool_gate_outcomes: &'a [ToolGateOutcomeEntry],
     missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
 }
@@ -6349,6 +6471,22 @@ enum RequiredProofClass {
 /// existing receipt artifact.
 fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
     let mut reasons = Vec::new();
+    let blocking_policy = &input.config.gate.blocking;
+
+    // Malformed policy sections recorded at config load are always blocking:
+    // a config the repo wrote but the gate could not honor must never decay
+    // into a silent default (roadmap #24). The exit decision still follows
+    // `fail-on-gate`, so review-byok with enforcement off records the reason
+    // without exiting non-zero.
+    for error in &input.config.policy_errors {
+        reasons.push(GateReason {
+            kind: "policy".to_owned(),
+            id: error.section.clone(),
+            detail: error.detail.clone(),
+            receipt: "effective-config.json".to_owned(),
+        });
+    }
+
     let mut required_proof = GateRequiredProofCounts::default();
     for request in input
         .proof_requests
@@ -6364,11 +6502,40 @@ fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         });
         let Some(receipt) = receipt else {
             required_proof.skipped += 1;
+            if blocking_policy.required_proof_unproven {
+                reasons.push(GateReason {
+                    kind: "blocking-finding".to_owned(),
+                    id: required_proof_reason_id(request),
+                    detail: format!(
+                        "required proof `{}` produced no receipt; repo policy \
+                         [gate.blocking] required_proof_unproven marks unproven required \
+                         proof blocking",
+                        required_proof_reason_id(request)
+                    ),
+                    receipt: "review/proof_requests.json".to_owned(),
+                });
+            }
             continue;
         };
         match required_proof_receipt_class(receipt) {
             RequiredProofClass::Passed => required_proof.passed += 1,
-            RequiredProofClass::Skipped => required_proof.skipped += 1,
+            RequiredProofClass::Skipped => {
+                required_proof.skipped += 1;
+                if blocking_policy.required_proof_unproven {
+                    reasons.push(GateReason {
+                        kind: "blocking-finding".to_owned(),
+                        id: required_proof_reason_id(request),
+                        detail: format!(
+                            "required proof `{}` was not proven (result `{}`); repo policy \
+                             [gate.blocking] required_proof_unproven marks unproven required \
+                             proof blocking",
+                            required_proof_reason_id(request),
+                            receipt.result
+                        ),
+                        receipt: format!("review/proof_receipts.json#{}", receipt.id),
+                    });
+                }
+            }
             RequiredProofClass::Failed => {
                 // One reason per failed required request, keyed by its policy
                 // identifier, so `required_proof.failed` and the blocking
@@ -6377,10 +6544,52 @@ fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                 reasons.push(GateReason {
                     kind: "required-proof".to_owned(),
                     id: required_proof_reason_id(request),
-                    detail: required_proof_failure_detail(receipt),
+                    detail: required_proof_failure_detail(request, receipt),
                     receipt: format!("review/proof_receipts.json#{}", receipt.id),
                 });
             }
+        }
+    }
+
+    // A tool-gate outcome entry exists only when repo config sets a
+    // [tools.<id>.gate] policy; that explicit opt-in is what makes a failed
+    // threshold blocking. A `failed` outcome means the threshold was actually
+    // evaluated against a gate-decision receipt and actually exceeded; a
+    // sensor crash or timeout is classified as `missing_evidence` upstream
+    // because no threshold verdict exists. Tools without configured gates
+    // never produce entries, so non-required tools without gate policies can
+    // never redden the gate. `missing_evidence` and `not_evaluated` outcomes
+    // stay non-blocking unless repo policy opts required tools in via
+    // [gate.blocking] tool_gate_missing_evidence.
+    let mut tool_gates = GateToolGateCounts::default();
+    for entry in input.tool_gate_outcomes {
+        if entry.evaluated {
+            tool_gates.evaluated += 1;
+        }
+        match entry.outcome.as_str() {
+            "passed" => tool_gates.passed += 1,
+            "failed" => {
+                tool_gates.failed += 1;
+                reasons.push(GateReason {
+                    kind: "tool-gate".to_owned(),
+                    id: entry.tool.clone(),
+                    detail: entry.reason.clone(),
+                    receipt: format!("review/tool-gate-outcomes.json#{}", entry.tool),
+                });
+            }
+            "missing_evidence" if entry.required && blocking_policy.tool_gate_missing_evidence => {
+                reasons.push(GateReason {
+                    kind: "blocking-finding".to_owned(),
+                    id: entry.tool.clone(),
+                    detail: format!(
+                        "required tool gate evidence is missing ({}); repo policy \
+                         [gate.blocking] tool_gate_missing_evidence marks this blocking",
+                        entry.reason
+                    ),
+                    receipt: format!("review/tool-gate-outcomes.json#{}", entry.tool),
+                });
+            }
+            _ => {}
         }
     }
 
@@ -6419,8 +6628,7 @@ fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         terminal_status: input.terminal_state.status.clone(),
         reasons,
         required_proof,
-        // Placeholder until repo-configured gate policy lands (roadmap #24).
-        tool_gates: GateToolGateCounts::default(),
+        tool_gates,
         evidence_gaps_blocking,
         evidence_gaps_advisory,
     }
@@ -6438,9 +6646,10 @@ fn required_proof_receipt_class(receipt: &ProofReceipt) -> RequiredProofClass {
         "head_passed" | "discriminating" => RequiredProofClass::Passed,
         "head_failed" | "timed_out" => RequiredProofClass::Failed,
         // Missing receipts, `skipped_budget`, `skipped_profile`,
-        // `non_discriminating`, and `base_patch_failed` stay non-blocking for
-        // now: a dry run must not redden the gate. The full evidence-gap
-        // policy is roadmap #24.
+        // `non_discriminating`, and `base_patch_failed` stay non-blocking by
+        // default: a dry run must not redden the gate. Repos opt skipped
+        // required proof into blocking via [gate.blocking]
+        // required_proof_unproven = true.
         _ => RequiredProofClass::Skipped,
     }
 }
@@ -6457,14 +6666,21 @@ fn required_proof_reason_id(request: &ProofRequest) -> String {
         .unwrap_or_else(|| request.id.clone())
 }
 
-fn required_proof_failure_detail(receipt: &ProofReceipt) -> String {
-    let detail = receipt
+/// Failure details lead with the request's policy identifier so two required
+/// requests resolved by one shared receipt still produce distinct,
+/// per-requirement details.
+fn required_proof_failure_detail(request: &ProofRequest, receipt: &ProofReceipt) -> String {
+    let command_detail = receipt
         .commands
         .iter()
         .find(|command| command.side == "head")
         .or_else(|| receipt.commands.first())
         .map(|command| format!("`{}` {}", command.command, proof_command_status(command)))
         .unwrap_or_else(|| receipt.reason.clone());
+    let detail = format!(
+        "required proof `{}`: {command_detail}",
+        required_proof_reason_id(request)
+    );
     if receipt.result == "timed_out" && !detail.contains("timed") {
         format!("{detail} (proof timed out)")
     } else {
@@ -21180,8 +21396,8 @@ mod tests {
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
-        FollowUpOutputRecord, FollowUpQuestionTask, GateOutcomeInput, GitHubReview,
-        GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
+        FailOnGate, FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GateOutcomeInput,
+        GitHubReview, GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
         ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
         ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelMode, ModelOutputSinks,
         ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE, Observation,
@@ -21193,16 +21409,16 @@ mod tests {
         ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
         RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
         SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_post, collect_pr_thread_context,
-        collect_sensor_evidence_issues, combined_observations, command_display,
-        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
-        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        TerminalStateInput, ToolClass, ToolGateOutcomeEntry, ToolGateOutcomeMetrics,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_final_orchestrator_plan, build_gate_outcome,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
+        classify_diff, classify_diff_class, classify_proof_cost, cmd_gate_check, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
         follow_up_output_record, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
@@ -22541,6 +22757,8 @@ enabled = false
             vec!["opened".to_owned(), "ready_for_review".to_owned()]
         );
         assert_eq!(config.gate.synchronize_mode, "gate-only");
+        assert!(!config.gate.blocking.required_proof_unproven);
+        assert!(!config.gate.blocking.tool_gate_missing_evidence);
 
         let ripr = config
             .tools
@@ -28514,6 +28732,8 @@ UB_REVIEW_HTTP_STATUS:429
             let terminal_state = test_terminal_state(status);
             let gate = build_gate_outcome(GateOutcomeInput {
                 args: &args,
+                config: &Config::default(),
+                tool_gate_outcomes: &[],
                 plan: &plan,
                 terminal_state: &terminal_state,
                 proof_requests: &[],
@@ -28550,6 +28770,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &[],
@@ -28577,6 +28799,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: std::slice::from_ref(&request),
@@ -28612,6 +28836,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: std::slice::from_ref(&request),
@@ -28655,6 +28881,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &requests,
@@ -28678,7 +28906,15 @@ UB_REVIEW_HTTP_STATUS:429
                 reason.receipt,
                 format!("review/proof_receipts.json#{}", receipt.id)
             );
+            assert!(
+                reason.detail.contains(&format!("`{}`", reason.id)),
+                "detail must name its own policy id: {}",
+                reason.detail
+            );
         }
+        // Two requests resolved by one shared receipt must still carry
+        // distinct, per-requirement details.
+        assert_ne!(gate.reasons[0].detail, gate.reasons[1].detail);
     }
 
     #[test]
@@ -28701,6 +28937,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &requests,
@@ -28731,6 +28969,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: std::slice::from_ref(&request),
@@ -28760,6 +29000,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &[],
@@ -28783,6 +29025,8 @@ UB_REVIEW_HTTP_STATUS:429
         let terminal_state = test_terminal_state("sufficient");
         let review_byok_gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &[],
@@ -28813,6 +29057,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &[],
@@ -28850,6 +29096,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: &[],
@@ -28883,6 +29131,8 @@ UB_REVIEW_HTTP_STATUS:429
 
         let gate = build_gate_outcome(GateOutcomeInput {
             args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
             plan: &plan,
             terminal_state: &terminal_state,
             proof_requests: std::slice::from_ref(&request),
@@ -28900,6 +29150,910 @@ UB_REVIEW_HTTP_STATUS:429
             gate.reasons.iter().all(|reason| reason.kind != "internal"),
             "specific reasons must replace the internal fallback"
         );
+    }
+
+    fn tool_gate_entry(
+        tool: &str,
+        outcome: &str,
+        evaluated: bool,
+        required: bool,
+    ) -> ToolGateOutcomeEntry {
+        ToolGateOutcomeEntry {
+            schema: "ub-review.tool_gate_outcome.v1",
+            tool: tool.to_owned(),
+            policy: super::ToolGatePolicy {
+                scope: Some("on-diff".to_owned()),
+                max_new_unsuppressed: Some(0),
+            },
+            required,
+            planned_run: outcome != "not_evaluated",
+            sensor_status: "ok".to_owned(),
+            sensor_reason: "tool gate fixture".to_owned(),
+            sensor_receipt_path: format!("sensors/{tool}/ub-review-sensor-status.json"),
+            status_source: "tool-status.json",
+            outcome: outcome.to_owned(),
+            evaluated,
+            reason: match outcome {
+                "failed" => "new_unsuppressed=3 exceeds configured maximum 0".to_owned(),
+                "passed" => "new_unsuppressed=0 is within configured maximum 0".to_owned(),
+                other => format!("tool gate fixture outcome `{other}`"),
+            },
+            metrics: ToolGateOutcomeMetrics {
+                new_unsuppressed: evaluated.then_some(if outcome == "failed" { 3 } else { 0 }),
+            },
+            source_artifacts: vec![
+                format!("sensors/{tool}/ub-review-sensor-status.json"),
+                "tool-status.json".to_owned(),
+            ],
+            packet_policy: "gate-only",
+            gate_policy: "trust-affecting",
+        }
+    }
+
+    #[test]
+    fn gate_outcome_counts_tool_gates_and_fails_on_threshold_failure() {
+        // review-byok on purpose: a configured [tools.*.gate] threshold is
+        // repo policy, so the recorded verdict is mode-independent and only
+        // the exit decision follows fail-on-gate.
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let entries = vec![
+            tool_gate_entry("ripr", "passed", true, true),
+            tool_gate_entry("unsafe-review", "failed", true, false),
+            tool_gate_entry("semgrep", "not_evaluated", false, false),
+        ];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &entries,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.tool_gates.evaluated, 2);
+        assert_eq!(gate.tool_gates.passed, 1);
+        assert_eq!(gate.tool_gates.failed, 1);
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "tool-gate");
+        assert_eq!(gate.reasons[0].id, "unsafe-review");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/tool-gate-outcomes.json#unsafe-review"
+        );
+        assert!(
+            gate.reasons[0]
+                .detail
+                .contains("exceeds configured maximum"),
+            "detail: {}",
+            gate.reasons[0].detail
+        );
+    }
+
+    #[test]
+    fn gate_outcome_keeps_unevaluated_tool_gates_non_blocking_by_default() {
+        // Non-required tools whose triggers never matched, and gates without
+        // evidence, must not redden the gate unless repo policy opts in.
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let entries = vec![
+            tool_gate_entry("semgrep", "not_evaluated", false, false),
+            tool_gate_entry("ripr", "missing_evidence", false, false),
+            tool_gate_entry("unsafe-review", "missing_evidence", false, true),
+        ];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &entries,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "pass");
+        assert_eq!(gate.tool_gates.evaluated, 0);
+        assert_eq!(gate.tool_gates.passed, 0);
+        assert_eq!(gate.tool_gates.failed, 0);
+        assert!(gate.reasons.is_empty());
+    }
+
+    #[test]
+    fn gate_outcome_blocks_missing_tool_gate_evidence_only_when_policy_opts_in() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let mut config = Config::default();
+        config.gate.blocking.tool_gate_missing_evidence = true;
+        let entries = vec![
+            tool_gate_entry("ripr", "missing_evidence", false, true),
+            tool_gate_entry("semgrep", "missing_evidence", false, false),
+        ];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &entries,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        // Only the required tool blocks; the non-required gap stays advisory
+        // even with the policy flag on.
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "blocking-finding");
+        assert_eq!(gate.reasons[0].id, "ripr");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/tool-gate-outcomes.json#ripr"
+        );
+    }
+
+    fn gated_tool_status_entry(tool: &str, required: bool, status: &str) -> super::ToolStatusEntry {
+        super::ToolStatusEntry {
+            id: tool.to_owned(),
+            class: ToolClass::Static,
+            command: tool.to_owned(),
+            required_if: super::Trigger::Diff,
+            required,
+            required_reason: "tool gate fixture".to_owned(),
+            runtime_profile: "gh-runner".to_owned(),
+            planned_run: true,
+            timeout_sec: 120,
+            artifact_budget_mb: 64,
+            requires_lease: false,
+            status: status.to_owned(),
+            reason: format!("sensor fixture status `{status}`"),
+            exit_code: Some(if status == "ok" { 0 } else { 101 }),
+            timed_out: status == "timed_out",
+            gate: Some(super::ToolGatePolicy {
+                scope: Some("on-diff".to_owned()),
+                max_new_unsuppressed: Some(0),
+            }),
+            artifact_paths: vec![format!("sensors/{tool}/ub-review-sensor-status.json")],
+        }
+    }
+
+    #[test]
+    fn tool_gate_outcome_classifies_sensor_crash_as_missing_evidence() -> Result<()> {
+        // A sensor that crashed or timed out never evaluated the threshold:
+        // the outcome is missing evidence, never an evaluated `failed`.
+        let temp = tempfile::tempdir()?;
+        let tool = super::ToolPolicy {
+            id: "ripr".to_owned(),
+            ..super::ToolPolicy::default()
+        };
+        let policy = super::ToolGatePolicy {
+            scope: Some("on-diff".to_owned()),
+            max_new_unsuppressed: Some(0),
+        };
+        for status in ["failed", "timed_out"] {
+            let status_entry = gated_tool_status_entry("ripr", false, status);
+            let outcome = super::tool_gate_outcome_entry(
+                temp.path(),
+                &tool,
+                policy.clone(),
+                Some(&status_entry),
+            );
+            assert_eq!(
+                outcome.outcome, "missing_evidence",
+                "sensor status {status}"
+            );
+            assert!(!outcome.evaluated, "sensor status {status}");
+            assert_eq!(outcome.metrics.new_unsuppressed, None);
+            assert!(
+                outcome.reason.contains("could not be evaluated"),
+                "reason must say the threshold was never evaluated: {}",
+                outcome.reason
+            );
+            assert!(
+                outcome.reason.contains(status),
+                "reason must name the sensor status: {}",
+                outcome.reason
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gate_outcome_keeps_sensor_crash_advisory_unless_required_and_opted_in() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let tool = super::ToolPolicy {
+            id: "ripr".to_owned(),
+            ..super::ToolPolicy::default()
+        };
+        let policy = super::ToolGatePolicy {
+            scope: Some("on-diff".to_owned()),
+            max_new_unsuppressed: Some(0),
+        };
+        let terminal_state = test_terminal_state("sufficient");
+        let mut opted_in = Config::default();
+        opted_in.gate.blocking.tool_gate_missing_evidence = true;
+
+        // A crashed sensor on a gated NON-required tool never blocks, with
+        // or without the missing-evidence opt-in.
+        let non_required_status = gated_tool_status_entry("ripr", false, "failed");
+        let non_required_entry = super::tool_gate_outcome_entry(
+            temp.path(),
+            &tool,
+            policy.clone(),
+            Some(&non_required_status),
+        );
+        for config in [&Config::default(), &opted_in] {
+            let gate = build_gate_outcome(GateOutcomeInput {
+                args: &args,
+                config,
+                plan: &plan,
+                terminal_state: &terminal_state,
+                proof_requests: &[],
+                proof_receipts: &[],
+                tool_gate_outcomes: std::slice::from_ref(&non_required_entry),
+                missing_or_failed_sensor_evidence: &[],
+                missing_or_failed_model_evidence: &[],
+            });
+            assert_eq!(gate.conclusion, "pass");
+            assert_eq!(gate.tool_gates.failed, 0);
+            assert!(gate.reasons.is_empty());
+        }
+
+        // A crashed sensor on a gated REQUIRED tool blocks only through the
+        // [gate.blocking] tool_gate_missing_evidence opt-in.
+        let required_status = gated_tool_status_entry("ripr", true, "timed_out");
+        let required_entry = super::tool_gate_outcome_entry(
+            temp.path(),
+            &tool,
+            policy.clone(),
+            Some(&required_status),
+        );
+        let default_gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: std::slice::from_ref(&required_entry),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+        assert_eq!(default_gate.conclusion, "pass");
+        assert!(default_gate.reasons.is_empty());
+        let opted_in_gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &opted_in,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: std::slice::from_ref(&required_entry),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+        assert_eq!(opted_in_gate.conclusion, "fail");
+        assert_eq!(opted_in_gate.reasons.len(), 1);
+        assert_eq!(opted_in_gate.reasons[0].kind, "blocking-finding");
+        assert_eq!(opted_in_gate.reasons[0].id, "ripr");
+        assert_eq!(
+            opted_in_gate.reasons[0].receipt,
+            "review/tool-gate-outcomes.json#ripr"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn gate_outcome_blocks_evaluated_exceeded_threshold_with_receipt() -> Result<()> {
+        // An ok sensor whose gate-decision receipt exceeds the configured
+        // threshold is the one unconditionally-blocking tool-gate case.
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("sensors/ripr"))?;
+        fs::write(
+            temp.path().join("sensors/ripr/gate-decision.json"),
+            br#"{"new_unsuppressed":3}"#,
+        )?;
+        let tool = super::ToolPolicy {
+            id: "ripr".to_owned(),
+            ..super::ToolPolicy::default()
+        };
+        let policy = super::ToolGatePolicy {
+            scope: Some("on-diff".to_owned()),
+            max_new_unsuppressed: Some(0),
+        };
+        let status_entry = gated_tool_status_entry("ripr", false, "ok");
+        let entry = super::tool_gate_outcome_entry(temp.path(), &tool, policy, Some(&status_entry));
+        assert_eq!(entry.outcome, "failed");
+        assert!(entry.evaluated);
+        assert_eq!(entry.metrics.new_unsuppressed, Some(3));
+
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let terminal_state = test_terminal_state("sufficient");
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: std::slice::from_ref(&entry),
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.tool_gates.failed, 1);
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "tool-gate");
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "review/tool-gate-outcomes.json#ripr"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn gate_outcome_fails_on_policy_parse_error_with_effective_config_receipt() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let config = Config {
+            policy_errors: vec![super::PolicyError {
+                section: "tools.ripr.gate".to_owned(),
+                detail: "invalid [tools.ripr.gate] table: unknown field `max_new`".to_owned(),
+            }],
+            ..Config::default()
+        };
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        // Recorded in review-byok too: the verdict is mode-independent and
+        // the exit decision follows fail-on-gate.
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "policy");
+        assert_eq!(gate.reasons[0].id, "tools.ripr.gate");
+        assert!(gate.reasons[0].detail.contains("unknown field"));
+        assert_eq!(gate.reasons[0].receipt, "effective-config.json");
+    }
+
+    #[test]
+    fn gate_outcome_blocks_unproven_required_proof_only_when_policy_opts_in() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let plan = test_plan(Vec::new());
+        let mut config = Config::default();
+        config.gate.blocking.required_proof_unproven = true;
+        let missing_receipt_request = required_policy_proof_request("proof-0000-cargocheck");
+        let mut skipped_request = required_policy_proof_request("proof-0001-cargoclippy");
+        skipped_request.requested_by = vec![
+            "intelligent-ci-policy".to_owned(),
+            "proof-policy:cargo-clippy".to_owned(),
+        ];
+        let mut skipped_receipt = test_proof_receipt("skipped_budget", "skipped");
+        skipped_receipt.id = "proof-receipt-budget".to_owned();
+        skipped_receipt.request_ids = vec![skipped_request.id.clone()];
+        let requests = vec![missing_receipt_request, skipped_request];
+        let terminal_state = test_terminal_state("sufficient");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &config,
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &requests,
+            proof_receipts: std::slice::from_ref(&skipped_receipt),
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.required_proof.matched, 2);
+        assert_eq!(gate.required_proof.skipped, 2);
+        assert_eq!(gate.required_proof.failed, 0);
+        assert_eq!(gate.reasons.len(), 2);
+        for reason in &gate.reasons {
+            assert_eq!(reason.kind, "blocking-finding");
+        }
+        assert_eq!(gate.reasons[0].id, "cargo-check");
+        assert_eq!(gate.reasons[0].receipt, "review/proof_requests.json");
+        assert_eq!(gate.reasons[1].id, "cargo-clippy");
+        assert_eq!(
+            gate.reasons[1].receipt,
+            "review/proof_receipts.json#proof-receipt-budget"
+        );
+    }
+
+    #[test]
+    fn policy_parse_errors_are_recorded_receipts_not_silent_defaults() -> Result<()> {
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[gate]
+target_minutes = 45
+target_minutez = 30
+
+[tools.ripr.gate]
+max_new_unsuppressed_findings = 0
+
+[tools.unsafe-review.gate]
+max_new_unsuppressed = 0
+
+[[proof.required]]
+id = "cargo-check"
+command = "cargo check --workspace"
+diff_classes = ["all"]
+
+[[proof.required]]
+id = "cargo-clippy"
+command = "cargo clippy --workspace"
+requird = true
+
+[[proof.required]]
+id = "empty-command"
+command = "   "
+
+[[proof.required]]
+id = "bad-diff-class"
+command = "cargo test"
+diff_classes = ["sourceish"]
+
+[[proof.required]]
+id = "bad-language"
+command = "cargo test"
+languages = ["cobol"]
+"#,
+        )?;
+
+        let sections = config
+            .policy_errors
+            .iter()
+            .map(|error| error.section.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            sections,
+            [
+                "gate.target_minutez",
+                "tools.ripr.gate",
+                "proof.required.cargo-clippy",
+                "proof.required.empty-command",
+                "proof.required.bad-diff-class",
+                "proof.required.bad-language",
+            ]
+        );
+        // Only the offending key is stripped; the valid sibling inside the
+        // same [gate] table survives. 45 is intentionally NOT the default
+        // (30), so this assertion fails if the sibling falls back.
+        assert_ne!(super::GateConfig::default().target_minutes, 45);
+        assert_eq!(config.gate.target_minutes, 45);
+        assert!(
+            config
+                .tools
+                .get("ripr")
+                .is_none_or(|tool| tool.gate.is_none())
+        );
+        // Well-formed sibling tables keep working too.
+        let unsafe_review = config
+            .tools
+            .get("unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("unsafe-review tool missing"))?;
+        assert_eq!(
+            unsafe_review
+                .gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed),
+            Some(0)
+        );
+        assert_eq!(config.proof.required.len(), 1);
+        assert_eq!(config.proof.required[0].id, "cargo-check");
+        // The receipt artifact (effective-config.json serializes Config)
+        // names each parse error.
+        let serialized = serde_json::to_value(&config)?;
+        assert_eq!(
+            serialized["policy_errors"][0]["section"],
+            serde_json::json!("gate.target_minutez")
+        );
+        assert!(
+            serialized["policy_errors"][1]["detail"]
+                .as_str()
+                .is_some_and(|detail| detail.contains("max_new_unsuppressed_findings")),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_policy_keys_are_stripped_with_receipts_keeping_valid_siblings() -> Result<()> {
+        // Misspelled section and key names must never silently de-fang
+        // policy: each unknown key becomes a PolicyError receipt while the
+        // correctly-spelled siblings keep working.
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[gatee]
+target_minutes = 45
+
+[gate]
+target_minutes = 45
+required_chekc = "ub-review/gate"
+
+[tools.ripr]
+required = true
+gates = { max_new_unsuppressed = 0 }
+
+[tools.ripr.gate]
+scope = "on-diff"
+max_new_unsuppressed = 0
+
+[[proof.requierd]]
+id = "cargo-check"
+command = "cargo check"
+"#,
+        )?;
+        let mut sections = config
+            .policy_errors
+            .iter()
+            .map(|error| error.section.as_str())
+            .collect::<Vec<_>>();
+        sections.sort_unstable();
+        assert_eq!(
+            sections,
+            [
+                "gate.required_chekc",
+                "gatee",
+                "proof.requierd",
+                "tools.ripr.gates"
+            ]
+        );
+        // Valid siblings survive each one-key typo.
+        assert_eq!(config.gate.target_minutes, 45);
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr tool missing"))?;
+        assert!(ripr.required);
+        assert_eq!(
+            ripr.gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed),
+            Some(0)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn policy_shape_mismatches_become_receipts_not_hard_errors() -> Result<()> {
+        // [proof.required] as a single table (not [[proof.required]]),
+        // a non-table tools.<id>, and a non-table [gate] are policy-surface
+        // shape mismatches: the doc scopes hard errors to TOML syntax, so all
+        // of these must take the PolicyError receipt path.
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+gate = 5
+
+[proof.required]
+id = "cargo-check"
+command = "cargo check"
+
+[tools]
+ripr = 5
+
+[tools.unsafe-review.gate]
+max_new_unsuppressed = 0
+"#,
+        )?;
+        let mut sections = config
+            .policy_errors
+            .iter()
+            .map(|error| error.section.as_str())
+            .collect::<Vec<_>>();
+        sections.sort_unstable();
+        assert_eq!(sections, ["gate", "proof.required", "tools.ripr"]);
+        assert!(config.proof.required.is_empty());
+        // Valid siblings in the same containers keep working.
+        let unsafe_review = config
+            .tools
+            .get("unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("unsafe-review tool missing"))?;
+        assert_eq!(
+            unsafe_review
+                .gate
+                .as_ref()
+                .and_then(|gate| gate.max_new_unsuppressed),
+            Some(0)
+        );
+        // A non-table [tools] (the container itself) is also a receipt.
+        let container = Config::from_toml_with_policy_receipts("tools = 5\n")?;
+        assert_eq!(container.policy_errors.len(), 1);
+        assert_eq!(container.policy_errors[0].section, "tools");
+        let proof_container = Config::from_toml_with_policy_receipts("proof = 5\n")?;
+        assert_eq!(proof_container.policy_errors.len(), 1);
+        assert_eq!(proof_container.policy_errors[0].section, "proof");
+        Ok(())
+    }
+
+    #[test]
+    fn tool_gate_scope_outside_allowlist_is_receipted_and_stripped() -> Result<()> {
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[tools.ripr.gate]
+scope = "repo-wide"
+max_new_unsuppressed = 0
+"#,
+        )?;
+        assert_eq!(config.policy_errors.len(), 1);
+        assert_eq!(config.policy_errors[0].section, "tools.ripr.gate.scope");
+        assert!(
+            config.policy_errors[0].detail.contains("repo-wide"),
+            "detail must name the rejected scope: {}",
+            config.policy_errors[0].detail
+        );
+        // The threshold sibling survives with the unknown scope stripped, so
+        // the only semantics that exist (on-diff) still apply.
+        let gate = config
+            .tools
+            .get("ripr")
+            .and_then(|tool| tool.gate.as_ref())
+            .ok_or_else(|| anyhow::anyhow!("ripr gate policy missing"))?;
+        assert_eq!(gate.scope, None);
+        assert_eq!(gate.max_new_unsuppressed, Some(0));
+
+        let valid = Config::from_toml_with_policy_receipts(
+            r#"
+[tools.ripr.gate]
+scope = "on-diff"
+max_new_unsuppressed = 0
+"#,
+        )?;
+        assert!(valid.policy_errors.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn tool_policy_known_keys_match_serialized_fields() -> Result<()> {
+        // Pin KNOWN_TOOL_POLICY_KEYS to the ToolPolicy field set so the
+        // sanitizer's unknown-key receipts can never drift from the struct.
+        let tool = super::ToolPolicy {
+            gate: Some(super::ToolGatePolicy {
+                scope: Some("on-diff".to_owned()),
+                max_new_unsuppressed: Some(0),
+            }),
+            ..super::ToolPolicy::default()
+        };
+        let serialized = serde_json::to_value(&tool)?;
+        let mut serialized_keys = serialized
+            .as_object()
+            .ok_or_else(|| anyhow::anyhow!("tool policy did not serialize to an object"))?
+            .keys()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        serialized_keys.sort_unstable();
+        let mut known = super::KNOWN_TOOL_POLICY_KEYS.to_vec();
+        known.sort_unstable();
+        assert_eq!(serialized_keys, known);
+        Ok(())
+    }
+
+    #[test]
+    fn well_formed_policy_sections_record_no_policy_errors() -> Result<()> {
+        for text in [
+            include_str!("../profiles/ub-review-self.toml"),
+            include_str!("../profiles/bun-ub-v0.toml"),
+            include_str!("../configs/ub-review.example.toml"),
+        ] {
+            let config = Config::from_toml_with_policy_receipts(text)?;
+            assert!(
+                config.policy_errors.is_empty(),
+                "unexpected policy errors: {:?}",
+                config.policy_errors
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn gate_blocking_policy_parses_and_defaults_off() -> Result<()> {
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[gate.blocking]
+required_proof_unproven = true
+tool_gate_missing_evidence = true
+"#,
+        )?;
+        assert!(config.policy_errors.is_empty());
+        assert!(config.gate.blocking.required_proof_unproven);
+        assert!(config.gate.blocking.tool_gate_missing_evidence);
+        assert!(!Config::default().gate.blocking.required_proof_unproven);
+        assert!(!Config::default().gate.blocking.tool_gate_missing_evidence);
+
+        let misspelled = Config::from_toml_with_policy_receipts(
+            r#"
+[gate]
+target_minutes = 45
+
+[gate.blocking]
+required_proof_unprooven = true
+"#,
+        )?;
+        assert_eq!(misspelled.policy_errors.len(), 1);
+        assert_eq!(misspelled.policy_errors[0].section, "gate.blocking");
+        assert!(!misspelled.gate.blocking.required_proof_unproven);
+        // Only the malformed [gate.blocking] key is stripped; the valid
+        // sibling inside [gate] survives.
+        assert_eq!(misspelled.gate.target_minutes, 45);
+        Ok(())
+    }
+
+    #[test]
+    fn policy_selector_known_sets_match_classifier_outputs() {
+        // Pin the config-side selector allowlists to the classifier outputs
+        // so an unknown selector can never silently de-fang a policy.
+        for diff_class in [
+            DiffClass::SourceUb,
+            DiffClass::SourceGeneral,
+            DiffClass::TestsOnly,
+            DiffClass::WorkflowTooling,
+            DiffClass::DocsOnly,
+            DiffClass::ArtifactOnlySmoke,
+        ] {
+            assert!(
+                super::KNOWN_POLICY_DIFF_CLASSES.contains(&diff_class.key()),
+                "diff class {} missing from KNOWN_POLICY_DIFF_CLASSES",
+                diff_class.key()
+            );
+        }
+        for path in [
+            "a.rs", "a.ts", "a.js", "a.cc", "a.zig", "a.go", "a.py", "a.sh", "a.yml", "a.toml",
+            "a.json", "a.md",
+        ] {
+            let Some(language) = super::language_for_path(path) else {
+                continue;
+            };
+            assert!(
+                super::KNOWN_POLICY_LANGUAGES.contains(&language),
+                "language {language} missing from KNOWN_POLICY_LANGUAGES"
+            );
+        }
+    }
+
+    #[test]
+    fn gate_check_enforces_fail_outcomes_per_fail_on_gate_resolution() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let pass_path = temp.path().join("gate-pass.json");
+        fs::write(
+            &pass_path,
+            serde_json::json!({
+                "schema": "ub-review.gate_outcome.v1",
+                "conclusion": "pass",
+                "reasons": []
+            })
+            .to_string(),
+        )?;
+        let fail_path = temp.path().join("gate-fail.json");
+        fs::write(
+            &fail_path,
+            serde_json::json!({
+                "schema": "ub-review.gate_outcome.v1",
+                "conclusion": "fail",
+                "reasons": [
+                    {"kind": "required-proof", "id": "cargo-check", "detail": "exit 101", "receipt": "review/proof_receipts.json#x"},
+                    {"kind": "tool-gate", "id": "ripr", "detail": "threshold", "receipt": "review/tool-gate-outcomes.json#ripr"}
+                ]
+            })
+            .to_string(),
+        )?;
+        let missing_path = temp.path().join("absent/gate_outcome.json");
+        let check = |path: &Path, fail_on_gate: FailOnGate, mode: RunMode| {
+            cmd_gate_check(GateCheckArgs {
+                gate_outcome: path.to_path_buf(),
+                fail_on_gate,
+                mode,
+            })
+        };
+
+        // Passing outcomes stay green under enforcement.
+        assert!(check(&pass_path, FailOnGate::True, RunMode::ReviewByok).is_ok());
+        // Enforcement off tolerates failing outcomes and missing artifacts.
+        assert!(check(&fail_path, FailOnGate::False, RunMode::IntelligentCi).is_ok());
+        assert!(check(&fail_path, FailOnGate::Auto, RunMode::ReviewByok).is_ok());
+        assert!(check(&missing_path, FailOnGate::Auto, RunMode::ReviewByok).is_ok());
+        // Enforcement on turns a failing outcome into a non-zero exit naming
+        // the blocking reason ids and the artifact path.
+        let enforced = check(&fail_path, FailOnGate::True, RunMode::ReviewByok)
+            .map_err(|err| err.to_string())
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("enforced gate-check should fail"))?;
+        assert!(enforced.contains("cargo-check, ripr"), "{enforced}");
+        assert!(enforced.contains("gate-fail.json"), "{enforced}");
+        // `auto` mirrors FailOnGate::resolved: intelligent-ci enforces.
+        assert!(check(&fail_path, FailOnGate::Auto, RunMode::IntelligentCi).is_err());
+        // Enforcement on with a missing artifact is a hard error.
+        assert!(check(&missing_path, FailOnGate::True, RunMode::ReviewByok).is_err());
+        assert!(check(&missing_path, FailOnGate::Auto, RunMode::IntelligentCi).is_err());
+
+        // Enforcement fails closed: any conclusion that is not exactly
+        // `pass` or `fail` is treated as a failure naming the value and the
+        // artifact path.
+        for (label, conclusion_json) in [
+            ("string `error`", r#""error""#),
+            ("cased `Fail`", r#""Fail""#),
+            ("null", "null"),
+        ] {
+            let weird_path = temp.path().join("gate-weird.json");
+            fs::write(
+                &weird_path,
+                format!(
+                    r#"{{"schema":"ub-review.gate_outcome.v1","conclusion":{conclusion_json},"reasons":[]}}"#
+                ),
+            )?;
+            let err = check(&weird_path, FailOnGate::True, RunMode::ReviewByok)
+                .map_err(|err| err.to_string())
+                .err()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("enforced gate-check should fail closed on {label}")
+                })?;
+            assert!(err.contains("unrecognized conclusion"), "{label}: {err}");
+            assert!(err.contains("gate-weird.json"), "{label}: {err}");
+            // Enforcement off tolerates the same artifact.
+            assert!(check(&weird_path, FailOnGate::False, RunMode::IntelligentCi).is_ok());
+        }
+        // A missing conclusion key also fails closed.
+        let keyless_path = temp.path().join("gate-keyless.json");
+        fs::write(
+            &keyless_path,
+            r#"{"schema":"ub-review.gate_outcome.v1","reasons":[]}"#,
+        )?;
+        let keyless = check(&keyless_path, FailOnGate::True, RunMode::ReviewByok)
+            .map_err(|err| err.to_string())
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("enforced gate-check should fail on missing key"))?;
+        assert!(keyless.contains("missing"), "{keyless}");
+        // A schema mismatch fails closed under enforcement even when the
+        // conclusion claims `pass`, and stays informational otherwise.
+        let wrong_schema_path = temp.path().join("gate-wrong-schema.json");
+        fs::write(
+            &wrong_schema_path,
+            r#"{"schema":"ub-review.gate_outcome.v2","conclusion":"pass","reasons":[]}"#,
+        )?;
+        let wrong_schema = check(&wrong_schema_path, FailOnGate::True, RunMode::ReviewByok)
+            .map_err(|err| err.to_string())
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("enforced gate-check should fail on schema drift"))?;
+        assert!(
+            wrong_schema.contains("ub-review.gate_outcome.v2"),
+            "{wrong_schema}"
+        );
+        assert!(
+            check(
+                &wrong_schema_path,
+                FailOnGate::False,
+                RunMode::IntelligentCi
+            )
+            .is_ok()
+        );
+        Ok(())
     }
 
     #[test]
@@ -28976,6 +30130,7 @@ UB_REVIEW_HTTP_STATUS:429
             &diff,
             &test_box_state(),
             &plan,
+            &[],
             "running summary",
             &args,
             &event_log,
@@ -30588,6 +31743,7 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
+            &[],
             "running summary",
             &args,
             &event_log,
