@@ -173,6 +173,7 @@ UB-REVIEW-SPEC-0007  audit-ci surface
 UB-REVIEW-SPEC-0008  setup-ci surface
 UB-REVIEW-SPEC-0009  bun-ub preset surface
 UB-REVIEW-SPEC-0010  release binary / Action install surface
+IMPLEMENTATION_PLAN  routes all open release work through these specs
 ```
 
 PR sequence: 0001 alone; 0002+0003; 0004+0005; 0006; 0007+0008; 0009; 0010;
