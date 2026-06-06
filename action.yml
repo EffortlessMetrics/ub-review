@@ -194,7 +194,7 @@ inputs:
     default: 'false'
     required: false
   fail-on-gate:
-    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step exits non-zero when review/gate_outcome.json records a fail conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
+    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step runs `ub-review gate-check`, which exits non-zero when review/gate_outcome.json records a fail conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
     default: auto
     required: false
   github-summary:
@@ -570,57 +570,22 @@ runs:
         echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
         echo "gate-outcome-path=${{ inputs.out }}/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
 
+    # `ub-review gate-check` is the single source of the FailOnGate::resolved
+    # semantics; this step only forwards inputs. The binary is always present
+    # here: the earlier runner step installed it and the run step already
+    # executed it, so no bash existence-check fallback is needed.
     - name: Enforce gate outcome
       shell: bash
       env:
-        UB_REVIEW_FAIL_ON_GATE: ${{ inputs['fail-on-gate'] }}
-        UB_REVIEW_MODE: ${{ inputs.mode }}
+        # Explicitly-empty inputs (fail-on-gate: '' / mode: '') fall back to
+        # the same defaults the input declarations and the run step's clap
+        # parser use, instead of handing clap an empty string (a hard error).
+        UB_REVIEW_FAIL_ON_GATE: ${{ inputs['fail-on-gate'] || 'auto' }}
+        UB_REVIEW_MODE: ${{ inputs.mode || 'review-byok' }}
         UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
       run: |
         set -euo pipefail
-
-        fail_on_gate="${UB_REVIEW_FAIL_ON_GATE:-auto}"
-        mode="${UB_REVIEW_MODE:-review-byok}"
-        gate_path="$UB_REVIEW_GATE_OUTCOME_PATH"
-
-        # Mirror the Rust FailOnGate::resolved semantics exactly:
-        # auto enforces the gate iff mode=intelligent-ci.
-        case "$fail_on_gate" in
-          true)
-            enforce=true
-            ;;
-          false)
-            enforce=false
-            ;;
-          auto)
-            if [[ "$mode" == "intelligent-ci" ]]; then
-              enforce=true
-            else
-              enforce=false
-            fi
-            ;;
-          *)
-            echo "::error::unknown fail-on-gate '$fail_on_gate'; expected auto, true, or false"
-            exit 1
-            ;;
-        esac
-
-        if [[ "$enforce" != "true" ]]; then
-          echo "gate enforcement is off (fail-on-gate=$fail_on_gate, mode=$mode); not enforcing $gate_path"
-          exit 0
-        fi
-
-        if [[ ! -f "$gate_path" ]]; then
-          echo "::error::gate enforcement is on but $gate_path is missing"
-          exit 1
-        fi
-
-        conclusion="$(jq -r '.conclusion // empty' "$gate_path")"
-        if [[ "$conclusion" != "fail" ]]; then
-          echo "gate conclusion is '${conclusion:-unknown}' in $gate_path; check stays green"
-          exit 0
-        fi
-
-        reasons="$(jq -r '[.reasons[]?.id] | join(", ")' "$gate_path")"
-        echo "::error::ub-review gate failed (blocking reasons: ${reasons:-none}); receipts are in $gate_path"
-        exit 1
+        "${{ steps.runner.outputs.bin }}" gate-check \
+          --gate-outcome "$UB_REVIEW_GATE_OUTCOME_PATH" \
+          --fail-on-gate "$UB_REVIEW_FAIL_ON_GATE" \
+          --mode "$UB_REVIEW_MODE"

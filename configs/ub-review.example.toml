@@ -31,6 +31,31 @@ hard_timeout_minutes = 60
 post_review_on = ["opened", "ready_for_review"]
 synchronize_mode = "gate-only"
 
+# Deterministic blocking markers (repo policy receipts, never model output).
+# Both default to false; flipping one promotes an already-deterministic
+# evidence class to a blocking gate reason.
+[gate.blocking]
+# A matched [[proof.required]] policy with no passing receipt blocks the gate.
+required_proof_unproven = false
+# A required tool's configured [tools.*.gate] threshold that could not be
+# evaluated (sensor failed/timed out without a verdict, or a missing or
+# malformed gate-decision receipt) blocks the gate. Without this opt-in those
+# gaps stay advisory.
+tool_gate_missing_evidence = false
+
+# Per-tool gate thresholds. A tool can redden the gate only when repo config
+# opts it in with a [tools.<id>.gate] table; tools without one never produce
+# blocking reasons. `required_if` trigger conditions are expressed with the
+# existing per-tool keys: `default = "<trigger>"` decides when the tool runs
+# (surfaced as `required_if` in resolved-tools.json and tool-status.json) and
+# `required = true` makes a matched trigger's missing evidence blocking in
+# intelligent-ci mode. An evaluated threshold that the diff exceeds blocks
+# regardless of `required`, because configuring the gate is itself the
+# explicit opt-in. A sensor that crashes or times out never evaluated the
+# threshold: that is missing evidence, advisory unless [gate.blocking]
+# tool_gate_missing_evidence opts required tools into blocking.
+# `scope = "on-diff"` is the only supported scope (repo-wide scoping does not
+# exist yet).
 [tools.ripr.gate]
 scope = "on-diff"
 max_new_unsuppressed = 0

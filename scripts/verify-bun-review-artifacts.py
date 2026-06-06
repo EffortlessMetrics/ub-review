@@ -4869,10 +4869,17 @@ def require_tool_gate_outcome_consistency(entry: dict) -> None:
         fail(f"tool-gate-outcomes.json {tool_id} outcome {outcome} must be evaluated")
     if outcome in {"not_evaluated", "missing_evidence"} and evaluated is not False:
         fail(f"tool-gate-outcomes.json {tool_id} outcome {outcome} must not be evaluated")
-    if sensor_status in {"failed", "timed_out"} and outcome != "failed":
-        fail(f"tool-gate-outcomes.json {tool_id} failed sensor must produce failed outcome")
-    if outcome == "passed" and sensor_status != "ok":
-        fail(f"tool-gate-outcomes.json {tool_id} passed with non-ok sensor status")
+    # A sensor that crashed or timed out never produced a threshold verdict:
+    # that is missing evidence, never an evaluated `failed` threshold.
+    if sensor_status in {"failed", "timed_out"} and outcome != "missing_evidence":
+        fail(
+            f"tool-gate-outcomes.json {tool_id} sensor without verdict must produce "
+            "missing_evidence outcome"
+        )
+    # `passed`/`failed` are evaluated threshold verdicts, which require an ok
+    # sensor run that produced a gate-decision receipt.
+    if outcome in {"passed", "failed"} and sensor_status != "ok":
+        fail(f"tool-gate-outcomes.json {tool_id} evaluated outcome with non-ok sensor status")
     if sensor_status != "ok" or max_new_unsuppressed is None:
         return
 
@@ -4974,7 +4981,10 @@ def require_tool_gate_policy(path: str, tool_id: str, gate: object) -> None:
     if not isinstance(gate, dict):
         fail(f"{path} {tool_id} gate is not an object")
     scope = gate.get("scope")
-    if scope is not None and (not isinstance(scope, str) or not scope):
+    # Allowlist kept in lockstep with KNOWN_TOOL_GATE_SCOPES in src/config.rs:
+    # on-diff is the only scope semantics that exist; the loader records any
+    # other value as a PolicyError and strips it before artifacts are written.
+    if scope is not None and scope != "on-diff":
         fail(f"{path} {tool_id} gate.scope is invalid: {gate!r}")
     max_new_unsuppressed = gate.get("max_new_unsuppressed")
     if max_new_unsuppressed is not None and (
@@ -5380,6 +5390,45 @@ def self_test_tool_gate_outcome_false_pass_fails() -> None:
         "packet_policy": "gate-only",
         "gate_policy": "trust-affecting",
     }
+    require_tool_gate_outcome_entry(entry)
+    require_tool_gate_outcome_consistency(entry)
+
+
+def crashed_sensor_tool_gate_outcome_entry(outcome: str, evaluated: bool) -> dict:
+    return {
+        "schema": "ub-review.tool_gate_outcome.v1",
+        "tool": "ripr",
+        "policy": {"scope": "on-diff", "max_new_unsuppressed": 0},
+        "required": False,
+        "planned_run": True,
+        "sensor_status": "failed",
+        "sensor_reason": "exit 101",
+        "sensor_receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+        "status_source": "tool-status.json",
+        "outcome": outcome,
+        "evaluated": evaluated,
+        "reason": "tool gate threshold could not be evaluated because the sensor did not "
+        "produce a verdict (sensor status `failed`)",
+        "metrics": {"new_unsuppressed": None},
+        "source_artifacts": [
+            "sensors/ripr/ub-review-sensor-status.json",
+            "tool-status.json",
+        ],
+        "packet_policy": "gate-only",
+        "gate_policy": "trust-affecting",
+    }
+
+
+def self_test_crashed_sensor_routes_as_missing_evidence() -> None:
+    # A crashed sensor is missing evidence, never an evaluated threshold
+    # failure; the artifact contract pins that distinction.
+    entry = crashed_sensor_tool_gate_outcome_entry("missing_evidence", False)
+    require_tool_gate_outcome_entry(entry)
+    require_tool_gate_outcome_consistency(entry)
+
+
+def self_test_crashed_sensor_claiming_failed_outcome_fails() -> None:
+    entry = crashed_sensor_tool_gate_outcome_entry("failed", True)
     require_tool_gate_outcome_entry(entry)
     require_tool_gate_outcome_consistency(entry)
 
@@ -5855,6 +5904,12 @@ def run_self_tests() -> None:
         "tool gate outcome false pass",
         "passed with new_unsuppressed 1 above threshold 0",
         self_test_tool_gate_outcome_false_pass_fails,
+    )
+    self_test_crashed_sensor_routes_as_missing_evidence()
+    expect_self_test_failure(
+        "tool gate outcome crashed sensor claiming failed",
+        "sensor without verdict must produce missing_evidence outcome",
+        self_test_crashed_sensor_claiming_failed_outcome_fails,
     )
     self_test_sanitize_artifact_name_bounds_long_values()
     require_proof_request_files(pathlib.Path("__missing_empty_artifact_dir__"), [])
