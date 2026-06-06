@@ -17,10 +17,18 @@ from typing import Any, Callable
 
 SENSORS = ["tokmd", "cargo-allow", "ripr", "unsafe-review", "ast-grep", "actionlint"]
 RUN_MODE_VALUES = {"review-byok", "intelligent-ci"}
-RUN_PASS_VALUES = {"opened", "ready_for_review", "pull_request_other", "manual"}
+RUN_PASS_VALUES = {
+    "opened",
+    "reopened",
+    "ready_for_review",
+    "synchronize",
+    "pull_request_other",
+    "manual",
+}
 SKIPPED_REVIEW_PAYLOAD_STATUSES = {
     "skipped_empty_smoke",
     "skipped_artifact_only_body",
+    "skipped_pass_policy",
 }
 BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY = "rust-box-from-allocation-failure"
 SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY = "sibling-path-completeness-overclaim"

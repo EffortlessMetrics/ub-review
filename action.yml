@@ -82,7 +82,7 @@ inputs:
     default: review-byok
     required: false
   run-pass:
-    description: 'Run pass identity: auto, opened, ready_for_review, pull_request_other, or manual. Auto maps pull_request opened and ready_for_review to the matching pass.'
+    description: 'Run pass identity: auto, opened, reopened, ready_for_review, synchronize, pull_request_other, or manual. Auto maps pull_request opened, reopened, ready_for_review, and synchronize to the matching pass; when posting=review, a pass posts the grouped review only if the profile lists its event action in [gate].post_review_on.'
     default: auto
     required: false
   github-token:

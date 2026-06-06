@@ -28,6 +28,9 @@ include_execution_summary = "none"
 required_check = "ub-review/gate"
 target_minutes = 30
 hard_timeout_minutes = 60
+# Pull_request event actions (opened, reopened, ready_for_review, synchronize)
+# whose passes may post the grouped PR review when posting=review; every other
+# pass stays artifact-only and writes a github-review-skip.json receipt.
 post_review_on = ["opened", "ready_for_review"]
 synchronize_mode = "gate-only"
 

@@ -3648,6 +3648,104 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn synchronize_pass_honors_profile_post_review_on_policy() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    init_minimal_repo(&repo)?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+
+    // Two-pass consumer default: synchronize is not in [gate].post_review_on,
+    // so a posting=review synchronize pass must skip with a receipt naming
+    // the pass policy instead of a reviewer-value sentence.
+    let two_pass_out = temp.path().join("two-pass");
+    let bun_config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&bun_config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&two_pass_out)?,
+            "--run-pass",
+            "synchronize",
+            "--posting",
+            "review",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    assert!(!two_pass_out.join("review/github-review.json").exists());
+    let skip: serde_json::Value = serde_json::from_slice(&fs::read(
+        two_pass_out.join("review/github-review-skip.json"),
+    )?)?;
+    assert_eq!(skip["status"], "skipped");
+    assert_eq!(skip["review_payload_status"], "skipped_pass_policy");
+    assert_eq!(skip["run_pass"], "synchronize");
+    let reason = skip["reason"].as_str().unwrap_or_default();
+    assert!(
+        reason.contains("pass `synchronize` is not in [gate].post_review_on"),
+        "skip reason should name the pass policy: {reason}"
+    );
+
+    // Self-profile policy lists synchronize, so the same pass is admitted by
+    // the pass gate; this dry run has no reviewer-value content, so the only
+    // acceptable skip is the empty-smoke one - never the pass policy.
+    let every_pass_out = temp.path().join("every-pass");
+    let self_config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/ub-review-self.toml");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&self_config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&every_pass_out)?,
+            "--run-pass",
+            "synchronize",
+            "--posting",
+            "review",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    let self_skip: serde_json::Value = serde_json::from_slice(&fs::read(
+        every_pass_out.join("review/github-review-skip.json"),
+    )?)?;
+    assert_eq!(self_skip["run_pass"], "synchronize");
+    assert_ne!(
+        self_skip["review_payload_status"], "skipped_pass_policy",
+        "self profile lists synchronize in [gate].post_review_on, so the pass gate must admit it"
+    );
+    let self_reason = self_skip["reason"].as_str().unwrap_or_default();
+    assert!(
+        !self_reason.contains("[gate].post_review_on"),
+        "admitted pass must not skip for pass policy: {self_reason}"
+    );
+    Ok(())
+}
+
 fn init_minimal_repo(repo: &Path) -> Result<()> {
     write_file(
         &repo.join("src/lib.rs"),

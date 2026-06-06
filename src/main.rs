@@ -2722,7 +2722,9 @@ fn resolve_run_pass_from_event(event_name: Option<&str>, event_action: Option<&s
     match event_name {
         Some("pull_request" | "pull_request_target") => match event_action {
             Some("opened") => RunPass::Opened,
+            Some("reopened") => RunPass::Reopened,
             Some("ready_for_review") => RunPass::ReadyForReview,
+            Some("synchronize") => RunPass::Synchronize,
             _ => RunPass::PullRequestOther,
         },
         _ => RunPass::Manual,
@@ -5672,9 +5674,12 @@ fn write_review_artifacts(
     let candidates = read_candidate_records(out)?;
     let (inline_comments, summary_only_findings) = read_candidate_review_surfaces(out)?;
 
+    let run_pass = resolved_run_pass(args.run_pass);
     let preliminary_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &shared_context_id,
         review_body_policy: &config.review_body,
+        run_pass,
+        post_review_on: &config.gate.post_review_on,
         args,
         plan,
         diff,
@@ -5693,7 +5698,7 @@ fn write_review_artifacts(
         mode: args.mode.key().to_owned(),
         posting: args.posting.key().to_owned(),
         runtime_profile: profile.name.clone(),
-        run_pass: resolved_run_pass(args.run_pass).key().to_owned(),
+        run_pass: run_pass.key().to_owned(),
         model_mode: args.model_mode.key().to_owned(),
         depth: args.depth.key().to_owned(),
         provider_policy: args.provider_policy.key().to_owned(),
@@ -5849,6 +5854,8 @@ fn write_review_artifacts(
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
         review_body_policy: &config.review_body,
+        run_pass,
+        post_review_on: &config.gate.post_review_on,
         args,
         plan,
         diff,
@@ -6017,6 +6024,10 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
 struct ReviewCompilerInput<'a> {
     shared_context_id: &'a str,
     review_body_policy: &'a ReviewBodyPolicy,
+    /// Resolved run pass (never `RunPass::Auto` from the run flow).
+    run_pass: RunPass,
+    /// `[gate].post_review_on` event actions from the selected profile.
+    post_review_on: &'a [String],
     args: &'a RunArgs,
     plan: &'a Plan,
     diff: &'a DiffContext,
@@ -6050,6 +6061,28 @@ struct CompiledReviewSurface {
     should_prepare_github_review: bool,
     review_payload_status: &'static str,
     terminal_state: ReviewTerminalState,
+}
+
+/// Pass-level posting policy: when the resolved posting mode is `review`, a
+/// pass may carry the grouped PR review only if the profile's
+/// `[gate].post_review_on` lists its `pull_request` event action. Manual runs
+/// (workflow_dispatch/local) are explicit operator requests and are not gated;
+/// catch-all `pull_request_other` passes never post. Artifact-only runs keep
+/// preparing the payload artifact because nothing is posted from them.
+fn pass_policy_permits_review_post(
+    posting: PostingMode,
+    run_pass: RunPass,
+    post_review_on: &[String],
+) -> bool {
+    if !matches!(posting, PostingMode::Review) {
+        return true;
+    }
+    match run_pass.event_action() {
+        Some(action) => post_review_on.iter().any(|allowed| allowed == action),
+        // `Auto` is resolved before compilation; treat a leak like `Manual`
+        // rather than silently dropping an explicitly requested review post.
+        None => matches!(run_pass, RunPass::Manual | RunPass::Auto),
+    }
 }
 
 fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledReviewSurface> {
@@ -6108,7 +6141,10 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
             })
             .collect(),
     };
-    let should_prepare_github_review = !suppressed_artifact_only_pr_body
+    let pass_policy_permits_post =
+        pass_policy_permits_review_post(input.args.posting, input.run_pass, input.post_review_on);
+    let should_prepare_github_review = pass_policy_permits_post
+        && !suppressed_artifact_only_pr_body
         && should_prepare_github_review_payload(
             input.args,
             pr_inline_comments,
@@ -6118,6 +6154,8 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         );
     let review_payload_status = if should_prepare_github_review {
         "prepared"
+    } else if !pass_policy_permits_post {
+        "skipped_pass_policy"
     } else if suppressed_artifact_only_pr_body {
         "skipped_artifact_only_body"
     } else {
@@ -6126,6 +6164,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     let terminal_state = build_review_terminal_state(TerminalStateInput {
         args: input.args,
         plan: input.plan,
+        run_pass: input.run_pass,
         review_payload_status,
         should_prepare_github_review,
         pr_body: &pr_body,
@@ -6343,6 +6382,7 @@ fn pr_body_has_failure_context(body: &str) -> bool {
 struct TerminalStateInput<'a> {
     args: &'a RunArgs,
     plan: &'a Plan,
+    run_pass: RunPass,
     review_payload_status: &'a str,
     should_prepare_github_review: bool,
     pr_body: &'a str,
@@ -6371,48 +6411,59 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
             .any(proof_receipt_changes_review_value);
 
     let (status, reason) = if reviewer_value_present {
-        (
-            "needs-reviewer-attention",
-            "Reviewer-value content survived compilation; a grouped PR review was prepared.",
-        )
+        let reason = if input.should_prepare_github_review {
+            "Reviewer-value content survived compilation; a grouped PR review was prepared."
+                .to_owned()
+        } else if input.review_payload_status == "skipped_pass_policy" {
+            format!(
+                "Reviewer-value content survived compilation, but pass `{}` is not in [gate].post_review_on; diagnostics remain in artifacts.",
+                input.run_pass.key()
+            )
+        } else {
+            "Reviewer-value content survived compilation, but the PR-facing payload was withheld as no-value boilerplate; diagnostics remain in artifacts."
+                .to_owned()
+        };
+        ("needs-reviewer-attention", reason)
     } else if input.args.dry_run {
         (
             "artifact-only",
-            "Dry run requested; this run produced artifacts but no reviewer-facing review.",
+            "Dry run requested; this run produced artifacts but no reviewer-facing review."
+                .to_owned(),
         )
     } else if matches!(input.args.mode, RunMode::IntelligentCi)
         && has_required_sensor_evidence_gap(input.plan, input.missing_or_failed_sensor_evidence)
     {
         (
             "failed-to-review",
-            "A required intelligent-ci sensor was missing, skipped, failed, or timed out, so the gate did not reach a sufficient review state.",
+            "A required intelligent-ci sensor was missing, skipped, failed, or timed out, so the gate did not reach a sufficient review state.".to_owned(),
         )
     } else if matches!(input.args.model_mode, ModelMode::Off) {
         (
             "artifact-only",
-            "Model mode was off; this run produced artifacts but no reviewer-facing review.",
+            "Model mode was off; this run produced artifacts but no reviewer-facing review."
+                .to_owned(),
         )
     } else if input.plan.diff_class == DiffClass::ArtifactOnlySmoke {
         (
             "artifact-only",
-            "Artifact-only smoke diff; diagnostics remain in artifacts and no PR review was prepared.",
+            "Artifact-only smoke diff; diagnostics remain in artifacts and no PR review was prepared.".to_owned(),
         )
     } else if usable_model_lanes == 0 && input.proof_receipts.is_empty() {
         (
             "failed-to-review",
-            "No usable model lane or proof receipt was available, so the run did not reach a sufficient review state.",
+            "No usable model lane or proof receipt was available, so the run did not reach a sufficient review state.".to_owned(),
         )
     } else {
         (
             "sufficient",
-            "No reviewer-value content survived compilation; the run reached a sufficient terminal state and stayed artifact-only.",
+            "No reviewer-value content survived compilation; the run reached a sufficient terminal state and stayed artifact-only.".to_owned(),
         )
     };
 
     ReviewTerminalState {
         schema: "ub-review.terminal_state.v1".to_owned(),
         status: status.to_owned(),
-        reason: reason.to_owned(),
+        reason,
         review_payload_status: input.review_payload_status.to_owned(),
         reviewer_value_present,
         diff_class: input.plan.diff_class.key().to_owned(),
@@ -12115,10 +12166,21 @@ fn build_github_review_skip_receipt(
     args: &RunArgs,
     review: &ReviewArtifacts,
 ) -> GitHubReviewSkipReceipt {
+    // The receipt reason must name the skip cause, not restate the terminal
+    // state: a pass excluded by the profile's posting policy says so directly
+    // instead of borrowing a sentence that can read like a contradiction.
+    let reason = if review.terminal_state.review_payload_status == "skipped_pass_policy" {
+        format!(
+            "pass `{}` is not in [gate].post_review_on; the profile keeps this pass artifact-only.",
+            review.run_pass
+        )
+    } else {
+        review.terminal_state.reason.clone()
+    };
     GitHubReviewSkipReceipt {
         schema_version: 1,
         status: "skipped".to_owned(),
-        reason: review.terminal_state.reason.clone(),
+        reason,
         review_payload_status: review.terminal_state.review_payload_status.clone(),
         terminal_state: review.terminal_state.status.clone(),
         github_review_json: None,
@@ -21834,6 +21896,10 @@ mod tests {
             "posting expression should post the grouped review on every PR pass"
         );
         assert!(
+            workflow.contains("run-pass: auto"),
+            "run-pass must stay auto so synchronize/reopened resolve to first-class passes that the [gate].post_review_on policy can admit"
+        );
+        assert!(
             workflow.contains("cancel-in-progress: true"),
             "synchronize passes must collapse push storms via concurrency"
         );
@@ -27558,7 +27624,15 @@ index 1111111..2222222 100644
             super::RunPass::ReadyForReview
         );
         assert_eq!(
+            super::resolve_run_pass_from_event(Some("pull_request"), Some("reopened")),
+            super::RunPass::Reopened
+        );
+        assert_eq!(
             super::resolve_run_pass_from_event(Some("pull_request"), Some("synchronize")),
+            super::RunPass::Synchronize
+        );
+        assert_eq!(
+            super::resolve_run_pass_from_event(Some("pull_request"), Some("labeled")),
             super::RunPass::PullRequestOther
         );
         assert_eq!(
@@ -27580,11 +27654,79 @@ index 1111111..2222222 100644
             Ok(super::RunPass::ReadyForReview)
         );
         assert_eq!(
+            super::parse_run_pass("reopened"),
+            Ok(super::RunPass::Reopened)
+        );
+        assert_eq!(
+            super::parse_run_pass("synchronize"),
+            Ok(super::RunPass::Synchronize)
+        );
+        assert_eq!(
             super::parse_run_pass("pull_request_other"),
             Ok(super::RunPass::PullRequestOther)
         );
         assert_eq!(super::parse_run_pass("manual"), Ok(super::RunPass::Manual));
         assert!(super::parse_run_pass("draft").is_err());
+    }
+
+    #[test]
+    fn pass_policy_decision_matrix_honors_post_review_on() {
+        let two_pass: Vec<String> = vec!["opened".to_owned(), "ready_for_review".to_owned()];
+        let every_pass: Vec<String> = vec![
+            "opened".to_owned(),
+            "reopened".to_owned(),
+            "ready_for_review".to_owned(),
+            "synchronize".to_owned(),
+        ];
+
+        // posting=review: the profile list is authoritative per event action.
+        for (pass, in_two_pass) in [
+            (super::RunPass::Opened, true),
+            (super::RunPass::Reopened, false),
+            (super::RunPass::ReadyForReview, true),
+            (super::RunPass::Synchronize, false),
+        ] {
+            assert_eq!(
+                super::pass_policy_permits_review_post(PostingMode::Review, pass, &two_pass),
+                in_two_pass,
+                "two-pass default, pass {}",
+                pass.key()
+            );
+            assert!(
+                super::pass_policy_permits_review_post(PostingMode::Review, pass, &every_pass),
+                "every-pass profile, pass {}",
+                pass.key()
+            );
+        }
+        // Catch-all PR passes have no event action in the list and never post.
+        assert!(!super::pass_policy_permits_review_post(
+            PostingMode::Review,
+            super::RunPass::PullRequestOther,
+            &every_pass
+        ));
+        // Manual runs are explicit operator requests; the PR pass policy does
+        // not apply to them.
+        assert!(super::pass_policy_permits_review_post(
+            PostingMode::Review,
+            super::RunPass::Manual,
+            &two_pass
+        ));
+        // posting=artifact-only never posts, so payload preparation stays
+        // unrestricted for every pass.
+        for pass in [
+            super::RunPass::Opened,
+            super::RunPass::Reopened,
+            super::RunPass::ReadyForReview,
+            super::RunPass::Synchronize,
+            super::RunPass::PullRequestOther,
+            super::RunPass::Manual,
+        ] {
+            assert!(
+                super::pass_policy_permits_review_post(PostingMode::ArtifactOnly, pass, &two_pass),
+                "artifact-only, pass {}",
+                pass.key()
+            );
+        }
     }
 
     #[test]
@@ -28551,6 +28693,7 @@ UB_REVIEW_HTTP_STATUS:429
         let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
+            run_pass: super::RunPass::Manual,
             plan: &plan,
             review_payload_status: "skipped_empty_smoke",
             should_prepare_github_review: false,
@@ -28585,6 +28728,7 @@ UB_REVIEW_HTTP_STATUS:429
 
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
+            run_pass: super::RunPass::Manual,
             plan: &plan,
             review_payload_status: "skipped_empty_smoke",
             should_prepare_github_review: false,
@@ -28604,6 +28748,7 @@ UB_REVIEW_HTTP_STATUS:429
         args.mode = RunMode::ReviewByok;
         let review_byok_state = build_review_terminal_state(TerminalStateInput {
             args: &args,
+            run_pass: super::RunPass::Manual,
             plan: &plan,
             review_payload_status: "skipped_empty_smoke",
             should_prepare_github_review: false,
@@ -28628,6 +28773,7 @@ UB_REVIEW_HTTP_STATUS:429
         let plan = test_plan(Vec::new());
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
+            run_pass: super::RunPass::Manual,
             plan: &plan,
             review_payload_status: "skipped_empty_smoke",
             should_prepare_github_review: false,
@@ -28659,6 +28805,7 @@ UB_REVIEW_HTTP_STATUS:429
         }];
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
+            run_pass: super::RunPass::Manual,
             plan: &plan,
             review_payload_status: "skipped_empty_smoke",
             should_prepare_github_review: false,
@@ -28682,6 +28829,7 @@ UB_REVIEW_HTTP_STATUS:429
         let plan = test_plan(Vec::new());
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
+            run_pass: super::RunPass::Manual,
             plan: &plan,
             review_payload_status: "prepared",
             should_prepare_github_review: true,
@@ -30176,6 +30324,8 @@ required_proof_unprooven = true
         let surface = compile_review_surface(ReviewCompilerInput {
             shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
             args: &args,
             plan: &plan,
             diff: &diff,
@@ -30217,6 +30367,8 @@ required_proof_unprooven = true
         let surface = compile_review_surface(ReviewCompilerInput {
             shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
             args: &args,
             plan: &plan,
             diff: &diff,
@@ -30257,6 +30409,8 @@ required_proof_unprooven = true
         let surface = compile_review_surface(ReviewCompilerInput {
             shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
             args: &args,
             plan: &plan,
             diff: &diff,
@@ -30300,6 +30454,8 @@ required_proof_unprooven = true
         let surface = compile_review_surface(ReviewCompilerInput {
             shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
             args: &args,
             plan: &plan,
             diff: &diff,
@@ -30323,6 +30479,110 @@ required_proof_unprooven = true
             surface
                 .artifact_body
                 .contains("Confirm concise-review guard boundary 0")
+        );
+        Ok(())
+    }
+
+    fn test_pass_policy_inline_comment() -> ReviewInlineComment {
+        ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/main.rs".to_owned(),
+            line: 100,
+            side: "RIGHT".to_owned(),
+            body: "Confirm the resize path cannot alias the detached buffer.".to_owned(),
+            evidence: "generated regression fixture".to_owned(),
+        }
+    }
+
+    #[test]
+    fn compiler_surface_skips_pass_excluded_by_post_review_on() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.posting = PostingMode::Review;
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let inline_comments = vec![test_pass_policy_inline_comment()];
+        let two_pass: Vec<String> = vec!["opened".to_owned(), "ready_for_review".to_owned()];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Synchronize,
+            post_review_on: &two_pass,
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_pass_policy");
+        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
+        assert!(surface.terminal_state.reviewer_value_present);
+        assert!(
+            surface
+                .terminal_state
+                .reason
+                .contains("pass `synchronize` is not in [gate].post_review_on"),
+            "terminal reason should name the pass policy: {}",
+            surface.terminal_state.reason
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_prepares_review_for_synchronize_pass_in_profile_list() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.posting = PostingMode::Review;
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let inline_comments = vec![test_pass_policy_inline_comment()];
+        let every_pass: Vec<String> = vec![
+            "opened".to_owned(),
+            "reopened".to_owned(),
+            "ready_for_review".to_owned(),
+            "synchronize".to_owned(),
+        ];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Synchronize,
+            post_review_on: &every_pass,
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+        })?;
+
+        assert!(
+            surface.should_prepare_github_review,
+            "synchronize pass in post_review_on should keep the payload prepared: {}",
+            surface.terminal_state.reason
+        );
+        assert_eq!(surface.review_payload_status, "prepared");
+        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
+        assert_eq!(surface.github_review.comments.len(), 1);
+        assert_eq!(
+            surface.terminal_state.reason,
+            "Reviewer-value content survived compilation; a grouped PR review was prepared."
         );
         Ok(())
     }
@@ -30494,6 +30754,8 @@ required_proof_unprooven = true
         let surface = compile_review_surface(ReviewCompilerInput {
             shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
             review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
             args: &args,
             plan: &plan,
             diff: &diff,
@@ -31784,6 +32046,58 @@ index 1111111..2222222 100644
             summary.contains("Review payload: `skipped_empty_smoke`; post: `not_attempted_by_run`")
         );
         assert!(!has_standalone_approval_line(&artifact_body));
+        Ok(())
+    }
+
+    #[test]
+    fn pass_excluded_by_post_review_on_writes_truthful_skip_receipt() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        // Config::default keeps the two-pass posture: synchronize is not in
+        // [gate].post_review_on, so a posting=review synchronize pass must
+        // skip with a receipt that names the pass policy.
+        let config = Config::default();
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let mut args = test_run_args(out.clone());
+        args.run_pass = super::RunPass::Synchronize;
+        args.posting = PostingMode::Review;
+        args.model_mode = ModelMode::Off;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let run_started = Instant::now();
+        let mut run_loop_tracker = super::RunLoopTracker::new();
+
+        write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &test_box_state(),
+            &plan,
+            &[],
+            "running summary",
+            &args,
+            &event_log,
+            &run_started,
+            &mut run_loop_tracker,
+            std::time::Duration::from_secs(5),
+        )?;
+
+        assert!(!out.join("review/github-review.json").exists());
+        let skip: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/github-review-skip.json"))?)?;
+        assert_eq!(skip["status"], "skipped");
+        assert_eq!(skip["review_payload_status"], "skipped_pass_policy");
+        assert_eq!(skip["run_pass"], "synchronize");
+        let reason = skip["reason"].as_str().unwrap_or_default();
+        assert!(
+            reason.contains("pass `synchronize` is not in [gate].post_review_on"),
+            "skip reason should name the pass policy: {reason}"
+        );
+        assert!(
+            !reason.contains("a grouped PR review was prepared"),
+            "skip reason must not claim a review was prepared: {reason}"
+        );
         Ok(())
     }
 
