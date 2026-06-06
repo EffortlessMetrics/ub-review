@@ -19952,33 +19952,35 @@ mod tests {
 
     #[test]
     fn ub_review_gate_workflow_matches_self_profile_post_policy() {
+        // Dogfood posture: the self gate runs and posts on every PR pass so
+        // a required check exists for every head SHA and review output stays
+        // visible for calibration. Consumer repos keep the two-pass default;
+        // see configs/ub-review.example.toml and ADR 0001.
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
         let profile = include_str!("../profiles/ub-review-self.toml");
         assert!(
-            workflow.contains("types: [opened, ready_for_review]"),
-            "self gate should run default passes on opened and ready_for_review"
+            workflow.contains("types: [opened, reopened, ready_for_review, synchronize]"),
+            "self gate should run on every PR pass, including synchronize"
         );
         assert!(
-            !workflow.contains("synchronize"),
-            "self gate must not spend a default pass on synchronize"
-        );
-        assert!(
-            !workflow.contains("reopened"),
-            "self gate review triggers should match the profile post_review_on list"
-        );
-        assert!(
-            profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
-            "self profile should declare the same PR review passes"
+            profile.contains(
+                "post_review_on = [\"opened\", \"reopened\", \"ready_for_review\", \"synchronize\"]"
+            ),
+            "self profile should declare review posting on every PR pass"
         );
         assert!(
             workflow.contains(
-                "github.event.action == 'opened' || github.event.action == 'ready_for_review'"
+                "posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}"
             ),
-            "posting expression should be limited to the profile review passes"
+            "posting expression should post the grouped review on every PR pass"
+        );
+        assert!(
+            workflow.contains("cancel-in-progress: true"),
+            "synchronize passes must collapse push storms via concurrency"
         );
         assert!(
             workflow.contains("model-mode: auto"),
-            "opened and ready_for_review passes should keep normal model routing"
+            "every PR pass should keep normal model routing"
         );
     }
 
@@ -19993,9 +19995,14 @@ mod tests {
         assert_eq!(config.gate.hard_timeout_minutes, 60);
         assert_eq!(
             config.gate.post_review_on,
-            vec!["opened".to_owned(), "ready_for_review".to_owned()]
+            vec![
+                "opened".to_owned(),
+                "reopened".to_owned(),
+                "ready_for_review".to_owned(),
+                "synchronize".to_owned()
+            ]
         );
-        assert_eq!(config.gate.synchronize_mode, "gate-only");
+        assert_eq!(config.gate.synchronize_mode, "review");
         for id in [
             "cargo-fmt",
             "cargo-check",

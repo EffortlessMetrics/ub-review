@@ -206,8 +206,11 @@ enabled = true
 required_check = "ub-review/gate"
 target_minutes = 30
 hard_timeout_minutes = 60
-post_review_on = ["opened", "ready_for_review"]
-synchronize_mode = "gate-only"
+# Dogfood posture: this repo posts the grouped review on every PR pass so
+# review bodies and inline comments stay visible for calibration. Consumer
+# repos keep the two-pass default (see configs/ub-review.example.toml).
+post_review_on = ["opened", "reopened", "ready_for_review", "synchronize"]
+synchronize_mode = "review"
 
 [providers]
 policy = "primary-with-fallback"
