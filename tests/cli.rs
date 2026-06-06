@@ -1144,6 +1144,11 @@ fn cache_warm_writes_base_and_rule_manifests() -> Result<()> {
             "warm",
             "--config",
             path_str(&config)?,
+            // Pin the profile: auto box detection resolves differently on
+            // runners with the full sensor image installed (gh-runner-full),
+            // and this test asserts the manifest profile value.
+            "--profile",
+            "gh-runner",
             "--root",
             path_str(&repo)?,
             "--base",
@@ -3566,10 +3571,13 @@ fn spawn_fake_openai_provider_with_contents_and_delay(
 
 fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
     static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    CLI_SUBPROCESS_TEST_LOCK
+    // Recover a poisoned lock instead of erroring: one failing test must
+    // produce one failure receipt, not cascade into every later subprocess
+    // test in the suite.
+    Ok(CLI_SUBPROCESS_TEST_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .map_err(|_| anyhow::anyhow!("CLI subprocess test lock poisoned"))
+        .unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 fn fake_openai_lane_content() -> String {

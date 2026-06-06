@@ -1679,10 +1679,20 @@ fn validate_ci_risk_packs(path: &Path, report: &mut PolicyReport) -> Result<()> 
 }
 
 fn require_schema_version(table: &Map<String, Value>, path: &Path) -> Result<()> {
-    let version = require_integer(table, path, "schema_version")?;
-    if version != 1 {
+    // The installed cargo-allow release deserializes schema_version as a
+    // string, so the ledger records `"1"`; accept the legacy integer form too
+    // so older ledgers keep validating.
+    let version = table
+        .get("schema_version")
+        .with_context(|| format!("{} missing `schema_version`", path.display()))?;
+    let matches_v1 = match version {
+        Value::String(text) => text == "1",
+        Value::Integer(number) => *number == 1,
+        _ => false,
+    };
+    if !matches_v1 {
         bail!(
-            "{} expected schema_version = 1, found {version}",
+            "{} expected schema_version = \"1\", found {version}",
             path.display()
         );
     }
