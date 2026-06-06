@@ -23,6 +23,16 @@ include_successful_lane_table = false
 include_provider_table = "on_failure"
 include_sensor_table = "on_failure"
 include_execution_summary = "none"
+# Posture for the boilerplate suppressor when reviewer-value content survived
+# compilation but the rendered PR body was classified as no-value boilerplate:
+# - "suppress" (consumer default): withhold the PR post; diagnostics stay in
+#   artifacts and github-review-skip.json names this policy and the counts.
+# - "post_substantive": post when at least one summary-only finding is
+#   substantive (severity medium+ or confidence medium-high+, excluding pure
+#   lane-status notes).
+# - "post_all": post whenever any summary-only finding exists.
+# Unknown values are policy parse errors and become receipted gate reasons.
+summary_only_body = "suppress"
 
 [gate]
 required_check = "ub-review/gate"

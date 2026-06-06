@@ -496,6 +496,11 @@ struct ReviewTerminalState {
     final_follow_up_tasks: usize,
     inline_comments: usize,
     summary_only_findings: usize,
+    /// Summary-only findings that carry reviewer-relevant weight on their own
+    /// (severity medium+ or confidence medium-high+, excluding pure
+    /// lane-status notes); `[review_body].summary_only_body` receipts cite
+    /// this count.
+    substantive_summary_only_findings: usize,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2963,7 +2968,17 @@ fn read_github_review_metadata(args: &PostArgs) -> Option<GitHubReviewMetadata> 
         || diff_metadata
             .as_ref()
             .is_some_and(|metadata| metadata.off_diff_comment_count == 0);
-    let valid = validate_github_review_payload(&review).is_ok() && diff_valid;
+    // Mirror validate_github_review_payload_for_post: the receipt's `valid`
+    // marker must reflect the policy the payload was prepared under, not the
+    // hardcoded default.
+    let review_body_policy = post_review_body_policy(args);
+    let valid = validate_github_review_payload_with_policy_waiver(
+        &review,
+        &review_body_policy,
+        summary_only_body_waives_post_validation(&review_body_policy),
+    )
+    .is_ok()
+        && diff_valid;
     Some(GitHubReviewMetadata {
         valid,
         comments: review.comments.len(),
@@ -5870,6 +5885,7 @@ fn write_review_artifacts(
     })?;
     let review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
+    let summary_only_policy_posted = final_surface.summary_only_policy_posted;
     let github_review = final_surface.github_review;
     let artifact_body = final_surface.artifact_body;
     let terminal_state = final_surface.terminal_state;
@@ -5973,11 +5989,17 @@ fn write_review_artifacts(
     )?;
     fs::write(review_dir.join("review.md"), artifact_body)?;
     if should_prepare_github_review {
-        write_github_review_payload(&review_dir, &github_review, &line_map, &config.review_body)?;
+        write_github_review_payload(
+            &review_dir,
+            &github_review,
+            &line_map,
+            &config.review_body,
+            summary_only_policy_posted,
+        )?;
     } else {
         write_github_review_skip_receipt(
             &review_dir,
-            build_github_review_skip_receipt(args, &review),
+            build_github_review_skip_receipt(args, &review, config.review_body.summary_only_body),
         )?;
     }
     Ok(gate_outcome)
@@ -6059,6 +6081,10 @@ struct CompiledReviewSurface {
     artifact_body: String,
     github_review: GitHubReview,
     should_prepare_github_review: bool,
+    /// True when `[review_body].summary_only_body` posted a body the
+    /// suppressor classified as no-value boilerplate; the payload writer
+    /// waives the suppressible body-policy checks for exactly this case.
+    summary_only_policy_posted: bool,
     review_payload_status: &'static str,
     terminal_state: ReviewTerminalState,
 }
@@ -6114,13 +6140,34 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
+    let substantive_summary_only_findings =
+        count_substantive_summary_only_findings(input.summary_only_findings);
     let mut suppressed_artifact_only_pr_body = false;
+    let mut summary_only_policy_posted = false;
     if let Err(err) = validate_pr_review_body_policy(&pr_body, input.review_body_policy) {
-        if is_suppressible_pr_body_policy_error(&err) {
+        if !is_suppressible_pr_body_policy_error(&err) {
+            return Err(err).with_context(|| "validate pull request review body policy");
+        }
+        if !matches!(input.args.model_mode, ModelMode::Off)
+            && summary_only_body_policy_permits_post(
+                input.review_body_policy.summary_only_body,
+                input.summary_only_findings.len(),
+                substantive_summary_only_findings,
+            )
+        {
+            // The configured [review_body].summary_only_body posture posts
+            // this body despite the suppressible classification. Everything
+            // outside the suppressible classes must still hold; rendered PR
+            // bodies never carry those sections, so a failure here means a
+            // body-construction bug, not reviewer content worth withholding.
+            validate_pr_review_body_policy_with_waiver(&pr_body, input.review_body_policy, true)
+                .with_context(
+                    || "validate pull request review body policy under summary_only_body waiver",
+                )?;
+            summary_only_policy_posted = true;
+        } else {
             pr_body.clear();
             suppressed_artifact_only_pr_body = true;
-        } else {
-            return Err(err).with_context(|| "validate pull request review body policy");
         }
     }
     let pr_inline_comments: &[ReviewInlineComment] = if suppressed_artifact_only_pr_body {
@@ -6145,13 +6192,14 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         pass_policy_permits_review_post(input.args.posting, input.run_pass, input.post_review_on);
     let should_prepare_github_review = pass_policy_permits_post
         && !suppressed_artifact_only_pr_body
-        && should_prepare_github_review_payload(
-            input.args,
-            pr_inline_comments,
-            input.summary_only_findings,
-            input.proof_receipts,
-            &pr_body,
-        );
+        && (summary_only_policy_posted
+            || should_prepare_github_review_payload(
+                input.args,
+                pr_inline_comments,
+                input.summary_only_findings,
+                input.proof_receipts,
+                &pr_body,
+            ));
     let review_payload_status = if should_prepare_github_review {
         "prepared"
     } else if !pass_policy_permits_post {
@@ -6170,6 +6218,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         pr_body: &pr_body,
         inline_comments: pr_inline_comments,
         summary_only_findings: input.summary_only_findings,
+        summary_only_body: input.review_body_policy.summary_only_body,
         model_lanes: input.model_lanes,
         missing_or_failed_sensor_evidence: input.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: input.missing_or_failed_model_evidence,
@@ -6180,9 +6229,46 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         artifact_body,
         github_review,
         should_prepare_github_review,
+        summary_only_policy_posted,
         review_payload_status,
         terminal_state,
     })
+}
+
+/// A summary-only finding is substantive when it carries reviewer-relevant
+/// weight on its own: severity medium or higher, or confidence medium-high or
+/// higher. Pure lane-status and guardrail notes
+/// (`is_pr_body_artifact_only_finding`) are never substantive regardless of
+/// the severity/confidence they record.
+fn summary_only_finding_is_substantive(finding: &SummaryOnlyFinding) -> bool {
+    if is_pr_body_artifact_only_finding(finding) {
+        return false;
+    }
+    matches!(finding.severity.as_str(), "blocker" | "high" | "medium")
+        || matches!(finding.confidence.as_str(), "high" | "medium-high")
+}
+
+fn count_substantive_summary_only_findings(findings: &[SummaryOnlyFinding]) -> usize {
+    findings
+        .iter()
+        .filter(|finding| summary_only_finding_is_substantive(finding))
+        .count()
+}
+
+/// `[review_body].summary_only_body` decision for a PR body the suppressor
+/// classified as no-value boilerplate: `suppress` always withholds,
+/// `post_substantive` posts when at least one summary-only finding is
+/// substantive, `post_all` posts whenever any summary-only finding exists.
+fn summary_only_body_policy_permits_post(
+    policy: SummaryOnlyBodyPolicy,
+    summary_only_findings: usize,
+    substantive_summary_only_findings: usize,
+) -> bool {
+    match policy {
+        SummaryOnlyBodyPolicy::Suppress => false,
+        SummaryOnlyBodyPolicy::PostSubstantive => substantive_summary_only_findings > 0,
+        SummaryOnlyBodyPolicy::PostAll => summary_only_findings > 0,
+    }
 }
 
 const MAX_PR_REVIEW_BODY_BYTES: usize = 6_000;
@@ -6196,28 +6282,44 @@ fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
 }
 
 fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
+    validate_pr_review_body_policy_with_waiver(body, policy, false)
+}
+
+/// Body-policy validation with an optional waiver for the suppressible
+/// classes (`is_suppressible_pr_body_policy_error`: conciseness, artifact-only
+/// boilerplate, refuted-only note). The waiver exists for exactly one caller
+/// posture: `[review_body].summary_only_body` decided to post a body the
+/// suppressor would have withheld. The non-suppressible checks (lane,
+/// provider, and sensor tables plus the execution summary) always run.
+fn validate_pr_review_body_policy_with_waiver(
+    body: &str,
+    policy: &ReviewBodyPolicy,
+    waive_suppressible: bool,
+) -> Result<()> {
     let trimmed = body.trim();
     if trimmed.is_empty() {
         return Ok(());
     }
-    if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
-        bail!(
-            "github review body is not concise enough: {} bytes over max {}",
-            trimmed.len(),
-            MAX_PR_REVIEW_BODY_BYTES
-        );
-    }
-    let bullet_count = pr_body_bullet_count(trimmed);
-    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
-        bail!(
-            "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
-        );
-    }
-    if has_forbidden_pr_review_boilerplate(trimmed) {
-        bail!("github review body contains artifact-only boilerplate");
-    }
-    if is_refuted_only_pr_body(trimmed) {
-        bail!("github review body contains refuted-only artifact note");
+    if !waive_suppressible {
+        if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
+            bail!(
+                "github review body is not concise enough: {} bytes over max {}",
+                trimmed.len(),
+                MAX_PR_REVIEW_BODY_BYTES
+            );
+        }
+        let bullet_count = pr_body_bullet_count(trimmed);
+        if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
+            bail!(
+                "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+            );
+        }
+        if has_forbidden_pr_review_boilerplate(trimmed) {
+            bail!("github review body contains artifact-only boilerplate");
+        }
+        if is_refuted_only_pr_body(trimmed) {
+            bail!("github review body contains refuted-only artifact note");
+        }
     }
     if !policy.include_successful_lane_table && contains_successful_lane_table(trimmed) {
         bail!("github review body contains successful lane table");
@@ -6388,6 +6490,7 @@ struct TerminalStateInput<'a> {
     pr_body: &'a str,
     inline_comments: &'a [ReviewInlineComment],
     summary_only_findings: &'a [SummaryOnlyFinding],
+    summary_only_body: SummaryOnlyBodyPolicy,
     model_lanes: &'a [ModelLaneReceipt],
     missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
@@ -6396,6 +6499,8 @@ struct TerminalStateInput<'a> {
 }
 
 fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalState {
+    let substantive_summary_only_findings =
+        count_substantive_summary_only_findings(input.summary_only_findings);
     let usable_model_lanes = input
         .model_lanes
         .iter()
@@ -6420,8 +6525,12 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
                 input.run_pass.key()
             )
         } else {
-            "Reviewer-value content survived compilation, but the PR-facing payload was withheld as no-value boilerplate; diagnostics remain in artifacts."
-                .to_owned()
+            format!(
+                "Reviewer-value content survived compilation, but summary_only_body = `{}` withheld the PR-facing payload as no-value boilerplate: {} summary-only findings, {} substantive; diagnostics remain in artifacts.",
+                input.summary_only_body.key(),
+                input.summary_only_findings.len(),
+                substantive_summary_only_findings
+            )
         };
         ("needs-reviewer-attention", reason)
     } else if input.args.dry_run {
@@ -6475,6 +6584,7 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
         final_follow_up_tasks: input.final_follow_up_tasks,
         inline_comments: input.inline_comments.len(),
         summary_only_findings: input.summary_only_findings.len(),
+        substantive_summary_only_findings,
     }
 }
 
@@ -6758,12 +6868,14 @@ fn write_github_review_payload(
     github_review: &GitHubReview,
     right_lines: &BTreeSet<(String, u32)>,
     review_body_policy: &ReviewBodyPolicy,
+    waive_suppressible_body_policy: bool,
 ) -> Result<()> {
     validate_github_review_payload_for_right_lines(
         github_review,
         right_lines,
         "generated diff context",
         review_body_policy,
+        waive_suppressible_body_policy,
     )?;
     fs::write(
         review_dir.join("github-review.json"),
@@ -12165,14 +12277,25 @@ fn write_github_review_skip_receipt(
 fn build_github_review_skip_receipt(
     args: &RunArgs,
     review: &ReviewArtifacts,
+    summary_only_body: SummaryOnlyBodyPolicy,
 ) -> GitHubReviewSkipReceipt {
     // The receipt reason must name the skip cause, not restate the terminal
     // state: a pass excluded by the profile's posting policy says so directly
-    // instead of borrowing a sentence that can read like a contradiction.
+    // instead of borrowing a sentence that can read like a contradiction, and
+    // a body withheld by the boilerplate suppressor names the configured
+    // [review_body].summary_only_body value and the finding counts it ruled
+    // on.
     let reason = if review.terminal_state.review_payload_status == "skipped_pass_policy" {
         format!(
             "pass `{}` is not in [gate].post_review_on; the profile keeps this pass artifact-only.",
             review.run_pass
+        )
+    } else if review.terminal_state.review_payload_status == "skipped_artifact_only_body" {
+        format!(
+            "summary_only_body = `{}` withheld the PR-facing body as no-value boilerplate: {} summary-only findings, {} substantive; diagnostics remain in artifacts.",
+            summary_only_body.key(),
+            review.terminal_state.summary_only_findings,
+            review.terminal_state.substantive_summary_only_findings
         )
     } else {
         review.terminal_state.reason.clone()
@@ -18814,18 +18937,26 @@ fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     })
 }
 
+/// Default-policy convenience wrapper kept for the payload contract tests;
+/// production callers thread the effective policy and waiver explicitly.
+#[cfg(test)]
 fn validate_github_review_payload(review: &GitHubReview) -> Result<()> {
-    validate_github_review_payload_with_policy(review, &ReviewBodyPolicy::default())
+    validate_github_review_payload_with_policy_waiver(review, &ReviewBodyPolicy::default(), false)
 }
 
-fn validate_github_review_payload_with_policy(
+fn validate_github_review_payload_with_policy_waiver(
     review: &GitHubReview,
     policy: &ReviewBodyPolicy,
+    waive_suppressible_body_policy: bool,
 ) -> Result<()> {
     if review.event != "COMMENT" {
         bail!("github review event must be COMMENT");
     }
-    validate_pr_review_body_policy(&review.body, policy)?;
+    validate_pr_review_body_policy_with_waiver(
+        &review.body,
+        policy,
+        waive_suppressible_body_policy,
+    )?;
     if review.comments.is_empty() && !pr_body_has_reviewer_value(&review.body) {
         bail!("github review body is missing reviewer-value content");
     }
@@ -18862,8 +18993,13 @@ fn validate_github_review_payload_with_policy(
 }
 
 fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubReview) -> Result<()> {
-    let review_body_policy = ReviewBodyPolicy::default();
-    validate_github_review_payload_with_policy(review, &review_body_policy)?;
+    let review_body_policy = post_review_body_policy(args);
+    let waive_suppressible = summary_only_body_waives_post_validation(&review_body_policy);
+    validate_github_review_payload_with_policy_waiver(
+        review,
+        &review_body_policy,
+        waive_suppressible,
+    )?;
     let diff_patch = post_diff_patch_path(args);
     if review.comments.is_empty() {
         return Ok(());
@@ -18876,7 +19012,56 @@ fn validate_github_review_payload_for_post(args: &PostArgs, review: &GitHubRevie
         &right_lines,
         &diff_patch.display().to_string(),
         &review_body_policy,
+        waive_suppressible,
     )
+}
+
+/// The post step trusts the run's compile decision for the suppressible
+/// body-policy classes: when the effective `[review_body].summary_only_body`
+/// is a posting posture (`post_substantive`/`post_all`), a prepared
+/// `github-review.json` was either clean or deliberately posted under that
+/// posture, so re-running the suppressible text checks here would silently
+/// override the configured policy. Under `suppress` (and when no effective
+/// config is readable) the conservative checks stay in force.
+fn summary_only_body_waives_post_validation(policy: &ReviewBodyPolicy) -> bool {
+    !matches!(policy.summary_only_body, SummaryOnlyBodyPolicy::Suppress)
+}
+
+/// Subset of `effective-config.json` the post step needs: the `[review_body]`
+/// policy the run prepared the payload under.
+#[derive(Default, Deserialize)]
+struct EffectiveReviewBodyConfig {
+    #[serde(default)]
+    review_body: ReviewBodyPolicy,
+}
+
+/// `[review_body]` policy for the post step, read from the run's
+/// `effective-config.json` (the receipt written next to the `review/`
+/// directory holding the payload). A missing or unreadable receipt falls back
+/// to the conservative default policy.
+fn post_review_body_policy(args: &PostArgs) -> ReviewBodyPolicy {
+    let path = post_effective_config_path(args);
+    fs::read(&path)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<EffectiveReviewBodyConfig>(&bytes).ok())
+        .map(|config| config.review_body)
+        .unwrap_or_default()
+}
+
+fn post_effective_config_path(args: &PostArgs) -> PathBuf {
+    if let Some(review_dir) = args.review_json.parent()
+        && review_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "review")
+        && let Some(run_dir) = review_dir.parent()
+    {
+        return run_dir.join("effective-config.json");
+    }
+    args.out
+        .parent()
+        .map(|run_dir| run_dir.join("effective-config.json"))
+        .unwrap_or_else(|| PathBuf::from("target/ub-review/effective-config.json"))
 }
 
 fn validate_github_review_payload_for_right_lines(
@@ -18884,8 +19069,13 @@ fn validate_github_review_payload_for_right_lines(
     right_lines: &BTreeSet<(String, u32)>,
     source: &str,
     review_body_policy: &ReviewBodyPolicy,
+    waive_suppressible_body_policy: bool,
 ) -> Result<()> {
-    validate_github_review_payload_with_policy(review, review_body_policy)?;
+    validate_github_review_payload_with_policy_waiver(
+        review,
+        review_body_policy,
+        waive_suppressible_body_policy,
+    )?;
     for comment in &review.comments {
         let path = normalize_repo_path(&comment.path);
         if !right_lines.contains(&(path.clone(), comment.line)) {
@@ -21470,14 +21660,15 @@ mod tests {
         ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
         ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
         RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, ToolGateOutcomeEntry, ToolGateOutcomeMetrics,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_final_orchestrator_plan, build_gate_outcome,
-        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, build_witness_records, builtin_profiles, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_gate_check, cmd_post,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
+        ToolGateOutcomeMetrics, append_follow_up_evidence_witnesses,
+        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
+        classify_diff_class, classify_proof_cost, cmd_gate_check, cmd_post,
         collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
         default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
@@ -21915,6 +22106,11 @@ mod tests {
         config.merge_defaults();
         assert_eq!(config.review_profile, "ub-review-self");
         assert_eq!(config.profile, "gh-runner-full");
+        assert_eq!(
+            config.review_body.summary_only_body,
+            SummaryOnlyBodyPolicy::PostSubstantive,
+            "dogfood profile posts substantive summary-only bodies for calibration"
+        );
         assert_eq!(config.gate.required_check, "ub-review/gate");
         assert_eq!(config.gate.target_minutes, 30);
         assert_eq!(config.gate.hard_timeout_minutes, 60);
@@ -22825,6 +23021,11 @@ enabled = false
         assert_eq!(config.gate.synchronize_mode, "gate-only");
         assert!(!config.gate.blocking.required_proof_unproven);
         assert!(!config.gate.blocking.tool_gate_missing_evidence);
+        assert_eq!(
+            config.review_body.summary_only_body,
+            SummaryOnlyBodyPolicy::Suppress,
+            "consumer example must document the conservative suppress default"
+        );
 
         let ripr = config
             .tools
@@ -26947,7 +27148,13 @@ index 1111111..2222222 100644
         validate_github_review_payload(&ok)?;
 
         let temp = tempfile::tempdir()?;
-        write_github_review_payload(temp.path(), &ok, &line_map, &ReviewBodyPolicy::default())?;
+        write_github_review_payload(
+            temp.path(),
+            &ok,
+            &line_map,
+            &ReviewBodyPolicy::default(),
+            false,
+        )?;
         assert!(temp.path().join("github-review.json").exists());
 
         let stale_line = GitHubReview {
@@ -26963,6 +27170,7 @@ index 1111111..2222222 100644
             &stale_line,
             &line_map,
             &ReviewBodyPolicy::default(),
+            false,
         )
         .err()
         .ok_or_else(|| anyhow::anyhow!("stale line unexpectedly wrote github-review.json"))?;
@@ -26980,7 +27188,8 @@ index 1111111..2222222 100644
                 bad_event_out.path(),
                 &bad_event,
                 &line_map,
-                &ReviewBodyPolicy::default()
+                &ReviewBodyPolicy::default(),
+                false
             )
             .is_err()
         );
@@ -27000,7 +27209,8 @@ index 1111111..2222222 100644
                 bad_out.path(),
                 &bad_side,
                 &line_map,
-                &ReviewBodyPolicy::default()
+                &ReviewBodyPolicy::default(),
+                false
             )
             .is_err()
         );
@@ -28700,6 +28910,7 @@ UB_REVIEW_HTTP_STATUS:429
             pr_body: "",
             inline_comments: &[],
             summary_only_findings: &[],
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
             model_lanes: &model_lanes,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
@@ -28735,6 +28946,7 @@ UB_REVIEW_HTTP_STATUS:429
             pr_body: "",
             inline_comments: &[],
             summary_only_findings: &[],
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
             model_lanes: &model_lanes,
             missing_or_failed_sensor_evidence: &missing_sensor,
             missing_or_failed_model_evidence: &[],
@@ -28755,6 +28967,7 @@ UB_REVIEW_HTTP_STATUS:429
             pr_body: "",
             inline_comments: &[],
             summary_only_findings: &[],
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
             model_lanes: &model_lanes,
             missing_or_failed_sensor_evidence: &missing_sensor,
             missing_or_failed_model_evidence: &[],
@@ -28780,6 +28993,7 @@ UB_REVIEW_HTTP_STATUS:429
             pr_body: "",
             inline_comments: &[],
             summary_only_findings: &[],
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
             model_lanes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
@@ -28812,6 +29026,7 @@ UB_REVIEW_HTTP_STATUS:429
             pr_body: "",
             inline_comments: &[],
             summary_only_findings: &[],
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
             model_lanes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &missing_model,
@@ -28836,6 +29051,7 @@ UB_REVIEW_HTTP_STATUS:429
             pr_body: "## Verification questions\n\n- Confirm the focused proof.",
             inline_comments: &[],
             summary_only_findings: &[],
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
             model_lanes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
@@ -30483,6 +30699,388 @@ required_proof_unprooven = true
         Ok(())
     }
 
+    /// Substantive summary-only finding (severity medium+) whose reason trips
+    /// the boilerplate suppressor when rendered into the PR body.
+    fn substantive_summary_finding() -> SummaryOnlyFinding {
+        SummaryOnlyFinding {
+            lane: "opposition".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "Residual risk remains for human review in the resize realloc ordering."
+                .to_owned(),
+            evidence: "diff hunk src/lib.rs:42".to_owned(),
+        }
+    }
+
+    /// Non-substantive summary-only finding (severity low, confidence medium)
+    /// whose reason trips the boilerplate suppressor when rendered.
+    fn non_substantive_summary_finding() -> SummaryOnlyFinding {
+        SummaryOnlyFinding {
+            lane: "workflow-opposition".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "medium".to_owned(),
+            reason:
+                "No blocking finding after bounded review; residual risk remains for human review."
+                    .to_owned(),
+            evidence: "bounded lane summary".to_owned(),
+        }
+    }
+
+    fn compile_summary_only_surface(
+        summary_only_body: SummaryOnlyBodyPolicy,
+        summary_only_findings: &[SummaryOnlyFinding],
+    ) -> Result<super::CompiledReviewSurface> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("opposition", "ok")];
+        let review_body_policy = ReviewBodyPolicy {
+            summary_only_body,
+            ..ReviewBodyPolicy::default()
+        };
+        compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &review_body_policy,
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings,
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+        })
+    }
+
+    #[test]
+    fn summary_only_finding_substantive_classification() {
+        assert!(super::summary_only_finding_is_substantive(
+            &substantive_summary_finding()
+        ));
+        let mut confidence_only = substantive_summary_finding();
+        confidence_only.severity = "low".to_owned();
+        assert!(
+            super::summary_only_finding_is_substantive(&confidence_only),
+            "confidence medium-high alone should qualify"
+        );
+        assert!(!super::summary_only_finding_is_substantive(
+            &non_substantive_summary_finding()
+        ));
+        let lane_status_note = SummaryOnlyFinding {
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Lane reviewed the packet without findings.".to_owned(),
+            evidence: "lane model summary".to_owned(),
+        };
+        assert!(
+            !super::summary_only_finding_is_substantive(&lane_status_note),
+            "pure lane-status notes never count as substantive"
+        );
+    }
+
+    #[test]
+    fn summary_only_body_suppress_withholds_substantive_findings() -> Result<()> {
+        let findings = vec![substantive_summary_finding()];
+        let surface = compile_summary_only_surface(SummaryOnlyBodyPolicy::Suppress, &findings)?;
+        assert!(!surface.should_prepare_github_review);
+        assert!(!surface.summary_only_policy_posted);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert!(surface.github_review.body.is_empty());
+        assert_eq!(surface.terminal_state.summary_only_findings, 1);
+        assert_eq!(surface.terminal_state.substantive_summary_only_findings, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_body_post_substantive_posts_substantive_findings() -> Result<()> {
+        let findings = vec![
+            non_substantive_summary_finding(),
+            substantive_summary_finding(),
+        ];
+        let surface =
+            compile_summary_only_surface(SummaryOnlyBodyPolicy::PostSubstantive, &findings)?;
+        assert!(
+            surface.should_prepare_github_review,
+            "post_substantive should post a body with a substantive finding: {}",
+            surface.terminal_state.reason
+        );
+        assert!(surface.summary_only_policy_posted);
+        assert_eq!(surface.review_payload_status, "prepared");
+        assert!(
+            surface
+                .github_review
+                .body
+                .contains("Residual risk remains for human review"),
+            "posted body should keep the finding content: {}",
+            surface.github_review.body
+        );
+        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
+        assert_eq!(surface.terminal_state.substantive_summary_only_findings, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_body_post_substantive_withholds_non_substantive_findings() -> Result<()> {
+        let findings = vec![non_substantive_summary_finding()];
+        let surface =
+            compile_summary_only_surface(SummaryOnlyBodyPolicy::PostSubstantive, &findings)?;
+        assert!(!surface.should_prepare_github_review);
+        assert!(!surface.summary_only_policy_posted);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert!(surface.github_review.body.is_empty());
+        assert_eq!(surface.terminal_state.summary_only_findings, 1);
+        assert_eq!(surface.terminal_state.substantive_summary_only_findings, 0);
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_body_post_all_posts_non_substantive_findings() -> Result<()> {
+        let findings = vec![non_substantive_summary_finding()];
+        let surface = compile_summary_only_surface(SummaryOnlyBodyPolicy::PostAll, &findings)?;
+        assert!(
+            surface.should_prepare_github_review,
+            "post_all should post whenever any summary-only finding exists: {}",
+            surface.terminal_state.reason
+        );
+        assert!(surface.summary_only_policy_posted);
+        assert_eq!(surface.review_payload_status, "prepared");
+        assert!(!surface.github_review.body.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_body_post_all_keeps_suppressing_without_summary_findings() -> Result<()> {
+        // 13 inline comments trip the conciseness suppressor with zero
+        // summary-only findings; the knob is scoped to summary-only bodies,
+        // so post_all must not resurrect this body.
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let inline_comments = (0..13)
+            .map(|index| ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/main.rs".to_owned(),
+                line: 100 + index,
+                side: "RIGHT".to_owned(),
+                body: format!("Confirm concise-review guard boundary {index}."),
+                evidence: "generated regression fixture".to_owned(),
+            })
+            .collect::<Vec<_>>();
+        let review_body_policy = ReviewBodyPolicy {
+            summary_only_body: SummaryOnlyBodyPolicy::PostAll,
+            ..ReviewBodyPolicy::default()
+        };
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &review_body_policy,
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+        })?;
+
+        assert!(!surface.should_prepare_github_review);
+        assert!(!surface.summary_only_policy_posted);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        Ok(())
+    }
+
+    #[test]
+    fn summary_only_withheld_terminal_reason_names_policy_and_counts() {
+        // A value-changing proof receipt keeps reviewer_value_present true so
+        // the terminal state takes the withheld-payload branch.
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let findings = vec![non_substantive_summary_finding()];
+        let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];
+        let state = build_review_terminal_state(TerminalStateInput {
+            args: &args,
+            run_pass: super::RunPass::Manual,
+            plan: &plan,
+            review_payload_status: "skipped_artifact_only_body",
+            should_prepare_github_review: false,
+            pr_body: "",
+            inline_comments: &[],
+            summary_only_findings: &findings,
+            summary_only_body: SummaryOnlyBodyPolicy::PostSubstantive,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            proof_receipts: &proof_receipts,
+            final_follow_up_tasks: 0,
+        });
+
+        assert_eq!(state.status, "needs-reviewer-attention");
+        assert!(
+            state
+                .reason
+                .contains("summary_only_body = `post_substantive`"),
+            "terminal reason should name the policy value: {}",
+            state.reason
+        );
+        assert!(
+            state
+                .reason
+                .contains("1 summary-only findings, 0 substantive"),
+            "terminal reason should name the counts: {}",
+            state.reason
+        );
+        assert!(
+            !state
+                .reason
+                .contains("withheld as no-value boilerplate; diagnostics"),
+            "old unconditional wording should be gone: {}",
+            state.reason
+        );
+        assert_eq!(state.substantive_summary_only_findings, 0);
+    }
+
+    #[test]
+    fn review_body_waiver_skips_suppressible_checks_only() -> Result<()> {
+        let policy = ReviewBodyPolicy::default();
+        let boilerplate_body = "## Confirmed findings\n\n- [opposition] Residual risk remains for human review in the resize path.";
+        assert!(
+            super::validate_pr_review_body_policy(boilerplate_body, &policy).is_err(),
+            "boilerplate body must still fail without the waiver"
+        );
+        super::validate_pr_review_body_policy_with_waiver(boilerplate_body, &policy, true)?;
+
+        let sensor_table_body = "## Confirmed findings\n\n- A finding.\n\n## Sensor status\n\n- ok";
+        let err =
+            super::validate_pr_review_body_policy_with_waiver(sensor_table_body, &policy, true)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("sensor table unexpectedly passed under waiver"))?;
+        assert!(err.to_string().contains("sensor status table"), "{err:#}");
+        Ok(())
+    }
+
+    #[test]
+    fn review_body_summary_only_body_parses_known_values() -> Result<()> {
+        for (value, expected) in [
+            ("suppress", SummaryOnlyBodyPolicy::Suppress),
+            ("post_substantive", SummaryOnlyBodyPolicy::PostSubstantive),
+            ("post-substantive", SummaryOnlyBodyPolicy::PostSubstantive),
+            ("post_all", SummaryOnlyBodyPolicy::PostAll),
+            ("post-all", SummaryOnlyBodyPolicy::PostAll),
+        ] {
+            let config = Config::from_toml_with_policy_receipts(&format!(
+                "[review_body]\nsummary_only_body = \"{value}\"\n"
+            ))?;
+            assert!(
+                config.policy_errors.is_empty(),
+                "`{value}` should parse without policy errors: {:?}",
+                config.policy_errors
+            );
+            assert_eq!(config.review_body.summary_only_body, expected, "{value}");
+        }
+        assert_eq!(
+            Config::default().review_body.summary_only_body,
+            SummaryOnlyBodyPolicy::Suppress,
+            "consumer default must stay suppress"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn review_body_unknown_policy_values_are_receipted() -> Result<()> {
+        let config = Config::from_toml_with_policy_receipts(
+            "[review_body]\ninclude_successful_lane_table = true\nsummary_only_body = \"post-everything\"\n",
+        )?;
+        assert_eq!(config.policy_errors.len(), 1, "{:?}", config.policy_errors);
+        assert_eq!(
+            config.policy_errors[0].section,
+            "review_body.summary_only_body"
+        );
+        assert!(
+            config.policy_errors[0].detail.contains("summary_only_body"),
+            "{:?}",
+            config.policy_errors[0]
+        );
+        // Valid siblings keep working; the bad key falls back to the default.
+        assert!(config.review_body.include_successful_lane_table);
+        assert_eq!(
+            config.review_body.summary_only_body,
+            SummaryOnlyBodyPolicy::Suppress
+        );
+
+        let misspelled = Config::from_toml_with_policy_receipts(
+            "[review_body]\nsummary_only_bodyy = \"suppress\"\n",
+        )?;
+        assert_eq!(
+            misspelled.policy_errors.len(),
+            1,
+            "{:?}",
+            misspelled.policy_errors
+        );
+        assert_eq!(
+            misspelled.policy_errors[0].section,
+            "review_body.summary_only_bodyy"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn post_validation_honors_effective_summary_only_body_policy() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let run_dir = temp.path();
+        let review_dir = run_dir.join("review");
+        fs::create_dir_all(&review_dir)?;
+        let args = PostArgs {
+            review_json: review_dir.join("github-review.json"),
+            diff_patch: None,
+            out: review_dir.clone(),
+            github_token: Some("token".to_owned()),
+            repo: Some("EffortlessMetrics/ub-review".to_owned()),
+            pull_number: Some(1),
+            github_api_url: "https://api.github.com".to_owned(),
+            fail_on_post_error: false,
+        };
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Confirmed findings\n\n- [opposition] Residual risk remains for human review in the resize path.".to_owned(),
+            comments: Vec::new(),
+        };
+
+        // Without an effective config the conservative default rejects the body.
+        let err = super::validate_github_review_payload_for_post(&args, &review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("boilerplate body unexpectedly passed post checks"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        // With a posting posture in effective-config.json the post step honors
+        // the run's compile decision and waives the suppressible classes.
+        let mut config = Config::default();
+        config.review_body.summary_only_body = SummaryOnlyBodyPolicy::PostSubstantive;
+        fs::write(
+            run_dir.join("effective-config.json"),
+            serde_json::to_vec_pretty(&config)?,
+        )?;
+        super::validate_github_review_payload_for_post(&args, &review)?;
+        Ok(())
+    }
+
     fn test_pass_policy_inline_comment() -> ReviewInlineComment {
         ReviewInlineComment {
             lane: "tests-oracle".to_owned(),
@@ -32099,6 +32697,73 @@ index 1111111..2222222 100644
             "skip reason must not claim a review was prepared: {reason}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn suppressed_body_skip_receipt_names_policy_and_counts() {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let mut terminal_state = test_terminal_state("needs-reviewer-attention");
+        terminal_state.review_payload_status = "skipped_artifact_only_body".to_owned();
+        terminal_state.summary_only_findings = 10;
+        terminal_state.substantive_summary_only_findings = 0;
+        let review = super::ReviewArtifacts {
+            shared_context_id: "abc123".to_owned(),
+            review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
+            mode: "review-byok".to_owned(),
+            posting: "review".to_owned(),
+            runtime_profile: "gh-runner".to_owned(),
+            run_pass: "opened".to_owned(),
+            model_mode: "auto".to_owned(),
+            depth: "standard".to_owned(),
+            provider_policy: "minimax-only".to_owned(),
+            model_provider_policy: "minimax-only".to_owned(),
+            lane_width: 10,
+            model_concurrency: 8,
+            max_model_calls: 18,
+            max_inline_comments: 8,
+            model_timeout_sec: 300,
+            ledger_path: String::new(),
+            ledger_max_bytes: 65_536,
+            pr_thread_context: test_pr_thread_context(),
+            terminal_state,
+            provider_preflights: Vec::new(),
+            model_lanes: vec![model_lane_receipt("opposition", "ok")],
+            missing_or_failed_sensor_evidence: Vec::new(),
+            missing_or_failed_model_evidence: Vec::new(),
+            inline_comments: Vec::new(),
+            summary_only_findings: Vec::new(),
+            observations: Vec::new(),
+            proof_requests: Vec::new(),
+            proof_receipts: Vec::new(),
+            resource_leases: Vec::new(),
+            body: "artifact body".to_owned(),
+        };
+
+        let receipt = super::build_github_review_skip_receipt(
+            &args,
+            &review,
+            SummaryOnlyBodyPolicy::PostSubstantive,
+        );
+        assert_eq!(receipt.review_payload_status, "skipped_artifact_only_body");
+        assert_eq!(
+            receipt.reason,
+            "summary_only_body = `post_substantive` withheld the PR-facing body as no-value boilerplate: 10 summary-only findings, 0 substantive; diagnostics remain in artifacts."
+        );
+
+        let mut suppress_review = review;
+        suppress_review.terminal_state.summary_only_findings = 3;
+        suppress_review
+            .terminal_state
+            .substantive_summary_only_findings = 2;
+        let suppress_receipt = super::build_github_review_skip_receipt(
+            &args,
+            &suppress_review,
+            SummaryOnlyBodyPolicy::Suppress,
+        );
+        assert_eq!(
+            suppress_receipt.reason,
+            "summary_only_body = `suppress` withheld the PR-facing body as no-value boilerplate: 3 summary-only findings, 2 substantive; diagnostics remain in artifacts."
+        );
     }
 
     #[test]
@@ -34764,6 +35429,7 @@ index 1111111..2222222 100644
             final_follow_up_tasks: 0,
             inline_comments: 0,
             summary_only_findings: 0,
+            substantive_summary_only_findings: 0,
         }
     }
 

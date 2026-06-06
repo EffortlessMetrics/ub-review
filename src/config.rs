@@ -29,9 +29,9 @@ pub(crate) struct Config {
 }
 
 /// One malformed policy key or section (an unknown top-level key, a `[gate]`
-/// key, a `[tools.<id>]` key, a `[proof]` key, or a `[[proof.required]]`
-/// entry) downgraded from a hard parse failure or a silent drop into a
-/// recorded, gate-failing receipt.
+/// key, a `[review_body]` key, a `[tools.<id>]` key, a `[proof]` key, or a
+/// `[[proof.required]]` entry) downgraded from a hard parse failure or a
+/// silent drop into a recorded, gate-failing receipt.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub(crate) struct PolicyError {
     pub(crate) section: String,
@@ -113,12 +113,18 @@ pub(crate) struct RequiredProofPolicy {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub(crate) struct ReviewBodyPolicy {
     pub(crate) include_successful_lane_table: bool,
     pub(crate) include_provider_table: ReviewBodyTablePolicy,
     pub(crate) include_sensor_table: ReviewBodyTablePolicy,
     pub(crate) include_execution_summary: ReviewBodyExecutionSummaryPolicy,
+    /// Posture for the boilerplate suppressor: what to do when reviewer-value
+    /// content survived compilation but the rendered PR body tripped a
+    /// suppressible no-value classification and only summary-only findings
+    /// carry the review's content. `suppress` (the consumer default) withholds
+    /// the PR post and keeps diagnostics in artifacts.
+    pub(crate) summary_only_body: SummaryOnlyBodyPolicy,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -137,6 +143,37 @@ pub(crate) enum ReviewBodyExecutionSummaryPolicy {
     None,
     OnFailure,
     Always,
+}
+
+/// `[review_body].summary_only_body`: posting posture for a PR review body
+/// that the suppressor would otherwise withhold as no-value boilerplate while
+/// summary-only findings exist. Values follow the snake_case `[review_body]`
+/// vocabulary; kebab-case spellings are accepted as aliases.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum SummaryOnlyBodyPolicy {
+    /// Withhold the PR-facing body (today's behavior; consumer default).
+    #[default]
+    Suppress,
+    /// Post when at least one summary-only finding is substantive: severity
+    /// medium or higher, or confidence medium-high or higher, excluding pure
+    /// lane-status notes.
+    #[serde(alias = "post-substantive")]
+    PostSubstantive,
+    /// Post whenever any summary-only finding exists.
+    #[serde(alias = "post-all")]
+    PostAll,
+}
+
+impl SummaryOnlyBodyPolicy {
+    /// Canonical config spelling, used by truthful skip receipts.
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::Suppress => "suppress",
+            Self::PostSubstantive => "post_substantive",
+            Self::PostAll => "post_all",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -476,6 +513,7 @@ impl Default for ReviewBodyPolicy {
             include_provider_table: ReviewBodyTablePolicy::OnFailure,
             include_sensor_table: ReviewBodyTablePolicy::OnFailure,
             include_execution_summary: ReviewBodyExecutionSummaryPolicy::None,
+            summary_only_body: SummaryOnlyBodyPolicy::Suppress,
         }
     }
 }
@@ -658,9 +696,9 @@ impl Config {
     }
 
     /// Parse config TOML while downgrading malformed policy keys (unknown
-    /// top-level keys, `[gate]` keys, `[tools.<id>]` keys, `[proof]` keys,
-    /// and `[[proof.required]]` entries) from hard parse failures or silent
-    /// drops into recorded `policy_errors`. The run proceeds with only the
+    /// top-level keys, `[gate]` keys, `[review_body]` keys, `[tools.<id>]`
+    /// keys, `[proof]` keys, and `[[proof.required]]` entries) from hard
+    /// parse failures or silent drops into recorded `policy_errors`. The run proceeds with only the
     /// offending keys stripped — valid siblings keep working — and
     /// `build_gate_outcome` turns every recorded error into a `policy` fail
     /// reason pointing at `effective-config.json`, never a silent default.
@@ -773,8 +811,9 @@ pub(crate) const KNOWN_TOOL_POLICY_KEYS: &[&str] = &[
 /// only one: repo-wide tool-gate scoping does not exist yet.
 pub(crate) const KNOWN_TOOL_GATE_SCOPES: &[&str] = &["on-diff"];
 
-/// Validate the three gate-policy surfaces (and their containers) inside a
-/// parsed TOML document. The strategy is strip-and-receipt per key: each
+/// Validate the receipted policy surfaces (`[gate]`, `[review_body]`,
+/// `[tools.<id>]`, `[proof]`, and their containers) inside a parsed TOML
+/// document. The strategy is strip-and-receipt per key: each
 /// unknown or malformed key is removed so the remaining document still
 /// deserializes, valid siblings survive, and one `PolicyError` is recorded
 /// per removed key. Shape mismatches (a non-table `[gate]`, a non-table
@@ -802,9 +841,48 @@ fn sanitize_policy_sections(value: &mut toml::Value) -> Vec<PolicyError> {
         table.remove(&key);
     }
     sanitize_gate_section(table, &mut errors);
+    sanitize_review_body_section(table, &mut errors);
     sanitize_tools_section(table, &mut errors);
     sanitize_proof_section(table, &mut errors);
     errors
+}
+
+/// Per-key validation for `[review_body]`, mirroring `[gate]`: each key is
+/// probed as a single-key table against `ReviewBodyPolicy` (which carries
+/// `deny_unknown_fields`), so an unknown key or an unknown policy value (for
+/// example a misspelled `summary_only_body`) strips only the offending key,
+/// records a `PolicyError` receipt, and leaves valid siblings working under
+/// the conservative defaults instead of silently de-fanging the policy.
+fn sanitize_review_body_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    let Some(review_body) = table.get_mut("review_body") else {
+        return;
+    };
+    let Some(review_body_table) = review_body.as_table_mut() else {
+        errors.push(PolicyError {
+            section: "review_body".to_owned(),
+            detail: format!(
+                "invalid [review_body]: expected a table, found {}",
+                review_body.type_str()
+            ),
+        });
+        table.remove("review_body");
+        return;
+    };
+    let entries = review_body_table
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect::<Vec<_>>();
+    for (key, entry) in entries {
+        let mut probe = toml::value::Table::new();
+        probe.insert(key.clone(), entry);
+        if let Err(err) = toml::Value::Table(probe).try_into::<ReviewBodyPolicy>() {
+            errors.push(PolicyError {
+                section: format!("review_body.{key}"),
+                detail: format!("invalid [review_body] key `{key}`: {err}"),
+            });
+            review_body_table.remove(&key);
+        }
+    }
 }
 
 /// Per-key validation for `[gate]`: each key is probed as a single-key table
