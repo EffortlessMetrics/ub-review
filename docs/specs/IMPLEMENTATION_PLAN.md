@@ -70,10 +70,11 @@ Decisions surfaced by the spec drafting and fact-check passes. Each blocks
 or shapes a slice; none blocks the wave.
 
 ```text
-D1  byok default policy: arm fallback on every lane when both keys are
-    present (make primary-with-fallback the default)?         shapes slice 3
-D2  [providers] precedence when parsing lands: CLI flag wins, or repo
-    config wins with CLI override?                            blocks slice 3
+D1  RESOLVED 2026-06-06: the design center is arbitrary provider/role
+    routing declared in repo config - the MiniMax+OpenCode pair is one
+    instance, not the product shape. Defaults stay conservative; the
+    [providers] surface carries the variation per repo.       shapes slice 3
+D2  RESOLVED 2026-06-06: config wins, CLI overrides.          shapes slice 3
 D3  keep or remove the `auto` provider-policy alias (today identical to
     minimax-primary)                                          shapes slice 3
 D4  opencode-model default: stay minimax-m3 (like-for-like fallback) or
