@@ -4144,10 +4144,19 @@ fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
     tool.required && trigger_match(tool.default, &diff.flags).is_some()
 }
 
+/// Repo-native cargo-allow ledger that wins over cargo-allow's default
+/// config discovery (`policy/allow.toml`, `.cargo/allow.toml`, `allow.toml`).
+const CARGO_ALLOW_NATIVE_LEDGER: &str = "policy/cargo-allow.toml";
+
 fn cargo_allow_policy_config_exists(root: &Path) -> bool {
-    ["policy/allow.toml", "cargo-allow.toml", ".cargo-allow.toml"]
-        .iter()
-        .any(|path| root.join(path).is_file())
+    [
+        CARGO_ALLOW_NATIVE_LEDGER,
+        "policy/allow.toml",
+        ".cargo/allow.toml",
+        "allow.toml",
+    ]
+    .iter()
+    .any(|path| root.join(path).is_file())
 }
 
 fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
@@ -4642,18 +4651,33 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             "--base".to_owned(),
             plan.base.clone(),
         ],
-        "cargo-allow" => vec![
-            "cargo-allow".to_owned(),
-            "check".to_owned(),
-            "--mode".to_owned(),
-            "no-new".to_owned(),
-            "--format".to_owned(),
-            "markdown".to_owned(),
-            "--receipt".to_owned(),
-            dir.join("cargo-allow.receipt.json").display().to_string(),
-            "--output".to_owned(),
-            dir.join("cargo-allow.md").display().to_string(),
-        ],
+        "cargo-allow" => {
+            let mut argv = vec!["cargo-allow".to_owned(), "check".to_owned()];
+            // Prefer the repo's native cargo-allow ledger over cargo-allow's
+            // default discovery. `policy/allow.toml` can be an xtask-owned
+            // repo-policy ledger in a different dialect that squats
+            // cargo-allow's default search path, which makes `check` fail on
+            // an unsupported schema instead of reading a genuine ledger.
+            // https://github.com/EffortlessMetrics/cargo-allow/issues/1465
+            //
+            // No `--mode` is passed: cargo-allow defaults to the
+            // policy-configured source-tree gate mode, so the repo ledger
+            // decides whether the check is enforcing or audit-stage.
+            let explicit_config = root.join(CARGO_ALLOW_NATIVE_LEDGER);
+            if explicit_config.is_file() {
+                argv.push("--config".to_owned());
+                argv.push(explicit_config.display().to_string());
+            }
+            argv.extend([
+                "--format".to_owned(),
+                "markdown".to_owned(),
+                "--receipt".to_owned(),
+                dir.join("cargo-allow.receipt.json").display().to_string(),
+                "--output".to_owned(),
+                dir.join("cargo-allow.md").display().to_string(),
+            ]);
+            argv
+        }
         "cargo-fmt" => vec![
             "cargo".to_owned(),
             "fmt".to_owned(),
@@ -20467,8 +20491,6 @@ mod tests {
             vec![
                 "cargo-allow".to_owned(),
                 "check".to_owned(),
-                "--mode".to_owned(),
-                "no-new".to_owned(),
                 "--format".to_owned(),
                 "markdown".to_owned(),
                 "--receipt".to_owned(),
@@ -20484,6 +20506,48 @@ mod tests {
                 "stderr.txt".to_owned(),
                 "cargo-allow.md".to_owned(),
                 "cargo-allow.receipt.json".to_owned(),
+            ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cargo_allow_sensor_command_pins_native_ledger_when_present() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        fs::create_dir_all(root.join("policy"))?;
+        // A repo-policy ledger in a foreign dialect squatting cargo-allow's
+        // default discovery path must not be what the sensor reads.
+        fs::write(root.join("policy/allow.toml"), "schema_version = \"1\"\n")?;
+        fs::write(
+            root.join(super::CARGO_ALLOW_NATIVE_LEDGER),
+            "schema_version = \"0.1\"\npolicy = \"cargo-allow\"\n",
+        )?;
+        let out = root.join("out");
+        let plan = test_plan(vec![sensor_plan("cargo-allow", "cargo-allow", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("cargo-allow sensor missing"))?;
+        let dir = out.join("sensors/cargo-allow");
+        let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
+
+        assert_eq!(
+            argv,
+            vec![
+                "cargo-allow".to_owned(),
+                "check".to_owned(),
+                "--config".to_owned(),
+                root.join(super::CARGO_ALLOW_NATIVE_LEDGER)
+                    .display()
+                    .to_string(),
+                "--format".to_owned(),
+                "markdown".to_owned(),
+                "--receipt".to_owned(),
+                dir.join("cargo-allow.receipt.json").display().to_string(),
+                "--output".to_owned(),
+                dir.join("cargo-allow.md").display().to_string(),
             ]
         );
         Ok(())

@@ -3649,8 +3649,29 @@ fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result
         .map_err(|_| anyhow::anyhow!("fake provider thread panicked"))?
 }
 
+/// Builds a child command with every ambient `UB_REVIEW_*` variable scrubbed.
+///
+/// When the dogfood gate runs this suite, the surrounding GitHub Actions step
+/// exports `UB_REVIEW_PROFILE`, `UB_REVIEW_RUNTIME_PROFILE`,
+/// `UB_REVIEW_TOOL_BUNDLE`, and friends. The spawned `ub-review` binary picks
+/// those up through clap `env = "UB_REVIEW_..."` fallbacks, so nested test
+/// runs silently resolve a gh-runner profile and assertions about default
+/// profile output fail only inside the gate. Scrubbing the prefix first keeps
+/// tests hermetic; explicit per-test envs are applied afterwards and still
+/// win.
+fn isolated_command(program: &str, cwd: &Path) -> Command {
+    let mut command = Command::new(program);
+    command.current_dir(cwd);
+    for (name, _) in std::env::vars_os() {
+        if name.to_string_lossy().starts_with("UB_REVIEW_") {
+            command.env_remove(&name);
+        }
+    }
+    command
+}
+
 fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
-    let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    let output = isolated_command(program, cwd).args(args).output()?;
     if output.status.success() {
         return Ok(());
     }
@@ -3664,8 +3685,8 @@ fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
 }
 
 fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)]) -> Result<()> {
-    let mut command = Command::new(program);
-    command.args(args).current_dir(cwd);
+    let mut command = isolated_command(program, cwd);
+    command.args(args);
     for (name, value) in envs {
         command.env(name, value);
     }
@@ -3688,8 +3709,8 @@ fn run_capture_with_env(
     args: &[&str],
     envs: &[(&str, &str)],
 ) -> Result<String> {
-    let mut command = Command::new(program);
-    command.args(args).current_dir(cwd);
+    let mut command = isolated_command(program, cwd);
+    command.args(args);
     for (name, value) in envs {
         command.env(name, value);
     }
@@ -3706,7 +3727,7 @@ fn run_capture_with_env(
 }
 
 fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
-    let output = Command::new(program).args(args).current_dir(cwd).output()?;
+    let output = isolated_command(program, cwd).args(args).output()?;
     if !output.status.success() {
         return Ok(format!(
             "{}\n{}",
@@ -3723,8 +3744,8 @@ fn run_expect_failure_with_env(
     args: &[&str],
     envs: &[(&str, &str)],
 ) -> Result<String> {
-    let mut command = Command::new(program);
-    command.args(args).current_dir(cwd);
+    let mut command = isolated_command(program, cwd);
+    command.args(args);
     for (name, value) in envs {
         command.env(name, value);
     }

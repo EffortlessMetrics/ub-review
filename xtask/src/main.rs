@@ -215,8 +215,13 @@ fn run_precommit(root: &Path, options: PrecommitOptions) -> Result<PrecommitRepo
         &[
             "cargo-allow",
             "check",
-            "--mode",
-            "no-new",
+            // Point cargo-allow at the repo's native 0.1 ledger explicitly;
+            // its default discovery would pick up `policy/allow.toml`, which
+            // is the xtask-owned repo-policy ledger in a different dialect.
+            // No `--mode`: the ledger's default_mode governs.
+            // https://github.com/EffortlessMetrics/cargo-allow/issues/1465
+            "--config",
+            "policy/cargo-allow.toml",
             "--format",
             "markdown",
             "--receipt",
@@ -810,6 +815,7 @@ fn run_relevant_tool(
 fn relevant_cargo_allow(changed: &[ChangedFile]) -> bool {
     changed.iter().any(|file| {
         file.path == "policy/allow.toml"
+            || file.path == "policy/cargo-allow.toml"
             || file.path.ends_with(".rs")
             || file.path.ends_with("Cargo.toml")
     })
