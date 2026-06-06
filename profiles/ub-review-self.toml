@@ -1,6 +1,7 @@
 # ub-review self-dogfood profile.
-# One required GitHub check should run these proof-stream receipts under
-# ub-review/gate while older CI remains available during transition.
+# One required GitHub check runs these proof-stream receipts under
+# ub-review/gate; the standalone CI and coverage workflows are folded into it,
+# so the gate is the only PR check.
 
 review_profile = "ub-review-self"
 profile = "gh-runner-full"
@@ -146,10 +147,14 @@ timeout_sec = 60
 artifact_budget_mb = 32
 requires_lease = false
 
+# Coverage stays a leased heavy witness, but this repo leases it on every PR:
+# the gate workflow passes allow-heavy and installs cargo-llvm-cov, the sensor
+# writes sensors/coverage/lcov.info plus the coverage status receipts, and the
+# workflow uploads the lcov receipt to Codecov after the gate step.
 [tools.coverage]
-enabled = false
+enabled = true
 class = "coverage"
-default = "manual"
+default = "always"
 required = false
 weight = 6
 timeout_sec = 1800
@@ -199,6 +204,19 @@ command = "cargo doc --workspace --no-deps --locked"
 reason = "Required documentation build for the ub-review self gate."
 cost = "focused-build"
 timeout_sec = 600
+required = true
+enabled = true
+
+# Policy receipts are TOML/Markdown surfaces, not Rust-only, so this proof
+# matches every language mix; it replaces the standalone CI policy step.
+[[proof.required]]
+id = "policy-check"
+languages = ["all"]
+diff_classes = ["all"]
+command = "cargo xtask policy-check"
+reason = "Required repo policy receipt validation for the ub-review self gate."
+cost = "focused-build"
+timeout_sec = 300
 required = true
 enabled = true
 

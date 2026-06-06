@@ -11388,7 +11388,20 @@ fn focused_build_command_spec(command: &str) -> Option<ProofCommandSpec> {
     let [program, subcommand, args @ ..] = argv.as_slice() else {
         return None;
     };
-    if program != "cargo" || !matches!(subcommand.as_str(), "build" | "check" | "doc") {
+    if program != "cargo" {
+        return None;
+    }
+    // `cargo xtask policy-check` is the repo-local parse-only policy receipt
+    // validation (see xtask/src/main.rs). Only this exact invocation is
+    // brokered so xtask cannot smuggle arbitrary repo commands into the
+    // focused proof lane.
+    if subcommand == "xtask" {
+        return (args == ["policy-check"]).then(|| ProofCommandSpec {
+            argv: argv.clone(),
+            env: BTreeMap::new(),
+        });
+    }
+    if !matches!(subcommand.as_str(), "build" | "check" | "doc") {
         return None;
     }
     if !args.iter().any(|arg| arg == "--locked") {
@@ -21554,26 +21567,23 @@ mod tests {
     }
 
     #[test]
-    fn action_smoke_workflow_matches_trusted_repo_trigger_contract() {
+    fn action_smoke_workflow_is_a_manual_debug_lane() {
+        // The self gate exercises `uses: ./` plus live model lanes on every
+        // PR pass, so the smoke must not spend PR passes of its own; it stays
+        // available as a workflow_dispatch debugging lane.
         let workflow = include_str!("../.github/workflows/action-smoke.yml");
         let action = include_str!("../action.yml");
         assert!(
-            workflow.contains("types: [opened, ready_for_review, labeled]"),
-            "action smoke should run default passes on opened/ready_for_review and keep labeled for explicit model smoke"
+            workflow.contains("workflow_dispatch:"),
+            "action smoke should stay available as a manual debugging lane"
         );
         assert!(
-            !workflow.contains("synchronize"),
-            "action smoke must not spend a default pass on synchronize"
+            !workflow.contains("pull_request"),
+            "action smoke must not trigger on or condition over pull_request events"
         );
         assert!(
-            !workflow.contains("reopened"),
-            "action smoke default trigger should match trusted repo pass triggers"
-        );
-        assert!(
-            workflow.contains(
-                "if: github.event_name != 'pull_request' || github.event.action != 'labeled'"
-            ),
-            "the local smoke job should skip label-only model-smoke opt-in events"
+            workflow.contains("if: inputs.run_model_smoke == true"),
+            "the model smoke job should run only on explicit dispatch opt-in"
         );
         assert!(
             action.contains("run-pass:")
@@ -21660,8 +21670,41 @@ mod tests {
             .get("coverage")
             .ok_or_else(|| anyhow::anyhow!("missing self-profile coverage tool"))?;
         assert!(
-            !coverage.enabled,
-            "coverage is a leased heavy witness and should not run in the default self gate"
+            coverage.enabled,
+            "coverage folds the standalone coverage workflow into the self gate"
+        );
+        assert!(
+            coverage.requires_lease,
+            "coverage stays a leased heavy witness behind allow-heavy"
+        );
+        assert!(
+            !coverage.required,
+            "coverage is execution-surface telemetry, not a blocking gate sensor"
+        );
+        for policy in &config.proof.required {
+            assert!(
+                policy.enabled && policy.required,
+                "self-profile proof policy {} should be required and enabled",
+                policy.id
+            );
+            assert_eq!(
+                super::proof_request_status(
+                    &policy.command,
+                    policy.cost.as_deref().unwrap_or_default()
+                ),
+                "requested",
+                "self-profile required proof {} must be brokerable, not silently unsupported",
+                policy.id
+            );
+        }
+        assert!(
+            config
+                .proof
+                .required
+                .iter()
+                .any(|policy| policy.id == "policy-check"
+                    && policy.command == "cargo xtask policy-check"),
+            "policy-check from the folded CI workflow must stay a required gate proof"
         );
         let ripr = config
             .tools
@@ -21706,6 +21749,19 @@ mod tests {
                 "{id} should be a required self gate sensor"
             );
         }
+        let coverage_sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "coverage")
+            .ok_or_else(|| anyhow::anyhow!("missing planned coverage sensor"))?;
+        assert!(
+            coverage_sensor.run,
+            "coverage should run in the self gate when heavy witnesses are leased"
+        );
+        assert!(
+            !coverage_sensor.required,
+            "coverage stays advisory in the self gate"
+        );
         let ripr_sensor = plan
             .sensors
             .iter()
@@ -24942,6 +24998,30 @@ index 1111111..2222222 100644
         assert_eq!(build_tasks[0].requested_by, vec!["tests-oracle".to_owned()]);
         assert_eq!(build_tasks[0].request_ids, vec![requests[6].id.clone()]);
         Ok(())
+    }
+
+    #[test]
+    fn focused_build_allowlist_brokers_exact_repo_policy_check_only() {
+        let spec = super::focused_build_command_spec("cargo xtask policy-check");
+        assert!(
+            spec.is_some_and(|spec| spec.argv == ["cargo", "xtask", "policy-check"]),
+            "the exact policy receipt validation command should be brokered"
+        );
+        assert_eq!(
+            super::proof_request_status("cargo xtask policy-check", "focused-build"),
+            "requested"
+        );
+        for rejected in [
+            "cargo xtask",
+            "cargo xtask precommit",
+            "cargo xtask policy-check --fix",
+            "cargo xtask policy-check && rm -rf target",
+        ] {
+            assert!(
+                super::focused_build_command_spec(rejected).is_none(),
+                "{rejected} must not be brokered"
+            );
+        }
     }
 
     #[test]

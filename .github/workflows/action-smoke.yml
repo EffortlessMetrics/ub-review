@@ -1,8 +1,8 @@
 name: Action Smoke
 
+# The gate exercises `uses: ./` plus live model lanes on every PR, so this
+# smoke is a manual debugging lane now.
 on:
-  pull_request:
-    types: [opened, ready_for_review, labeled]
   workflow_dispatch:
     inputs:
       run_model_smoke:
@@ -42,7 +42,6 @@ permissions:
 jobs:
   smoke:
     name: Local action smoke
-    if: github.event_name != 'pull_request' || github.event.action != 'labeled'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -67,7 +66,8 @@ jobs:
       - name: Verify smoke artifacts
         shell: bash
         env:
-          EXPECT_REVIEW_POST: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]' && github.event.pull_request.user.login != 'dependabot[bot]' }}
+          # Manual dispatch has no PR context, so a review post is never expected.
+          EXPECT_REVIEW_POST: 'false'
           SUMMARY_PATH: ${{ steps.ub-review.outputs.summary-path }}
           GITHUB_REVIEW_PATH: ${{ steps.ub-review.outputs.github-review-path }}
           POST_RESULT_PATH: ${{ steps.ub-review.outputs.post-result-path }}
@@ -119,7 +119,7 @@ jobs:
 
   model-smoke:
     name: MiniMax model smoke
-    if: (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'ub-review-model-smoke')) || (github.event_name == 'workflow_dispatch' && inputs.run_model_smoke == true)
+    if: inputs.run_model_smoke == true
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
