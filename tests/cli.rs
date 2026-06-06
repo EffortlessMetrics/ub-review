@@ -3700,11 +3700,11 @@ fn synchronize_pass_honors_profile_post_review_on_policy() -> Result<()> {
         "skip reason should name the pass policy: {reason}"
     );
 
-    // Self-profile policy lists synchronize, so the same pass is admitted by
-    // the pass gate; this dry run has no reviewer-value content, so the only
-    // acceptable skip is the empty-smoke one - never the pass policy.
-    let every_pass_out = temp.path().join("every-pass");
-    let self_config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/ub-review-self.toml");
+    // The repo's own gate policy keeps synchronize gate-only: the gate still
+    // runs on every head SHA, but a posting=review synchronize pass must skip
+    // with the pass-policy receipt, exactly like the consumer default.
+    let self_pass_out = temp.path().join("self-pass");
+    let self_config = Path::new(env!("CARGO_MANIFEST_DIR")).join(".ub-review.toml");
     run(
         temp.path(),
         bin,
@@ -3713,6 +3713,49 @@ fn synchronize_pass_honors_profile_post_review_on_policy() -> Result<()> {
             "--dry-run",
             "--config",
             path_str(&self_config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&self_pass_out)?,
+            "--run-pass",
+            "synchronize",
+            "--posting",
+            "review",
+            "--model-mode",
+            "off",
+            "--no-github-summary",
+        ],
+    )?;
+    let self_skip: serde_json::Value = serde_json::from_slice(&fs::read(
+        self_pass_out.join("review/github-review-skip.json"),
+    )?)?;
+    assert_eq!(self_skip["run_pass"], "synchronize");
+    assert_eq!(
+        self_skip["review_payload_status"], "skipped_pass_policy",
+        "repo gate policy keeps synchronize gate-only"
+    );
+
+    // A policy that lists synchronize must still be admitted by the pass
+    // gate; this dry run has no reviewer-value content, so the only
+    // acceptable skip is the empty-smoke one - never the pass policy.
+    let every_pass_out = temp.path().join("every-pass");
+    let every_pass_config = temp.path().join("every-pass.toml");
+    fs::write(
+        &every_pass_config,
+        "[gate]\npost_review_on = [\"opened\", \"reopened\", \"ready_for_review\", \"synchronize\"]\nsynchronize_mode = \"review\"\n",
+    )?;
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&every_pass_config)?,
             "--root",
             path_str(&repo)?,
             "--base",
@@ -3730,18 +3773,18 @@ fn synchronize_pass_honors_profile_post_review_on_policy() -> Result<()> {
             "--no-github-summary",
         ],
     )?;
-    let self_skip: serde_json::Value = serde_json::from_slice(&fs::read(
+    let every_pass_skip: serde_json::Value = serde_json::from_slice(&fs::read(
         every_pass_out.join("review/github-review-skip.json"),
     )?)?;
-    assert_eq!(self_skip["run_pass"], "synchronize");
+    assert_eq!(every_pass_skip["run_pass"], "synchronize");
     assert_ne!(
-        self_skip["review_payload_status"], "skipped_pass_policy",
-        "self profile lists synchronize in [gate].post_review_on, so the pass gate must admit it"
+        every_pass_skip["review_payload_status"], "skipped_pass_policy",
+        "a policy listing synchronize in [gate].post_review_on must admit the pass"
     );
-    let self_reason = self_skip["reason"].as_str().unwrap_or_default();
+    let every_pass_reason = every_pass_skip["reason"].as_str().unwrap_or_default();
     assert!(
-        !self_reason.contains("[gate].post_review_on"),
-        "admitted pass must not skip for pass policy: {self_reason}"
+        !every_pass_reason.contains("[gate].post_review_on"),
+        "admitted pass must not skip for pass policy: {every_pass_reason}"
     );
     Ok(())
 }

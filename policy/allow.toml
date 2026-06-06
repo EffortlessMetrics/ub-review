@@ -49,6 +49,17 @@ created = "2026-06-03"
 review_after = "2026-09-03"
 
 [[exception]]
+id = "non-rust-repo-gate-config"
+kind = "non-rust-file"
+glob = ".ub-review.toml"
+category = "configuration-and-policy"
+language = "toml"
+owner = "ub-review/core"
+reason = "The repo's own gate policy lives at the root .ub-review.toml, the same path consumer repos use, so the dogfood contract is explicit and copyable."
+created = "2026-06-06"
+review_after = "2026-09-06"
+
+[[exception]]
 id = "non-rust-release-scripts"
 kind = "non-rust-file"
 glob = "scripts/*"

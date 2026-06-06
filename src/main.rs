@@ -22066,21 +22066,19 @@ mod tests {
 
     #[test]
     fn ub_review_gate_workflow_matches_self_profile_post_policy() {
-        // Dogfood posture: the self gate runs and posts on every PR pass so
-        // a required check exists for every head SHA and review output stays
-        // visible for calibration. Consumer repos keep the two-pass default;
-        // see configs/ub-review.example.toml and ADR 0001.
+        // Dogfood posture: the self gate runs on every PR pass so a required
+        // check exists for every head SHA, but review posting is reserved for
+        // opened/ready_for_review; synchronize and reopened passes stay
+        // gate-only so push storms do not become an inbox tax.
         let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
-        let profile = include_str!("../profiles/ub-review-self.toml");
+        let profile = include_str!("../.ub-review.toml");
         assert!(
             workflow.contains("types: [opened, reopened, ready_for_review, synchronize]"),
             "self gate should run on every PR pass, including synchronize"
         );
         assert!(
-            profile.contains(
-                "post_review_on = [\"opened\", \"reopened\", \"ready_for_review\", \"synchronize\"]"
-            ),
-            "self profile should declare review posting on every PR pass"
+            profile.contains("post_review_on = [\"opened\", \"ready_for_review\"]"),
+            "self config should post reviews on opened/ready_for_review only"
         );
         assert!(
             workflow.contains(
@@ -22104,7 +22102,7 @@ mod tests {
 
     #[test]
     fn ub_review_self_profile_loads_baseline_gate_tools() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         assert_eq!(config.review_profile, "ub-review-self");
         assert_eq!(config.profile, "gh-runner-full");
@@ -22118,14 +22116,9 @@ mod tests {
         assert_eq!(config.gate.hard_timeout_minutes, 60);
         assert_eq!(
             config.gate.post_review_on,
-            vec![
-                "opened".to_owned(),
-                "reopened".to_owned(),
-                "ready_for_review".to_owned(),
-                "synchronize".to_owned()
-            ]
+            vec!["opened".to_owned(), "ready_for_review".to_owned()]
         );
-        assert_eq!(config.gate.synchronize_mode, "review");
+        assert_eq!(config.gate.synchronize_mode, "gate-only");
         for id in [
             "cargo-fmt",
             "cargo-check",
@@ -22283,7 +22276,7 @@ mod tests {
 
     #[test]
     fn work_queue_includes_baseline_sensor_packet_policies() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         let plan = super::build_plan(
             &config,
@@ -22368,7 +22361,7 @@ mod tests {
 
     #[test]
     fn tool_gate_outcome_records_missing_threshold_receipt() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         let plan = super::build_plan(
             &config,
@@ -22413,7 +22406,7 @@ mod tests {
 
     #[test]
     fn tool_gate_outcome_passes_with_gate_decision_receipt() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         let plan = super::build_plan(
             &config,
@@ -22476,7 +22469,7 @@ mod tests {
 
     #[test]
     fn tool_gate_outcome_records_malformed_gate_decision_receipt() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         let plan = super::build_plan(
             &config,
@@ -22542,7 +22535,7 @@ mod tests {
 
     #[test]
     fn baseline_gate_sensor_argvs_match_required_matrix() -> Result<()> {
-        let mut config: Config = toml::from_str(include_str!("../profiles/ub-review-self.toml"))?;
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
         let plan = super::build_plan(
             &config,
@@ -30233,7 +30226,7 @@ max_new_unsuppressed = 0
     #[test]
     fn well_formed_policy_sections_record_no_policy_errors() -> Result<()> {
         for text in [
-            include_str!("../profiles/ub-review-self.toml"),
+            include_str!("../.ub-review.toml"),
             include_str!("../profiles/bun-ub-v0.toml"),
             include_str!("../configs/ub-review.example.toml"),
         ] {
