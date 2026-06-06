@@ -5792,6 +5792,18 @@ fn write_review_artifacts(
     let resolved_candidates =
         resolved_candidate_records(&candidates, &follow_up_results, &follow_up_outputs);
     write_resolved_candidate_artifacts(out, &resolved_candidates)?;
+    // The late receipt turn exists to change candidate dispositions, so the
+    // final compiler must honor those changes: candidates the follow-up pass
+    // resolved to `refuted` or `dropped` lose their review surface here.
+    // The full audit trail stays in candidates.json, resolved_candidates.json,
+    // and the follow-up artifacts. Candidates resolved to `parked-follow-up`
+    // keep their surface — parked items render in the dedicated parked
+    // section instead of disappearing.
+    let resolved_away_candidate_ids = follow_up_resolved_away_candidate_ids(&resolved_candidates);
+    let resolved_away_candidates = candidates
+        .iter()
+        .filter(|candidate| resolved_away_candidate_ids.contains(&candidate.id))
+        .collect::<Vec<_>>();
     write_model_stage_artifacts(out, &review.model_lanes, &follow_up_results, args)?;
     write_shared_context_cache_artifacts(
         out,
@@ -5841,18 +5853,34 @@ fn write_review_artifacts(
     write_final_orchestrator_artifact(out, &final_orchestrator_plan)?;
     let final_compiler_loop =
         start_run_loop(event_log, run_started, "compiler", "coordination", "final")?;
+    let compiler_inline_comments = review
+        .inline_comments
+        .iter()
+        .filter(|comment| {
+            !resolved_away_candidates
+                .iter()
+                .any(|candidate| candidate_matches_inline_comment(candidate, comment))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
     let mut compiler_summary_only_findings = review.summary_only_findings.clone();
+    compiler_summary_only_findings.retain(|finding| {
+        !resolved_away_candidates
+            .iter()
+            .any(|candidate| candidate_matches_summary_finding(candidate, finding))
+    });
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
     let mut compiler_observations = review.observations.clone();
     compiler_observations.extend(follow_up_evidence.observations.clone());
     write_final_compiler_input_artifact(
         out,
         FinalCompilerInputArtifact {
-            schema: "ub-review.final_compiler_input.v1",
+            schema: "ub-review.final_compiler_input.v2",
             phase: "final",
             source_artifacts: &[
                 "review/review.json",
                 "review/follow_up_evidence.json",
+                "review/resolved_candidates.json",
                 "review/proof_receipts.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
@@ -5860,7 +5888,8 @@ fn write_review_artifacts(
             model_lanes: &review.model_lanes,
             missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
             missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-            inline_comments: &review.inline_comments,
+            follow_up_resolved_candidate_ids: &resolved_away_candidate_ids,
+            inline_comments: &compiler_inline_comments,
             summary_only_findings: &compiler_summary_only_findings,
             observations: &compiler_observations,
             proof_receipts: &review.proof_receipts,
@@ -5877,7 +5906,7 @@ fn write_review_artifacts(
         model_lanes: &review.model_lanes,
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-        inline_comments: &review.inline_comments,
+        inline_comments: &compiler_inline_comments,
         summary_only_findings: &compiler_summary_only_findings,
         observations: &compiler_observations,
         proof_receipts: &review.proof_receipts,
@@ -6071,6 +6100,10 @@ struct FinalCompilerInputArtifact<'a> {
     model_lanes: &'a [ModelLaneReceipt],
     missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
+    /// Candidates the follow-up pass resolved to `refuted` or `dropped`;
+    /// their original review surfaces are excluded from `inline_comments`
+    /// and `summary_only_findings` below (v2 contract).
+    follow_up_resolved_candidate_ids: &'a [String],
     inline_comments: &'a [ReviewInlineComment],
     summary_only_findings: &'a [SummaryOnlyFinding],
     observations: &'a [Observation],
@@ -8038,6 +8071,53 @@ fn resolved_candidate_records(
             resolved_candidate_record(candidate, &linked_outputs)
         })
         .collect()
+}
+
+/// Candidate ids whose follow-up outputs resolved them to `refuted` or
+/// `dropped`. The final compiler excludes these candidates' original review
+/// surfaces: the late receipt turn exists to change dispositions (confirm,
+/// refute, or demote), so a refutation that only reached an artifact would
+/// leave the posted review contradicting the run's own evidence.
+/// `parked-follow-up` resolutions are deliberately not in this set — parked
+/// items keep their surface and render in the parked section.
+fn follow_up_resolved_away_candidate_ids(
+    resolved_candidates: &[ResolvedCandidateRecord],
+) -> Vec<String> {
+    resolved_candidates
+        .iter()
+        .filter(|record| {
+            record.resolved_status == "resolved"
+                && matches!(record.resolved_disposition.as_str(), "refuted" | "dropped")
+        })
+        .map(|record| record.candidate_id.clone())
+        .collect()
+}
+
+/// Inline-comment candidates are built 1:1 from `ReviewInlineComment` in
+/// `build_candidate_records`, so matching back uses the same fields the
+/// fingerprint hashed: lane, path, line, and body-as-claim.
+fn candidate_matches_inline_comment(
+    candidate: &CandidateRecord,
+    comment: &ReviewInlineComment,
+) -> bool {
+    candidate.source == "inline-comment"
+        && candidate.lane == comment.lane
+        && candidate.path.as_deref() == Some(comment.path.as_str())
+        && candidate.line == Some(comment.line)
+        && candidate.claim == comment.body
+}
+
+/// Summary-only candidates are built 1:1 from `SummaryOnlyFinding` in
+/// `build_candidate_records`; matching back uses lane, reason-as-claim, and
+/// evidence.
+fn candidate_matches_summary_finding(
+    candidate: &CandidateRecord,
+    finding: &SummaryOnlyFinding,
+) -> bool {
+    candidate.source == "summary-only-finding"
+        && candidate.lane == finding.lane
+        && candidate.claim == finding.reason
+        && candidate.evidence == finding.evidence
 }
 
 fn resolved_candidate_record(
@@ -21669,16 +21749,17 @@ mod tests {
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
         build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, cap_review_body, classify_diff,
-        classify_diff_class, classify_proof_cost, cmd_gate_check, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
+        classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
         focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
-        follow_up_output_record, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
-        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, normalize_run_args,
+        follow_up_output_record, follow_up_resolved_away_candidate_ids, github_review_skip_path,
+        http_status_from_error, is_model_receipt_evidence_issue, make_observation, model_api_url,
+        model_assignments, model_assignments_with_key_state, model_auth_header, model_json_payload,
+        model_lane, model_request_payload, model_response_shape, normalize_run_args,
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
@@ -33784,11 +33865,12 @@ index 1111111..2222222 100644
         super::write_final_compiler_input_artifact(
             temp.path(),
             super::FinalCompilerInputArtifact {
-                schema: "ub-review.final_compiler_input.v1",
+                schema: "ub-review.final_compiler_input.v2",
                 phase: "final",
                 source_artifacts: &[
                     "review/review.json",
                     "review/follow_up_evidence.json",
+                    "review/resolved_candidates.json",
                     "review/proof_receipts.json",
                     "review/receipt_routes.json",
                     "review/final_orchestrator_plan.json",
@@ -33796,6 +33878,7 @@ index 1111111..2222222 100644
                 model_lanes: &model_lanes,
                 missing_or_failed_sensor_evidence: &[],
                 missing_or_failed_model_evidence: &[],
+                follow_up_resolved_candidate_ids: &["candidate-0001-deadbeef0123".to_owned()],
                 inline_comments: &inline_comments,
                 summary_only_findings: &summary_only_findings,
                 observations: &[],
@@ -33805,7 +33888,7 @@ index 1111111..2222222 100644
         let written: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path().join("review/final_compiler_input.json"),
         )?)?;
-        assert_eq!(written["schema"], "ub-review.final_compiler_input.v1");
+        assert_eq!(written["schema"], "ub-review.final_compiler_input.v2");
         assert_eq!(written["phase"], "final");
         assert_eq!(written["model_lanes"][0]["lane"], "tests-oracle");
         assert_eq!(
@@ -33821,10 +33904,15 @@ index 1111111..2222222 100644
             serde_json::json!([
                 "review/review.json",
                 "review/follow_up_evidence.json",
+                "review/resolved_candidates.json",
                 "review/proof_receipts.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json"
             ])
+        );
+        assert_eq!(
+            written["follow_up_resolved_candidate_ids"],
+            serde_json::json!(["candidate-0001-deadbeef0123"])
         );
         Ok(())
     }
@@ -34436,6 +34524,140 @@ index 1111111..2222222 100644
         assert_eq!(written.as_array().map(Vec::len), Some(candidates.len()));
         assert_eq!(written.as_array().cloned().unwrap_or_default(), ndjson);
         Ok(())
+    }
+
+    #[test]
+    fn follow_up_resolved_away_excludes_refuted_and_dropped_but_keeps_parked() {
+        let candidates = vec![
+            test_candidate_record("candidate-keep"),
+            test_candidate_record("candidate-refuted"),
+            test_candidate_record("candidate-parked"),
+            test_candidate_record("candidate-dropped"),
+        ];
+        let outputs = vec![
+            test_follow_up_output_for_candidate(
+                "follow-refuted",
+                &candidates[1].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-refuted",
+                    "The proof receipt resolves this candidate.",
+                    "resolved-check",
+                    "refuted",
+                    "low",
+                    "high",
+                    "candidate-refuted",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-parked",
+                &candidates[2].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-parked",
+                    "The sibling route is parked behind a helper.",
+                    "parked-follow-up",
+                    "parked",
+                    "low",
+                    "medium",
+                    "candidate-parked",
+                )],
+                Vec::new(),
+            ),
+            test_follow_up_output_for_candidate(
+                "follow-dropped",
+                &candidates[3].id,
+                "ok",
+                Vec::new(),
+                vec![SummaryOnlyFinding {
+                    lane: "orchestrator-follow-up-follow-dropped".to_owned(),
+                    severity: "low".to_owned(),
+                    confidence: "high".to_owned(),
+                    reason: "duplicate inline candidate merged after tertiary review".to_owned(),
+                    evidence: "duplicate evidence".to_owned(),
+                }],
+            ),
+        ];
+        let results = outputs
+            .iter()
+            .map(|output| {
+                let mut result =
+                    test_follow_up_result(&output.task_id, &output.group_id, &output.status);
+                result.stage = output.stage.clone();
+                result.disposition = output.disposition.clone();
+                result.evidence_need = output.evidence_need.clone();
+                result.candidate_ids = output.candidate_ids.clone();
+                result.observation_group_ids = output.observation_group_ids.clone();
+                result
+            })
+            .collect::<Vec<_>>();
+
+        let records = resolved_candidate_records(&candidates, &results, &outputs);
+        let resolved_away = follow_up_resolved_away_candidate_ids(&records);
+        assert_eq!(
+            resolved_away,
+            vec![candidates[1].id.clone(), candidates[3].id.clone()],
+            "only refuted and dropped resolutions lose their review surface"
+        );
+        assert!(
+            !resolved_away.contains(&candidates[2].id),
+            "parked-follow-up resolutions keep their surface for the parked section"
+        );
+        assert!(!resolved_away.contains(&candidates[0].id));
+    }
+
+    #[test]
+    fn resolved_away_candidates_match_their_original_review_surfaces() {
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "ub-active-view".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 7,
+            side: "RIGHT".to_owned(),
+            body: "[ub-active-view] The reborrow may alias the active view.".to_owned(),
+            evidence: "unsafe block at src/lib.rs:7".to_owned(),
+        }];
+        let summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: "The new test may also pass on base.".to_owned(),
+            evidence: "test sensor receipt".to_owned(),
+        }];
+        let candidates = build_candidate_records(&inline_comments, &summary_only_findings);
+        assert_eq!(candidates.len(), 2);
+
+        // Each candidate matches exactly the surface it was built from.
+        assert!(candidate_matches_inline_comment(
+            &candidates[0],
+            &inline_comments[0]
+        ));
+        assert!(!candidate_matches_summary_finding(
+            &candidates[0],
+            &summary_only_findings[0]
+        ));
+        assert!(candidate_matches_summary_finding(
+            &candidates[1],
+            &summary_only_findings[0]
+        ));
+        assert!(!candidate_matches_inline_comment(
+            &candidates[1],
+            &inline_comments[0]
+        ));
+
+        // A different line on the same path must not match: the filter may
+        // only remove the exact surface the follow-up pass resolved away.
+        let mut moved = inline_comments[0].clone();
+        moved.line = 8;
+        assert!(!candidate_matches_inline_comment(&candidates[0], &moved));
+        let mut reworded = summary_only_findings[0].clone();
+        reworded.reason = "The new test proves the patch.".to_owned();
+        assert!(!candidate_matches_summary_finding(
+            &candidates[1],
+            &reworded
+        ));
     }
 
     #[test]
