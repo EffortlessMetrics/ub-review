@@ -781,6 +781,27 @@ Verified red/green gate evidence (PR #305):
   with `gate_outcome.json` `conclusion: pass`, `required_proof.passed: 1`,
   and zero evidence gaps.
 
+Verified single-gate state (2026-06-06):
+
+- branch protection on `main` requires exactly one status check:
+  `ub-review/gate` (app-pinned, `strict: false`), confirmed via
+  `GET /repos/EffortlessMetrics/ub-review/branches/main/protection`;
+- repo gate policy lives at root `.ub-review.toml` (PR #307), the same path
+  consumer repos use;
+- quiet-pass posting proof on PR #307: the opened pass (run `27070590534`,
+  head `1cbb042`) passed 3/3 matched required proofs and posted one grouped
+  review with a line-local finding that was then applied; the synchronize
+  pass (run `27070880408`, head `5c520cd`) concluded `pass` and posted
+  nothing, with `github-review-skip.json` recording `skipped_pass_policy`;
+- the audit-ci right-sizing report (#299) and the CI fold (#300, #301)
+  carry the receipts that justified the single gate.
+
+Rollback: restore `ci.yml`/`coverage.yml` from git history (the #301 fold
+deleted the workflow files while preserving their commands inside the gate
+as `[[proof.required]]` tasks and required tools in `.ub-review.toml`),
+then re-add their checks to `required_status_checks.contexts` via the same
+branch-protection endpoint.
+
 ### 27. rust-test-proof profile and multi-repo rollout
 
 A generic Rust profile (required proof: fmt/check/test/clippy; adaptive:
