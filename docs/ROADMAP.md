@@ -701,6 +701,95 @@ Acceptance:
 - candidate-only lanes cannot directly post high-severity comments;
 - provider failures remain evidence, not findings.
 
+## Single-gate product path
+
+The target operating state is `ub-review/gate` as the standard and only
+required PR check across the owner's repositories. Decision record:
+[adr/0002-single-gate-and-ci-audit-wizard.md](adr/0002-single-gate-and-ci-audit-wizard.md);
+artifact contracts: [CI_AUDIT_WIZARD.md](CI_AUDIT_WIZARD.md).
+
+### 23. Gate verdict surface
+
+Write `review/gate_outcome.json` (`ub-review.gate_outcome.v1`) derived from the
+terminal state, required-proof receipts, and tool gate outcomes. Add the
+exit-code contract and the `fail-on-gate` action input with a `gate-outcome`
+output.
+
+Acceptance:
+
+- a failed `[[proof.required]]` task turns the check red in `intelligent-ci`;
+- every `fail` reason carries a receipt pointer into existing artifacts;
+- model/provider failures never flip the verdict;
+- `review-byok` behavior is unchanged by default;
+- the artifact verifier covers the new contract.
+
+### 24. Repo-configured gate policy
+
+`[tools.*.gate]` thresholds (e.g. `max_new_unsuppressed = 0`), `required_if`
+trigger conditions, and explicit `blocking = true` markers for finding classes.
+
+Acceptance:
+
+- thresholds route into `gate_outcome.json` reasons;
+- non-required tools cannot redden the gate;
+- policy parse errors are gate failures with receipts, not silent defaults.
+
+### 25. audit-ci read-only report
+
+`ub-review audit-ci`: workflow inventory, run/check history, cost and
+correlation receipts (independent merge-decision signal), tiered right-sizing
+recommendations per the contract doc. First run target: this repository.
+
+Acceptance:
+
+- inventory/history/costs/correlation/recommendations/report artifacts match
+  their schemas;
+- no mutation of any repo file;
+- tokenless runs degrade to inventory-only with explicit evidence gaps;
+- the model lane classifies over deterministic receipts only;
+- security-relevant jobs are always `flag-for-human`.
+
+### 26. Dogfood: single required check on this repo
+
+`ub-review/gate` becomes the only required PR check on
+`EffortlessMetrics/ub-review`; `ci.yml` jobs fold into the gate as
+`[[proof.required]]` tasks.
+
+Acceptance:
+
+- fmt/check/test/clippy/doc/policy-check run as required proof inside the gate;
+- a deliberately broken PR goes red with a receipted reason;
+- the audit-ci report for this repo justified the fold with receipts.
+
+### 27. rust-test-proof profile and multi-repo rollout
+
+A generic Rust profile (required proof: fmt/check/test/clippy; adaptive:
+ripr/unsafe-review/cargo-allow by trigger; model lanes optional) rolled out to
+the owner's other repositories.
+
+Acceptance:
+
+- a new repo onboards with ~10 lines of TOML and zero model keys;
+- `model-mode: off` is a fully supported tier with a useful gate;
+- each onboarded repo keeps one required check only.
+
+### 28. setup-ci migration PR mode
+
+`ub-review setup-ci` (and `--print-pr`): read the audit-ci receipts, emit one
+migration PR per the contract — `.ub-review.toml`, minimal workflow edits,
+`docs/ci/branch-protection-change.md` with the exact required-checks change.
+Branch protection is never mutated by the PR; a later explicit
+`setup-ci --apply-branch-protection` may apply it with an admin token.
+
+Acceptance:
+
+- every recommendation cites an evidence receipt;
+- security jobs are never auto-right-sized;
+- the PR passes the repo's pre-existing CI before any branch-protection change;
+- the rollback section is complete;
+- no broad workflow rewrites — minimal edits implementing accepted
+  recommendations only.
+
 ## Later profiles
 
 Generalize beside Bun, not by weakening Bun:
