@@ -34133,3 +34133,14 @@ jobs:
         assert_eq!(super::ci_repo_slug_from_remote_url("not-a-url"), None);
     }
 }
+
+#[cfg(test)]
+mod deliberate_red_proof {
+    // Flip-checklist proof (roadmap #26): this test fails on purpose so the
+    // gate must go red with a receipted required-sensor reason. The PR that
+    // carries it is closed unmerged once the red verdict is captured.
+    #[test]
+    fn gate_goes_red_when_required_tests_fail() {
+        assert_eq!(1 + 1, 3, "deliberate red: the gate must catch this");
+    }
+}
