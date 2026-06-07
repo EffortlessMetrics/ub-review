@@ -104,10 +104,11 @@ under `summary`** (not flat top-level), and the `artifacts` map keys are
 **snake_case** (`comment_plan`, `repair_queue`, …) while their values are the
 hyphenated filenames.
 
-ub-review validates `schema_version` on ingestion: only `unsafe-review-gate/v1`
-is parsed; unknown or absent schema versions degrade gracefully to status-only
-rendering — no crash, no silent pass. The `trust_boundary` field is preserved
-and surfaced verbatim in every lane packet and in the shared context.
+ub-review routes by `schema_version` before binding the typed shape: only
+`unsafe-review-gate/v1` is parsed. An unknown version is recorded as an
+evidence gap naming the found version — never a parse attempt against the v1
+shape. The `trust_boundary` field is preserved and surfaced verbatim in every
+lane packet and in the shared context.
 
 **Lane packets** (`lanes/<lane>.md`, "Routed sensor evidence" section): when
 unsafe-review's sensor status is `ok` and `unsafe-review-gate/v1` is parsed,
@@ -122,9 +123,16 @@ includes the tool/version provenance, advisory status, movement summary,
 candidate count, and comment-plan entries rendered as JSON (for audit and for
 #360 to consume).
 
-**Schema routing**: `schema_version == "unsafe-review-gate/v1"` → full
-structured evidence. Any other value → note in lane packet and shared context
-explaining the degradation; existing Markdown precontext continues to work.
+**Schema routing and evidence gaps**: `schema_version == "unsafe-review-gate/v1"`
+→ full structured evidence. An absent, unreadable, malformed, or
+unknown-schema `unsafe-review-gate.json` while the sensor status is `ok`
+becomes a typed `artifact-gap` entry in `missing_or_failed_sensor_evidence`
+with the gap reason (`UnsafeReviewIngestGap` in `src/sensors/unsafe_review.rs`).
+That entry reaches `build_gate_outcome` through the same required-sensor path
+as other sensor evidence: blocking in intelligent-ci when the sensor is
+required, advisory otherwise — missing structured evidence is never recorded
+as clean evidence. Lane packets and the shared context render the same gap
+reason. unsafe-review's Markdown output is never scraped as a substitute.
 
 **Inline posting is NOT implemented here** — that is issue #360. The
 `comment-plan.json` entries are deserialized into a structured type (carrying

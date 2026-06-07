@@ -2785,9 +2785,12 @@ fn build_unsafe_review_inline_comments(
     existing_paths_lines: &std::collections::BTreeSet<(String, u32)>,
     max_inline_budget: usize,
 ) -> Vec<GitHubReviewComment> {
+    // An ingestion gap yields no inline candidates here; the gap itself is
+    // surfaced through missing_or_failed_sensor_evidence (#359), not silently
+    // absorbed at this advisory posting surface.
     let artifacts = match read_unsafe_review_artifacts(sensor_dir) {
-        Some(a) => a,
-        None => return Vec::new(),
+        Ok(artifacts) => artifacts,
+        Err(_) => return Vec::new(),
     };
     let repair_queue = read_repair_queue(sensor_dir, &artifacts.gate);
     let trust = artifacts
@@ -4088,20 +4091,13 @@ fn render_unsafe_review_lane_evidence(sensor_dir: &Path, status: &str) -> String
         return String::new();
     }
     match read_unsafe_review_artifacts(sensor_dir) {
-        None => {
-            // The gate file is absent or has an unrecognised schema_version.
-            let gate_path = sensor_dir
-                .join(UNSAFE_REVIEW_OUTPUT_SUBDIR)
-                .join("unsafe-review-gate.json");
-            let reason = if gate_path.exists() {
-                "unsafe-review-gate.json present but schema_version not recognised; \
-                 structured evidence unavailable (schema routing degraded)"
-            } else {
-                "unsafe-review-gate.json absent; structured evidence unavailable"
-            };
-            format!("  - unsafe-review structured evidence: {reason}\n")
+        Err(gap) => {
+            // Typed gap (absent / unreadable / malformed / unknown schema):
+            // the reason names the failure class — and the found version for
+            // unknown schemas — so a lane never infers safety from silence.
+            format!("  - unsafe-review structured evidence: {}\n", gap.reason())
         }
-        Some(artifacts) => {
+        Ok(artifacts) => {
             let gate = &artifacts.gate;
             let trust = gate.trust_boundary.as_deref().unwrap_or("advisory");
             let summary = &gate.summary;
@@ -10260,17 +10256,13 @@ fn render_shared_context(
         text.push_str(&format!("- Sensor status: `{sensor_status}`\n"));
         if sensor_status == "ok" {
             match read_unsafe_review_artifacts(&sensor_dir) {
-                None => {
-                    let gate_path = sensor_dir
-                        .join(UNSAFE_REVIEW_OUTPUT_SUBDIR)
-                        .join("unsafe-review-gate.json");
-                    if gate_path.exists() {
-                        text.push_str("- Structured evidence: schema_version not recognised; falling back to status-only\n");
-                    } else {
-                        text.push_str("- Structured evidence: unsafe-review-gate.json not found; falling back to status-only\n");
-                    }
+                Err(gap) => {
+                    text.push_str(&format!(
+                        "- Structured evidence: {} (falling back to status-only)\n",
+                        gap.reason()
+                    ));
                 }
-                Some(artifacts) => {
+                Ok(artifacts) => {
                     let gate = &artifacts.gate;
                     let trust = gate.trust_boundary.as_deref().unwrap_or("advisory");
                     let summary = &gate.summary;
@@ -11082,6 +11074,24 @@ fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidence
             let reason = receipt
                 .map(|receipt| receipt.reason)
                 .unwrap_or_else(|| sensor.reason.clone());
+            // #359: an `ok` unsafe-review run is not yet clean evidence — its
+            // structured gate artifact must also ingest. Absent, unreadable,
+            // malformed, or unknown-schema artifacts become a receipted
+            // `artifact-gap` issue through the same machinery as missing
+            // sensors, so build_gate_outcome blocks it when the sensor is
+            // required (intelligent-ci) and records it as advisory otherwise.
+            // Markdown output is never scraped as a substitute.
+            if sensor.id == "unsafe-review"
+                && status == "ok"
+                && let Err(gap) =
+                    read_unsafe_review_artifacts(&out.join("sensors").join(&sensor.id))
+            {
+                return Some(SensorEvidenceIssue {
+                    sensor: sensor.id.clone(),
+                    status: "artifact-gap".to_owned(),
+                    reason: gap.reason(),
+                });
+            }
             if !is_sensor_evidence_issue(sensor, &status, &reason) {
                 return None;
             }
@@ -16829,8 +16839,8 @@ mod tests {
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, Config,
         DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
-        FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview, IssueCandidate,
-        IssueCandidateEvidence, LaneModelOutput, LanePlan, Limits, ModelAssignment,
+        FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GateOutcomeInput, GitHubReview,
+        IssueCandidate, IssueCandidateEvidence, LaneModelOutput, LanePlan, Limits, ModelAssignment,
         ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
         ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
         ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
@@ -16843,11 +16853,12 @@ mod tests {
         ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
         STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
         SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_final_orchestrator_plan, build_issue_broker_plan, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_witness_records, builtin_profiles,
+        TerminalStateInput, ToolClass, UNSAFE_REVIEW_OUTPUT_SUBDIR,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_final_orchestrator_plan, build_gate_outcome,
+        build_issue_broker_plan, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_witness_records, builtin_profiles,
         candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
         classify_diff, classify_diff_class, classify_issue_candidates, classify_proof_cost,
         cmd_gate_check, collect_sensor_evidence_issues, combined_observations,
@@ -18495,6 +18506,159 @@ max_new_unsuppressed_findings = 0
         assert_eq!(issues[0].sensor, "actionlint");
         assert_eq!(issues[0].status, "skipped");
         assert_eq!(issues[0].reason, "disabled by config");
+        Ok(())
+    }
+
+    /// #359: an `ok` unsafe-review run whose gate artifact does not ingest is
+    /// an `artifact-gap` evidence issue with the typed gap reason — absent,
+    /// unknown-schema (naming the found version), and malformed each carry
+    /// their own reason. A valid v1 artifact produces no issue.
+    #[test]
+    fn unsafe_review_ok_without_ingestible_gate_artifact_is_artifact_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let sensor = sensor_plan("unsafe-review", "unsafe-review", true);
+        write_sensor_status(
+            &out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["unsafe-review".to_owned(), "first-pr".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![sensor]);
+        let gate_dir = out
+            .join("sensors/unsafe-review")
+            .join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
+
+        // Sensor ok, gate file absent: gap, never clean evidence.
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].sensor, "unsafe-review");
+        assert_eq!(issues[0].status, "artifact-gap");
+        assert_eq!(
+            issues[0].reason,
+            "unsafe-review-gate.json absent; structured evidence unavailable"
+        );
+
+        // Unknown schema_version: the gap names the found version.
+        fs::create_dir_all(&gate_dir)?;
+        fs::write(
+            gate_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version": "unsafe-review-gate/v2", "status": "advisory"}"#,
+        )?;
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].status, "artifact-gap");
+        assert!(
+            issues[0].reason.contains("`unsafe-review-gate/v2`"),
+            "found version must be named: {}",
+            issues[0].reason
+        );
+
+        // Malformed JSON: gap with a parse reason.
+        fs::write(gate_dir.join("unsafe-review-gate.json"), "{not json")?;
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].status, "artifact-gap");
+        assert!(
+            issues[0]
+                .reason
+                .starts_with("unsafe-review-gate.json malformed: "),
+            "malformed gap must carry a reason: {}",
+            issues[0].reason
+        );
+
+        // Valid v1 artifact: no evidence issue.
+        fs::write(
+            gate_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version": "unsafe-review-gate/v1", "status": "advisory"}"#,
+        )?;
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert!(
+            issues.is_empty(),
+            "ingestible v1 artifact must not be an evidence issue: {issues:?}"
+        );
+        Ok(())
+    }
+
+    /// #359: the artifact gap reaches gate-outcome composition through the
+    /// same required-sensor path as other sensor evidence — blocking in
+    /// intelligent-ci when the sensor is required, advisory in review-byok.
+    #[test]
+    fn unsafe_review_artifact_gap_blocks_gate_when_sensor_required() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut sensor = sensor_plan("unsafe-review", "unsafe-review", true);
+        sensor.required = true;
+        write_sensor_status(
+            &out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["unsafe-review".to_owned(), "first-pr".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![sensor]);
+        // No gate artifact written: ingestion gap while the sensor ran ok.
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let terminal_state = test_terminal_state("sufficient");
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.evidence_gaps_blocking, 1);
+        assert_eq!(gate.reasons.len(), 1);
+        assert_eq!(gate.reasons[0].kind, "required-sensor");
+        assert_eq!(gate.reasons[0].id, "unsafe-review");
+        assert!(
+            gate.reasons[0].detail.contains("artifact-gap")
+                && gate.reasons[0].detail.contains("absent"),
+            "detail must carry the gap status and reason: {}",
+            gate.reasons[0].detail
+        );
+        // The receipt points at the existing status receipt, not a file the
+        // gap says is missing.
+        assert_eq!(
+            gate.reasons[0].receipt,
+            "sensors/unsafe-review/ub-review-sensor-status.json"
+        );
+
+        // review-byok: same gap recorded advisory, gate stays green.
+        args.mode = RunMode::ReviewByok;
+        let advisory_gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            tool_gate_outcomes: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+        assert_eq!(advisory_gate.conclusion, "pass");
+        assert_eq!(advisory_gate.evidence_gaps_blocking, 0);
+        assert_eq!(advisory_gate.evidence_gaps_advisory, 1);
         Ok(())
     }
 
@@ -29101,8 +29265,12 @@ jobs:
         )?;
         let block = super::render_unsafe_review_lane_evidence(&sensor_dir, "ok");
         assert!(
-            block.contains("schema_version not recognised"),
+            block.contains("not recognised"),
             "degradation note must appear: {block}"
+        );
+        assert!(
+            block.contains("unsafe-review-gate/v99"),
+            "the found schema_version must be named: {block}"
         );
         Ok(())
     }
@@ -29477,7 +29645,7 @@ jobs:
             }"#,
         )?;
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
-            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts)"))?;
+            .map_err(|gap| anyhow::anyhow!("expected ingested artifacts, got gap: {gap:?}"))?;
         let map = super::read_repair_queue(&sensor_dir, &artifacts.gate);
         assert_eq!(map.len(), 2, "two distinct card_ids expected");
         // cid-1 should keep the first bucket hit (repairable_by_guard).
@@ -29516,7 +29684,7 @@ jobs:
             }"#,
         )?;
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
-            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts)"))?;
+            .map_err(|gap| anyhow::anyhow!("expected ingested artifacts, got gap: {gap:?}"))?;
         let map = super::read_repair_queue(&sensor_dir, &artifacts.gate);
         assert!(map.is_empty(), "absent repair-queue must return empty map");
         Ok(())

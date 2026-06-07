@@ -17,12 +17,14 @@ use serde::{Deserialize, Serialize};
 ///
 /// Only the fields consumed by ub-review are bound; unknown fields are
 /// silently ignored so forward-compatible additions in unsafe-review ≥0.3.5
-/// do not break ingestion. The schema_version is validated before use: only
-/// `"unsafe-review-gate/v1"` is understood; anything else degrades to the
-/// status-only fallback rather than crashing.
+/// do not break ingestion. `schema_version` is routed before this shape is
+/// bound: only `"unsafe-review-gate/v1"` is understood, and anything else is
+/// an [`UnsafeReviewIngestGap::UnknownSchema`] naming the found version.
+/// `schema_version` is not bound here: routing happens on a probe before this
+/// shape is constructed, so every `UnsafeReviewGate` is `unsafe-review-gate/v1`
+/// by construction.
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct UnsafeReviewGate {
-    pub(crate) schema_version: String,
     /// Dialect marker on the real manifest (e.g. `"unsafe-review"`). Context
     /// only; surfaced if present, never a gate input.
     #[serde(default)]
@@ -113,21 +115,88 @@ pub(crate) const UNSAFE_REVIEW_GATE_SCHEMA: &str = "unsafe-review-gate/v1";
 
 pub(crate) const UNSAFE_REVIEW_OUTPUT_SUBDIR: &str = "unsafe-review-output";
 
+/// Why structured unsafe-review evidence could not be ingested (#359). Every
+/// variant carries enough to write a receipted evidence gap: an ok sensor
+/// whose gate artifact does not ingest is missing evidence, never clean
+/// evidence, so callers must surface `reason()` instead of dropping the gap.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum UnsafeReviewIngestGap {
+    /// `unsafe-review-gate.json` does not exist under the sensor output dir.
+    Absent,
+    /// The file exists but reading it failed (permissions, encoding, I/O).
+    Unreadable(String),
+    /// Not valid JSON, no `schema_version` field, or a v1-claimed document
+    /// that does not bind to the v1 shape. Carries the parse detail.
+    Malformed(String),
+    /// `schema_version` present but not understood; carries the version the
+    /// file declared. The document is NOT parsed against the v1 shape — an
+    /// unknown version is reported as exactly that, never as a shape error
+    /// against a contract it never promised.
+    UnknownSchema(String),
+}
+
+impl UnsafeReviewIngestGap {
+    /// Human-readable gap reason for lane packets, the shared context, and
+    /// `missing_or_failed_sensor_evidence` entries feeding the gate.
+    pub(crate) fn reason(&self) -> String {
+        match self {
+            Self::Absent => {
+                "unsafe-review-gate.json absent; structured evidence unavailable".to_owned()
+            }
+            Self::Unreadable(detail) => {
+                format!("unsafe-review-gate.json unreadable: {detail}")
+            }
+            Self::Malformed(detail) => {
+                format!("unsafe-review-gate.json malformed: {detail}")
+            }
+            Self::UnknownSchema(found) => format!(
+                "unsafe-review-gate.json schema_version `{found}` not recognised \
+                 (known: `{UNSAFE_REVIEW_GATE_SCHEMA}`); structured evidence not parsed"
+            ),
+        }
+    }
+}
+
+/// Minimal probe used to route by `schema_version` before binding the typed
+/// v1 shape.
+#[derive(Deserialize)]
+struct UnsafeReviewSchemaProbe {
+    #[serde(default)]
+    schema_version: Option<String>,
+}
+
 /// Parse the structured artifacts written by `unsafe-review first-pr --out`.
 ///
-/// Returns `None` when the gate file is absent (sensor did not run or failed),
-/// or when `schema_version` is not `"unsafe-review-gate/v1"` (unknown schema —
-/// degrade gracefully, fall back to status-only rendering in callers).
-pub(crate) fn read_unsafe_review_artifacts(sensor_dir: &Path) -> Option<UnsafeReviewArtifacts> {
+/// Schema-routed: `schema_version` is checked against the known version(s)
+/// before the v1 shape is bound, so an unknown version yields
+/// [`UnsafeReviewIngestGap::UnknownSchema`] naming the found version rather
+/// than a misleading parse error. Absent, unreadable, and malformed files each
+/// produce their own gap with a reason; callers surface that reason rather
+/// than treating any of these as clean evidence.
+pub(crate) fn read_unsafe_review_artifacts(
+    sensor_dir: &Path,
+) -> Result<UnsafeReviewArtifacts, UnsafeReviewIngestGap> {
     let out_dir = sensor_dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
     let gate_path = out_dir.join("unsafe-review-gate.json");
-    let text = fs::read_to_string(&gate_path).ok()?;
-    let gate: UnsafeReviewGate = serde_json::from_str(&text).ok()?;
-    if gate.schema_version != UNSAFE_REVIEW_GATE_SCHEMA {
-        // Unknown schema — caller degrades to status-only; log nothing here
-        // so the degradation is legible in lane packets rather than silent.
-        return None;
+    let text = match fs::read_to_string(&gate_path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(UnsafeReviewIngestGap::Absent);
+        }
+        Err(err) => return Err(UnsafeReviewIngestGap::Unreadable(err.to_string())),
+    };
+    let probe: UnsafeReviewSchemaProbe = serde_json::from_str(&text)
+        .map_err(|err| UnsafeReviewIngestGap::Malformed(err.to_string()))?;
+    let Some(found_version) = probe.schema_version else {
+        return Err(UnsafeReviewIngestGap::Malformed(
+            "schema_version field missing".to_owned(),
+        ));
+    };
+    if found_version != UNSAFE_REVIEW_GATE_SCHEMA {
+        return Err(UnsafeReviewIngestGap::UnknownSchema(found_version));
     }
+    let gate: UnsafeReviewGate = serde_json::from_str(&text)
+        .map_err(|err| UnsafeReviewIngestGap::Malformed(err.to_string()))?;
     // Follow the artifacts pointer for comment-plan.json (if present).
     // Key is snake_case `comment_plan` in unsafe-review-gate/v1 (the value is the
     // hyphenated filename); routing by the wrong key silently drops the plan.
@@ -142,7 +211,7 @@ pub(crate) fn read_unsafe_review_artifacts(sensor_dir: &Path) -> Option<UnsafeRe
             serde_json::from_str::<Vec<UnsafeReviewCommentPlanEntry>>(&cp_text).ok()
         })
         .unwrap_or_default();
-    Some(UnsafeReviewArtifacts { gate, comment_plan })
+    Ok(UnsafeReviewArtifacts { gate, comment_plan })
 }
 
 #[cfg(test)]
@@ -212,11 +281,7 @@ mod tests {
         )?;
 
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
-            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts), got None"))?;
-        assert_eq!(
-            artifacts.gate.schema_version,
-            super::UNSAFE_REVIEW_GATE_SCHEMA
-        );
+            .map_err(|gap| anyhow::anyhow!("expected ingested artifacts, got gap: {gap:?}"))?;
         assert_eq!(artifacts.gate.status, "advisory");
         assert_eq!(artifacts.gate.dialect.as_deref(), Some("unsafe-review"));
         assert_eq!(artifacts.gate.tool.as_deref(), Some("unsafe-review"));
@@ -249,51 +314,136 @@ mod tests {
         Ok(())
     }
 
-    /// Unknown schema_version: read_unsafe_review_artifacts must return None
-    /// (graceful degrade) rather than panicking or returning partial data.
+    /// Unknown schema_version: ingestion must produce an `UnknownSchema` gap
+    /// NAMING the found version — never a parse attempt against the v1 shape,
+    /// never partial data, never silence.
     #[test]
-    fn unsafe_review_artifacts_unknown_schema_degrades_gracefully() -> Result<()> {
+    fn unsafe_review_artifacts_unknown_schema_is_gap_naming_found_version() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
         fs::create_dir_all(&out_dir)?;
-        // Real-shape manifest but a future schema_version: nested summary,
-        // advisory status, snake_case artifacts. Routing must still degrade.
+        // A future manifest whose `status` is no longer a string: if routing
+        // ever parsed before checking the version, this would surface as a
+        // misleading shape error instead of the unknown-version gap.
         fs::write(
             out_dir.join("unsafe-review-gate.json"),
             r#"{
                 "schema_version": "unsafe-review-gate/v2-future",
                 "dialect": "unsafe-review",
-                "status": "advisory",
-                "summary": {
-                    "new_gaps": 0,
-                    "worsened_gaps": 0,
-                    "resolved_gaps": 0,
-                    "inherited_gaps": 0
-                },
-                "artifacts": {"comment_plan": "comment-plan.json"},
-                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict",
+                "status": {"word": "advisory", "code": 0},
                 "tool": "unsafe-review",
                 "tool_version": "0.4.0"
             }"#,
         )?;
-        // Must return None, not panic or error
-        let result = super::read_unsafe_review_artifacts(&sensor_dir);
-        assert!(
-            result.is_none(),
-            "expected None for unknown schema_version, got Some"
+        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+            Err(gap) => gap,
+            Ok(_) => anyhow::bail!("expected UnknownSchema gap, got parsed artifacts"),
+        };
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::UnknownSchema("unsafe-review-gate/v2-future".to_owned())
+        );
+        let reason = gap.reason();
+        assert_eq!(
+            reason,
+            "unsafe-review-gate.json schema_version `unsafe-review-gate/v2-future` not \
+             recognised (known: `unsafe-review-gate/v1`); structured evidence not parsed"
         );
         Ok(())
     }
 
-    /// Absent gate file: returns None cleanly.
+    /// Absent gate file: an `Absent` gap with a reason, never clean evidence.
     #[test]
-    fn unsafe_review_artifacts_absent_gate_returns_none() -> Result<()> {
+    fn unsafe_review_artifacts_absent_gate_is_gap() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         // Don't create any files — the output dir does not exist
-        let result = super::read_unsafe_review_artifacts(&sensor_dir);
-        assert!(result.is_none(), "expected None when gate file absent");
+        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+            Err(gap) => gap,
+            Ok(_) => anyhow::bail!("expected Absent gap, got parsed artifacts"),
+        };
+        assert_eq!(gap, super::UnsafeReviewIngestGap::Absent);
+        assert_eq!(
+            gap.reason(),
+            "unsafe-review-gate.json absent; structured evidence unavailable"
+        );
+        Ok(())
+    }
+
+    /// Malformed JSON: a `Malformed` gap carrying the parse detail.
+    #[test]
+    fn unsafe_review_artifacts_malformed_json_is_gap_with_reason() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version": "unsafe-review-gate/v1", "status":"#,
+        )?;
+        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+            Err(gap) => gap,
+            Ok(_) => anyhow::bail!("expected Malformed gap, got parsed artifacts"),
+        };
+        let super::UnsafeReviewIngestGap::Malformed(detail) = &gap else {
+            anyhow::bail!("expected Malformed, got {gap:?}");
+        };
+        assert!(!detail.is_empty(), "parse detail must be carried");
+        assert!(
+            gap.reason()
+                .starts_with("unsafe-review-gate.json malformed: "),
+            "reason must name the file and the failure class: {}",
+            gap.reason()
+        );
+        Ok(())
+    }
+
+    /// Valid JSON with no schema_version field: `Malformed` naming the missing
+    /// field — there is no version to route on, so this is a contract failure,
+    /// not an unknown version.
+    #[test]
+    fn unsafe_review_artifacts_missing_schema_version_is_malformed_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{"status": "advisory"}"#,
+        )?;
+        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+            Err(gap) => gap,
+            Ok(_) => anyhow::bail!("expected Malformed gap, got parsed artifacts"),
+        };
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::Malformed("schema_version field missing".to_owned())
+        );
+        Ok(())
+    }
+
+    /// A v1-claimed document that does not bind to the v1 shape (here:
+    /// `status` is not a string) is `Malformed` with the serde detail — the
+    /// version routed correctly, the shape broke the promise.
+    #[test]
+    fn unsafe_review_artifacts_v1_claimed_wrong_shape_is_malformed_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version": "unsafe-review-gate/v1", "status": 7}"#,
+        )?;
+        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+            Err(gap) => gap,
+            Ok(_) => anyhow::bail!("expected Malformed gap, got parsed artifacts"),
+        };
+        assert!(
+            matches!(gap, super::UnsafeReviewIngestGap::Malformed(_)),
+            "expected Malformed, got {gap:?}"
+        );
         Ok(())
     }
 }
