@@ -46,7 +46,7 @@ inputs:
     default: 'true'
     required: false
   tool-bundle:
-    description: 'Sensor bundle to install: none, core, bun-fast, or full.'
+    description: 'Sensor bundle to install: none, core, bun-fast, or full. Unknown values fail the install step.'
     default: core
     required: false
   setup-rust:
