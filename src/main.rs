@@ -14165,7 +14165,16 @@ fn dedupe_inline_comments(
             deduped.insert(key, comment);
         }
     }
-    inline_comments.extend(deduped.into_values());
+    // #178 value ranking: the body leads with the best finding. Survivors
+    // order by severity then confidence (descending), with path:line as the
+    // stable tiebreak so equal-rank findings keep a deterministic order.
+    let mut survivors: Vec<ReviewInlineComment> = deduped.into_values().collect();
+    survivors.sort_by(|a, b| {
+        inline_comment_rank(b)
+            .cmp(&inline_comment_rank(a))
+            .then_with(|| (a.path.as_str(), a.line).cmp(&(b.path.as_str(), b.line)))
+    });
+    inline_comments.extend(survivors);
 }
 
 fn inline_comment_rank(comment: &ReviewInlineComment) -> (u8, u8) {
@@ -20668,6 +20677,44 @@ index 1111111..2222222 100644
             ));
         }
         Ok(())
+    }
+
+    #[test]
+    fn inline_findings_order_best_first_after_dedupe() {
+        // #178 value ranking: severity then confidence descending, with
+        // path:line as the deterministic tiebreak - the PR body and the
+        // inline list lead with the finding most worth the reviewer's
+        // first look, regardless of lane arrival order.
+        let comment = |path: &str, severity: &str, confidence: &str| ReviewInlineComment {
+            lane: "ub".to_owned(),
+            path: path.to_owned(),
+            line: 10,
+            side: "RIGHT".to_owned(),
+            severity: severity.to_owned(),
+            confidence: confidence.to_owned(),
+            body: format!("finding at {path}"),
+            evidence: "input/diff.patch".to_owned(),
+        };
+        let mut inline = vec![
+            comment("src/low.rs", "low", "high"),
+            comment("src/blocker.rs", "blocker", "medium"),
+            comment("src/high_med.rs", "high", "medium"),
+            comment("src/high_hi.rs", "high", "high"),
+        ];
+        let mut summary = Vec::new();
+        dedupe_inline_comments(&mut inline, &mut summary);
+        let order: Vec<&str> = inline.iter().map(|c| c.path.as_str()).collect();
+        assert_eq!(
+            order,
+            vec![
+                "src/blocker.rs",
+                "src/high_hi.rs",
+                "src/high_med.rs",
+                "src/low.rs"
+            ],
+            "best finding leads"
+        );
+        assert!(summary.is_empty(), "no duplicates were merged");
     }
 
     #[test]
