@@ -48,18 +48,6 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
-      - name: Memory telemetry (temporary OOM probe)
-        # TEMPORARY: seven runner-shutdown kills on this branch's runs with
-        # githubstatus all-green points at the runner OOM-killing itself.
-        # Log free RAM every 15s in the background; the last flushed lines
-        # before a kill are the receipt. Remove with the allow-heavy revert.
-        run: |
-          ( while true; do
-              echo "memprobe $(date -u +%H:%M:%S) $(free -m | awk '/^Mem:/{print $3"/"$2" MB used, avail "$7}')"
-              sleep 15
-            done ) &
-          echo $! > /tmp/memprobe.pid
-
       - name: Run ub-review gate
         uses: ./
         with:
@@ -69,25 +57,12 @@ jobs:
           mode: intelligent-ci
           run-pass: auto
           # Lease the heavy witness classes so the enabled coverage sensor runs.
-          # TEMPORARY (2026-06-07): GitHub-hosted runners are evicting jobs
-          # past ~10 minutes ('runner has received a shutdown signal', six
-          # kills on this PR's runs). Coverage is the long pole and is
-          # advisory (required = false); skipping its lease fits the gate
-          # under the eviction window. The skip writes a receipted
-          # missing-evidence sensor status, never clean evidence. Restore
-          # to 'true' in the next train PR once runs complete again.
-          allow-heavy: 'false'
+          allow-heavy: 'true'
           root: .
           out: target/ub-review
           github-token: ${{ github.token }}
           posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
-          # TEMPORARY (2026-06-07, with the allow-heavy skip above): an
-          # external actor with actions:write kills this repo's gate runs
-          # past ~7-10 minutes (nine kills; forensics in #367). Model lanes
-          # are advisory on this pure-motion diff and skipped lanes are
-          # recorded as missing evidence, never clean. Restore to 'auto'
-          # with the other temp commits once the canceller is stopped.
-          model-mode: 'off'
+          model-mode: auto
           depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
           # provider-policy is deliberately omitted: the action default is
           # auto, which defers to [providers].policy in .ub-review.toml
