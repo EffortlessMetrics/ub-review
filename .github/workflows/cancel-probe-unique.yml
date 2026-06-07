@@ -1,6 +1,7 @@
 name: cancel-probe-unique
 
 on:
+  pull_request:
   workflow_dispatch:
 
 permissions:
