@@ -35,14 +35,27 @@ pub(crate) struct Config {
 /// today: `policy`, the provider routing policy the run uses when the CLI
 /// flag is `auto` (D2 precedence: an explicit `--provider-policy`/env value
 /// overrides config; config overrides the built-in default). An invalid
-/// `policy` value is stripped at load with a `PolicyError` receipt. The
-/// per-provider sub-tables (`[providers.minimax]`, `[providers.opencode]`)
-/// remain documentation of intent - `env`, `role`, `models`, `prompt_cache`,
-/// and `max_concurrency` are not read; wiring routes through #310.
+/// `policy` value is stripped at load with a `PolicyError` receipt.
+/// `[providers.<id>].max_concurrency` is consumed (wave caps + rate-limit
+/// shedding, #310); `env`, `role`, `models`, and `prompt_cache` remain
+/// documentation of intent.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ProvidersConfig {
     pub(crate) policy: String,
+    pub(crate) minimax: ProviderEntryConfig,
+    pub(crate) opencode: ProviderEntryConfig,
+}
+
+/// Per-provider keys consumed from `[providers.<id>]`. `max_concurrency`
+/// (0 = uncapped) bounds how many lanes a provider may hold in one model
+/// wave, and a provider that returns a rate limit is shed to one in-flight
+/// lane for the rest of the run (#310). `env`, `role`, `models`, and
+/// `prompt_cache` remain documentation of intent.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ProviderEntryConfig {
+    pub(crate) max_concurrency: usize,
 }
 
 /// Follow-up issue-capture posture (`[issues]`). `mode = "off"` keeps every

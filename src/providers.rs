@@ -236,3 +236,64 @@ pub(crate) fn provider_preflight_ok(
         .iter()
         .any(|receipt| preflight_matches_spec(receipt, spec) && receipt.status == "ok")
 }
+
+/// Per-wave provider concurrency caps resolved from `[providers.<id>]`
+/// config (#310). 0 = uncapped. A provider that returned a rate limit this
+/// run is shed to one in-flight lane regardless of its configured cap, so a
+/// degraded provider stops receiving full waves instead of failing them.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct ProviderCaps {
+    pub(crate) minimax: usize,
+    pub(crate) opencode: usize,
+}
+
+impl ProviderCaps {
+    pub(crate) fn from_config(providers: &ProvidersConfig) -> Self {
+        Self {
+            minimax: providers.minimax.max_concurrency,
+            opencode: providers.opencode.max_concurrency,
+        }
+    }
+
+    pub(crate) fn cap_for(self, provider: ModelProvider) -> usize {
+        match provider {
+            ModelProvider::MiniMaxDirect => self.minimax,
+            ModelProvider::OpenCodeGo => self.opencode,
+        }
+    }
+}
+
+/// True when the wave has a slot open for `provider` under its effective
+/// cap. Shedding floors the cap at one: an empty wave always admits the
+/// provider, so progress is guaranteed even fully shed.
+pub(crate) fn provider_slot_open(in_wave: usize, cap: usize, shed: bool) -> bool {
+    let effective = if shed { 1 } else { cap };
+    effective == 0 || in_wave < effective
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ProviderEntryConfig;
+
+    #[test]
+    fn provider_caps_resolve_from_config_and_bound_waves() {
+        let providers = ProvidersConfig {
+            policy: String::new(),
+            minimax: ProviderEntryConfig { max_concurrency: 2 },
+            opencode: ProviderEntryConfig { max_concurrency: 0 },
+        };
+        let caps = ProviderCaps::from_config(&providers);
+        assert_eq!(caps.cap_for(ModelProvider::MiniMaxDirect), 2);
+        assert_eq!(caps.cap_for(ModelProvider::OpenCodeGo), 0);
+        // Cap bounds the wave; 0 means uncapped.
+        assert!(provider_slot_open(1, 2, false));
+        assert!(!provider_slot_open(2, 2, false));
+        assert!(provider_slot_open(100, 0, false));
+        // Shedding floors at one regardless of configured cap, and an empty
+        // wave always admits the provider - no starvation.
+        assert!(provider_slot_open(0, 0, true));
+        assert!(!provider_slot_open(1, 0, true));
+        assert!(!provider_slot_open(1, 4, true));
+    }
+}

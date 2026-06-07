@@ -1840,6 +1840,9 @@ struct ModelRunContext<'a> {
     /// `env_value_present`; tests inject a constant so lane scheduling and
     /// runtime fallback can be exercised without mutating process env.
     key_present: fn(&str) -> bool,
+    /// Per-wave provider concurrency caps from [providers.<id>]
+    /// max_concurrency (#310); Default = uncapped.
+    caps: ProviderCaps,
 }
 
 struct RefuterRunContext<'a> {
@@ -4733,6 +4736,7 @@ fn write_review_artifacts(
                     args,
                     line_map: &line_map,
                     key_present: env_value_present,
+                    caps: ProviderCaps::from_config(&config.providers),
                 },
                 &mut model_lanes,
                 &mut missing_or_failed_model_evidence,
@@ -12371,9 +12375,19 @@ fn run_available_model_lanes_with_runner(
     // budget as first attempts.
     let mut forced_specs: Vec<Option<ProviderSpec>> = vec![None; context.assignments.len()];
     let mut retry_queue: Vec<usize> = Vec::new();
+    // Providers that returned a rate limit this run are shed to one
+    // in-flight lane (#310): a degraded provider stops receiving full
+    // waves instead of failing them.
+    let mut shed_providers: BTreeSet<ModelProvider> = BTreeSet::new();
+    // Lanes deferred by a provider cap re-enter at the front of the next
+    // wave; cap floors at one under shedding, so an empty wave always
+    // admits the head lane and the loop cannot starve.
+    let mut deferred: Vec<usize> = Vec::new();
     loop {
         if calls >= context.args.max_model_calls
-            || (next_assignment >= context.assignments.len() && retry_queue.is_empty())
+            || (next_assignment >= context.assignments.len()
+                && retry_queue.is_empty()
+                && deferred.is_empty())
         {
             break;
         }
@@ -12381,6 +12395,7 @@ fn run_available_model_lanes_with_runner(
         let mut wave = Vec::new();
         // Drain fallback retries first: their primary failure is already
         // known, so they are the wave's most valuable slots.
+        let mut requeued_retries: Vec<usize> = Vec::new();
         while wave.len() < context.args.model_concurrency
             && calls + wave.len() < context.args.max_model_calls
             && !retry_queue.is_empty()
@@ -12391,6 +12406,18 @@ fn run_available_model_lanes_with_runner(
             let Some(spec) = forced_specs[index].clone() else {
                 continue;
             };
+            let in_wave = wave
+                .iter()
+                .filter(|task: &&ModelLaneTask| task.spec.provider == spec.provider)
+                .count();
+            if !provider_slot_open(
+                in_wave,
+                context.caps.cap_for(spec.provider),
+                shed_providers.contains(&spec.provider),
+            ) {
+                requeued_retries.push(index);
+                continue;
+            }
             receipt.fallback_from = Some(assignment.spec.label());
             receipt.provider = spec.provider.key().to_owned();
             receipt.model = spec.model.clone();
@@ -12402,12 +12429,19 @@ fn run_available_model_lanes_with_runner(
                 spec,
             });
         }
+        retry_queue.extend(requeued_retries);
+        let mut pending = std::mem::take(&mut deferred);
         while wave.len() < context.args.model_concurrency
             && calls + wave.len() < context.args.max_model_calls
-            && next_assignment < context.assignments.len()
+            && (!pending.is_empty() || next_assignment < context.assignments.len())
         {
-            let index = next_assignment;
-            next_assignment += 1;
+            let index = if pending.is_empty() {
+                let index = next_assignment;
+                next_assignment += 1;
+                index
+            } else {
+                pending.remove(0)
+            };
             let assignment = &context.assignments[index];
             let receipt = &mut model_lanes[index];
             if receipt.status != "planned" {
@@ -12423,6 +12457,21 @@ fn run_available_model_lanes_with_runner(
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
                 continue;
             };
+            let in_wave = wave
+                .iter()
+                .filter(|task: &&ModelLaneTask| task.spec.provider == spec.provider)
+                .count();
+            if !provider_slot_open(
+                in_wave,
+                context.caps.cap_for(spec.provider),
+                shed_providers.contains(&spec.provider),
+            ) {
+                // Provider cap (or shed) is full for this wave: the lane
+                // keeps its planned status and re-enters at the front of
+                // the next wave.
+                deferred.push(index);
+                continue;
+            }
             if let Some(reason) = preflight_reason {
                 receipt.reason = reason;
             }
@@ -12515,6 +12564,11 @@ fn run_available_model_lanes_with_runner(
                             fallback.label()
                         );
                         receipt.http_status = http_status;
+                        if status == "rate_limited" {
+                            // Shed the degraded provider to one in-flight
+                            // lane for the rest of the run (#310).
+                            shed_providers.insert(assignment.spec.provider);
+                        }
                         forced_specs[task_result.index] = Some(fallback);
                         retry_queue.push(task_result.index);
                     } else {
@@ -20456,13 +20510,14 @@ mod tests {
         ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
         Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
         PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
-        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
+        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderCaps, ProviderKindArg,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs,
+        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
+        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
         append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_final_orchestrator_plan, build_issue_broker_plan, build_orchestrator_plan,
@@ -23536,6 +23591,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                caps: ProviderCaps::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -23710,6 +23766,137 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn provider_caps_bound_waves_and_rate_limit_sheds_to_one() -> Result<()> {
+        // #310: [providers.minimax].max_concurrency bounds how many lanes
+        // MiniMax holds per wave, and a rate-limited wave sheds the
+        // provider to one in-flight lane for the rest of the run. Four
+        // MiniMax lanes, cap 2, global concurrency 4: wave one carries two
+        // lanes; the first returns 429 (shedding MiniMax and queueing a
+        // fallback retry), so every later wave carries at most one MiniMax
+        // first-attempt alongside the fallback retry.
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 12;
+        args.model_concurrency = 4;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let lanes = ["ub", "security", "tests", "arch"];
+        let assignments: Vec<ModelAssignment> = lanes
+            .iter()
+            .map(|lane| ModelAssignment {
+                lane: lane_plan(lane),
+                spec: primary.clone(),
+                fallback: Some(fallback.clone()),
+            })
+            .collect();
+        let preflights = vec![preflight_ok_receipt(&primary)];
+        let mut model_lanes: Vec<ModelLaneReceipt> = lanes
+            .iter()
+            .map(|lane| model_lane_receipt(lane, "planned"))
+            .collect();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::sync::Mutex::new(Vec::<Vec<(String, String)>>::new());
+        let rate_limited_once = std::sync::Mutex::new(false);
+
+        run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                caps: ProviderCaps {
+                    minimax: 2,
+                    opencode: 0,
+                },
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            &mut issue_candidates,
+            |_context, _model_dir, tasks| {
+                if let Ok(mut log) = waves.lock() {
+                    log.push(
+                        tasks
+                            .iter()
+                            .map(|task| (task.lane.id.clone(), task.spec.provider.key().to_owned()))
+                            .collect(),
+                    );
+                }
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let mut first_429 = false;
+                        if task.spec.provider == ModelProvider::MiniMaxDirect
+                            && let Ok(mut seen) = rate_limited_once.lock()
+                            && !*seen
+                        {
+                            *seen = true;
+                            first_429 = true;
+                        }
+                        let result = if first_429 {
+                            Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            ))
+                        } else {
+                            Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            })
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        let waves = waves.into_inner().unwrap_or_default();
+        // Wave one: exactly the configured cap of MiniMax lanes.
+        let minimax_in = |wave: &Vec<(String, String)>| {
+            wave.iter()
+                .filter(|(_, provider)| provider == "minimax")
+                .count()
+        };
+        assert_eq!(minimax_in(&waves[0]), 2, "cap bounds wave one: {waves:?}");
+        // After the 429, MiniMax is shed: no later wave carries more than
+        // one MiniMax lane.
+        for wave in &waves[1..] {
+            assert!(
+                minimax_in(wave) <= 1,
+                "shed provider exceeded one in-flight lane: {waves:?}"
+            );
+        }
+        // Every lane still completes - deferral re-queues, never drops.
+        for (index, lane) in lanes.iter().enumerate() {
+            assert_eq!(
+                model_lanes[index].status, "ok",
+                "lane {lane} should complete: {:?}",
+                model_lanes[index].reason
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn model_lane_rate_limited_primary_retries_once_on_fallback() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut args = test_run_args(temp.path().join("out"));
@@ -23742,6 +23929,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                caps: ProviderCaps::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -23828,6 +24016,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                caps: ProviderCaps::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -23893,6 +24082,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                caps: ProviderCaps::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -23954,6 +24144,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                caps: ProviderCaps::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,

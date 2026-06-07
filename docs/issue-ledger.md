@@ -32,9 +32,11 @@ Tally this pass: 4 closed, 8 narrowed, 15 kept.
                 threshold
 #306  keep      synchronize_mode still read by no functional code; fix =
                 remove field with deprecation PolicyError receipt, one PR
-#310  narrowed  retry (#315) and [providers].policy D2 (#351) shipped;
-                retitled to the remainder: per-provider max_concurrency +
-                429 wave shedding
+#310  closed    retry (#315), [providers].policy D2 (#351), and the
+                remainder shipped in the cleanup train: max_concurrency
+                caps waves per provider and a 429 sheds the provider to
+                one in-flight lane (provider_caps_bound_waves_and_
+                rate_limit_sheds_to_one)
 ```
 
 ## 2. Gate trust and evidence detail (highest-priority implementation bucket)

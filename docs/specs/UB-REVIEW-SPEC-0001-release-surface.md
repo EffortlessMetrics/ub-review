@@ -147,10 +147,11 @@ What does success look like in ten minutes?
 
 ## Known reserved/inert surfaces (specs must not paper over these)
 
-- `[providers]` config section: deliberately reserved; provider selection is
-  CLI flags today (src/config.rs:776-790). Keys inside it (`prompt_cache`,
-  `max_concurrency`, `fallback_for`) are documentation of intent, not wired
-  behavior.
+- `[providers]` config section: `policy` is consumed (D2 precedence, #351)
+  and `[providers.<id>].max_concurrency` is consumed (per-wave provider
+  caps plus rate-limit shedding to one in-flight lane, #310). Remaining
+  keys (`prompt_cache`, `env`, `role`, `models`, `fallback_for`) are
+  documentation of intent, not wired behavior.
 - `[gate].synchronize_mode`: declared, defaulted, asserted in tests, read by
   no functional code (#306). Posting on quiet passes is governed solely by
   `[gate].post_review_on`.
