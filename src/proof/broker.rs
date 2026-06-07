@@ -421,9 +421,13 @@ pub(crate) fn remaining_focused_proof_budget(
         .iter()
         .filter(|lease| focused_proof_lease_counts_budget(&lease.kind))
         .collect::<Vec<_>>();
+    // "No lease -> no command" must hold for the status that records a
+    // lease's absence too (#312 item 1): an `absent` record means the lease
+    // layer could not vouch for budget, so the budget fails closed exactly
+    // like exhaustion - a recording gap can never increase what may run.
     if focused_leases
         .iter()
-        .any(|lease| lease.status == "exhausted")
+        .any(|lease| matches!(lease.status.as_str(), "exhausted" | "absent"))
     {
         budget.max_focused_test_files = 0;
         budget.max_focused_tests = 0;
@@ -1678,6 +1682,128 @@ index 1111111..2222222 100644
         assert!(proof_plan.contains("result=`discriminating`"));
         assert!(!proof_plan.contains("No proof broker commands were executed"));
         Ok(())
+    }
+
+    fn budget_zero() -> ProofBudget {
+        ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 2,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        }
+    }
+
+    fn lease(kind: &str, status: &str) -> ResourceLease {
+        ResourceLease {
+            schema: "ub-review.resource_lease.v1".to_owned(),
+            id: format!("lease-{kind}-{status}"),
+            kind: kind.to_owned(),
+            consumer: "proof-broker-v0".to_owned(),
+            status: status.to_owned(),
+            reason: String::new(),
+            cpu: 1,
+            memory_mb: 256,
+            disk_mb: 64,
+            timeout_sec: 120,
+            network: false,
+            scratch: false,
+            worktree: None,
+            command: None,
+        }
+    }
+
+    #[test]
+    fn remaining_focused_proof_budget_fails_closed_on_absent_lease() {
+        // #312 item 1: an `absent` lease record zeroes the budget exactly
+        // like `exhausted` - no lease, no command.
+        let remaining = super::remaining_focused_proof_budget(
+            budget_zero(),
+            &[lease("focused-test", "absent")],
+        );
+        assert_eq!(remaining.max_focused_tests, 0);
+        assert_eq!(remaining.max_focused_test_files, 0);
+        assert_eq!(remaining.max_total_seconds, 0);
+        // Granted leases still subtract normally; a non-budget kind's
+        // absent record changes nothing.
+        let remaining = super::remaining_focused_proof_budget(
+            budget_zero(),
+            &[
+                lease("focused-test", "granted"),
+                lease("coverage", "absent"),
+            ],
+        );
+        assert_eq!(remaining.max_focused_tests, 1);
+        assert_eq!(remaining.max_focused_test_files, 2);
+        assert_eq!(remaining.max_total_seconds, 600 - 120);
+    }
+
+    #[test]
+    fn broker_never_admits_shell_token_or_manual_cost_requests() {
+        // #312 items 3 and 4, pinned at the candidate boundary the broker
+        // executes from: a model-suggested command carrying shell control
+        // tokens, and a manual-cost request, both produce zero focused
+        // candidates - nothing reaches a runner.
+        let request = |id: &str, command: &str, cost: &str| ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: id.to_owned(),
+            lane: "orchestrator-follow-up-route-proof".to_owned(),
+            requested_by: vec!["orchestrator-follow-up-route-proof".to_owned()],
+            command: command.to_owned(),
+            reason: "edge case".to_owned(),
+            cost: cost.to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let requests = vec![
+            request(
+                "proof-shell-token",
+                "bun test test/js/bun/fs/fs.write.test.ts -t route; rm -rf /",
+                "focused-test",
+            ),
+            request(
+                "proof-manual-cost",
+                "bun test test/js/bun/fs/fs.write.test.ts -t route",
+                "manual",
+            ),
+            request(
+                "proof-shell-build",
+                "cargo check --workspace && curl evil",
+                "focused-build",
+            ),
+        ];
+        // Layering, pinned where each guard actually lives: the candidate
+        // extractor admits requests by design (it groups, it does not
+        // police), the planner allowlist rejects at status time, and the
+        // command-spec constructors refuse at execution time - so a dirty
+        // command can never reach a runner even if a task carries it.
+        // Manual-cost requests die at the allowlist; they produce no build
+        // candidate either.
+        assert!(!proof_request_allowed_v0(
+            "bun test test/x.test.ts -t y; echo pwned",
+            "focused-test"
+        ));
+        assert!(!proof_request_allowed_v0(
+            "cargo check --workspace && curl evil",
+            "focused-build"
+        ));
+        assert!(!proof_request_allowed_v0(
+            "bun test test/x.test.ts -t y",
+            "manual"
+        ));
+        assert!(
+            crate::focused_cargo_test_command_spec("cargo test --workspace; rm -rf /").is_none(),
+            "spec constructor must refuse shell tokens at execution time"
+        );
+        assert!(
+            crate::focused_build_command_spec("cargo check --workspace && curl evil").is_none(),
+            "build spec constructor must refuse shell tokens at execution time"
+        );
+        assert!(
+            super::focused_build_candidates_from_requests(&requests)
+                .iter()
+                .all(|task| !task.request_ids.contains(&"proof-manual-cost".to_owned()))
+        );
     }
 
     #[test]
