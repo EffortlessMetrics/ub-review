@@ -24227,6 +24227,48 @@ open_cap = 1
     }
 
     #[test]
+    fn review_byok_advisory_contract_pins_resolution_alias_and_posture_defaults() -> Result<()> {
+        // SPEC-0002's enforcement pivot, pinned as a full matrix: auto
+        // enforces for intelligent-ci alone; review-byok (and the agent
+        // modes) never enforce unless fail-on-gate is explicitly true.
+        use super::{FailOnGate, RunMode};
+        let modes = [
+            (RunMode::ReviewByok, false),
+            (RunMode::IntelligentCi, true),
+            (RunMode::AgentInvestigate, false),
+            (RunMode::AgentPatch, false),
+        ];
+        for (mode, auto_enforces) in modes {
+            assert_eq!(
+                FailOnGate::Auto.resolved(mode),
+                auto_enforces,
+                "auto resolution for {}",
+                mode.key()
+            );
+            assert!(FailOnGate::True.resolved(mode));
+            assert!(!FailOnGate::False.resolved(mode));
+        }
+
+        // `review-direct` is a legacy alias of review-byok: same variant,
+        // same never-enforcing resolution. The alias must never grow its own
+        // semantics.
+        let direct = <RunMode as clap::ValueEnum>::from_str("review-direct", false)
+            .map_err(|err| anyhow::anyhow!("parse review-direct: {err}"))?;
+        assert_eq!(direct, RunMode::ReviewByok);
+        assert_eq!(direct.key(), "review-byok");
+        assert!(!FailOnGate::Auto.resolved(direct));
+
+        // The byok posting posture defaults the spec documents: standalone
+        // approvals banned, zero-finding audits required, no custom poster.
+        let config: Config = toml::from_str("")?;
+        assert!(config.review.ban_standalone_approval);
+        assert!(config.review.require_zero_finding_audit);
+        assert!(!config.review.custom_poster);
+        assert_eq!(config.review.posting_engine, "github-step-summary");
+        Ok(())
+    }
+
+    #[test]
     fn repo_lanes_merge_with_defaults_replacement_and_diff_class_gating() -> Result<()> {
         let mut config: Config = toml::from_str(
             r#"
