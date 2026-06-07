@@ -198,6 +198,23 @@ pub(crate) fn run_sensor(
     Ok(())
 }
 
+/// #319: name the actionable root cause when an out-of-pin tokmd rejects
+/// `--preset bun-ub` with a clap usage error. Pure so the reason text is
+/// testable without a tokmd binary. Returns `None` when the version matches
+/// the pin or when no version could be determined - in the latter case the
+/// run stays fail-closed through the natural subcommand failure path rather
+/// than asserting a mismatch the preflight cannot prove.
+pub(crate) fn tokmd_pin_mismatch_note(actual: Option<&str>, expected: &str) -> Option<String> {
+    let actual = actual?;
+    if command_version_matches(actual, expected) {
+        return None;
+    }
+    Some(format!(
+        "installed tokmd ({actual}) does not match pinned {expected} \
+         (the bun-ub preset requires {expected})"
+    ))
+}
+
 pub(crate) fn run_tokmd_sensor(
     root: &Path,
     out: &Path,
@@ -207,6 +224,12 @@ pub(crate) fn run_tokmd_sensor(
     plan: &Plan,
     aggregate_argv: &[String],
 ) -> Result<()> {
+    // #319: preflight the version pin before executing subcommands, so a
+    // drifted runner image fails with "upgrade tokmd" readable from
+    // status.json instead of a bare clap exit-2 on `--preset bun-ub`.
+    let pin_note = expected_standard_image_tool_version("tokmd").and_then(|expected| {
+        tokmd_pin_mismatch_note(command_version(&sensor.command).as_deref(), expected)
+    });
     let commands = build_tokmd_sensor_commands(root, dir, plan);
     fs::write(
         dir.join("commands.json"),
@@ -289,20 +312,28 @@ pub(crate) fn run_tokmd_sensor(
         )?;
     }
 
+    // A version mismatch leads the failure reason: it is the actionable
+    // root cause, and the missing-evidence line in the lane packet carries
+    // whatever stands here. The ok path is untouched - a mismatched but
+    // fully succeeding tokmd is not a failure to explain.
+    let with_pin_note = |detail: String| match &pin_note {
+        Some(note) => format!("{note}; {detail}"),
+        None => detail,
+    };
     let (status, reason) = if failures.is_empty() {
         ("ok", format!("{} tokmd receipts completed", commands.len()))
     } else if timed_out {
         (
             "timed_out",
-            format!(
+            with_pin_note(format!(
                 "tokmd subcommands timed out or failed: {}",
                 failures.join("; ")
-            ),
+            )),
         )
     } else {
         (
             "failed",
-            format!("tokmd subcommands failed: {}", failures.join("; ")),
+            with_pin_note(format!("tokmd subcommands failed: {}", failures.join("; "))),
         )
     };
     write_sensor_status(
@@ -1065,6 +1096,33 @@ mod tests {
             ]
         );
         Ok(())
+    }
+
+    #[test]
+    fn tokmd_pin_mismatch_note_names_installed_and_pinned_versions() {
+        // #319: a drifted tokmd must fail with the version delta readable
+        // from the sensor reason, not a bare clap exit-2 on --preset bun-ub.
+        let note =
+            super::tokmd_pin_mismatch_note(Some("tokmd 1.11.1"), "1.12.0").unwrap_or_default();
+        assert!(note.contains("tokmd 1.11.1"), "names installed: {note}");
+        assert!(note.contains("1.12.0"), "names pin: {note}");
+        assert!(note.contains("bun-ub preset"), "names the why: {note}");
+
+        // Matching version (with or without a v prefix): no note, so the ok
+        // and failure paths are byte-identical to the pre-#319 behavior.
+        assert_eq!(
+            super::tokmd_pin_mismatch_note(Some("tokmd 1.12.0"), "1.12.0"),
+            None
+        );
+        assert_eq!(
+            super::tokmd_pin_mismatch_note(Some("tokmd v1.12.0"), "1.12.0"),
+            None
+        );
+
+        // No --version output: the preflight cannot prove a mismatch, so it
+        // stays silent and the run fails closed through the subcommand
+        // failures it would have had anyway.
+        assert_eq!(super::tokmd_pin_mismatch_note(None, "1.12.0"), None);
     }
 
     #[test]
