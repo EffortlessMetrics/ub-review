@@ -3737,8 +3737,9 @@ ISSUE_ACTION_VOCABULARY = {"artifact-only", "duplicate", "invalid", "suggested"}
 def require_issue_capture_artifacts(root: pathlib.Path) -> None:
     """Release lane step 4: candidates and their action ledger are schema-
     checked with NDJSON parity, every action references a known candidate,
-    and the v0 vocabulary excludes opened/failed_to_open - no auto-file is
-    possible before the broker exists, and the verifier proves it."""
+    and the run-side vocabulary excludes opened/failed_to_open forever -
+    opening issues is a post-time side effect recorded in the separate
+    broker artifacts (require_issue_broker_artifacts), never here."""
     candidates = load_json(root / "review/issue_candidates.json")
     if not isinstance(candidates, list):
         fail("review/issue_candidates.json is not an array")
@@ -3765,9 +3766,10 @@ def require_issue_capture_artifacts(root: pathlib.Path) -> None:
             fail(f"issue action {index + 1} has wrong schema")
         if action.get("action") not in ISSUE_ACTION_VOCABULARY:
             fail(
-                f"issue action {index + 1} uses `{action.get('action')!r}`; v0 allows "
-                f"only {sorted(ISSUE_ACTION_VOCABULARY)!r} (no auto-file before "
-                "the broker exists)"
+                f"issue action {index + 1} uses `{action.get('action')!r}`; the "
+                f"run-side ledger allows only {sorted(ISSUE_ACTION_VOCABULARY)!r} "
+                "(no auto-file from run; broker outcomes live in "
+                "issue_broker_results.json)"
             )
         if action.get("candidate_id") not in candidate_ids:
             fail(f"issue action {index + 1} references an unknown candidate")
@@ -3812,6 +3814,132 @@ def require_issue_capture_artifacts(root: pathlib.Path) -> None:
                 fail(f"{name} line {index + 1} does not match JSON artifact")
     if not (root / "review/suggested_issues.md").is_file():
         fail("missing review/suggested_issues.md")
+    require_issue_broker_artifacts(root, candidates, actions)
+
+
+ISSUE_BROKER_DECISIONS = {"attempt", "skip"}
+ISSUE_BROKER_RESULT_VOCABULARY = {"opened", "duplicate", "failed_to_open", "skipped"}
+
+
+def require_issue_broker_artifacts(
+    root: pathlib.Path, candidates: list, actions: list
+) -> None:
+    """Release lane step 6: the broker plan (run decides, renders the full
+    issue text) and results (post acts) are audited when present. Every plan
+    entry references a run-side `suggested` candidate, attempt bodies carry
+    the fingerprint duplicate-search marker, opened/duplicate results carry
+    urls, failures carry errors, and one result mirrors each plan entry.
+    Absent plan means the broker was not opted in - that is the default."""
+    plan_path = root / "review/issue_broker_plan.json"
+    results_path = root / "review/issue_broker_results.json"
+    if not plan_path.is_file():
+        if results_path.is_file():
+            fail("issue_broker_results.json present without issue_broker_plan.json")
+        return
+    plan = load_json(plan_path)
+    if not isinstance(plan, list):
+        fail("review/issue_broker_plan.json is not an array")
+    suggested_ids = {
+        action.get("candidate_id")
+        for action in actions
+        if isinstance(action, dict) and action.get("action") == "suggested"
+    }
+    candidate_ids = {
+        candidate.get("id") for candidate in candidates if isinstance(candidate, dict)
+    }
+    for index, entry in enumerate(plan):
+        if not isinstance(entry, dict):
+            fail(f"broker plan entry {index + 1} is not an object")
+        if entry.get("schema") != "ub-review.issue_broker_plan.v1":
+            fail(f"broker plan entry {index + 1} has wrong schema")
+        if entry.get("decision") not in ISSUE_BROKER_DECISIONS:
+            fail(
+                f"broker plan entry {index + 1} decision must be one of "
+                f"{sorted(ISSUE_BROKER_DECISIONS)!r}"
+            )
+        if entry.get("candidate_id") not in candidate_ids:
+            fail(f"broker plan entry {index + 1} references an unknown candidate")
+        if entry.get("candidate_id") not in suggested_ids:
+            fail(
+                f"broker plan entry {index + 1} references a candidate the run-side "
+                "ledger did not mark suggested; only suggested candidates reach "
+                "the broker"
+            )
+        fingerprint = entry.get("fingerprint")
+        if (
+            not isinstance(fingerprint, str)
+            or len(fingerprint) != 64
+            or any(ch not in "0123456789abcdef" for ch in fingerprint)
+        ):
+            fail(f"broker plan entry {index + 1} fingerprint is not a sha256 hex")
+        candidate_id = entry.get("candidate_id") or ""
+        if not candidate_id.endswith(fingerprint[:12]):
+            fail(
+                f"broker plan entry {index + 1} fingerprint does not match its "
+                "candidate id suffix"
+            )
+        for field in ("reason", "title"):
+            value = entry.get(field)
+            if not isinstance(value, str) or not value:
+                fail(f"broker plan entry {index + 1} {field} is not a non-empty string")
+        if entry.get("decision") == "attempt":
+            body = entry.get("body")
+            marker = f"ub-review-fingerprint: {fingerprint}"
+            if not isinstance(body, str) or marker not in body:
+                fail(
+                    f"broker plan entry {index + 1} attempt body is missing the "
+                    "fingerprint duplicate-search marker"
+                )
+    ndjson_parity(root, "issue_broker_plan.ndjson", plan)
+    if not results_path.is_file():
+        return
+    results = load_json(results_path)
+    if not isinstance(results, list):
+        fail("review/issue_broker_results.json is not an array")
+    if len(results) != len(plan):
+        fail("issue_broker_results.json must record one result per plan entry")
+    for index, (result, entry) in enumerate(zip(results, plan)):
+        if not isinstance(result, dict):
+            fail(f"broker result {index + 1} is not an object")
+        if result.get("schema") != "ub-review.issue_broker_result.v1":
+            fail(f"broker result {index + 1} has wrong schema")
+        if result.get("candidate_id") != entry.get("candidate_id"):
+            fail(f"broker result {index + 1} does not mirror its plan entry")
+        result_action = result.get("action")
+        if result_action not in ISSUE_BROKER_RESULT_VOCABULARY:
+            fail(
+                f"broker result {index + 1} uses `{result_action!r}`; allowed: "
+                f"{sorted(ISSUE_BROKER_RESULT_VOCABULARY)!r}"
+            )
+        if entry.get("decision") == "skip" and result_action != "skipped":
+            fail(f"broker result {index + 1} acted on a plan entry marked skip")
+        if entry.get("decision") == "attempt" and result_action == "skipped":
+            fail(f"broker result {index + 1} skipped a plan entry marked attempt")
+        if result_action in {"opened", "duplicate"}:
+            url = result.get("url")
+            if not isinstance(url, str) or not url.startswith("https://"):
+                fail(f"broker result {index + 1} {result_action} without an https url")
+        if result_action == "failed_to_open":
+            error = result.get("error")
+            if not isinstance(error, str) or not error:
+                fail(f"broker result {index + 1} failed_to_open without an error")
+        reason = result.get("reason")
+        if not isinstance(reason, str) or not reason:
+            fail(f"broker result {index + 1} reason is not a non-empty string")
+    ndjson_parity(root, "issue_broker_results.ndjson", results)
+
+
+def ndjson_parity(root: pathlib.Path, name: str, expected: list) -> None:
+    lines = [line for line in read_text(root / name).splitlines() if line.strip()]
+    if len(lines) != len(expected):
+        fail(f"{name} line count does not match its JSON artifact")
+    for index, line in enumerate(lines):
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError as error:
+            fail(f"invalid {name} line {index + 1}: {error}")
+        if parsed != expected[index]:
+            fail(f"{name} line {index + 1} does not match JSON artifact")
 
 
 def require_gate_outcome(root: pathlib.Path) -> None:
@@ -5870,7 +5998,7 @@ def self_test_issue_capture_contract() -> None:
 
     expect_self_test_failure(
         "issue capture auto-file rejected",
-        "no auto-file before",
+        "no auto-file from run",
         lambda root=write_root(
             [candidate], [dict(action, action="opened")]
         ): require_issue_capture_artifacts(root),
@@ -5893,6 +6021,124 @@ def self_test_issue_capture_contract() -> None:
         "issue capture action count parity",
         "one action per candidate",
         lambda root=write_root([candidate], []): require_issue_capture_artifacts(root),
+    )
+
+
+def self_test_issue_broker_contract() -> None:
+    """Release lane step 6: broker plan and results are audited - only
+    suggested candidates reach the broker, attempt bodies carry the
+    duplicate-search marker, opened results carry urls, and results mirror
+    the plan one-to-one."""
+    import tempfile
+
+    fingerprint = "a" * 52 + "b" * 12
+    candidate = {
+        "schema": "ub-review.issue_candidate.v1",
+        "id": f"issue-candidate-000-{fingerprint[:12]}",
+        "source": "tests-red-green",
+        "target_repo": "EffortlessMetrics/ripr-swarm",
+        "kind": "test-gap",
+        "confidence": "high",
+        "current_pr_disposition": "do-not-block",
+        "title": "Broker self-test follow-up",
+        "problem": "p",
+        "why_not_this_pr": "w",
+        "evidence": [{"type": "artifact", "path": "review/proof_plan.md"}],
+        "implementation_plan": ["step"],
+        "acceptance": ["done"],
+        "labels": [],
+    }
+    action = {
+        "schema": "ub-review.issue_action.v1",
+        "candidate_id": candidate["id"],
+        "action": "suggested",
+        "reason": "high-confidence follow-up",
+    }
+    plan_entry = {
+        "schema": "ub-review.issue_broker_plan.v1",
+        "candidate_id": candidate["id"],
+        "fingerprint": fingerprint,
+        "target_repo": candidate["target_repo"],
+        "decision": "attempt",
+        "reason": "allowlisted",
+        "title": candidate["title"],
+        "body": f"body\n\nub-review-fingerprint: {fingerprint}\n",
+        "labels": [],
+    }
+    result = {
+        "schema": "ub-review.issue_broker_result.v1",
+        "candidate_id": candidate["id"],
+        "target_repo": candidate["target_repo"],
+        "action": "opened",
+        "reason": "no fingerprint duplicate found; issue opened",
+        "url": "https://github.com/EffortlessMetrics/ripr-swarm/issues/9001",
+    }
+
+    def write_root(plan: list, results: "list | None") -> "pathlib.Path":
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        (tmp / "review").mkdir()
+        (tmp / "review/issue_broker_plan.json").write_text(
+            json.dumps(plan), encoding="utf-8"
+        )
+        (tmp / "issue_broker_plan.ndjson").write_text(
+            "".join(json.dumps(item) + "\n" for item in plan), encoding="utf-8"
+        )
+        if results is not None:
+            (tmp / "review/issue_broker_results.json").write_text(
+                json.dumps(results), encoding="utf-8"
+            )
+            (tmp / "issue_broker_results.ndjson").write_text(
+                "".join(json.dumps(item) + "\n" for item in results),
+                encoding="utf-8",
+            )
+        return tmp
+
+    candidates = [candidate]
+    actions = [action]
+    require_issue_broker_artifacts(write_root([plan_entry], [result]), candidates, actions)
+    require_issue_broker_artifacts(write_root([plan_entry], None), candidates, actions)
+
+    expect_self_test_failure(
+        "broker plan rejects non-suggested candidate",
+        "did not mark suggested",
+        lambda root=write_root([plan_entry], None): require_issue_broker_artifacts(
+            root, candidates, [dict(action, action="artifact-only")]
+        ),
+    )
+    expect_self_test_failure(
+        "broker attempt body requires the fingerprint marker",
+        "fingerprint duplicate-search marker",
+        lambda root=write_root(
+            [dict(plan_entry, body="no marker here")], None
+        ): require_issue_broker_artifacts(root, candidates, actions),
+    )
+    expect_self_test_failure(
+        "broker opened result requires an https url",
+        "without an https url",
+        lambda root=write_root(
+            [plan_entry], [dict(result, url=None)]
+        ): require_issue_broker_artifacts(root, candidates, actions),
+    )
+    expect_self_test_failure(
+        "broker result vocabulary is closed",
+        "allowed:",
+        lambda root=write_root(
+            [plan_entry], [dict(result, action="auto-filed")]
+        ): require_issue_broker_artifacts(root, candidates, actions),
+    )
+    expect_self_test_failure(
+        "broker results mirror the plan one-to-one",
+        "one result per plan entry",
+        lambda root=write_root([plan_entry], []): require_issue_broker_artifacts(
+            root, candidates, actions
+        ),
+    )
+    expect_self_test_failure(
+        "broker cannot act on a planned skip",
+        "acted on a plan entry marked skip",
+        lambda root=write_root(
+            [dict(plan_entry, decision="skip")], [result]
+        ): require_issue_broker_artifacts(root, candidates, actions),
     )
 
 
@@ -6882,6 +7128,7 @@ def run_self_tests() -> None:
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
     self_test_issue_capture_contract()
+    self_test_issue_broker_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(

@@ -1338,10 +1338,11 @@ struct IssueCandidateEvidence {
     url: Option<String>,
 }
 
-/// What ub-review did with each issue candidate. v0 emits exactly
-/// artifact-only, duplicate, or invalid; suggested/opened/failed_to_open
-/// belong to the rendering and broker steps and are verifier-rejected until
-/// those land.
+/// What ub-review did with each issue candidate during `run`. The run-side
+/// vocabulary is exactly artifact-only, duplicate, invalid, and suggested -
+/// fail-closed forever. Broker outcomes (opened/failed_to_open) never appear
+/// here: opening issues is a `post`-time side effect recorded in the
+/// separate broker plan and results artifacts.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 struct IssueAction {
     schema: String,
@@ -1350,6 +1351,43 @@ struct IssueAction {
     reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     existing: Option<String>,
+}
+
+/// One issue-broker decision made at `run` time (ub-review.issue_broker_plan.v1).
+/// The plan is pure data: `run` decides (allowlist, cap, slug validity) and
+/// renders the full issue title/body; `post` only executes attempts. The
+/// rendered body carries the `ub-review-fingerprint: <sha256>` marker the
+/// broker's remote duplicate search keys on.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct IssueBrokerPlanEntry {
+    schema: String,
+    candidate_id: String,
+    fingerprint: String,
+    target_repo: String,
+    /// `attempt` or `skip`.
+    decision: String,
+    reason: String,
+    title: String,
+    body: String,
+    labels: Vec<String>,
+}
+
+/// One issue-broker outcome recorded at `post` time
+/// (ub-review.issue_broker_result.v1). Vocabulary: `opened` (url required),
+/// `duplicate` (existing issue url required), `failed_to_open` (error
+/// required), `skipped` (mirrors a plan skip). Broker outcomes never affect
+/// the gate or the post exit code.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct IssueBrokerResult {
+    schema: String,
+    candidate_id: String,
+    target_repo: String,
+    action: String,
+    reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2896,9 +2934,10 @@ fn cmd_post(args: PostArgs) -> Result<()> {
             "skipped GitHub review post; wrote {}/post-result.json",
             args.out.display()
         );
+        run_issue_broker_step(&args);
         return Ok(());
     }
-    match post_github_review(&args) {
+    let post_outcome = match post_github_review(&args) {
         Ok(value) => {
             fs::write(
                 args.out.join("post-result.json"),
@@ -2923,7 +2962,247 @@ fn cmd_post(args: PostArgs) -> Result<()> {
                 Ok(())
             }
         }
+    };
+    // The issue broker runs after the review submission attempt on every
+    // path: it has its own receipts (issue_broker_results.json), the
+    // fingerprint duplicate search makes it idempotent across passes, and
+    // its failures never change the post exit code.
+    run_issue_broker_step(&args);
+    post_outcome
+}
+
+/// Execute the run-written broker plan, never fatally: read
+/// review/issue_broker_plan.json next to the review payload, perform the
+/// remote duplicate search and opens for `attempt` entries, and write
+/// issue_broker_results artifacts. Absent plan means the broker was not
+/// opted in; any whole-step error is reported to stderr and swallowed
+/// (broker outcomes never affect the gate or the post exit code).
+fn run_issue_broker_step(args: &PostArgs) {
+    let plan_path = args
+        .review_json
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join("issue_broker_plan.json");
+    if !plan_path.exists() {
+        return;
     }
+    match execute_issue_broker(args, &plan_path) {
+        Ok(results) => {
+            if let Err(err) = write_issue_broker_results(&args.out, &results) {
+                eprintln!("ub-review issue broker: failed to write results: {err:#}");
+            } else {
+                let opened = results.iter().filter(|r| r.action == "opened").count();
+                let duplicates = results.iter().filter(|r| r.action == "duplicate").count();
+                let failed = results
+                    .iter()
+                    .filter(|r| r.action == "failed_to_open")
+                    .count();
+                println!(
+                    "issue broker: {opened} opened, {duplicates} duplicate, {failed} failed, \
+                     {} skipped; wrote {}/issue_broker_results.json",
+                    results.iter().filter(|r| r.action == "skipped").count(),
+                    args.out.display()
+                );
+            }
+        }
+        Err(err) => {
+            eprintln!("ub-review issue broker failed (tolerated): {err:#}");
+        }
+    }
+}
+
+/// Execute every plan entry. Skips mirror through as `skipped`; attempts run
+/// the fingerprint duplicate search first and only open when the search
+/// comes back empty. Per-entry failures become `failed_to_open` results, so
+/// one bad target repo cannot abort the rest of the plan.
+fn execute_issue_broker(args: &PostArgs, plan_path: &Path) -> Result<Vec<IssueBrokerResult>> {
+    let plan: Vec<IssueBrokerPlanEntry> = serde_json::from_slice(
+        &fs::read(plan_path).with_context(|| format!("read {}", plan_path.display()))?,
+    )
+    .with_context(|| format!("parse {}", plan_path.display()))?;
+    let token = args
+        .github_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let api_url = args.github_api_url.trim_end_matches('/');
+    let mut results = Vec::new();
+    for (index, entry) in plan.iter().enumerate() {
+        let result = if entry.decision != "attempt" {
+            IssueBrokerResult {
+                schema: "ub-review.issue_broker_result.v1".to_owned(),
+                candidate_id: entry.candidate_id.clone(),
+                target_repo: entry.target_repo.clone(),
+                action: "skipped".to_owned(),
+                reason: entry.reason.clone(),
+                url: None,
+                error: None,
+            }
+        } else if let Some(token) = token {
+            execute_issue_broker_attempt(args, api_url, token, entry, index)
+        } else {
+            IssueBrokerResult {
+                schema: "ub-review.issue_broker_result.v1".to_owned(),
+                candidate_id: entry.candidate_id.clone(),
+                target_repo: entry.target_repo.clone(),
+                action: "failed_to_open".to_owned(),
+                reason: "broker attempt planned but no GitHub token was available at post time"
+                    .to_owned(),
+                url: None,
+                error: Some("github token unavailable".to_owned()),
+            }
+        };
+        results.push(result);
+    }
+    Ok(results)
+}
+
+/// One open attempt: fingerprint duplicate search, then create. Every
+/// outcome is a result row, never an error.
+fn execute_issue_broker_attempt(
+    args: &PostArgs,
+    api_url: &str,
+    token: &str,
+    entry: &IssueBrokerPlanEntry,
+    index: usize,
+) -> IssueBrokerResult {
+    let mut result = IssueBrokerResult {
+        schema: "ub-review.issue_broker_result.v1".to_owned(),
+        candidate_id: entry.candidate_id.clone(),
+        target_repo: entry.target_repo.clone(),
+        action: "failed_to_open".to_owned(),
+        reason: String::new(),
+        url: None,
+        error: None,
+    };
+    let marker = issue_broker_fingerprint_marker(&entry.fingerprint);
+    let query = format!("repo:{} in:body \"{marker}\"", entry.target_repo);
+    let search_url = format!(
+        "{api_url}/search/issues?per_page=1&q={}",
+        percent_encode_query(&query)
+    );
+    match run_github_api_get(Path::new("."), &search_url, token) {
+        Ok(value) => {
+            let total = value
+                .get("total_count")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0);
+            if total > 0 {
+                let existing_url = value
+                    .get("items")
+                    .and_then(|items| items.get(0))
+                    .and_then(|item| item.get("html_url"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned();
+                result.action = "duplicate".to_owned();
+                result.reason = format!(
+                    "fingerprint duplicate search found {total} existing issue(s) in {}",
+                    entry.target_repo
+                );
+                result.url = Some(existing_url);
+                return result;
+            }
+        }
+        Err(err) => {
+            result.reason =
+                "fingerprint duplicate search failed; refusing to open without it".to_owned();
+            result.error = Some(format!("{err:#}"));
+            return result;
+        }
+    }
+    let payload = serde_json::json!({
+        "title": entry.title,
+        "body": entry.body,
+        "labels": entry.labels,
+    });
+    let payload_path = args
+        .out
+        .join(format!("issue-broker-payload-{index:03}.json"));
+    if let Err(err) = serde_json::to_vec_pretty(&payload)
+        .map_err(anyhow::Error::from)
+        .and_then(|bytes| fs::write(&payload_path, bytes).map_err(anyhow::Error::from))
+    {
+        result.reason = "failed to write the issue create payload receipt".to_owned();
+        result.error = Some(format!("{err:#}"));
+        return result;
+    }
+    let create_url = format!("{api_url}/repos/{}/issues", entry.target_repo);
+    match run_curl_json_post(
+        Path::new("."),
+        &create_url,
+        &format!("Authorization: Bearer {token}"),
+        &payload_path,
+        &[
+            "Accept: application/vnd.github+json",
+            "Content-Type: application/json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    ) {
+        Ok(output) if output.status.success() => {
+            let response: serde_json::Value =
+                serde_json::from_slice(&output.stdout).unwrap_or(serde_json::Value::Null);
+            let url = response
+                .get("html_url")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            result.action = "opened".to_owned();
+            result.reason = "no fingerprint duplicate found; issue opened".to_owned();
+            result.url = Some(url);
+            result
+        }
+        Ok(output) => {
+            result.reason = "GitHub issue create returned a failure status".to_owned();
+            result.error = Some(format!(
+                "http status {:?}: {}",
+                output.http_status,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+            result
+        }
+        Err(err) => {
+            result.reason = "GitHub issue create request failed".to_owned();
+            result.error = Some(format!("{err:#}"));
+            result
+        }
+    }
+}
+
+/// Minimal percent-encoding for a GitHub search query string: keeps
+/// unreserved characters, encodes everything else byte-wise.
+fn percent_encode_query(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len() * 3);
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(byte as char);
+            }
+            _ => {
+                encoded.push_str(&format!("%{byte:02X}"));
+            }
+        }
+    }
+    encoded
+}
+
+/// Persist broker results (review/issue_broker_results.json next to the
+/// other review artifacts under out, plus the NDJSON twin at the out root).
+fn write_issue_broker_results(out: &Path, results: &[IssueBrokerResult]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("issue_broker_results.json"),
+        serde_json::to_vec_pretty(results)?,
+    )?;
+    let mut lines = String::new();
+    for result in results {
+        lines.push_str(&serde_json::to_string(result)?);
+        lines.push('\n');
+    }
+    fs::write(out.join("issue_broker_results.ndjson"), lines)?;
+    Ok(())
 }
 
 fn read_github_review_skip_receipt(review_json: &Path) -> Option<serde_json::Value> {
@@ -6091,6 +6370,20 @@ fn write_review_artifacts(
     let (issue_capture_candidates, issue_capture_actions) =
         classify_issue_candidates(&config.issues, std::mem::take(&mut issue_candidates));
     write_issue_capture_artifacts(out, &issue_capture_candidates, &issue_capture_actions)?;
+    // Step 6: under open-high-confidence, `run` decides what the post-time
+    // broker may attempt and renders the full issue text into a pure plan
+    // artifact. `run` itself never opens issues.
+    if config.issues.enabled && config.issues.mode == "open-high-confidence" {
+        let broker_plan = build_issue_broker_plan(
+            &config.issues,
+            &issue_capture_candidates,
+            &issue_capture_actions,
+            args.github_repo.as_deref(),
+            args.github_pull_number
+                .or_else(detect_pull_number_from_event),
+        );
+        write_issue_broker_plan(out, &broker_plan)?;
+    }
     let suggested_issue_ids = issue_capture_actions
         .iter()
         .filter(|action| action.action == "suggested")
@@ -8440,15 +8733,11 @@ fn issue_candidate_invalid_reason(candidate: &IssueCandidate) -> Option<String> 
     None
 }
 
-/// Assign ids, validate, and dedupe lane-emitted issue candidates into the
-/// candidate list plus the action ledger. v0 terminal states are exactly
-/// artifact-only, duplicate, and invalid - rendering (release lane step 5)
-/// and the opt-in broker (step 6) extend the vocabulary later, and the
-/// verifier rejects opened/failed_to_open until the broker exists.
 /// True when the issue posture lets a valid candidate render for the
-/// reviewer: enabled, mode suggest (or the reserved open-high-confidence,
-/// which degrades to suggest until the broker exists), high confidence, and
-/// a do-not-block disposition. Suggested follow-ups never block.
+/// reviewer: enabled, mode suggest or open-high-confidence, high confidence,
+/// and a do-not-block disposition. Suggested follow-ups never block; under
+/// open-high-confidence the broker may additionally attempt opening at post
+/// time, but the run-side action stays `suggested` either way.
 fn issue_candidate_renders(issues: &IssuesConfig, candidate: &IssueCandidate) -> bool {
     issues.enabled
         && matches!(issues.mode.as_str(), "suggest" | "open-high-confidence")
@@ -8492,9 +8781,9 @@ fn classify_issue_candidates(
                     candidate_id: candidate.id.clone(),
                     action: "suggested".to_owned(),
                     reason: if issues.mode == "open-high-confidence" {
-                        "high-confidence follow-up rendered for the reviewer; \
-                         open-high-confidence degrades to suggest until the issue \
-                         broker exists"
+                        "high-confidence follow-up rendered for the reviewer; the \
+                         issue broker attempts opening at post time for allowlisted \
+                         target repos"
                             .to_owned()
                     } else {
                         "high-confidence follow-up rendered for the reviewer; \
@@ -8588,6 +8877,160 @@ fn write_issue_capture_artifacts(
         }
     }
     fs::write(review_dir.join("suggested_issues.md"), drafts)?;
+    Ok(())
+}
+
+/// The body marker the broker's remote duplicate search keys on. Embedded in
+/// every broker-opened issue; searched verbatim before any open attempt.
+fn issue_broker_fingerprint_marker(fingerprint: &str) -> String {
+    format!("ub-review-fingerprint: {fingerprint}")
+}
+
+/// Render the full GitHub issue body for a broker attempt at `run` time so
+/// `post` performs zero formatting. Carries the candidate's problem,
+/// why-not-this-PR, evidence, plan, acceptance, a provenance line, and the
+/// fingerprint marker.
+fn issue_broker_body(
+    candidate: &IssueCandidate,
+    fingerprint: &str,
+    source_repo: Option<&str>,
+    pull_number: Option<u64>,
+) -> String {
+    let mut body = format!(
+        "{}\n\nWhy not the source PR: {}\n",
+        candidate.problem, candidate.why_not_this_pr
+    );
+    if !candidate.evidence.is_empty() {
+        body.push_str("\n## Evidence\n\n");
+        for evidence in &candidate.evidence {
+            if let Some(path) = &evidence.path {
+                body.push_str(&format!("- {}: {path}\n", evidence.kind));
+            }
+            if let Some(url) = &evidence.url {
+                body.push_str(&format!("- {}: {url}\n", evidence.kind));
+            }
+        }
+    }
+    body.push_str("\n## Implementation plan\n\n");
+    for (index, step) in candidate.implementation_plan.iter().enumerate() {
+        body.push_str(&format!("{}. {step}\n", index + 1));
+    }
+    body.push_str("\n## Acceptance\n\n");
+    for item in &candidate.acceptance {
+        body.push_str(&format!("- [ ] {item}\n"));
+    }
+    let provenance = match (source_repo, pull_number) {
+        (Some(repo), Some(number)) => {
+            format!(
+                "opened by ub-review from {repo}#{number}, lane {}",
+                candidate.source
+            )
+        }
+        _ => format!("opened by ub-review, lane {}", candidate.source),
+    };
+    body.push_str(&format!(
+        "\n---\n{provenance}\n{}\n",
+        issue_broker_fingerprint_marker(fingerprint)
+    ));
+    body
+}
+
+/// Decide at `run` time what the post-time broker may do. Pure: only
+/// `suggested` candidates are considered, in ledger order; each becomes an
+/// `attempt` (valid allowlisted slug, under `open_cap`) or a `skip` with the
+/// reason recorded. Returns an empty plan unless mode is
+/// open-high-confidence. No silent caps: cap-excluded candidates appear as
+/// skips.
+fn build_issue_broker_plan(
+    issues: &IssuesConfig,
+    candidates: &[IssueCandidate],
+    actions: &[IssueAction],
+    source_repo: Option<&str>,
+    pull_number: Option<u64>,
+) -> Vec<IssueBrokerPlanEntry> {
+    if !issues.enabled || issues.mode != "open-high-confidence" {
+        return Vec::new();
+    }
+    let by_id: BTreeMap<&str, &IssueCandidate> = candidates
+        .iter()
+        .map(|candidate| (candidate.id.as_str(), candidate))
+        .collect();
+    let mut plan = Vec::new();
+    let mut attempts = 0u32;
+    for action in actions {
+        if action.action != "suggested" {
+            continue;
+        }
+        let Some(candidate) = by_id.get(action.candidate_id.as_str()) else {
+            continue;
+        };
+        let fingerprint = issue_candidate_fingerprint(candidate);
+        let (decision, reason) = if !is_valid_repo_slug(&candidate.target_repo) {
+            (
+                "skip",
+                "target repo is not a valid owner/repo slug".to_owned(),
+            )
+        } else if !issues
+            .open_in
+            .iter()
+            .any(|allowed| allowed == &candidate.target_repo)
+        {
+            (
+                "skip",
+                "target repo is not in the issues.open_in allowlist; the candidate \
+                 stays suggested"
+                    .to_owned(),
+            )
+        } else if attempts >= issues.open_cap {
+            (
+                "skip",
+                format!(
+                    "issues.open_cap={} reached for this post; the candidate stays \
+                     suggested",
+                    issues.open_cap
+                ),
+            )
+        } else {
+            attempts += 1;
+            (
+                "attempt",
+                "high-confidence do-not-block candidate targeting an allowlisted \
+                 repo; post runs a fingerprint duplicate search before opening"
+                    .to_owned(),
+            )
+        };
+        plan.push(IssueBrokerPlanEntry {
+            schema: "ub-review.issue_broker_plan.v1".to_owned(),
+            candidate_id: candidate.id.clone(),
+            fingerprint: fingerprint.clone(),
+            target_repo: candidate.target_repo.clone(),
+            decision: decision.to_owned(),
+            reason,
+            title: candidate.title.clone(),
+            body: issue_broker_body(candidate, &fingerprint, source_repo, pull_number),
+            labels: candidate.labels.clone(),
+        });
+    }
+    plan
+}
+
+/// Persist the broker plan (review/issue_broker_plan.json + NDJSON twin).
+/// Written only when the broker is opted in; an absent file means mode never
+/// reached open-high-confidence, an empty list means it did and there was
+/// nothing suggested.
+fn write_issue_broker_plan(out: &Path, plan: &[IssueBrokerPlanEntry]) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("issue_broker_plan.json"),
+        serde_json::to_vec_pretty(plan)?,
+    )?;
+    let mut lines = String::new();
+    for entry in plan {
+        lines.push_str(&serde_json::to_string(entry)?);
+        lines.push('\n');
+    }
+    fs::write(out.join("issue_broker_plan.ndjson"), lines)?;
     Ok(())
 }
 
@@ -22582,36 +23025,38 @@ mod tests {
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
         FailOnGate, FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GateOutcomeInput,
-        GitHubReview, GitHubReviewComment, IssueCandidate, IssueCandidateEvidence, LaneModelOutput,
-        LanePlan, Limits, ModelAssignment, ModelCacheUsage, ModelCallOutcome,
-        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelLaneTaskResult, ModelMode,
-        ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
-        Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
-        PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
-        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
-        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
-        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
-        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
-        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
-        follow_up_output_record, follow_up_resolved_away_candidate_ids, github_review_skip_path,
-        http_status_from_error, is_model_receipt_evidence_issue, make_observation, model_api_url,
-        model_assignments, model_assignments_with_key_state, model_auth_header, model_json_payload,
-        model_lane, model_request_payload, model_response_shape, normalize_run_args,
+        GitHubReview, GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate,
+        IssueCandidateEvidence, LaneModelOutput, LanePlan, Limits, ModelAssignment,
+        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
+        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
+        ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
+        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
+        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
+        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
+        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
+        TerminalStateInput, ToolClass, ToolGateOutcomeEntry, ToolGateOutcomeMetrics,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_final_orchestrator_plan, build_gate_outcome,
+        build_issue_broker_plan, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_tokmd_sensor_commands, build_witness_records,
+        builtin_profiles, candidate_matches_inline_comment, candidate_matches_summary_finding,
+        cap_review_body, classify_diff, classify_diff_class, classify_issue_candidates,
+        classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, execute_issue_broker, extract_model_content,
+        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
+        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
@@ -22626,10 +23071,11 @@ mod tests {
         validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
         write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_issue_capture_artifacts, write_observation_artifacts,
-        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
-        write_sensor_status, write_witness_artifacts,
+        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
+        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
+        write_proof_request_artifacts, write_resolved_candidate_artifacts,
+        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
+        write_witness_artifacts,
     };
 
     #[test]
@@ -23758,16 +24204,25 @@ diff_classes = ["docs-only"]
         let absent: Config = toml::from_str("")?;
         assert!(absent.issues.enabled);
         assert_eq!(absent.issues.mode, "suggest");
+        assert_eq!(absent.issues.open_in, Vec::<String>::new());
+        assert_eq!(absent.issues.open_cap, 3);
 
         let explicit: Config = toml::from_str(
             r#"
 [issues]
 enabled = false
 mode = "off"
+open_in = ["EffortlessMetrics/ripr-swarm"]
+open_cap = 1
 "#,
         )?;
         assert!(!explicit.issues.enabled);
         assert_eq!(explicit.issues.mode, "off");
+        assert_eq!(
+            explicit.issues.open_in,
+            vec!["EffortlessMetrics/ripr-swarm".to_owned()]
+        );
+        assert_eq!(explicit.issues.open_cap, 1);
         Ok(())
     }
 
@@ -36412,8 +36867,8 @@ index 1111111..2222222 100644
 
         // mode = off keeps everything artifact-only.
         let off = super::IssuesConfig {
-            enabled: true,
             mode: "off".to_owned(),
+            ..super::IssuesConfig::default()
         };
         let (_, off_actions) =
             classify_issue_candidates(&off, vec![valid_candidate("Run base+tests red/green")]);
@@ -36427,6 +36882,275 @@ index 1111111..2222222 100644
         let (_, medium_actions) = classify_issue_candidates(&issues, vec![medium]);
         assert_eq!(medium_actions[0].action, "artifact-only");
         Ok(())
+    }
+
+    fn broker_test_candidate(title: &str, target_repo: &str) -> IssueCandidate {
+        IssueCandidate {
+            source: "tests-red-green".to_owned(),
+            target_repo: target_repo.to_owned(),
+            kind: "test-gap".to_owned(),
+            confidence: "high".to_owned(),
+            title: title.to_owned(),
+            problem: "base+tests discrimination remains unimplemented".to_owned(),
+            why_not_this_pr: "needs worktree setup and separate receipt states".to_owned(),
+            evidence: vec![IssueCandidateEvidence {
+                kind: "artifact".to_owned(),
+                path: Some("review/proof_plan.md".to_owned()),
+                url: None,
+            }],
+            implementation_plan: vec!["create base worktree".to_owned()],
+            acceptance: vec!["discriminating receipt renders".to_owned()],
+            labels: vec!["ub-review".to_owned()],
+            ..IssueCandidate::default()
+        }
+    }
+
+    #[test]
+    fn issue_broker_plan_gates_on_mode_allowlist_and_cap() {
+        let issues = super::IssuesConfig {
+            mode: "open-high-confidence".to_owned(),
+            open_in: vec!["EffortlessMetrics/ripr-swarm".to_owned()],
+            open_cap: 1,
+            ..super::IssuesConfig::default()
+        };
+        let raw = vec![
+            broker_test_candidate("Allowlisted follow-up", "EffortlessMetrics/ripr-swarm"),
+            broker_test_candidate("Not allowlisted", "EffortlessMetrics/tokmd-swarm"),
+            broker_test_candidate("Over the cap", "EffortlessMetrics/ripr-swarm"),
+            broker_test_candidate("Bad slug", "not-a-slug"),
+        ];
+        let (candidates, actions) = classify_issue_candidates(&issues, raw);
+        let plan = build_issue_broker_plan(
+            &issues,
+            &candidates,
+            &actions,
+            Some("EffortlessMetrics/ub-review"),
+            Some(346),
+        );
+        // Every suggested candidate appears in the plan; nothing is silent.
+        assert_eq!(plan.len(), 4);
+        assert_eq!(plan[0].decision, "attempt");
+        assert_eq!(plan[1].decision, "skip");
+        assert!(plan[1].reason.contains("open_in allowlist"));
+        assert_eq!(plan[2].decision, "skip");
+        assert!(plan[2].reason.contains("open_cap=1"));
+        assert_eq!(plan[3].decision, "skip");
+        assert!(plan[3].reason.contains("valid owner/repo slug"));
+        // The rendered body carries the duplicate-search marker, provenance,
+        // and the acceptance checklist; post performs zero formatting.
+        let body = &plan[0].body;
+        assert!(body.contains(&format!("ub-review-fingerprint: {}", plan[0].fingerprint)));
+        assert!(body.contains("opened by ub-review from EffortlessMetrics/ub-review#346"));
+        assert!(body.contains("- [ ] discriminating receipt renders"));
+        assert!(plan[0].fingerprint.len() == 64);
+        assert!(
+            plan[0]
+                .candidate_id
+                .ends_with(&plan[0].fingerprint[..12].to_owned())
+        );
+
+        // Suggest mode never produces a plan: the broker is opt-in.
+        let suggest_only = super::IssuesConfig::default();
+        let (candidates, actions) = classify_issue_candidates(
+            &suggest_only,
+            vec![broker_test_candidate(
+                "Allowlisted follow-up",
+                "EffortlessMetrics/ripr-swarm",
+            )],
+        );
+        assert!(
+            build_issue_broker_plan(&suggest_only, &candidates, &actions, None, None).is_empty()
+        );
+    }
+
+    #[test]
+    fn issue_broker_executes_plan_with_duplicate_search_and_receipts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("post-out");
+        fs::create_dir_all(&out)?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let entry = |id: &str, fingerprint: &str, decision: &str| IssueBrokerPlanEntry {
+            schema: "ub-review.issue_broker_plan.v1".to_owned(),
+            candidate_id: id.to_owned(),
+            fingerprint: fingerprint.to_owned(),
+            target_repo: "EffortlessMetrics/ripr-swarm".to_owned(),
+            decision: decision.to_owned(),
+            reason: "test".to_owned(),
+            title: "Broker test issue".to_owned(),
+            body: format!("body\n\nub-review-fingerprint: {fingerprint}\n"),
+            labels: vec!["ub-review".to_owned()],
+        };
+        let plan = vec![
+            entry("issue-candidate-000-aaaaaaaaaaaa", "fresh", "attempt"),
+            entry("issue-candidate-001-bbbbbbbbbbbb", "existing", "attempt"),
+            entry("issue-candidate-002-cccccccccccc", "skipme", "skip"),
+        ];
+        let plan_path = review_dir.join("issue_broker_plan.json");
+        fs::write(&plan_path, serde_json::to_vec_pretty(&plan)?)?;
+
+        // Fake GitHub API: search for "fresh" finds nothing then accepts the
+        // create; search for "existing" returns one hit so no create happens.
+        let (api_url, handle) = spawn_fake_issue_broker_api(3)?;
+        let args = PostArgs {
+            review_json: review_dir.join("github-review.json"),
+            diff_patch: None,
+            out: out.clone(),
+            github_token: Some("test-token".to_owned()),
+            repo: Some("EffortlessMetrics/ub-review".to_owned()),
+            pull_number: Some(346),
+            github_api_url: api_url,
+            fail_on_post_error: false,
+        };
+        let results = execute_issue_broker(&args, &plan_path)?;
+        let requests = join_fake_issue_broker_api(handle)?;
+        assert_eq!(requests.len(), 3);
+        assert!(requests[0].contains("GET /search/issues"));
+        assert!(requests[0].contains("fresh"));
+        assert!(requests[1].contains("POST /repos/EffortlessMetrics/ripr-swarm/issues"));
+        assert!(requests[2].contains("GET /search/issues"));
+        assert!(requests[2].contains("existing"));
+
+        assert_eq!(results.len(), 3);
+        assert_eq!(results[0].action, "opened");
+        assert_eq!(
+            results[0].url.as_deref(),
+            Some("https://github.com/EffortlessMetrics/ripr-swarm/issues/9001")
+        );
+        assert_eq!(results[1].action, "duplicate");
+        assert_eq!(
+            results[1].url.as_deref(),
+            Some("https://github.com/EffortlessMetrics/ripr-swarm/issues/1052")
+        );
+        assert_eq!(results[2].action, "skipped");
+
+        // The create payload receipt is on disk and carries the marker body.
+        let payload = fs::read_to_string(out.join("issue-broker-payload-000.json"))?;
+        assert!(payload.contains("ub-review-fingerprint: fresh"));
+
+        write_issue_broker_results(&out, &results)?;
+        let written: Vec<serde_json::Value> =
+            serde_json::from_slice(&fs::read(out.join("review/issue_broker_results.json"))?)?;
+        assert_eq!(written.len(), 3);
+        let ndjson = fs::read_to_string(out.join("issue_broker_results.ndjson"))?;
+        assert_eq!(ndjson.lines().count(), 3);
+
+        // No token: planned attempts become failed_to_open, never errors.
+        let no_token = PostArgs {
+            github_token: None,
+            ..args
+        };
+        let results = execute_issue_broker(&no_token, &plan_path)?;
+        assert_eq!(results[0].action, "failed_to_open");
+        assert_eq!(results[1].action, "failed_to_open");
+        assert_eq!(results[2].action, "skipped");
+        Ok(())
+    }
+
+    fn spawn_fake_issue_broker_api(
+        expected_requests: usize,
+    ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let handle = thread::spawn(move || -> Result<Vec<String>> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < expected_requests {
+                match listener.accept() {
+                    Ok((stream, _addr)) => {
+                        requests.push(handle_fake_issue_broker_request(stream)?);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            bail!(
+                                "fake issue broker API received {} of {} requests",
+                                requests.len(),
+                                expected_requests
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            Ok(requests)
+        });
+        Ok((url, handle))
+    }
+
+    fn handle_fake_issue_broker_request(mut stream: TcpStream) -> Result<String> {
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                bail!("fake issue broker request ended before headers finished");
+            }
+            headers.push_str(&line);
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                line.to_ascii_lowercase()
+                    .strip_prefix("content-length:")
+                    .map(|value| value.trim().parse::<usize>().unwrap_or(0))
+            })
+            .unwrap_or(0);
+        if content_length > 0 {
+            let mut body = vec![0u8; content_length];
+            use std::io::Read as _;
+            reader.read_exact(&mut body)?;
+        }
+        let request_line = headers.lines().next().unwrap_or_default().to_owned();
+        let (status_line, response_body) = if request_line.starts_with("GET /search/issues")
+            && request_line.contains("existing")
+        {
+            (
+                "HTTP/1.1 200 OK",
+                serde_json::to_vec(&serde_json::json!({
+                    "total_count": 1,
+                    "items": [{
+                        "html_url": "https://github.com/EffortlessMetrics/ripr-swarm/issues/1052"
+                    }]
+                }))?,
+            )
+        } else if request_line.starts_with("GET /search/issues") {
+            (
+                "HTTP/1.1 200 OK",
+                serde_json::to_vec(&serde_json::json!({"total_count": 0, "items": []}))?,
+            )
+        } else {
+            (
+                "HTTP/1.1 201 Created",
+                serde_json::to_vec(&serde_json::json!({
+                    "html_url": "https://github.com/EffortlessMetrics/ripr-swarm/issues/9001"
+                }))?,
+            )
+        };
+        write!(
+            stream,
+            "{status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+        stream.write_all(&response_body)?;
+        Ok(request_line)
+    }
+
+    fn join_fake_issue_broker_api(
+        handle: thread::JoinHandle<Result<Vec<String>>>,
+    ) -> Result<Vec<String>> {
+        match handle.join() {
+            Ok(result) => result,
+            Err(_) => bail!("fake issue broker API thread panicked"),
+        }
     }
 
     #[test]
