@@ -1482,6 +1482,13 @@ struct GitHubReviewComment {
     line: u32,
     side: String,
     body: String,
+    /// GitHub suggestion block content (the text between the fenced
+    /// ` ```suggestion ` markers). Present only when unsafe-review's
+    /// repair-queue supplies a concrete applicable edit for this site.
+    /// Serialised as a JSON string when set; omitted entirely when absent
+    /// (advisory comment without a one-click edit).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggestion: Option<String>,
 }
 
 #[derive(Debug)]
@@ -3825,6 +3832,206 @@ fn read_unsafe_review_artifacts(sensor_dir: &Path) -> Option<UnsafeReviewArtifac
         })
         .unwrap_or_default();
     Some(UnsafeReviewArtifacts { gate, comment_plan })
+}
+
+/// One entry from a bucket in `repair-queue.json` (schema_version `"0.1"`).
+///
+/// Validated against real `unsafe-review 0.3.4` output. The repair queue
+/// classifies each card into one of several buckets (`repairable_by_guard`,
+/// `requires_witness_receipt`, `requires_human_review`, …) with per-entry
+/// fields for routing and missing-evidence description.
+///
+/// **Honest capability assessment**: the repair queue provides guidance — it
+/// names the missing evidence and classifies the repair class — but does NOT
+/// supply a concrete replacement text that could power a one-click GitHub
+/// suggestion block. Fields like `operation` (the unsafe expression as-is),
+/// `missing_evidence` (why it lacks a guard), and `do_not_do` (negative
+/// constraints) are present; a `replacement` / `new_text` / `suggestion_text`
+/// field is absent. Suggestion blocks therefore cannot be emitted from this
+/// source without fabricating edits. See the narrow follow-up issue:
+/// "repair-queue should emit applicable edits for suggestion blocks".
+#[derive(Clone, Debug, Deserialize)]
+struct RepairQueueEntry {
+    card_id: String,
+    /// Bucket reason explains why this entry landed in its bucket.
+    #[serde(default)]
+    bucket_reason: Option<String>,
+    /// The unsafe operation text (read-only context; not a replacement).
+    #[serde(default)]
+    operation: Option<String>,
+    /// Missing evidence items (prose guidance; not a diff suggestion).
+    #[serde(default)]
+    missing_evidence: Vec<String>,
+}
+
+/// Top-level shape of `repair-queue.json` (schema_version `"0.1"`).
+///
+/// Only the `buckets` map is consumed here; all other top-level fields are
+/// silently tolerated so forward-compatible additions do not break ingestion.
+#[derive(Debug, Deserialize)]
+struct RepairQueueFile {
+    /// All bucket names map to lists of `RepairQueueEntry`. Known keys:
+    /// `repairable_by_guard`, `repairable_by_safety_docs`, `repairable_by_test`,
+    /// `requires_witness_receipt`, `requires_human_review`, `do_not_auto_repair`.
+    #[serde(default)]
+    buckets: std::collections::BTreeMap<String, Vec<RepairQueueEntry>>,
+}
+
+/// Read `repair-queue.json` from the unsafe-review output directory.
+///
+/// Returns a map from `card_id` to the first `RepairQueueEntry` for that id
+/// (entries may appear in multiple buckets; we keep the first bucket hit per
+/// card so callers get exactly one context record per card). Returns an empty
+/// map when the file is absent, unreadable, or unparseable — always degrades
+/// gracefully.
+fn read_repair_queue(
+    sensor_dir: &Path,
+    artifacts: &UnsafeReviewGate,
+) -> std::collections::BTreeMap<String, RepairQueueEntry> {
+    let out_dir = sensor_dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
+    let rq_path = artifacts
+        .artifacts
+        .get("repair_queue")
+        .map(|rel| out_dir.join(rel))
+        .unwrap_or_else(|| out_dir.join("repair-queue.json"));
+    let text = match fs::read_to_string(&rq_path) {
+        Ok(t) => t,
+        Err(_) => return std::collections::BTreeMap::new(),
+    };
+    let rq: RepairQueueFile = match serde_json::from_str(&text) {
+        Ok(r) => r,
+        Err(_) => return std::collections::BTreeMap::new(),
+    };
+    let mut by_card: std::collections::BTreeMap<String, RepairQueueEntry> =
+        std::collections::BTreeMap::new();
+    for entries in rq.buckets.into_values() {
+        for entry in entries {
+            by_card.entry(entry.card_id.clone()).or_insert(entry);
+        }
+    }
+    by_card
+}
+
+/// Build `GitHubReviewComment` entries from unsafe-review `comment-plan.json`
+/// candidates for inline posting on the PR diff.
+///
+/// # Selection rules
+/// - Only candidates with `changed_line: true` are eligible; anchoring to an
+///   unchanged line would be rejected by the GitHub review API.
+/// - Capped at `min(comment_plan.len(), max_inline_budget)` (the comment plan
+///   is already bounded to ≤3 by unsafe-review itself).
+/// - Deduplication against `existing_paths_lines` prevents double-posting if a
+///   model lane already proposed a comment on the same `(path, line)` pair.
+///
+/// # Suggestion blocks
+/// Each comment body names the `coverage_gap`, the next reviewer action
+/// (`confirmation_state`), and the per-entry `trust_boundary`. A GitHub
+/// `suggestion` block is emitted ONLY when unsafe-review's repair-queue
+/// provides a concrete applicable code edit for the site. As of
+/// `repair-queue/0.1`, the queue provides bucket classification and guidance
+/// (missing evidence, do-not-do constraints) but NO replacement text — so
+/// suggestion blocks are NOT emitted from this source. The field remains ready
+/// on `GitHubReviewComment` for a future repair-queue version that adds
+/// `replacement` / `applicable_edit` output. This is an honest capability gap
+/// reported upstream as a narrow follow-up issue.
+fn build_unsafe_review_inline_comments(
+    sensor_dir: &Path,
+    existing_paths_lines: &std::collections::BTreeSet<(String, u32)>,
+    max_inline_budget: usize,
+) -> Vec<GitHubReviewComment> {
+    let artifacts = match read_unsafe_review_artifacts(sensor_dir) {
+        Some(a) => a,
+        None => return Vec::new(),
+    };
+    let repair_queue = read_repair_queue(sensor_dir, &artifacts.gate);
+    let trust = artifacts
+        .gate
+        .trust_boundary
+        .as_deref()
+        .unwrap_or("advisory");
+    let mut comments: Vec<GitHubReviewComment> = Vec::new();
+    for entry in &artifacts.comment_plan {
+        if comments.len() >= max_inline_budget {
+            break;
+        }
+        // Only anchor to changed lines — GitHub review API requires it.
+        if entry.changed_line != Some(true) {
+            continue;
+        }
+        let (Some(path), Some(line)) = (entry.path.as_deref(), entry.line) else {
+            continue;
+        };
+        // Dedup: skip if a model lane already claimed this (path, line).
+        let norm_path = normalize_repo_path(path);
+        if existing_paths_lines.contains(&(norm_path.clone(), line)) {
+            continue;
+        }
+        let gap = entry
+            .coverage_gap
+            .as_deref()
+            .unwrap_or("unsafe coverage gap");
+        let action = entry
+            .confirmation_state
+            .as_deref()
+            .unwrap_or("reviewer confirmation required");
+        let card_label = entry
+            .card_id
+            .as_deref()
+            .map(|id| format!(" (`{id}`)"))
+            .unwrap_or_default();
+        // Optional: if the repair queue has an entry for this card, surface the
+        // bucket reason, operation, and missing evidence as additional context
+        // (guidance only, not a suggestion block).
+        let rq_context = entry
+            .card_id
+            .as_deref()
+            .and_then(|id| repair_queue.get(id))
+            .map(|rq_entry| {
+                let bucket = rq_entry
+                    .bucket_reason
+                    .as_deref()
+                    .unwrap_or("see repair-queue.json");
+                let operation_line = rq_entry
+                    .operation
+                    .as_deref()
+                    .map(|op| format!("\n\n**Operation**: `{op}`"))
+                    .unwrap_or_default();
+                let evidence_lines = rq_entry
+                    .missing_evidence
+                    .iter()
+                    .map(|e| format!("  - {e}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if evidence_lines.is_empty() {
+                    format!("\n\n**Repair class**: {bucket}{operation_line}")
+                } else {
+                    format!(
+                        "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
+                    )
+                }
+            })
+            .unwrap_or_default();
+        let body = format!(
+            "[unsafe-review]{card_label} **{gap}**\n\n\
+             **Next action**: {action}\n\n\
+             **Trust boundary** (advisory): {trust}{rq_context}\n\n\
+             _Suggestion sourced from unsafe-review advisory output. \
+             Apply only after reviewer verification. \
+             Inline comments are advisory — they do not change the merge decision._"
+        );
+        // No suggestion block: repair-queue/0.1 provides guidance (missing
+        // evidence, bucket classification, do-not-do constraints) but no
+        // concrete replacement text. suggestion = None until a future
+        // repair-queue version adds an applicable edit field.
+        comments.push(GitHubReviewComment {
+            path: norm_path,
+            line,
+            side: "RIGHT".to_owned(),
+            body,
+            suggestion: None,
+        });
+    }
+    comments
 }
 
 enum ToolGateDecisionState {
@@ -6552,8 +6759,29 @@ fn write_review_artifacts(
     let review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
     let summary_only_policy_posted = final_surface.summary_only_policy_posted;
-    let github_review = final_surface.github_review;
+    let mut github_review = final_surface.github_review;
     let artifact_body = final_surface.artifact_body;
+    // Inject unsafe-review comment-plan entries as inline review comments (#360).
+    // These are appended after the final model-lane surface so the grouped
+    // review body is unaffected. Only `changed_line: true` entries are eligible
+    // (GitHub API requirement). Dedup against already-present comments prevents
+    // double-posting on any path:line pair claimed by a model lane. Advisory
+    // only — they never change the deterministic merge gate.
+    if should_prepare_github_review {
+        let unsafe_review_sensor_dir = out.join("sensors").join("unsafe-review");
+        let existing: std::collections::BTreeSet<(String, u32)> = github_review
+            .comments
+            .iter()
+            .map(|c| (normalize_repo_path(&c.path), c.line))
+            .collect();
+        let extra = build_unsafe_review_inline_comments(
+            &unsafe_review_sensor_dir,
+            &existing,
+            args.max_inline_comments
+                .saturating_sub(github_review.comments.len()),
+        );
+        github_review.comments.extend(extra);
+    }
     let terminal_state = final_surface.terminal_state;
     review.terminal_state = terminal_state.clone();
     review.body = artifact_body.clone();
@@ -6890,6 +7118,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
                 line: comment.line,
                 side: comment.side.clone(),
                 body: comment.body.clone(),
+                suggestion: None,
             })
             .collect(),
     };
@@ -29984,6 +30213,7 @@ index 1111111..2222222 100644
                 line: 2,
                 side: "RIGHT".to_owned(),
                 body: "[tests] This test reaches the helper but does not assert the boundary.".to_owned(),
+                suggestion: None,
             }],
         };
         validate_github_review_payload(&ok)?;
@@ -30300,6 +30530,7 @@ index 1111111..2222222 100644
                 line: 2,
                 side: "RIGHT".to_owned(),
                 body: "[tests] No actionable findings after checking this path.".to_owned(),
+                suggestion: None,
             }],
         };
 
@@ -30370,6 +30601,7 @@ index 1111111..2222222 100644
                 line: 2,
                 side: "RIGHT".to_owned(),
                 body: "[tests] This test reaches the helper but not the boundary.".to_owned(),
+                suggestion: None,
             }],
         };
         validate_github_review_payload_for_post(&args, &ok)?;
@@ -39650,6 +39882,421 @@ jobs:
             block.contains("schema_version not recognised"),
             "degradation note must appear: {block}"
         );
+        Ok(())
+    }
+
+    // ── #360 inline comment tests ─────────────────────────────────────────────
+
+    /// Helper: write the canonical v1 gate manifest + a comment-plan with one
+    /// `changed_line: true` entry pointing at `src/lib.rs:8`.
+    fn write_inline_comment_fixtures(
+        out_dir: &Path,
+        comment_plan_json: &str,
+        repair_queue_json: Option<&str>,
+    ) -> Result<()> {
+        fs::create_dir_all(out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "dialect": "unsafe-review",
+                "status": "advisory",
+                "summary": {"new_gaps": 1, "worsened_gaps": 0, "resolved_gaps": 0, "inherited_gaps": 0},
+                "artifacts": {
+                    "comment_plan": "comment-plan.json",
+                    "repair_queue": "repair-queue.json"
+                },
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict",
+                "tool": "unsafe-review",
+                "tool_version": "0.3.4"
+            }"#,
+        )?;
+        fs::write(out_dir.join("comment-plan.json"), comment_plan_json)?;
+        if let Some(rq) = repair_queue_json {
+            fs::write(out_dir.join("repair-queue.json"), rq)?;
+        }
+        Ok(())
+    }
+
+    /// `changed_line: true` entry → one inline comment is produced at the
+    /// correct `path:line`, body contains `coverage_gap`, `confirmation_state`,
+    /// and the advisory `trust_boundary`. No suggestion block is set.
+    #[test]
+    fn build_unsafe_review_inline_comments_produces_comment_for_changed_line() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-001",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "raw_pointer_read without alignment guard",
+                "selection_reason": "changed line in unsafe block",
+                "selection_reason_code": "changed-line-unsafe",
+                "confirmation_state": "unconfirmed",
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+            }]"#,
+            None,
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        assert_eq!(comments.len(), 1, "expected exactly one inline comment");
+        let c = &comments[0];
+        assert_eq!(c.path, "src/lib.rs");
+        assert_eq!(c.line, 8);
+        assert_eq!(c.side, "RIGHT");
+        assert!(
+            c.body.contains("raw_pointer_read without alignment guard"),
+            "body must contain coverage_gap: {}",
+            c.body
+        );
+        assert!(
+            c.body.contains("unconfirmed"),
+            "body must name the confirmation_state: {}",
+            c.body
+        );
+        assert!(
+            c.body.contains("advisory"),
+            "body must surface trust_boundary: {}",
+            c.body
+        );
+        // No suggestion block: repair-queue/0.1 provides no replacement text.
+        assert!(
+            c.suggestion.is_none(),
+            "suggestion must be None when repair-queue has no edit"
+        );
+        Ok(())
+    }
+
+    /// `changed_line: false` → the entry is skipped (GitHub API requires
+    /// inline comments to anchor to changed diff lines only).
+    #[test]
+    fn build_unsafe_review_inline_comments_skips_unchanged_line() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-002",
+                "path": "src/lib.rs",
+                "line": 5,
+                "changed_line": false,
+                "coverage_gap": "guard_coverage: weak",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        assert!(
+            comments.is_empty(),
+            "unchanged-line entry must be skipped, got {comments:?}"
+        );
+        Ok(())
+    }
+
+    /// Dedup: a path:line already claimed by a model lane is skipped so the
+    /// same location is not posted twice.
+    #[test]
+    fn build_unsafe_review_inline_comments_deduplicates_against_existing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-003",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "transmute size mismatch",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        // Simulate a model lane already posting to src/lib.rs:8.
+        let mut existing = std::collections::BTreeSet::new();
+        existing.insert(("src/lib.rs".to_owned(), 8u32));
+        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        assert!(
+            comments.is_empty(),
+            "duplicate path:line must be deduped, got {comments:?}"
+        );
+        Ok(())
+    }
+
+    /// Budget cap: if `max_inline_budget` is 0 no comments are produced, even
+    /// when there are eligible candidates.
+    #[test]
+    fn build_unsafe_review_inline_comments_respects_budget_cap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-004",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "pointer cast without validity check",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 0);
+        assert!(
+            comments.is_empty(),
+            "budget=0 must produce no comments, got {comments:?}"
+        );
+        Ok(())
+    }
+
+    /// Repair-queue with a `repairable_by_guard` entry: the bucket context
+    /// (bucket_reason, operation, missing_evidence) is surfaced in the body.
+    /// Crucially, `suggestion` is still `None` because the repair queue does
+    /// NOT provide a concrete replacement text — this is the honest capability
+    /// finding for the #360 follow-up issue.
+    #[test]
+    fn build_unsafe_review_inline_comments_surfaces_repair_queue_context() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        // Repair-queue shape from real unsafe-review 0.3.4 output: guidance and
+        // classification are present, but no concrete replacement text exists.
+        let repair_queue = r#"{
+            "schema_version": "0.1",
+            "tool": "unsafe-review",
+            "mode": "aggregate_repair_queue",
+            "source": "review_card",
+            "policy": "advisory",
+            "trust_boundary": "static unsafe contract review only",
+            "buckets": {
+                "repairable_by_guard": [{
+                    "card_id": "card-001",
+                    "class": "guard_missing",
+                    "priority": "high",
+                    "confidence": "medium",
+                    "operation": "unsafe { ptr.cast::<Header>().read() }",
+                    "missing_evidence": ["Missing visible local guard", "No witness receipt"],
+                    "bucket_reason": "guard_evidence_missing"
+                }],
+                "repairable_by_safety_docs": [],
+                "repairable_by_test": [],
+                "requires_witness_receipt": [],
+                "requires_human_review": [],
+                "do_not_auto_repair": []
+            }
+        }"#;
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-001",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "raw_pointer_read without alignment guard",
+                "confirmation_state": "unconfirmed",
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+            }]"#,
+            Some(repair_queue),
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        assert_eq!(comments.len(), 1);
+        let c = &comments[0];
+        // Repair-queue context surfaces bucket reason, operation, and evidence.
+        assert!(
+            c.body.contains("guard_evidence_missing"),
+            "body must contain bucket_reason: {}",
+            c.body
+        );
+        assert!(
+            c.body.contains("ptr.cast"),
+            "body must contain operation from repair-queue: {}",
+            c.body
+        );
+        assert!(
+            c.body.contains("Missing visible local guard"),
+            "body must contain missing_evidence: {}",
+            c.body
+        );
+        // Honest finding: repair-queue/0.1 has no replacement text → no
+        // suggestion block can be emitted. This is the evidence for the
+        // follow-up issue "repair-queue should emit applicable edits for
+        // suggestion blocks".
+        assert!(
+            c.suggestion.is_none(),
+            "suggestion must be None — repair-queue/0.1 provides no replacement text, \
+             only guidance; fabricating edits is explicitly prohibited"
+        );
+        Ok(())
+    }
+
+    /// Absent repair-queue file: `build_unsafe_review_inline_comments` still
+    /// produces comments (degrades gracefully — repair-queue context is
+    /// optional).
+    #[test]
+    fn build_unsafe_review_inline_comments_works_without_repair_queue() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        // No repair-queue.json written.
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-005",
+                "path": "src/ffi.rs",
+                "line": 12,
+                "changed_line": true,
+                "coverage_gap": "slice::from_raw_parts without length check",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        assert_eq!(
+            comments.len(),
+            1,
+            "comment must be produced without repair-queue"
+        );
+        assert_eq!(comments[0].path, "src/ffi.rs");
+        assert_eq!(comments[0].line, 12);
+        assert!(comments[0].suggestion.is_none());
+        Ok(())
+    }
+
+    /// `suggestion` field is omitted from JSON serialisation when `None`, and
+    /// present as a string when set. Validates the serde round-trip contract
+    /// so the GitHub API payload stays clean.
+    #[test]
+    fn github_review_comment_suggestion_serialises_correctly() -> Result<()> {
+        let without = super::GitHubReviewComment {
+            path: "src/lib.rs".to_owned(),
+            line: 8,
+            side: "RIGHT".to_owned(),
+            body: "[unsafe-review] gap".to_owned(),
+            suggestion: None,
+        };
+        let json = serde_json::to_string(&without)?;
+        assert!(
+            !json.contains("suggestion"),
+            "suggestion must be omitted when None: {json}"
+        );
+
+        let with_suggestion = super::GitHubReviewComment {
+            suggestion: Some(
+                "// SAFETY: alignment verified above\nunsafe { ptr.cast::<Header>().read() }"
+                    .to_owned(),
+            ),
+            ..without
+        };
+        let json_with = serde_json::to_string(&with_suggestion)?;
+        assert!(
+            json_with.contains("suggestion"),
+            "suggestion must appear when Some: {json_with}"
+        );
+        assert!(
+            json_with.contains("alignment verified above"),
+            "suggestion content must be serialised: {json_with}"
+        );
+        Ok(())
+    }
+
+    /// `read_repair_queue` with a real-shape v0.1 file: entries are indexed by
+    /// card_id, the first bucket hit wins for a card appearing in multiple
+    /// buckets.
+    #[test]
+    fn read_repair_queue_indexes_entries_by_card_id() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        // Minimal v1 gate with a repair_queue pointer.
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "status": "advisory",
+                "artifacts": {"repair_queue": "repair-queue.json"}
+            }"#,
+        )?;
+        fs::write(
+            out_dir.join("repair-queue.json"),
+            r#"{
+                "schema_version": "0.1",
+                "buckets": {
+                    "repairable_by_guard": [{
+                        "card_id": "cid-1",
+                        "operation": "unsafe { *ptr }",
+                        "missing_evidence": ["needs alignment proof"],
+                        "bucket_reason": "guard_evidence_missing"
+                    }],
+                    "requires_witness_receipt": [{
+                        "card_id": "cid-1",
+                        "operation": "unsafe { *ptr }",
+                        "missing_evidence": ["no witness receipt"],
+                        "bucket_reason": "witness_receipt_missing"
+                    }, {
+                        "card_id": "cid-2",
+                        "operation": "unsafe { slice::from_raw_parts(p, n) }",
+                        "missing_evidence": ["length not verified"],
+                        "bucket_reason": "witness_receipt_missing"
+                    }],
+                    "requires_human_review": [],
+                    "do_not_auto_repair": []
+                }
+            }"#,
+        )?;
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts)"))?;
+        let map = super::read_repair_queue(&sensor_dir, &artifacts.gate);
+        assert_eq!(map.len(), 2, "two distinct card_ids expected");
+        // cid-1 should keep the first bucket hit (repairable_by_guard).
+        let e1 = map
+            .get("cid-1")
+            .ok_or_else(|| anyhow::anyhow!("cid-1 missing"))?;
+        assert_eq!(
+            e1.bucket_reason.as_deref(),
+            Some("guard_evidence_missing"),
+            "first bucket hit must win for cid-1"
+        );
+        assert_eq!(e1.missing_evidence.len(), 1);
+        // cid-2 only appears in requires_witness_receipt.
+        let e2 = map
+            .get("cid-2")
+            .ok_or_else(|| anyhow::anyhow!("cid-2 missing"))?;
+        assert_eq!(e2.bucket_reason.as_deref(), Some("witness_receipt_missing"));
+        Ok(())
+    }
+
+    /// Absent repair-queue file: `read_repair_queue` returns an empty map,
+    /// never panics or errors.
+    #[test]
+    fn read_repair_queue_absent_file_returns_empty_map() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        // Gate file exists but no repair-queue.json.
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "status": "advisory",
+                "artifacts": {"repair_queue": "repair-queue.json"}
+            }"#,
+        )?;
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts)"))?;
+        let map = super::read_repair_queue(&sensor_dir, &artifacts.gate);
+        assert!(map.is_empty(), "absent repair-queue must return empty map");
         Ok(())
     }
 }
