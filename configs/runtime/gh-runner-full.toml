@@ -48,3 +48,10 @@ proof_lanes = [
   "targeted-mutation-when-leased",
   "sanitizer-when-leased",
 ]
+
+# Per-tool sensor leases this box can afford; an explicit repo-config
+# [tools.<id>] timeout_sec still wins (resolve_sensor_timeout_sec).
+# ripr needed more than the one-size 240s on a hosted runner
+# (run 27102118267 timed out the required ripr sensor at 240s).
+[tool_timeouts]
+ripr = 720

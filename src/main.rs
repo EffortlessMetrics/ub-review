@@ -3753,7 +3753,7 @@ fn plan_tool(
                 run: true,
                 reason,
                 required,
-                timeout_sec: tool.timeout_sec.min(profile.budgets.default_timeout_sec),
+                timeout_sec: resolve_sensor_timeout_sec(tool, profile),
                 artifact_budget_mb: tool.artifact_budget_mb,
                 class: tool.class,
                 weight: tool.weight,
@@ -3763,6 +3763,26 @@ fn plan_tool(
         }
         None => skipped(tool, "trigger did not match this diff", false),
     }
+}
+
+/// Resolve a sensor's effective lease in seconds. Precedence: an explicit
+/// repo-config `[tools.<id>] timeout_sec` (`provided.timeout_sec`) wins, then
+/// the box profile's `[tool_timeouts]` override, then the built-in tool
+/// default — all capped by the profile's `budgets.default_timeout_sec`, the
+/// same cap the old one-size resolution applied. The box profile knows what
+/// this box can afford (run 27102118267: ripr needed more than the one-size
+/// 240s on a gh-runner); the repo config stays the per-repo override.
+fn resolve_sensor_timeout_sec(tool: &ToolPolicy, profile: &Profile) -> u64 {
+    let base = if tool.provided.timeout_sec {
+        tool.timeout_sec
+    } else {
+        profile
+            .tool_timeouts
+            .get(&tool.id)
+            .copied()
+            .unwrap_or(tool.timeout_sec)
+    };
+    base.min(profile.budgets.default_timeout_sec)
 }
 
 fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
@@ -22490,6 +22510,105 @@ max_new_unsuppressed = 0
         let mut known = super::KNOWN_TOOL_POLICY_KEYS.to_vec();
         known.sort_unstable();
         assert_eq!(serialized_keys, known);
+        Ok(())
+    }
+
+    #[test]
+    fn sensor_timeout_resolves_per_profile_with_repo_override_winning() -> Result<()> {
+        // Run 27102118267: ripr's one-size 240s lease timed out on a hosted
+        // runner. The SAME tool config must resolve to different effective
+        // leases under different box profiles — executed through plan_tool,
+        // not asserted on the resolver alone.
+        let tool = super::ToolPolicy {
+            id: "ripr".to_owned(),
+            command: "ripr".to_owned(),
+            default: super::Trigger::Always,
+            timeout_sec: 240,
+            ..super::ToolPolicy::default()
+        };
+        let diff = test_diff();
+        let temp = tempfile::tempdir()?;
+        let quick = Profile::default();
+        let mut hosted = Profile::default();
+        hosted.tool_timeouts.insert("ripr".to_owned(), 720);
+
+        let quick_plan = super::plan_tool(&tool, &quick, &diff, temp.path(), true, false);
+        let hosted_plan = super::plan_tool(&tool, &hosted, &diff, temp.path(), true, false);
+        assert!(quick_plan.run, "{}", quick_plan.reason);
+        assert!(hosted_plan.run, "{}", hosted_plan.reason);
+        assert_eq!(quick_plan.timeout_sec, 240, "no override: builtin lease");
+        assert_eq!(
+            hosted_plan.timeout_sec, 720,
+            "profile [tool_timeouts] applies"
+        );
+
+        // The repo's explicit [tools.ripr] timeout_sec stays the per-repo
+        // winner over the profile table (the #383 posture: repo config is
+        // the override surface, the profile is the box default).
+        let mut repo_tool = tool.clone();
+        repo_tool.timeout_sec = 600;
+        repo_tool.provided.timeout_sec = true;
+        let repo_plan = super::plan_tool(&repo_tool, &hosted, &diff, temp.path(), true, false);
+        assert_eq!(repo_plan.timeout_sec, 600, "explicit repo config wins");
+
+        // The profile-wide default_timeout_sec cap is unchanged and applies
+        // to profile overrides exactly as it did to one-size leases.
+        let mut capped_profile = hosted.clone();
+        capped_profile.budgets.default_timeout_sec = 300;
+        let capped_plan = super::plan_tool(&tool, &capped_profile, &diff, temp.path(), true, false);
+        assert_eq!(capped_plan.timeout_sec, 300, "budget cap still bounds");
+        Ok(())
+    }
+
+    #[test]
+    fn gh_runner_profiles_carry_ripr_lease_override_quick_boxes_do_not() -> Result<()> {
+        // The shipped gh-runner family TOML carries [tool_timeouts] ripr=720
+        // (run 27102118267 capacity fix); the cx quick boxes stay one-size.
+        let profiles = super::builtin_profiles();
+        for name in ["gh-runner", "gh-runner-standard", "gh-runner-full"] {
+            let profile = profiles
+                .iter()
+                .find(|profile| profile.name == name)
+                .ok_or_else(|| anyhow::anyhow!("missing builtin profile {name}"))?;
+            assert_eq!(
+                profile.tool_timeouts.get("ripr"),
+                Some(&720),
+                "{name} must carry the ripr lease override"
+            );
+        }
+        for name in ["cx23", "cx33", "cx43"] {
+            let profile = profiles
+                .iter()
+                .find(|profile| profile.name == name)
+                .ok_or_else(|| anyhow::anyhow!("missing builtin profile {name}"))?;
+            assert!(
+                profile.tool_timeouts.is_empty(),
+                "{name} keeps one-size leases"
+            );
+        }
+
+        // This repo's own config pins ripr's lease explicitly, so the repo
+        // value (not the profile's 720) is what plan-time resolution yields:
+        // the per-repo override surface and the profile table do not fight.
+        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
+        config.merge_defaults();
+        let profile = config.selected_profile()?;
+        assert_eq!(profile.tool_timeouts.get("ripr"), Some(&720));
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("ripr tool missing from repo config"))?;
+        assert!(
+            ripr.provided.timeout_sec,
+            "this repo pins ripr's lease explicitly in .ub-review.toml"
+        );
+        let resolved = super::resolve_sensor_timeout_sec(ripr, profile);
+        assert_eq!(
+            resolved,
+            ripr.timeout_sec.min(profile.budgets.default_timeout_sec),
+            "repo-pinned lease wins over the profile override"
+        );
+        assert_ne!(resolved, 720, "profile table must not shadow repo config");
         Ok(())
     }
 

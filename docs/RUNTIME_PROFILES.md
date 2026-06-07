@@ -36,6 +36,17 @@ Each pass targets 30 minutes of local proof work and has a hard timeout of 60 mi
 | `cx33` | Balanced local runner | Full fast sensors and focused proof with moderate leases. |
 | `cx43` | Stronger local runner | Wider sensor fanout, more local tests, and occasional leased build/heavy-witness work. |
 
+## Per-tool sensor leases (`[tool_timeouts]`)
+
+A runtime profile may carry a `[tool_timeouts]` table mapping tool ids to
+lease seconds, because the box — not the tool — knows what it can afford
+(run 27102118267: ripr's one-size 240s lease timed out on a hosted runner).
+The gh-runner family ships `ripr = 720`; the cx quick boxes keep the one-size
+built-in leases. Resolution order (`resolve_sensor_timeout_sec`): an explicit
+repo-config `[tools.<id>] timeout_sec` always wins, then the profile's
+`[tool_timeouts]` entry, then the built-in tool default — all still capped by
+the profile's `budgets.default_timeout_sec`.
+
 ## Resource rule
 
 A lane requests proof; it does not own the runner. The proof-planning lane reads the diff, sensor output, early lane observations, repository configuration, and available receipts, then recommends the smallest proof set that can change the review decision. The orchestrator ranks and routes those requests, the proof broker runs the commands while model lanes continue over the network, and the resource broker enforces the local lease. Work is eligible only when it is relevant to the PR, centrally scheduled, deduped, budgeted, leased, receipted, and likely to change the review decision.

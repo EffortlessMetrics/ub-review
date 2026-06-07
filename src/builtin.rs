@@ -330,7 +330,12 @@ pub(crate) fn tool(
         requires_lease,
         enabled,
         gate: None,
-        provided: ToolPolicyProvided::all(),
+        // `provided` means "the repo config explicitly wrote this field".
+        // Built-in tools were written by nobody's repo config, so every flag
+        // is false: profile-level `[tool_timeouts]` overrides apply to them,
+        // while a repo's explicit `[tools.<id>] timeout_sec` (provided =
+        // true after the merge) stays the per-repo winner.
+        provided: ToolPolicyProvided::default(),
     }
 }
 

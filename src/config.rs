@@ -260,6 +260,15 @@ pub(crate) struct Profile {
     pub(crate) guards: Guards,
     pub(crate) budgets: Budgets,
     pub(crate) trusted_repo: TrustedRepo,
+    /// Per-tool sensor lease overrides keyed by tool id, in seconds. The box
+    /// profile knows how much wall clock a tool deserves on this box (a
+    /// gh-runner can afford ripr 720s; a quick box cannot), while the repo
+    /// config stays the per-repo override: an explicit `[tools.<id>]
+    /// timeout_sec` always wins over this table (see
+    /// `resolve_sensor_timeout_sec`). Empty for profiles that keep the
+    /// one-size built-in tool leases.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub(crate) tool_timeouts: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -269,6 +278,9 @@ pub(crate) struct RuntimeProfileFile {
     pub(crate) guards: RuntimeGuardsFile,
     pub(crate) budgets: RuntimeBudgetsFile,
     pub(crate) trusted_repo: TrustedRepo,
+    /// `[tool_timeouts]` table: per-tool lease overrides for this box.
+    #[serde(default)]
+    pub(crate) tool_timeouts: BTreeMap<String, u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -427,24 +439,6 @@ pub(crate) struct ToolGatePolicy {
     pub(crate) scope: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) max_new_unsuppressed: Option<u64>,
-}
-
-impl ToolPolicyProvided {
-    pub(crate) fn all() -> Self {
-        Self {
-            id: true,
-            command: true,
-            class: true,
-            weight: true,
-            default: true,
-            required: true,
-            timeout_sec: true,
-            artifact_budget_mb: true,
-            requires_lease: true,
-            enabled: true,
-            gate: true,
-        }
-    }
 }
 
 impl<'de> Deserialize<'de> for ToolPolicy {
@@ -619,6 +613,7 @@ impl Default for Profile {
             guards: Guards::default(),
             budgets: Budgets::default(),
             trusted_repo: TrustedRepo::default(),
+            tool_timeouts: BTreeMap::new(),
         }
     }
 }
@@ -1322,6 +1317,7 @@ pub(crate) fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
             sanitizer: profile.budgets.sanitizer,
         },
         trusted_repo: profile.trusted_repo,
+        tool_timeouts: profile.tool_timeouts,
     })
 }
 
