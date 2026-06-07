@@ -2758,61 +2758,105 @@ fn read_repair_queue(
     by_card
 }
 
-/// Build `GitHubReviewComment` entries from unsafe-review `comment-plan.json`
-/// candidates for inline posting on the PR diff.
+/// Synthetic lane identity for unsafe-review comment-plan candidates inside
+/// the compiler intake. Lane identity and model identity are separate by
+/// architecture invariant: the lane id ("unsafe-review") prefixes the inline
+/// body via `ensure_lane_prefix`, and the model fields name the deterministic
+/// sensor so receipts never read as a model lane.
+fn unsafe_review_sensor_lane() -> LanePlan {
+    LanePlan {
+        id: "unsafe-review".to_owned(),
+        role: "sensor-comment-plan".to_owned(),
+        model: "unsafe-review".to_owned(),
+        model_display: "unsafe-review (deterministic sensor)".to_owned(),
+        receives: Vec::new(),
+        focus: "unsafe-review comment-plan inline candidates".to_owned(),
+    }
+}
+
+/// Convert unsafe-review `comment-plan.json` entries into inline-comment
+/// CANDIDATES for the review compiler (#360). This function never posts and
+/// never constructs `GitHubReviewComment`s: candidates enter the exact same
+/// intake as model-lane output (`apply_model_output` → shared cap →
+/// `validate_inline_candidate` against the RIGHT-side diff line map →
+/// `dedupe_inline_comments`), so the compiler stays the only posting surface.
 ///
-/// # Selection rules
-/// - Only candidates with `changed_line: true` are eligible; anchoring to an
-///   unchanged line would be rejected by the GitHub review API.
-/// - Capped at `min(comment_plan.len(), max_inline_budget)` (the comment plan
-///   is already bounded to ≤3 by unsafe-review itself).
-/// - Deduplication against `existing_paths_lines` prevents double-posting if a
-///   model lane already proposed a comment on the same `(path, line)` pair.
+/// Returned alongside the candidates are reasoned skip findings for every
+/// entry that cannot become a candidate (broken plan, missing path/line,
+/// `changed_line != true`) — receipted dispositions, never silent drops.
 ///
-/// # Suggestion blocks
-/// Each comment body names the `coverage_gap`, the next reviewer action
-/// (`confirmation_state`), and the per-entry `trust_boundary`. A GitHub
-/// `suggestion` block is emitted ONLY when unsafe-review's repair-queue
-/// provides a concrete applicable code edit for the site. As of
-/// `repair-queue/0.1`, the queue provides bucket classification and guidance
-/// (missing evidence, do-not-do constraints) but NO replacement text — so
-/// suggestion blocks are NOT emitted from this source. The field remains ready
-/// on `GitHubReviewComment` for a future repair-queue version that adds
-/// `replacement` / `applicable_edit` output. This is an honest capability gap
-/// reported upstream as a narrow follow-up issue.
-fn build_unsafe_review_inline_comments(
+/// # Suggestion blocks (v1 scope)
+/// Each candidate body names the `coverage_gap`, the next reviewer action
+/// (`confirmation_state`), the advisory `trust_boundary`, and — when the
+/// repair-queue classifies the card — the repair bucket context. A GitHub
+/// `suggestion` block would be emitted only from a concrete applicable edit;
+/// `repair-queue/0.1` carries guidance but NO replacement text, so candidates
+/// are plain comments and the compiler emits `suggestion: None`. Honest
+/// capability gap tracked upstream; never fabricate edits.
+fn unsafe_review_comment_plan_candidates(
     sensor_dir: &Path,
-    existing_paths_lines: &std::collections::BTreeSet<(String, u32)>,
-    max_inline_budget: usize,
-) -> Vec<GitHubReviewComment> {
-    // An ingestion gap yields no inline candidates here; the gap itself is
-    // surfaced through missing_or_failed_sensor_evidence (#359), not silently
-    // absorbed at this advisory posting surface.
+) -> (Vec<ModelCandidateComment>, Vec<SummaryOnlyFinding>) {
+    let lane_id = "unsafe-review";
+    let mut candidates = Vec::new();
+    let mut skips = Vec::new();
+    // A gate ingestion gap yields no candidates here; the gap itself is
+    // already receipted through missing_or_failed_sensor_evidence (#359), so
+    // a second receipt would double-report the same gap.
     let artifacts = match read_unsafe_review_artifacts(sensor_dir) {
         Ok(artifacts) => artifacts,
-        Err(_) => return Vec::new(),
+        Err(_) => return (candidates, skips),
     };
+    if let Some(gap) = &artifacts.comment_plan_gap {
+        // Declared-but-broken plan: reasoned skip in the review surface, not
+        // a gate input — the comment plan is advisory and never gates.
+        skips.push(SummaryOnlyFinding {
+            lane: lane_id.to_owned(),
+            severity: "low".to_owned(),
+            confidence: "low".to_owned(),
+            reason: format!("{}; comment-plan inline candidates skipped", gap.reason()),
+            evidence: "unsafe-review comment-plan ingestion".to_owned(),
+        });
+        return (candidates, skips);
+    }
     let repair_queue = read_repair_queue(sensor_dir, &artifacts.gate);
-    let trust = artifacts
+    let gate_trust = artifacts
         .gate
         .trust_boundary
         .as_deref()
         .unwrap_or("advisory");
-    let mut comments: Vec<GitHubReviewComment> = Vec::new();
     for entry in &artifacts.comment_plan {
-        if comments.len() >= max_inline_budget {
-            break;
-        }
-        // Only anchor to changed lines — GitHub review API requires it.
-        if entry.changed_line != Some(true) {
-            continue;
-        }
+        let card_label = entry
+            .card_id
+            .as_deref()
+            .map(|id| format!(" (`{id}`)"))
+            .unwrap_or_default();
         let (Some(path), Some(line)) = (entry.path.as_deref(), entry.line) else {
+            skips.push(SummaryOnlyFinding {
+                lane: lane_id.to_owned(),
+                severity: "low".to_owned(),
+                confidence: "low".to_owned(),
+                reason: format!("comment-plan candidate{card_label} missing path or line; skipped"),
+                evidence: "unsafe-review comment-plan entry".to_owned(),
+            });
             continue;
         };
-        // Dedup: skip if a model lane already claimed this (path, line).
-        let norm_path = normalize_repo_path(path);
-        if existing_paths_lines.contains(&(norm_path.clone(), line)) {
+        if entry.changed_line != Some(true) {
+            // The sensor itself marks the entry as not anchored to a changed
+            // line; keep it out of the inline intake with a reasoned
+            // disposition instead of trusting the line map alone.
+            skips.push(SummaryOnlyFinding {
+                lane: lane_id.to_owned(),
+                severity: "low".to_owned(),
+                confidence: "low".to_owned(),
+                reason: format!(
+                    "comment-plan candidate{card_label} at {path}:{line} not marked \
+                     changed_line: true; kept summary-only"
+                ),
+                evidence: entry
+                    .coverage_gap
+                    .clone()
+                    .unwrap_or_else(|| "unsafe-review comment-plan entry".to_owned()),
+            });
             continue;
         }
         let gap = entry
@@ -2823,14 +2867,10 @@ fn build_unsafe_review_inline_comments(
             .confirmation_state
             .as_deref()
             .unwrap_or("reviewer confirmation required");
-        let card_label = entry
-            .card_id
-            .as_deref()
-            .map(|id| format!(" (`{id}`)"))
-            .unwrap_or_default();
-        // Optional: if the repair queue has an entry for this card, surface the
-        // bucket reason, operation, and missing evidence as additional context
-        // (guidance only, not a suggestion block).
+        let trust = entry.trust_boundary.as_deref().unwrap_or(gate_trust);
+        // Optional repair-queue context for this card: bucket reason,
+        // operation, and missing evidence (guidance only, not a suggestion
+        // block — repair-queue/0.1 has no replacement text).
         let rq_context = entry
             .card_id
             .as_deref()
@@ -2860,27 +2900,75 @@ fn build_unsafe_review_inline_comments(
                 }
             })
             .unwrap_or_default();
-        let body = format!(
-            "[unsafe-review]{card_label} **{gap}**\n\n\
-             **Next action**: {action}\n\n\
-             **Trust boundary** (advisory): {trust}{rq_context}\n\n\
-             _Suggestion sourced from unsafe-review advisory output. \
-             Apply only after reviewer verification. \
-             Inline comments are advisory — they do not change the merge decision._"
+        // No lane prefix here: `validate_inline_candidate` applies
+        // `ensure_lane_prefix("unsafe-review", ...)` exactly as it does for
+        // model lanes. Truncated to clear the shared 1200-char concise guard
+        // with the prefix applied.
+        let body = truncate_chars(
+            &format!(
+                "**{gap}**{card_label}\n\n\
+                 **Next action**: {action}\n\n\
+                 **Trust boundary** (advisory): {trust}{rq_context}\n\n\
+                 _Sourced from unsafe-review advisory output. \
+                 Apply only after reviewer verification. \
+                 Inline comments are advisory — they do not change the merge decision._"
+            ),
+            1_100,
         );
-        // No suggestion block: repair-queue/0.1 provides guidance (missing
-        // evidence, bucket classification, do-not-do constraints) but no
-        // concrete replacement text. suggestion = None until a future
-        // repair-queue version adds an applicable edit field.
-        comments.push(GitHubReviewComment {
-            path: norm_path,
+        let selection = entry
+            .selection_reason
+            .as_deref()
+            .unwrap_or("deterministic comment-plan candidate");
+        candidates.push(ModelCandidateComment {
+            // severity/confidence are compiler routing metadata, not a UB
+            // claim: medium/medium-high passes the shared inline guard while
+            // ranking below any high/blocker model finding, so on a duplicate
+            // path:line the model lane's comment survives dedupe and the
+            // sensor candidate merges into it.
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: path.to_owned(),
             line,
-            side: "RIGHT".to_owned(),
             body,
-            suggestion: None,
+            evidence: format!(
+                "unsafe-review comment-plan{card_label}: {selection}; \
+                 confirmation_state: {action}"
+            ),
         });
     }
-    comments
+    (candidates, skips)
+}
+
+/// Route unsafe-review comment-plan candidates through the SAME compiler
+/// intake as model-lane inline candidates (#360): `apply_model_output` applies
+/// the shared `max_inline_comments` cap and `validate_inline_candidate`
+/// (RIGHT-side diff line map guard) — one cap, one guard, one posting surface.
+/// Reasoned skips land in `summary_only_findings` through the same disposition
+/// machinery as rejected model candidates.
+fn apply_unsafe_review_comment_plan_candidates(
+    sensor_dir: &Path,
+    line_map: &BTreeSet<(String, u32)>,
+    max_inline: usize,
+    sinks: ModelOutputSinks<'_>,
+) {
+    let (candidates, skips) = unsafe_review_comment_plan_candidates(sensor_dir);
+    sinks.summary_only_findings.extend(skips);
+    if candidates.is_empty() {
+        return;
+    }
+    let lane = unsafe_review_sensor_lane();
+    let output = LaneModelOutput {
+        summary: None,
+        inline_comments: candidates,
+        candidate_findings: Vec::new(),
+        summary_only_findings: Vec::new(),
+        observations: Vec::new(),
+        failed_objections: Vec::new(),
+        proof_requests: Vec::new(),
+        issue_candidates: Vec::new(),
+        degraded: false,
+    };
+    apply_model_output(&lane, output, line_map, max_inline, sinks);
 }
 
 fn resolved_plan_artifact(
@@ -4110,7 +4198,14 @@ fn render_unsafe_review_lane_evidence(sensor_dir: &Path, status: &str) -> String
                 summary.resolved_gaps,
                 summary.inherited_gaps
             ));
-            if artifacts.comment_plan.is_empty() {
+            if let Some(gap) = &artifacts.comment_plan_gap {
+                // Declared-but-broken plan: the reason is surfaced so a lane
+                // never reads a broken plan as "no candidates" (#360).
+                block.push_str(&format!(
+                    "  - unsafe-review comment-plan: {}\n",
+                    gap.reason()
+                ));
+            } else if artifacts.comment_plan.is_empty() {
                 block.push_str(
                     "  - unsafe-review comment-plan: absent or empty \
                      (no comment candidates for this diff)\n",
@@ -4380,6 +4475,32 @@ fn write_review_artifacts(
             initial_proof_loop,
             "completed",
         )?;
+    }
+    // #360: unsafe-review comment-plan candidates enter the compiler intake
+    // HERE — before candidate records are built — so they share the inline
+    // cap, the RIGHT-side diff-line guard, dedupe, the candidate ledger, and
+    // the refuter loop with model-lane candidates. Nothing downstream of the
+    // compiler reads comment-plan.json: the grouped review stays the only
+    // posting surface. Runs in every model mode (the sensor is deterministic
+    // and does not depend on model lanes).
+    if plan
+        .sensors
+        .iter()
+        .any(|sensor| sensor.id == "unsafe-review")
+    {
+        apply_unsafe_review_comment_plan_candidates(
+            &out.join("sensors").join("unsafe-review"),
+            &line_map,
+            args.max_inline_comments,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut model_observations,
+                proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+        dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
     }
     attach_request_metadata_to_focused_receipts(
         diff,
@@ -4708,29 +4829,14 @@ fn write_review_artifacts(
     let review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
     let summary_only_policy_posted = final_surface.summary_only_policy_posted;
-    let mut github_review = final_surface.github_review;
+    let github_review = final_surface.github_review;
     let artifact_body = final_surface.artifact_body;
-    // Inject unsafe-review comment-plan entries as inline review comments (#360).
-    // These are appended after the final model-lane surface so the grouped
-    // review body is unaffected. Only `changed_line: true` entries are eligible
-    // (GitHub API requirement). Dedup against already-present comments prevents
-    // double-posting on any path:line pair claimed by a model lane. Advisory
-    // only — they never change the deterministic merge gate.
-    if should_prepare_github_review {
-        let unsafe_review_sensor_dir = out.join("sensors").join("unsafe-review");
-        let existing: std::collections::BTreeSet<(String, u32)> = github_review
-            .comments
-            .iter()
-            .map(|c| (normalize_repo_path(&c.path), c.line))
-            .collect();
-        let extra = build_unsafe_review_inline_comments(
-            &unsafe_review_sensor_dir,
-            &existing,
-            args.max_inline_comments
-                .saturating_sub(github_review.comments.len()),
-        );
-        github_review.comments.extend(extra);
-    }
+    // #360 posting boundary: comment-plan candidates entered the compiler
+    // intake before candidate records were built (see
+    // apply_unsafe_review_comment_plan_candidates). No post-compile injection
+    // happens here — appending to github_review.comments after
+    // compile_review_surface would be a second posting surface that bypasses
+    // the validated cap, dedupe, and candidate ledger.
     let terminal_state = final_surface.terminal_state;
     review.terminal_state = terminal_state.clone();
     review.body = artifact_body.clone();
@@ -10285,6 +10391,9 @@ fn render_shared_context(
                         summary.resolved_gaps,
                         summary.inherited_gaps
                     ));
+                    if let Some(gap) = &artifacts.comment_plan_gap {
+                        text.push_str(&format!("- Comment-plan: {}\n", gap.reason()));
+                    }
                     text.push_str(&format!(
                         "- Comment-plan candidates: {}\n",
                         artifacts.comment_plan.len()
@@ -29275,7 +29384,52 @@ jobs:
         Ok(())
     }
 
-    // ── #360 inline comment tests ─────────────────────────────────────────────
+    // ── #360 comment-plan → compiler intake tests ─────────────────────────────
+
+    /// Diff patch whose RIGHT side covers `src/lib.rs:1..=4` (line 2 is the
+    /// added line). Same shape as the model-lane inline-guard fixtures so
+    /// sensor candidates are proven against the identical line map.
+    const COMMENT_PLAN_TEST_PATCH: &str = "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let ptr = &len as *const usize;
+     len
+ }
+";
+
+    /// Helper: run comment-plan candidates through the SAME compiler intake
+    /// production uses (`apply_unsafe_review_comment_plan_candidates` →
+    /// `apply_model_output` → shared cap → `validate_inline_candidate`),
+    /// returning the mutated inline/summary sinks.
+    fn apply_comment_plan_fixture(
+        sensor_dir: &Path,
+        patch: &str,
+        max_inline: usize,
+        inline_comments: &mut Vec<ReviewInlineComment>,
+        summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+    ) {
+        let line_map = right_side_diff_lines(patch);
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        super::apply_unsafe_review_comment_plan_candidates(
+            sensor_dir,
+            &line_map,
+            max_inline,
+            super::ModelOutputSinks {
+                inline_comments,
+                summary_only_findings,
+                model_observations: &mut model_observations,
+                proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+        super::dedupe_inline_comments(inline_comments, summary_only_findings);
+    }
 
     /// Helper: write the canonical v1 gate manifest + a comment-plan with one
     /// `changed_line: true` entry pointing at `src/lib.rs:8`.
@@ -29308,11 +29462,12 @@ jobs:
         Ok(())
     }
 
-    /// `changed_line: true` entry → one inline comment is produced at the
-    /// correct `path:line`, body contains `coverage_gap`, `confirmation_state`,
-    /// and the advisory `trust_boundary`. No suggestion block is set.
+    /// `changed_line: true` entry on a valid RIGHT-side diff line → exactly
+    /// one `ReviewInlineComment` enters the compiler intake, with the lane
+    /// prefix, severity/confidence routing metadata, and the exact body and
+    /// evidence strings (exact-equality oracle).
     #[test]
-    fn build_unsafe_review_inline_comments_produces_comment_for_changed_line() -> Result<()> {
+    fn comment_plan_candidate_on_right_diff_line_enters_compiler_intake() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
@@ -29321,7 +29476,7 @@ jobs:
             r#"[{
                 "card_id": "card-001",
                 "path": "src/lib.rs",
-                "line": 8,
+                "line": 2,
                 "changed_line": true,
                 "coverage_gap": "raw_pointer_read without alignment guard",
                 "selection_reason": "changed line in unsafe block",
@@ -29331,40 +29486,51 @@ jobs:
             }]"#,
             None,
         )?;
-        let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
-        assert_eq!(comments.len(), 1, "expected exactly one inline comment");
-        let c = &comments[0];
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
+        assert_eq!(inline_comments.len(), 1, "expected exactly one candidate");
+        assert_eq!(
+            summary_only_findings.len(),
+            0,
+            "no skips expected: {summary_only_findings:?}"
+        );
+        let c = &inline_comments[0];
+        assert_eq!(c.lane, "unsafe-review");
+        assert_eq!(c.severity, "medium");
+        assert_eq!(c.confidence, "medium-high");
         assert_eq!(c.path, "src/lib.rs");
-        assert_eq!(c.line, 8);
+        assert_eq!(c.line, 2);
         assert_eq!(c.side, "RIGHT");
-        assert!(
-            c.body.contains("raw_pointer_read without alignment guard"),
-            "body must contain coverage_gap: {}",
-            c.body
+        assert_eq!(
+            c.body,
+            "[unsafe-review] **raw_pointer_read without alignment guard** (`card-001`)\n\n\
+             **Next action**: unconfirmed\n\n\
+             **Trust boundary** (advisory): static unsafe-review coverage evidence; \
+             not proof, not a merge verdict\n\n\
+             _Sourced from unsafe-review advisory output. \
+             Apply only after reviewer verification. \
+             Inline comments are advisory — they do not change the merge decision._"
         );
-        assert!(
-            c.body.contains("unconfirmed"),
-            "body must name the confirmation_state: {}",
-            c.body
-        );
-        assert!(
-            c.body.contains("advisory"),
-            "body must surface trust_boundary: {}",
-            c.body
-        );
-        // No suggestion block: repair-queue/0.1 provides no replacement text.
-        assert!(
-            c.suggestion.is_none(),
-            "suggestion must be None when repair-queue has no edit"
+        assert_eq!(
+            c.evidence,
+            "unsafe-review comment-plan (`card-001`): changed line in unsafe block; \
+             confirmation_state: unconfirmed"
         );
         Ok(())
     }
 
-    /// `changed_line: false` → the entry is skipped (GitHub API requires
-    /// inline comments to anchor to changed diff lines only).
+    /// Candidate on a line that is NOT a RIGHT-side diff line → excluded by
+    /// the SAME `validate_inline_candidate` guard model candidates hit, with
+    /// the exact standard disposition reason (exact-equality oracle).
     #[test]
-    fn build_unsafe_review_inline_comments_skips_unchanged_line() -> Result<()> {
+    fn comment_plan_candidate_on_non_diff_line_demoted_by_shared_guard() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
@@ -29373,26 +29539,43 @@ jobs:
             r#"[{
                 "card_id": "card-002",
                 "path": "src/lib.rs",
-                "line": 5,
-                "changed_line": false,
+                "line": 99,
+                "changed_line": true,
                 "coverage_gap": "guard_coverage: weak",
                 "confirmation_state": "unconfirmed"
             }]"#,
             None,
         )?;
-        let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
         assert!(
-            comments.is_empty(),
-            "unchanged-line entry must be skipped, got {comments:?}"
+            inline_comments.is_empty(),
+            "non-diff line must not pass the inline guard: {inline_comments:?}"
+        );
+        assert_eq!(summary_only_findings.len(), 1);
+        let finding = &summary_only_findings[0];
+        assert_eq!(finding.lane, "unsafe-review");
+        // The exact reason string the shared guard emits for model candidates.
+        assert_eq!(
+            finding.reason,
+            "inline guard rejected src/lib.rs:99; severity_allowed=true \
+             confidence_allowed=true line_valid=false concise=true \
+             body_present=true evidence_present=true repo_relative=true"
         );
         Ok(())
     }
 
-    /// Dedup: a path:line already claimed by a model lane is skipped so the
-    /// same location is not posted twice.
+    /// `changed_line: false` → reasoned skip through the same summary-only
+    /// disposition machinery, never a silent drop.
     #[test]
-    fn build_unsafe_review_inline_comments_deduplicates_against_existing() -> Result<()> {
+    fn comment_plan_unchanged_line_candidate_is_reasoned_skip() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
@@ -29401,28 +29584,41 @@ jobs:
             r#"[{
                 "card_id": "card-003",
                 "path": "src/lib.rs",
-                "line": 8,
-                "changed_line": true,
-                "coverage_gap": "transmute size mismatch",
+                "line": 1,
+                "changed_line": false,
+                "coverage_gap": "guard_coverage: weak",
                 "confirmation_state": "unconfirmed"
             }]"#,
             None,
         )?;
-        // Simulate a model lane already posting to src/lib.rs:8.
-        let mut existing = std::collections::BTreeSet::new();
-        existing.insert(("src/lib.rs".to_owned(), 8u32));
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
         assert!(
-            comments.is_empty(),
-            "duplicate path:line must be deduped, got {comments:?}"
+            inline_comments.is_empty(),
+            "unchanged-line entry must not become inline: {inline_comments:?}"
+        );
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(
+            summary_only_findings[0].reason,
+            "comment-plan candidate (`card-003`) at src/lib.rs:1 not marked \
+             changed_line: true; kept summary-only"
         );
         Ok(())
     }
 
-    /// Budget cap: if `max_inline_budget` is 0 no comments are produced, even
-    /// when there are eligible candidates.
+    /// Shared cap: sensor candidates compete with lane candidates for the
+    /// SAME `max_inline_comments` budget — no second cap exists. With the
+    /// budget already consumed by a model-lane comment, the sensor candidate
+    /// is demoted with the standard budget-exhausted disposition.
     #[test]
-    fn build_unsafe_review_inline_comments_respects_budget_cap() -> Result<()> {
+    fn comment_plan_candidates_share_lane_inline_cap() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
@@ -29431,29 +29627,153 @@ jobs:
             r#"[{
                 "card_id": "card-004",
                 "path": "src/lib.rs",
-                "line": 8,
+                "line": 2,
                 "changed_line": true,
                 "coverage_gap": "pointer cast without validity check",
                 "confirmation_state": "unconfirmed"
             }]"#,
             None,
         )?;
-        let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 0);
+        // A model lane already used the whole budget (max_inline_comments=1).
+        let mut inline_comments = vec![ReviewInlineComment {
+            lane: "ub".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 1,
+            side: "RIGHT".to_owned(),
+            body: "[ub] model-lane finding".to_owned(),
+            evidence: "RIGHT-side line map".to_owned(),
+        }];
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            1,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
+        assert_eq!(
+            inline_comments.len(),
+            1,
+            "sensor candidate must not exceed the shared cap: {inline_comments:?}"
+        );
+        assert_eq!(inline_comments[0].lane, "ub", "lane comment must survive");
+        assert_eq!(summary_only_findings.len(), 1);
+        // The exact budget disposition `apply_model_output` emits for lanes.
+        assert_eq!(
+            summary_only_findings[0].reason,
+            "inline budget exhausted for src/lib.rs:2; kept as summary-only"
+        );
+        Ok(())
+    }
+
+    /// Duplicate path:line between a model lane and the comment-plan: the
+    /// shared `dedupe_inline_comments` keeps the higher-ranked model finding
+    /// and merges the sensor candidate as the standard duplicate disposition —
+    /// the same location is never posted twice.
+    #[test]
+    fn comment_plan_duplicate_path_line_merges_into_lane_candidate() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-005",
+                "path": "src/lib.rs",
+                "line": 2,
+                "changed_line": true,
+                "coverage_gap": "transmute size mismatch",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        // Model lane already claimed src/lib.rs:2 with a higher rank.
+        let mut inline_comments = vec![ReviewInlineComment {
+            lane: "ub".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/lib.rs".to_owned(),
+            line: 2,
+            side: "RIGHT".to_owned(),
+            body: "[ub] model-lane finding on the same line".to_owned(),
+            evidence: "RIGHT-side line map".to_owned(),
+        }];
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
+        assert_eq!(
+            inline_comments.len(),
+            1,
+            "duplicate path:line must collapse to one comment: {inline_comments:?}"
+        );
+        assert_eq!(
+            inline_comments[0].lane, "ub",
+            "the higher-ranked model finding must win dedupe"
+        );
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(summary_only_findings[0].lane, "unsafe-review");
+        assert_eq!(
+            summary_only_findings[0].reason,
+            "duplicate inline candidate merged into src/lib.rs:2"
+        );
+        Ok(())
+    }
+
+    /// Malformed comment-plan.json behind a valid gate manifest → reasoned
+    /// skip finding naming the failure, zero inline candidates, no panic.
+    #[test]
+    fn comment_plan_malformed_plan_is_reasoned_skip() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(&out_dir, r#"{"not": "an array""#, None)?;
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
         assert!(
-            comments.is_empty(),
-            "budget=0 must produce no comments, got {comments:?}"
+            inline_comments.is_empty(),
+            "malformed plan must yield no candidates: {inline_comments:?}"
+        );
+        assert_eq!(summary_only_findings.len(), 1);
+        let finding = &summary_only_findings[0];
+        assert_eq!(finding.lane, "unsafe-review");
+        assert!(
+            finding.reason.starts_with("comment-plan.json malformed: "),
+            "reason must name the failure class: {}",
+            finding.reason
+        );
+        assert!(
+            finding
+                .reason
+                .ends_with("; comment-plan inline candidates skipped"),
+            "reason must say the candidates were skipped: {}",
+            finding.reason
         );
         Ok(())
     }
 
     /// Repair-queue with a `repairable_by_guard` entry: the bucket context
     /// (bucket_reason, operation, missing_evidence) is surfaced in the body.
-    /// Crucially, `suggestion` is still `None` because the repair queue does
-    /// NOT provide a concrete replacement text — this is the honest capability
+    /// Crucially, no suggestion machinery exists for the candidate because
+    /// repair-queue/0.1 provides NO concrete replacement text — v1 scope is
+    /// plain comments; the compiler emits `suggestion: None` for every inline
+    /// comment (see `compile_review_surface`). This is the honest capability
     /// finding for the #360 follow-up issue.
     #[test]
-    fn build_unsafe_review_inline_comments_surfaces_repair_queue_context() -> Result<()> {
+    fn comment_plan_candidate_surfaces_repair_queue_context() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
@@ -29488,7 +29808,7 @@ jobs:
             r#"[{
                 "card_id": "card-001",
                 "path": "src/lib.rs",
-                "line": 8,
+                "line": 2,
                 "changed_line": true,
                 "coverage_gap": "raw_pointer_read without alignment guard",
                 "confirmation_state": "unconfirmed",
@@ -29496,10 +29816,17 @@ jobs:
             }]"#,
             Some(repair_queue),
         )?;
-        let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
-        assert_eq!(comments.len(), 1);
-        let c = &comments[0];
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
+        );
+        assert_eq!(inline_comments.len(), 1);
+        let c = &inline_comments[0];
         // Repair-queue context surfaces bucket reason, operation, and evidence.
         assert!(
             c.body.contains("guard_evidence_missing"),
@@ -29516,49 +29843,53 @@ jobs:
             "body must contain missing_evidence: {}",
             c.body
         );
-        // Honest finding: repair-queue/0.1 has no replacement text → no
-        // suggestion block can be emitted. This is the evidence for the
-        // follow-up issue "repair-queue should emit applicable edits for
-        // suggestion blocks".
+        // Shared concise guard: the body (with lane prefix) must stay within
+        // the 1200-char inline limit even with repair-queue context attached.
         assert!(
-            c.suggestion.is_none(),
-            "suggestion must be None — repair-queue/0.1 provides no replacement text, \
-             only guidance; fabricating edits is explicitly prohibited"
+            c.body.chars().count() <= 1_200,
+            "body must clear the shared concise guard: {} chars",
+            c.body.chars().count()
         );
         Ok(())
     }
 
-    /// Absent repair-queue file: `build_unsafe_review_inline_comments` still
-    /// produces comments (degrades gracefully — repair-queue context is
-    /// optional).
+    /// Absent repair-queue file: candidates still flow through the intake
+    /// (degrades gracefully — repair-queue context is optional).
     #[test]
-    fn build_unsafe_review_inline_comments_works_without_repair_queue() -> Result<()> {
+    fn comment_plan_candidates_flow_without_repair_queue() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
-        // No repair-queue.json written.
+        // No repair-queue.json written; candidate anchors to src/lib.rs:2 on
+        // the shared test patch.
         write_inline_comment_fixtures(
             &out_dir,
             r#"[{
                 "card_id": "card-005",
-                "path": "src/ffi.rs",
-                "line": 12,
+                "path": "src/lib.rs",
+                "line": 2,
                 "changed_line": true,
                 "coverage_gap": "slice::from_raw_parts without length check",
                 "confirmation_state": "unconfirmed"
             }]"#,
             None,
         )?;
-        let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
-        assert_eq!(
-            comments.len(),
-            1,
-            "comment must be produced without repair-queue"
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        apply_comment_plan_fixture(
+            &sensor_dir,
+            COMMENT_PLAN_TEST_PATCH,
+            8,
+            &mut inline_comments,
+            &mut summary_only_findings,
         );
-        assert_eq!(comments[0].path, "src/ffi.rs");
-        assert_eq!(comments[0].line, 12);
-        assert!(comments[0].suggestion.is_none());
+        assert_eq!(
+            inline_comments.len(),
+            1,
+            "candidate must flow without repair-queue: {summary_only_findings:?}"
+        );
+        assert_eq!(inline_comments[0].path, "src/lib.rs");
+        assert_eq!(inline_comments[0].line, 2);
         Ok(())
     }
 

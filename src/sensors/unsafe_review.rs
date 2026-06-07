@@ -109,6 +109,44 @@ pub(crate) struct UnsafeReviewArtifacts {
     pub(crate) gate: UnsafeReviewGate,
     /// comment-plan entries (bounded, ready for #360). Empty when absent.
     pub(crate) comment_plan: Vec<UnsafeReviewCommentPlanEntry>,
+    /// Why `comment_plan` is empty when the manifest promised one: a
+    /// declared-but-broken comment-plan is a receipted gap with a reason,
+    /// never a silent empty vec (#360, same posture as
+    /// [`UnsafeReviewIngestGap`]). `None` when the plan loaded or the
+    /// manifest never declared one.
+    pub(crate) comment_plan_gap: Option<UnsafeReviewCommentPlanGap>,
+}
+
+/// Why a manifest-declared `comment-plan.json` did not yield entries.
+///
+/// `comment-plan.json` in unsafe-review 0.3.4 is a bare JSON array with no
+/// `schema_version` of its own (verified against real output; the gate
+/// manifest carries the version routing). There is therefore no version to
+/// route on: an unknown future shape lands as [`Self::Malformed`] carrying
+/// the parse detail — receipted, never a panic, never a silent drop.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum UnsafeReviewCommentPlanGap {
+    /// Declared under the manifest's `artifacts.comment_plan` key but the
+    /// file does not exist — a broken manifest promise.
+    Absent,
+    /// The file exists but reading it failed (permissions, encoding, I/O).
+    Unreadable(String),
+    /// Not a JSON array of comment-plan entries; carries the parse detail.
+    Malformed(String),
+}
+
+impl UnsafeReviewCommentPlanGap {
+    /// Human-readable skip reason for the review surface: callers must
+    /// surface this instead of treating a broken plan as "no candidates".
+    pub(crate) fn reason(&self) -> String {
+        match self {
+            Self::Absent => {
+                "comment-plan.json declared in unsafe-review-gate.json but absent".to_owned()
+            }
+            Self::Unreadable(detail) => format!("comment-plan.json unreadable: {detail}"),
+            Self::Malformed(detail) => format!("comment-plan.json malformed: {detail}"),
+        }
+    }
 }
 
 pub(crate) const UNSAFE_REVIEW_GATE_SCHEMA: &str = "unsafe-review-gate/v1";
@@ -200,18 +238,37 @@ pub(crate) fn read_unsafe_review_artifacts(
     // Follow the artifacts pointer for comment-plan.json (if present).
     // Key is snake_case `comment_plan` in unsafe-review-gate/v1 (the value is the
     // hyphenated filename); routing by the wrong key silently drops the plan.
-    let comment_plan = gate
-        .artifacts
-        .get("comment_plan")
-        .and_then(|rel| {
-            let cp_path = out_dir.join(rel);
-            fs::read_to_string(&cp_path).ok()
-        })
-        .and_then(|cp_text| {
-            serde_json::from_str::<Vec<UnsafeReviewCommentPlanEntry>>(&cp_text).ok()
-        })
-        .unwrap_or_default();
-    Ok(UnsafeReviewArtifacts { gate, comment_plan })
+    // A manifest that does not declare a comment plan promised nothing: empty
+    // entries, no gap. A declared plan that fails to load is a receipted gap
+    // with a reason — never an empty vec pretending the sensor had no
+    // candidates (#360).
+    let mut comment_plan = Vec::new();
+    let mut comment_plan_gap = None;
+    if let Some(rel) = gate.artifacts.get("comment_plan") {
+        let cp_path = out_dir.join(rel);
+        match fs::read_to_string(&cp_path) {
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+                comment_plan_gap = Some(UnsafeReviewCommentPlanGap::Absent);
+            }
+            Err(err) => {
+                comment_plan_gap = Some(UnsafeReviewCommentPlanGap::Unreadable(err.to_string()));
+            }
+            Ok(cp_text) => {
+                match serde_json::from_str::<Vec<UnsafeReviewCommentPlanEntry>>(&cp_text) {
+                    Ok(entries) => comment_plan = entries,
+                    Err(err) => {
+                        comment_plan_gap =
+                            Some(UnsafeReviewCommentPlanGap::Malformed(err.to_string()));
+                    }
+                }
+            }
+        }
+    }
+    Ok(UnsafeReviewArtifacts {
+        gate,
+        comment_plan,
+        comment_plan_gap,
+    })
 }
 
 #[cfg(test)]
@@ -296,6 +353,7 @@ mod tests {
             Some("static unsafe-review coverage evidence; not proof, not a merge verdict")
         );
         // comment-plan loaded via the snake_case `comment_plan` artifacts key.
+        assert_eq!(artifacts.comment_plan_gap, None);
         assert_eq!(artifacts.comment_plan.len(), 1);
         let entry = &artifacts.comment_plan[0];
         assert_eq!(entry.card_id.as_deref(), Some("card-001"));
@@ -420,6 +478,93 @@ mod tests {
             gap,
             super::UnsafeReviewIngestGap::Malformed("schema_version field missing".to_owned())
         );
+        Ok(())
+    }
+
+    /// Helper: write a valid v1 gate manifest that declares a comment plan.
+    fn write_v1_gate_declaring_comment_plan(out_dir: &Path) -> Result<()> {
+        fs::create_dir_all(out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "status": "advisory",
+                "artifacts": {"comment_plan": "comment-plan.json"}
+            }"#,
+        )?;
+        Ok(())
+    }
+
+    /// Malformed comment-plan.json behind a valid v1 gate: the gate still
+    /// ingests, the plan is empty, and `comment_plan_gap` carries a reasoned
+    /// `Malformed` — never a silent empty plan (#360).
+    #[test]
+    fn unsafe_review_artifacts_malformed_comment_plan_is_reasoned_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_v1_gate_declaring_comment_plan(&out_dir)?;
+        fs::write(out_dir.join("comment-plan.json"), r#"{"not": "an array""#)?;
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .map_err(|gap| anyhow::anyhow!("expected ingested gate, got gap: {gap:?}"))?;
+        assert!(artifacts.comment_plan.is_empty());
+        let gap = artifacts
+            .comment_plan_gap
+            .ok_or_else(|| anyhow::anyhow!("expected a Malformed comment-plan gap"))?;
+        let super::UnsafeReviewCommentPlanGap::Malformed(detail) = &gap else {
+            anyhow::bail!("expected Malformed, got {gap:?}");
+        };
+        assert!(!detail.is_empty(), "parse detail must be carried");
+        assert!(
+            gap.reason().starts_with("comment-plan.json malformed: "),
+            "reason must name the file and failure class: {}",
+            gap.reason()
+        );
+        Ok(())
+    }
+
+    /// A manifest that declares `comment_plan` while the file is absent is a
+    /// broken promise: `Absent` gap with an exact reason.
+    #[test]
+    fn unsafe_review_artifacts_declared_but_absent_comment_plan_is_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_v1_gate_declaring_comment_plan(&out_dir)?;
+        // No comment-plan.json written.
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .map_err(|gap| anyhow::anyhow!("expected ingested gate, got gap: {gap:?}"))?;
+        assert!(artifacts.comment_plan.is_empty());
+        assert_eq!(
+            artifacts.comment_plan_gap,
+            Some(super::UnsafeReviewCommentPlanGap::Absent)
+        );
+        assert_eq!(
+            artifacts
+                .comment_plan_gap
+                .map(|gap| gap.reason())
+                .unwrap_or_default(),
+            "comment-plan.json declared in unsafe-review-gate.json but absent"
+        );
+        Ok(())
+    }
+
+    /// A manifest that never declares a comment plan promised nothing:
+    /// empty entries AND no gap (an undeclared plan is not broken evidence).
+    #[test]
+    fn unsafe_review_artifacts_undeclared_comment_plan_is_not_a_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version": "unsafe-review-gate/v1", "status": "advisory"}"#,
+        )?;
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .map_err(|gap| anyhow::anyhow!("expected ingested gate, got gap: {gap:?}"))?;
+        assert!(artifacts.comment_plan.is_empty());
+        assert_eq!(artifacts.comment_plan_gap, None);
         Ok(())
     }
 

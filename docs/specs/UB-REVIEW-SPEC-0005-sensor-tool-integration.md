@@ -330,11 +330,14 @@ reaches the PR except through the compiler's one grouped review.
 unsafe-review's own posting surface (its standalone PR-gate mode and its
 durable `comment-plan.json` artifact) is for running unsafe-review
 *without* ub-review; when both are present, the standalone poster stays
-off and ub-review consumes the receipts. Honest current state: the
-ub-review sensor invocation consumes unsafe-review's stdout/receipt
-surface, not `comment-plan.json` - consuming the plan artifact directly
-is integration intent owned by the unsafe-review interop specs, not
-wired behavior here.
+off and ub-review consumes the receipts. Wired behavior (#359/#360):
+ub-review ingests `unsafe-review-gate.json` (schema-routed, gaps
+receipted) and routes `comment-plan.json` entries into the review
+compiler as inline-comment candidates - same RIGHT-side diff-line
+guard, same `max_inline_comments` cap, same dedupe as model-lane
+candidates. The compiler's one grouped review remains the only path by
+which a comment-plan candidate can reach the PR; no post-compile
+injection exists.
 
 ## Fail-closed behavior
 
