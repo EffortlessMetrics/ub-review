@@ -1435,6 +1435,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     follow_up_evidence = require_follow_up_evidence(root, follow_up_outputs)
     require_resolved_candidate_artifacts(root, follow_up_results, follow_up_outputs)
     require_final_compiler_input(root, review, follow_up_evidence)
+    require_gate_outcome(root)
     require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
@@ -3707,6 +3708,124 @@ def require_final_compiler_input(
         )
 
 
+# Reason kinds the gate may emit (SPEC-0003). `internal` is declared in the
+# ADR 0002 schema but unemitted today (internal failures abort before gate
+# construction); it stays accepted so a future emitter is not a verifier
+# break, while unknown kinds fail closed.
+GATE_OUTCOME_REASON_KINDS = {
+    "required-proof",
+    "tool-gate",
+    "required-sensor",
+    "blocking-finding",
+    "policy",
+    "internal",
+}
+
+
+def require_gate_outcome(root: pathlib.Path) -> None:
+    """The verdict artifact decides pass/fail; the verifier audits it
+    (release lane step 3 / decision D5): schema, reason shapes, receipt
+    pointers that resolve, count coherence, and conclusion-iff-reasons."""
+    outcome = load_json(root / "review/gate_outcome.json")
+    if not isinstance(outcome, dict):
+        fail("review/gate_outcome.json is not an object")
+    if outcome.get("schema") != "ub-review.gate_outcome.v1":
+        fail(f"gate outcome has wrong schema: {outcome.get('schema')!r}")
+    conclusion = outcome.get("conclusion")
+    if conclusion not in {"pass", "fail"}:
+        fail(f"gate outcome conclusion must be pass or fail: {conclusion!r}")
+    terminal = load_json(root / "review/terminal_state.json")
+    if isinstance(terminal, dict) and outcome.get("terminal_status") != terminal.get(
+        "status"
+    ):
+        fail(
+            "gate outcome terminal_status does not match review/terminal_state.json"
+        )
+    reasons = outcome.get("reasons")
+    if not isinstance(reasons, list):
+        fail("gate outcome reasons is not an array")
+    if (conclusion == "fail") != bool(reasons):
+        fail(
+            "gate outcome conclusion must be fail exactly when blocking "
+            f"reasons exist: conclusion={conclusion!r} reasons={len(reasons)}"
+        )
+    for index, reason in enumerate(reasons):
+        if not isinstance(reason, dict):
+            fail(f"gate outcome reason {index + 1} is not an object")
+        kind = reason.get("kind")
+        if kind not in GATE_OUTCOME_REASON_KINDS:
+            fail(f"gate outcome reason {index + 1} has unknown kind: {kind!r}")
+        for field in ("id", "detail", "receipt"):
+            value = reason.get(field)
+            if not isinstance(value, str) or not value:
+                fail(
+                    f"gate outcome reason {index + 1} {field} is not a "
+                    f"non-empty string: {value!r}"
+                )
+        # A red gate without a resolvable receipt is a gate bug, not a
+        # finding: the pointer's file part must exist in the packet.
+        receipt_file = reason["receipt"].split("#", 1)[0]
+        if not (root / receipt_file).is_file():
+            fail(
+                f"gate outcome reason {index + 1} receipt does not resolve "
+                f"to a packet file: {reason['receipt']!r}"
+            )
+    required_proof = outcome.get("required_proof")
+    if not isinstance(required_proof, dict):
+        fail("gate outcome required_proof is not an object")
+    for field in ("matched", "passed", "failed", "skipped"):
+        value = required_proof.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"gate outcome required_proof.{field} is invalid: {value!r}")
+    if required_proof["matched"] != (
+        required_proof["passed"] + required_proof["failed"] + required_proof["skipped"]
+    ):
+        fail(
+            "gate outcome required_proof counts do not add up: "
+            f"{required_proof!r}"
+        )
+    tool_gates = outcome.get("tool_gates")
+    if not isinstance(tool_gates, dict):
+        fail("gate outcome tool_gates is not an object")
+    for field in ("evaluated", "passed", "failed"):
+        value = tool_gates.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"gate outcome tool_gates.{field} is invalid: {value!r}")
+    for field in ("evidence_gaps_blocking", "evidence_gaps_advisory"):
+        value = outcome.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"gate outcome {field} is invalid: {value!r}")
+    if conclusion == "pass" and outcome.get("evidence_gaps_blocking", 0) > 0:
+        fail("gate outcome passed with blocking evidence gaps recorded")
+    # Cross-check: every failed tool-gate outcome must carry a matching
+    # blocking reason, and every tool-gate reason must point at a failed
+    # outcome - the verdict and the per-tool ledger may not disagree. The
+    # ledger's own existence is enforced by require_common_tree; this check
+    # only runs when it is present.
+    if not (root / "tool-gate-outcomes.json").is_file():
+        return
+    gate_outcomes = load_json(root / "tool-gate-outcomes.json")
+    if isinstance(gate_outcomes, dict):
+        entries = gate_outcomes.get("outcomes")
+        if isinstance(entries, list):
+            failed_tools = {
+                entry.get("tool")
+                for entry in entries
+                if isinstance(entry, dict) and entry.get("outcome") == "failed"
+            }
+            reason_tools = {
+                reason.get("id")
+                for reason in reasons
+                if isinstance(reason, dict) and reason.get("kind") == "tool-gate"
+            }
+            if failed_tools != reason_tools:
+                fail(
+                    "gate outcome tool-gate reasons do not match failed "
+                    f"tool-gate outcomes: reasons={sorted(reason_tools)!r} "
+                    f"failed={sorted(failed_tools)!r}"
+                )
+
+
 def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> list[dict]:
     witnesses = load_json(root / "review/witnesses.json")
     if not isinstance(witnesses, list):
@@ -5576,6 +5695,135 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
 
 
+def self_test_gate_outcome_contract() -> None:
+    """Release lane step 3: the verdict artifact is audited, not just
+    executed. A valid red outcome passes; each violation class fails."""
+    import tempfile
+
+    def write_root(outcome: dict, with_receipt_file: bool = True) -> "pathlib.Path":
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        review_dir = tmp / "review"
+        review_dir.mkdir()
+        (review_dir / "terminal_state.json").write_text(
+            json.dumps({"status": "needs-reviewer-attention"}), encoding="utf-8"
+        )
+        if with_receipt_file:
+            (review_dir / "proof_receipts.json").write_text("[]", encoding="utf-8")
+        (review_dir / "gate_outcome.json").write_text(
+            json.dumps(outcome), encoding="utf-8"
+        )
+        return tmp
+
+    def outcome(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.gate_outcome.v1",
+            "conclusion": "fail",
+            "terminal_status": "needs-reviewer-attention",
+            "reasons": [
+                {
+                    "kind": "required-proof",
+                    "id": "policy-check",
+                    "detail": "required proof `policy-check` failed (exit 1)",
+                    "receipt": "review/proof_receipts.json#proof-build-abc",
+                }
+            ],
+            "required_proof": {"matched": 1, "passed": 0, "failed": 1, "skipped": 0},
+            "tool_gates": {"evaluated": 0, "passed": 0, "failed": 0},
+            "evidence_gaps_blocking": 0,
+            "evidence_gaps_advisory": 1,
+        }
+        base.update(overrides)
+        return base
+
+    require_gate_outcome(write_root(outcome()))
+
+    cases = [
+        (
+            "wrong schema",
+            outcome(schema="ub-review.gate_outcome.v2"),
+            True,
+            "wrong schema",
+        ),
+        (
+            "fail without reasons",
+            outcome(reasons=[], required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0}),
+            True,
+            "conclusion must be fail exactly when",
+        ),
+        (
+            "pass with reasons",
+            outcome(conclusion="pass"),
+            True,
+            "conclusion must be fail exactly when",
+        ),
+        (
+            "unknown reason kind",
+            outcome(
+                reasons=[
+                    {
+                        "kind": "vibes",
+                        "id": "x",
+                        "detail": "y",
+                        "receipt": "review/proof_receipts.json#z",
+                    }
+                ]
+            ),
+            True,
+            "unknown kind",
+        ),
+        (
+            "dangling receipt pointer",
+            outcome(),
+            False,
+            "receipt does not resolve",
+        ),
+        (
+            "required_proof counts disagree",
+            outcome(required_proof={"matched": 2, "passed": 0, "failed": 1, "skipped": 0}),
+            True,
+            "counts do not add up",
+        ),
+        (
+            "pass with blocking gaps",
+            outcome(
+                conclusion="pass",
+                reasons=[],
+                required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+                evidence_gaps_blocking=1,
+            ),
+            True,
+            "passed with blocking evidence gaps",
+        ),
+    ]
+    for label, fixture, with_receipt, expected in cases:
+        root = write_root(fixture, with_receipt_file=with_receipt)
+        expect_self_test_failure(
+            f"gate-outcome {label}",
+            expected,
+            lambda root=root: require_gate_outcome(root),
+        )
+
+    # Cross-check: a failed tool-gate outcome without a matching tool-gate
+    # reason is a verdict/ledger disagreement.
+    root = write_root(outcome())
+    (root / "tool-gate-outcomes.json").write_text(
+        json.dumps(
+            {
+                "schema": "ub-review.tool_gate_outcomes.v1",
+                "outcomes": [
+                    {"tool": "ripr", "outcome": "failed", "required": True}
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    expect_self_test_failure(
+        "gate-outcome failed tool gate without reason",
+        "do not match failed",
+        lambda root=root: require_gate_outcome(root),
+    )
+
+
 def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
     """Loop-closure pin for #314: a refuted candidate's surface reaching the
     final compiler input must redden the verifier, end to end - not just the
@@ -6431,6 +6679,7 @@ def run_self_tests() -> None:
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
+    self_test_gate_outcome_contract()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
         "tool status metadata mismatch",
