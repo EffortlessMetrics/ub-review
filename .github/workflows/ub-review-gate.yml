@@ -55,7 +55,7 @@ jobs:
         # before a kill are the receipt. Remove with the allow-heavy revert.
         run: |
           ( while true; do
-              echo "memprobe $(date -u +%H:%M:%S) $(free -m | awk '/^Mem:/{print $3"/"$2" MB used, avail "$7}')"
+              echo "memprobe $(date -u +%H:%M:%S) $(free -m | awk '/^Mem:/{print $3"/"$2" MB used, avail "$7}') disk $(df -m / --output=used,avail | tail -1 | awk '{print $1"/"$1+$2" MB used"}') biggest $(du -sm /home/runner/work/ub-review/ub-review/target 2>/dev/null | cut -f1)MB-target"
               sleep 15
             done ) &
           echo $! > /tmp/memprobe.pid
