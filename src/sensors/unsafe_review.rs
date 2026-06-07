@@ -6,10 +6,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// unsafe-review `first-pr --out <dir>` top-level artifact
+/// unsafe-review `first-pr --out-dir <dir>` top-level artifact
 /// (`unsafe-review-gate.json`, schema `unsafe-review-gate/v1`).
 ///
-/// Shape verified against real `unsafe-review 0.3.4 first-pr --out` output:
+/// Shape verified against real `unsafe-review 0.3.4 first-pr --out-dir` output:
 /// movement counts are NESTED under `summary`, `status` is the advisory word
 /// (`"advisory"`), and the `artifacts` map keys are snake_case
 /// (`comment_plan`, `repair_queue`, ...) while their values are the hyphenated
@@ -203,7 +203,7 @@ struct UnsafeReviewSchemaProbe {
     schema_version: Option<String>,
 }
 
-/// Parse the structured artifacts written by `unsafe-review first-pr --out`.
+/// Parse the structured artifacts written by `unsafe-review first-pr --out-dir`.
 ///
 /// Schema-routed: `schema_version` is checked against the known version(s)
 /// before the v1 shape is bound, so an unknown version yields
@@ -281,7 +281,7 @@ mod tests {
     /// v1 gate.json present with a comment-plan: ingestion succeeds, movement
     /// values come through the NESTED `summary` block, and the comment-plan
     /// loads via the snake_case `comment_plan` artifacts key. Fixture matches
-    /// the REAL `unsafe-review 0.3.4 first-pr --out` manifest shape.
+    /// the REAL `unsafe-review 0.3.4 first-pr --out-dir` manifest shape.
     #[test]
     fn unsafe_review_artifacts_v1_gate_ingested() -> Result<()> {
         let temp = tempfile::tempdir()?;

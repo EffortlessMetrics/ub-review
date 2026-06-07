@@ -65,11 +65,14 @@ to live in focused test, Miri, sanitizer, mutation, and coverage jobs.
 
 ### Wired artifact routing (unsafe-review 0.3.4+, #359)
 
-`ub-review` invokes `unsafe-review first-pr --out <sensor-dir>/unsafe-review-output`
-so the structured artifact bundle is written to a known location. The bundle
-files (tracked by `sensor_outputs`, included in `resolved-tools.json`) match
-the real `first-pr --out` manifest's `artifacts` map — note `receipt-audit.md`
-and `pr-summary.md` are Markdown:
+`ub-review` invokes `unsafe-review first-pr --out-dir <sensor-dir>/unsafe-review-output`
+so the structured artifact bundle is written to a known location. The flag is
+`--out-dir` — `--out` belongs to `check`/`repo`, and `first-pr` in 0.3.4
+silently ignores it (exit 0, bundle to `target/unsafe-review` inside the
+checkout; EffortlessMetrics/unsafe-review#531), which presented as "sensor ok,
+gate artifact absent". The bundle files (tracked by `sensor_outputs`, included
+in `resolved-tools.json`) match the real `first-pr --out-dir` manifest's
+`artifacts` map — note `receipt-audit.md` and `pr-summary.md` are Markdown:
 
 ```text
 sensors/unsafe-review/unsafe-review-output/unsafe-review-gate.json

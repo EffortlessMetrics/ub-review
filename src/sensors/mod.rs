@@ -408,6 +408,14 @@ pub(crate) fn build_sensor_argv(
             "--format".to_owned(),
             "badge-json".to_owned(),
         ],
+        // `first-pr` takes `--out-dir` (verified against the real 0.3.4
+        // binary); `--out` belongs to `check`/`repo` and is SILENTLY ignored
+        // by `first-pr` — exit 0, bundle written to the default
+        // `target/unsafe-review` inside the checkout, gate artifact absent
+        // from the sensor dir. That produced the "sensor ok, required
+        // artifact absent" gate failure on PR #387 (run 27102118267).
+        // Silent unknown-flag acceptance is filed upstream as
+        // EffortlessMetrics/unsafe-review#531.
         "unsafe-review" => vec![
             "unsafe-review".to_owned(),
             "first-pr".to_owned(),
@@ -415,7 +423,7 @@ pub(crate) fn build_sensor_argv(
             root.display().to_string(),
             "--base".to_owned(),
             plan.base.clone(),
-            "--out".to_owned(),
+            "--out-dir".to_owned(),
             dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR).display().to_string(),
         ],
         "cargo-allow" => {
@@ -744,7 +752,7 @@ pub(crate) fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "exposure-gaps.json".to_owned(),
         ]),
         // unsafe-review 0.3.4 structured output bundle (#359). Filenames match
-        // the REAL `first-pr --out` manifest's `artifacts` map (note
+        // the REAL `first-pr --out-dir` manifest's `artifacts` map (note
         // `receipt-audit.md` and `pr-summary.md` are Markdown, not JSON). The
         // gate file and the artifact files it points to are all written under
         // the UNSAFE_REVIEW_OUTPUT_SUBDIR subdirectory of the sensor dir.
@@ -1377,7 +1385,7 @@ mod tests {
     }
 
     #[test]
-    fn unsafe_review_sensor_argv_includes_out_flag() -> Result<()> {
+    fn unsafe_review_sensor_argv_uses_first_pr_out_dir_flag() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path();
         let out = root.join("out");
@@ -1389,18 +1397,31 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("unsafe-review sensor missing"))?;
         let dir = out.join("sensors/unsafe-review");
         let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
-        assert_eq!(argv[0], "unsafe-review");
-        assert_eq!(argv[1], "first-pr");
-        // --out must be present and point at the expected subdir
-        let out_idx = argv
-            .iter()
-            .position(|arg| arg == "--out")
-            .ok_or_else(|| anyhow::anyhow!("--out flag missing from unsafe-review argv"))?;
+        // The full argv is pinned: `first-pr` accepts `--out-dir`, and 0.3.4
+        // SILENTLY ignores unknown flags (EffortlessMetrics/unsafe-review#531),
+        // so a drifted flag here is an ok-status sensor with an absent gate
+        // artifact, not a red sensor. Exact-match keeps the contract loud.
         assert_eq!(
-            argv[out_idx + 1],
-            dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR)
-                .display()
-                .to_string()
+            argv,
+            vec![
+                "unsafe-review".to_owned(),
+                "first-pr".to_owned(),
+                "--root".to_owned(),
+                root.display().to_string(),
+                "--base".to_owned(),
+                plan.base.clone(),
+                "--out-dir".to_owned(),
+                dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR)
+                    .display()
+                    .to_string(),
+            ]
+        );
+        // Regression guard for the exact production failure: `--out` is the
+        // `check`/`repo` flag; on `first-pr` it routed the bundle to
+        // `target/unsafe-review` inside the checkout (run 27102118267).
+        assert!(
+            !argv.iter().any(|arg| arg == "--out"),
+            "--out must never reappear on the first-pr invocation: {argv:?}"
         );
         Ok(())
     }
