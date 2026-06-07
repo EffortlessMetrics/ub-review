@@ -113,9 +113,18 @@ struct CommandReceipt {
     status: Option<i32>,
     success: bool,
     skipped: bool,
+    /// A tool that should have run but is not installed (#320): distinct
+    /// from a relevance skip, never `success: true`, carries an install
+    /// hint in `reason`. Stays non-blocking so missing optional tooling
+    /// does not fail an unrelated precommit, but it can never read as a
+    /// clean pass again.
+    missing: bool,
     reason: Option<String>,
     stdout: String,
     stderr: String,
+    /// Captured streams are bounded (#317); true when output was clipped.
+    stdout_truncated: bool,
+    stderr_truncated: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -340,9 +349,49 @@ fn skipped_receipt(name: &str, reason: &str) -> CommandReceipt {
         status: None,
         success: true,
         skipped: true,
+        missing: false,
         reason: Some(reason.to_owned()),
         stdout: String::new(),
         stderr: String::new(),
+        stdout_truncated: false,
+        stderr_truncated: false,
+    }
+}
+
+/// How to install each tool precommit knows about (#321). One table shared
+/// by the missing-tool receipts; versions track scripts/install-gh-runner-tools.sh.
+fn install_hint(name: &str) -> &'static str {
+    match name {
+        "tokmd" => "cargo install tokmd --version 1.12.0",
+        "cargo-allow" => "cargo install cargo-allow",
+        "ripr" => "cargo install ripr --version 0.8.0",
+        "unsafe-review" => "cargo install unsafe-review --version 0.3.3",
+        "ast-grep" => "npm install -g @ast-grep/cli",
+        "actionlint" => "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
+        _ => "see scripts/install-gh-runner-tools.sh",
+    }
+}
+
+/// A required-but-absent tool (#320): skipped (it cannot run, and missing
+/// optional tooling must not block unrelated work) but never `success` -
+/// the receipt is distinguishable from a relevance skip and says how to
+/// install (#321).
+fn missing_receipt(name: &str) -> CommandReceipt {
+    CommandReceipt {
+        name: name.to_owned(),
+        command: String::new(),
+        status: None,
+        success: false,
+        skipped: true,
+        missing: true,
+        reason: Some(format!(
+            "{name} not installed; install: {}",
+            install_hint(name)
+        )),
+        stdout: String::new(),
+        stderr: String::new(),
+        stdout_truncated: false,
+        stderr_truncated: false,
     }
 }
 
@@ -802,7 +851,7 @@ fn run_relevant_tool(
         return Ok(receipt);
     }
     if !command_available(root, argv[0])? {
-        let receipt = skipped_receipt(name, &format!("{name} not installed"));
+        let receipt = missing_receipt(name);
         write_tool_artifact(artifact, &receipt, "")?;
         return Ok(receipt);
     }
@@ -878,17 +927,52 @@ fn command_output(root: &Path, program: &str, args: &[&str]) -> Result<CapturedO
     })
 }
 
+/// Per-stream capture budget (#317): head plus tail with an elision marker,
+/// so one loud tool cannot turn a receipt into a 450 MB markdown file.
+const CAPTURE_HEAD_BYTES: usize = 64 * 1024;
+const CAPTURE_TAIL_BYTES: usize = 16 * 1024;
+
+fn clip_capture(text: String) -> (String, bool) {
+    let budget = CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES;
+    if text.len() <= budget {
+        return (text, false);
+    }
+    let mut head_end = CAPTURE_HEAD_BYTES;
+    while !text.is_char_boundary(head_end) {
+        head_end -= 1;
+    }
+    let mut tail_start = text.len() - CAPTURE_TAIL_BYTES;
+    while !text.is_char_boundary(tail_start) {
+        tail_start += 1;
+    }
+    let elided = tail_start - head_end;
+    let marker = format!(
+        "
+[... {elided} bytes truncated by the precommit capture budget ...]
+"
+    );
+    (
+        format!("{}{marker}{}", &text[..head_end], &text[tail_start..]),
+        true,
+    )
+}
+
 fn run_capture(root: &Path, program: &str, args: &[&str]) -> Result<CommandReceipt> {
     let output = command_output(root, program, args)?;
+    let (stdout, stdout_truncated) = clip_capture(output.stdout);
+    let (stderr, stderr_truncated) = clip_capture(output.stderr);
     Ok(CommandReceipt {
         name: program.to_owned(),
         command: format_command(program, args),
         status: output.status.code(),
         success: output.status.success(),
         skipped: false,
+        missing: false,
         reason: None,
-        stdout: output.stdout,
-        stderr: output.stderr,
+        stdout,
+        stderr,
+        stdout_truncated,
+        stderr_truncated,
     })
 }
 
@@ -931,8 +1015,22 @@ fn receipt_markdown(receipt: &CommandReceipt) -> String {
         text.push_str(&format!("- status: {status}\n"));
     }
     text.push_str(&format!("- success: {}\n", receipt.success));
-    if receipt.skipped {
-        text.push_str("- skipped: true\n");
+    if receipt.missing {
+        text.push_str(
+            "- missing: true
+",
+        );
+    } else if receipt.skipped {
+        text.push_str(
+            "- skipped: true
+",
+        );
+    }
+    if receipt.stdout_truncated || receipt.stderr_truncated {
+        text.push_str(
+            "- output truncated by capture budget
+",
+        );
     }
     if let Some(reason) = &receipt.reason {
         text.push_str("\n```text\n");
@@ -985,7 +1083,9 @@ fn render_precommit_summary(
     text.push_str(&format!("- blocking findings: {blocking_failures}\n\n"));
     text.push_str("## Checks\n\n");
     for receipt in receipts {
-        let status = if receipt.skipped {
+        let status = if receipt.missing {
+            "missing"
+        } else if receipt.skipped {
             "skipped"
         } else if receipt.success {
             "pass"
@@ -1077,6 +1177,76 @@ fn path_to_slash_string(path: &Path) -> String {
 mod tests {
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn missing_tool_receipt_is_never_success_and_carries_install_hint() {
+        // #320: a missing tool can never read as a clean pass again, and
+        // #321: the receipt says exactly how to install it. It stays
+        // non-blocking (skipped) so absent optional tooling does not fail
+        // unrelated precommits.
+        let receipt = missing_receipt("ripr");
+        assert!(!receipt.success);
+        assert!(receipt.skipped);
+        assert!(receipt.missing);
+        assert!(!receipt.success_is_blocking_failure());
+        let reason = receipt.reason.as_deref().unwrap_or_default();
+        assert!(reason.contains("not installed"), "{reason}");
+        assert!(
+            reason.contains("cargo install ripr --version 0.8.0"),
+            "{reason}"
+        );
+        // A relevance skip stays success: true and missing: false - the two
+        // receipt shapes can never be confused.
+        let skip = skipped_receipt("ripr", "no Rust changes");
+        assert!(skip.success && skip.skipped && !skip.missing);
+        // Rendering keeps the distinction.
+        let markdown = receipt_markdown(&receipt);
+        assert!(markdown.contains("- missing: true"));
+        assert!(!markdown.contains("- skipped: true"));
+        let summary = render_precommit_summary(
+            PrecommitOptions { staged: false },
+            &[],
+            &[],
+            &[receipt, skip],
+            0,
+        );
+        assert!(summary.contains("missing: ripr"), "{summary}");
+        assert!(summary.contains("skipped: ripr"), "{summary}");
+    }
+
+    #[test]
+    fn clip_capture_bounds_streams_with_head_tail_and_marker() {
+        // #317: under budget passes through untouched; over budget keeps
+        // the head and tail with a marker naming the elided byte count, so
+        // a 450 MB tool dump can never become a 450 MB receipt.
+        let small = "small output".to_owned();
+        let (kept, truncated) = clip_capture(small.clone());
+        assert_eq!(kept, small);
+        assert!(!truncated);
+
+        let big = "a".repeat(CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES + 10_000);
+        let (clipped, truncated) = clip_capture(big);
+        assert!(truncated);
+        assert!(clipped.len() < CAPTURE_HEAD_BYTES + CAPTURE_TAIL_BYTES + 200);
+        assert!(
+            clipped.contains("10000 bytes truncated by the precommit capture budget"),
+            "marker names the elided bytes"
+        );
+        let receipt = CommandReceipt {
+            name: "loud".to_owned(),
+            command: "loud".to_owned(),
+            status: Some(0),
+            success: true,
+            skipped: false,
+            missing: false,
+            reason: None,
+            stdout: clipped,
+            stderr: String::new(),
+            stdout_truncated: true,
+            stderr_truncated: false,
+        };
+        assert!(receipt_markdown(&receipt).contains("output truncated by capture budget"));
+    }
 
     fn temp_repo_root(name: &str) -> Result<PathBuf> {
         let suffix = SystemTime::now()
