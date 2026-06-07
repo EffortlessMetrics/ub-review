@@ -4860,6 +4860,31 @@ fn write_review_artifacts(
     let terminal_state = final_surface.terminal_state;
     review.terminal_state = terminal_state.clone();
     review.body = artifact_body.clone();
+    // The gate verdict is derived BEFORE the payload-status receipts are
+    // written, because the verdict corrects them: a failed gate that
+    // prepared no postable review is a blocked run, not an "empty smoke"
+    // diff. Run 27102118267 reported `skipped_empty_smoke` while two
+    // blocking reasons sat in gate_outcome.json — the no-post receipt must
+    // name the gate failure, never imply there was nothing to review.
+    let gate_outcome = build_gate_outcome(GateOutcomeInput {
+        args,
+        config,
+        plan,
+        terminal_state: &review.terminal_state,
+        proof_requests: &review.proof_requests,
+        proof_receipts: &review.proof_receipts,
+        tool_gate_outcomes,
+        missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
+        missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
+    });
+    let review_payload_status =
+        if gate_outcome.conclusion == "fail" && review_payload_status == "skipped_empty_smoke" {
+            review.terminal_state.review_payload_status =
+                "skipped_gate_failure_artifact_only".to_owned();
+            "skipped_gate_failure_artifact_only"
+        } else {
+            review_payload_status
+        };
     let mut witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
@@ -4927,17 +4952,6 @@ fn write_review_artifacts(
         review_dir.join("terminal_state.json"),
         serde_json::to_vec_pretty(&review.terminal_state)?,
     )?;
-    let gate_outcome = build_gate_outcome(GateOutcomeInput {
-        args,
-        config,
-        plan,
-        terminal_state: &review.terminal_state,
-        proof_requests: &review.proof_requests,
-        proof_receipts: &review.proof_receipts,
-        tool_gate_outcomes,
-        missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
-        missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-    });
     fs::write(
         review_dir.join("gate_outcome.json"),
         serde_json::to_vec_pretty(&gate_outcome)?,
@@ -25031,6 +25045,82 @@ index 1111111..2222222 100644
             summary.contains("Review payload: `skipped_empty_smoke`; post: `not_attempted_by_run`")
         );
         assert!(!has_standalone_approval_line(&artifact_body));
+        Ok(())
+    }
+
+    #[test]
+    fn failed_gate_without_post_reports_gate_failure_not_empty_smoke() -> Result<()> {
+        // Run 27102118267: the gate failed on two blocking reasons while the
+        // run reported `skipped_empty_smoke` — a blocked run narrated as an
+        // empty diff. Executed shape: intelligent-ci, a required sensor that
+        // never wrote its status receipt (receipt-absent gap => gate fail),
+        // nothing postable prepared.
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let config = Config::default();
+        let mut required_ripr = sensor_plan("ripr", "ripr", true);
+        required_ripr.required = true;
+        let plan = test_plan(vec![required_ripr]);
+        let diff = test_diff();
+        let mut args = test_run_args(out.clone());
+        args.run_pass = super::RunPass::Manual;
+        args.model_mode = ModelMode::Off;
+        args.mode = RunMode::IntelligentCi;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let run_started = Instant::now();
+        let mut run_loop_tracker = super::RunLoopTracker::new();
+
+        let gate_outcome = write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &test_box_state(),
+            &plan,
+            &[],
+            "running summary",
+            &args,
+            &event_log,
+            &run_started,
+            &mut run_loop_tracker,
+            std::time::Duration::from_secs(5),
+        )?;
+
+        assert_eq!(gate_outcome.conclusion, "fail");
+        assert!(!out.join("review/github-review.json").exists());
+        let skip: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/github-review-skip.json"))?)?;
+        let metrics: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+        let terminal: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/terminal_state.json"))?)?;
+        // The dishonest status must be gone from every receipt surface...
+        for (label, value) in [
+            ("skip receipt", &skip["review_payload_status"]),
+            ("metrics", &metrics["review_payload_status"]),
+            ("terminal state", &terminal["review_payload_status"]),
+        ] {
+            assert_eq!(
+                value, "skipped_gate_failure_artifact_only",
+                "{label} must name the gate failure"
+            );
+        }
+        // ...and the skip reason routes to the blocking receipts instead of
+        // implying there was nothing to review.
+        let reason = skip["reason"].as_str().unwrap_or_default();
+        assert!(
+            reason.contains("gate concluded `fail`") && reason.contains("review/gate_outcome.json"),
+            "skip reason must name the gate failure and its receipt: {reason}"
+        );
+        let summary = render_summary(&out, &plan, &diff)?;
+        assert!(
+            summary.contains(
+                "Review payload: `skipped_gate_failure_artifact_only`; \
+                 post: `not_attempted_by_run`"
+            ),
+            "running summary must carry the honest status"
+        );
+        assert!(summary.contains("Gate: `fail`"));
         Ok(())
     }
 

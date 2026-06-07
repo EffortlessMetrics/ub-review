@@ -150,7 +150,10 @@ review/github-review.json        event == "COMMENT"; body within
 review/github-review-skip.json   XOR with github-review.json; status one of
                                  skipped_empty_smoke |
                                  skipped_artifact_only_body |
-                                 skipped_pass_policy (src/main.rs)
+                                 skipped_pass_policy |
+                                 skipped_gate_failure_artifact_only
+                                 (src/main.rs; a failed gate must carry the
+                                 last one, never skipped_empty_smoke)
 review/gate_outcome.json         schema ub-review.gate_outcome.v1;
                                  conclusion "pass" | "fail"; reasons carry
                                  receipt pointers

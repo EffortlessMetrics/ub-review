@@ -532,6 +532,13 @@ pub(crate) fn build_github_review_skip_receipt(
             review.terminal_state.summary_only_findings,
             review.terminal_state.substantive_summary_only_findings
         )
+    } else if review.terminal_state.review_payload_status == "skipped_gate_failure_artifact_only" {
+        // A failed gate with nothing postable is a blocked run, not an empty
+        // diff: route the reader to the blocking reasons instead of implying
+        // there was nothing to review.
+        "the gate concluded `fail` and no reviewer-postable content was prepared; \
+         blocking reasons are receipted in review/gate_outcome.json."
+            .to_owned()
     } else {
         review.terminal_state.reason.clone()
     };
