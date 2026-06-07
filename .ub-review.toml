@@ -280,7 +280,6 @@ hard_timeout_minutes = 60
 # SHA gets a verdict) but stay gate-only so push storms do not become an
 # inbox tax. Diagnostics for quiet passes live in artifacts.
 post_review_on = ["opened", "ready_for_review"]
-synchronize_mode = "gate-only"
 
 [providers]
 policy = "primary-with-fallback"

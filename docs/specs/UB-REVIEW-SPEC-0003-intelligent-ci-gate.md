@@ -6,7 +6,7 @@ Maturity: production on this repository — `ub-review/gate` is the sole
 required PR check on `EffortlessMetrics/ub-review` (roadmap item 26), with
 live red/green receipts. The configured ripr threshold production-evaluates
 since #335 (closing #316) and has blocked two real PRs (#342, #346). Named
-gap: `[gate].synchronize_mode` is inert (#306). Tool-gate reds are
+gap closed: `[gate].synchronize_mode` is removed (#306). Tool-gate reds are
 diagnosable from artifacts: per-finding gap detail ships in
 `sensors/ripr/exposure-gaps.json` next to the badge receipt (#347 closed).
 
@@ -105,10 +105,10 @@ this repository's own file is the production example):
   `sensors/ripr/exposure-gaps.json`, verifier-reconciled against the badge
   counts (#347).
 - `[gate]` — `required_check`, `target_minutes`, `hard_timeout_minutes`,
-  `post_review_on` (default `["opened", "ready_for_review"]`),
-  `synchronize_mode` (declared, defaulted to `gate-only`, read by no
-  functional code — #306; posting on quiet passes is governed solely by
-  `post_review_on`), and `blocking` (src/config.rs `GateConfig`).
+  `post_review_on` (default `["opened", "ready_for_review"]`), and
+  `blocking` (src/config.rs `GateConfig`). `synchronize_mode` is removed
+  (#306): setting it yields a dedicated deprecation `PolicyError` receipt
+  and posting on quiet passes is governed solely by `post_review_on`.
 - `[gate.blocking]` opt-ins, both default `false` (src/config.rs
   `GateBlockingPolicy`): `required_proof_unproven` blocks when a matched
   `[[proof.required]]` produced no passing receipt (missing receipt or any
@@ -341,8 +341,8 @@ Honest current-state limits a consumer must know:
   gap, forcing an owned suppression for a non-defect. The governance loop —
   strengthen what is genuine, file the tool half upstream, suppress with a
   receipt — is the supported answer; do not loosen the threshold.
-- `[gate].synchronize_mode` is declared and defaulted but consumed by no
-  functional code (#306). Do not configure it expecting behavior.
+- `[gate].synchronize_mode` is removed (#306): setting it yields a
+  dedicated deprecation `PolicyError` receipt and the key is stripped.
 - `model-mode: off` is the intended zero-key product tier (docs/adr/0002
   "Out-of-the-box posture"); this repo's gate runs with model lanes on, so
   the zero-key tier's gate posture is design intent validated by the
@@ -384,7 +384,7 @@ This spec is docs-only. Open gate-surface work it routes:
        pins in install script + doctor, unevaluated-required-gate alarm
 #347   DONE: sensors/ripr/exposure-gaps.json carries per-finding gap
        detail, verifier-reconciled against the badge counts
-#306   wire [gate].synchronize_mode to real routing semantics or delete it
+#306   DONE: synchronize_mode removed; deprecation PolicyError on set
 item 27  rust-test-proof profile; one required check per onboarded repo,
          model-mode off as a supported tier
 item 28  setup-ci migration PR mode: the branch-protection change spelled

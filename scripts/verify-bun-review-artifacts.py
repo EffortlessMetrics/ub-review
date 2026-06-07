@@ -1164,7 +1164,7 @@ def require_profile_artifacts(
 def require_gate_config(path: str, gate: object) -> None:
     if not isinstance(gate, dict):
         fail(f"{path} gate is not an object")
-    for field in ["required_check", "synchronize_mode"]:
+    for field in ["required_check"]:
         if not isinstance(gate.get(field), str) or not gate[field]:
             fail(f"{path} gate.{field} is invalid: {gate!r}")
     for field in ["target_minutes", "hard_timeout_minutes"]:

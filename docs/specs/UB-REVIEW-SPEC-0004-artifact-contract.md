@@ -467,10 +467,9 @@ Honest current-state limits a consumer must know:
   (`require_gate_outcome`: schema, conclusion-iff-reasons, receipt-pointer
   resolution, count coherence, terminal_status mirror).
 - The gate config block that `resolved-profile.json`/`resolved-plan.json`
-  must carry includes `synchronize_mode` as a required non-empty string
-  (verifier `require_gate_config`) even though no functional code consumes
-  the field (#306). The artifact contract currently pins an inert knob;
-  resolving #306 must update the verifier and this spec together.
+  must carry no longer includes `synchronize_mode` (#306 resolved: field
+  removed, `require_gate_config` requirement dropped, this spec updated -
+  all in the same PR, as this bullet demanded).
 - `tool-gate-outcomes.json` entries route receipts through
   `sensors/<tool>/gate-decision.json`, which the ripr sensor produces in
   production since #335 (#316 closed): verbatim badge-json stdout, threshold
@@ -599,8 +598,8 @@ This spec is docs-only. Open contract-surface work it routes:
        the tool-gate receipt route no longer dangles
 #347   DONE: per-finding exposure-gap detail in
        sensors/ripr/exposure-gaps.json, verifier-reconciled
-#306   wire or delete [gate].synchronize_mode; either way, update
-       require_gate_config and this spec in the same PR
+#306   DONE: field deleted, require_gate_config updated, spec updated -
+       in one PR as the rule demanded
 #312   close the proof-broker edge-status test gaps so rare receipt/lease
        statuses are exercised, not just shaped
 0007   give ci-audit/* its own contract spec before anyone builds on it

@@ -142,7 +142,6 @@ pub(crate) struct GateConfig {
     pub(crate) target_minutes: u64,
     pub(crate) hard_timeout_minutes: u64,
     pub(crate) post_review_on: Vec<String>,
-    pub(crate) synchronize_mode: String,
     pub(crate) blocking: GateBlockingPolicy,
 }
 
@@ -579,7 +578,6 @@ impl Default for GateConfig {
             target_minutes: 30,
             hard_timeout_minutes: 60,
             post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
-            synchronize_mode: "gate-only".to_owned(),
             blocking: GateBlockingPolicy::default(),
         }
     }
@@ -1024,6 +1022,19 @@ fn sanitize_gate_section(table: &mut toml::value::Table, errors: &mut Vec<Policy
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect::<Vec<_>>();
     for (key, entry) in entries {
+        // `synchronize_mode` was declared for its whole life without a
+        // functional consumer (#306); it is removed rather than wired.
+        // Setting it gets this dedicated deprecation receipt instead of the
+        // generic unknown-key error, so existing configs learn why.
+        if key == "synchronize_mode" {
+            errors.push(PolicyError {
+                section: "gate.synchronize_mode".to_owned(),
+                detail: "deprecated and removed (#306): the key never had a functional                          consumer; posting policy is [gate].post_review_on alone"
+                    .to_owned(),
+            });
+            gate_table.remove(&key);
+            continue;
+        }
         let mut probe = toml::value::Table::new();
         probe.insert(key.clone(), entry);
         if let Err(err) = toml::Value::Table(probe).try_into::<GateConfig>() {
@@ -1359,6 +1370,28 @@ mod tests {
         assert!(sanitize_policy_sections(&mut valid).is_empty());
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn synchronize_mode_is_deprecated_with_a_dedicated_receipt() -> anyhow::Result<()> {
+        // #306: the key never had a functional consumer and is removed
+        // rather than wired. Setting it yields the dedicated deprecation
+        // receipt (not the generic unknown-key error), the key is stripped,
+        // and valid siblings keep working.
+        let mut value: toml::Value = toml::from_str(
+            "[gate]
+synchronize_mode = \"gate-only\"
+target_minutes = 25
+",
+        )?;
+        let errors = sanitize_policy_sections(&mut value);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].section, "gate.synchronize_mode");
+        assert!(errors[0].detail.contains("deprecated and removed (#306)"));
+        assert!(errors[0].detail.contains("post_review_on"));
+        let config: Config = value.try_into()?;
+        assert_eq!(config.gate.target_minutes, 25, "valid sibling survives");
         Ok(())
     }
 

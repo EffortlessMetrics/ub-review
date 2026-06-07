@@ -49,7 +49,7 @@ argument.
 - Model and provider failures never redden the gate; missing evidence is
   recorded as missing evidence, never as clean evidence.
 - Posting policy is `[gate].post_review_on` alone; `synchronize_mode` is
-  inert (#306).
+  removed (#306, deprecation receipt on set).
 
 ## Known noise classes (do not emit)
 

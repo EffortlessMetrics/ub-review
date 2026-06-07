@@ -30,8 +30,9 @@ Tally this pass: 4 closed, 8 narrowed, 15 kept.
 #77   narrowed  terminal sufficient state shipped; remaining: cross-pass
                 convergence (pass N+1 vs pass N resolutions) + materiality
                 threshold
-#306  keep      synchronize_mode still read by no functional code; fix =
-                remove field with deprecation PolicyError receipt, one PR
+#306  closed    field removed; setting it yields a dedicated deprecation
+                PolicyError receipt (test-pinned); verifier requirement
+                dropped in the same PR (train step 13 cycle)
 #310  closed    retry (#315), [providers].policy D2 (#351), and the
                 remainder shipped in the cleanup train: max_concurrency
                 caps waves per provider and a 429 sheds the provider to

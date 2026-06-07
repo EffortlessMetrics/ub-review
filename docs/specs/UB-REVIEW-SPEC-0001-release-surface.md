@@ -152,8 +152,9 @@ What does success look like in ten minutes?
   caps plus rate-limit shedding to one in-flight lane, #310). Remaining
   keys (`prompt_cache`, `env`, `role`, `models`, `fallback_for`) are
   documentation of intent, not wired behavior.
-- `[gate].synchronize_mode`: declared, defaulted, asserted in tests, read by
-  no functional code (#306). Posting on quiet passes is governed solely by
+- `[gate].synchronize_mode`: removed (#306) - it never had a functional
+  consumer. Setting it now yields a dedicated deprecation `PolicyError`
+  receipt; posting on quiet passes is governed solely by
   `[gate].post_review_on`.
 - `[tools.ripr.gate] max_new_unsuppressed`: production-enforcing since #335
   (#316 closed) — the sensor persists `sensors/ripr/gate-decision.json` and

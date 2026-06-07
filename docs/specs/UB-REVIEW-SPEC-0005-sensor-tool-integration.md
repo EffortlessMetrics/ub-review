@@ -434,8 +434,9 @@ upstream ripr-swarm#1035-1038, unsafe-review-swarm#1516-1518,
          resolution; local glue changes must link them
 ```
 
-Out of scope here, routed by sibling specs: `[gate].synchronize_mode`
-(#306, spec 0003) and per-provider concurrency (#310, spec 0006).
+Out of scope here, routed by sibling specs and both since resolved:
+`[gate].synchronize_mode` removal (#306, spec 0003) and per-provider
+concurrency enforcement (#310, spec 0006).
 
 ## Release note claim
 

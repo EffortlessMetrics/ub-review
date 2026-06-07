@@ -43,9 +43,9 @@ slice                                          spec    issue   proof obligation
    handling (skip-with-link, not schema red)           (+cargo- skips with a linked reason
                                                        allow
                                                        #1470)
-8  synchronize_mode: wire semantics or         0003    #306    either the knob routes
-   delete with PolicyError deprecation                 behavior with tests, or setting
-                                                       it yields a deprecation receipt
+8  DONE: synchronize_mode deleted with a       0003    #306    setting it yields the
+   dedicated PolicyError deprecation                   dedicated deprecation
+   receipt; verifier updated in same PR                receipt (test-pinned)
 9  setup-ci v1 per the 0008 contract           0008    item28  --print-pr emits the
                                                        migration PR content; never
                                                        mutates branch protection
