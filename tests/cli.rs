@@ -240,8 +240,11 @@ fn active_len_tracks_view_after_resize() {
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
     assert_eq!(review["mode"], "review-byok");
     assert_eq!(review["review_profile"], "bun-ub-v0");
-    assert_eq!(review["provider_policy"], "minimax-primary");
-    assert_eq!(review["model_provider_policy"], "minimax-primary");
+    // No --provider-policy flag and no [providers].policy in the fixture
+    // config: the resolved policy stays `auto` (built-in minimax-primary
+    // semantics), recorded as what it is rather than as a value nobody set.
+    assert_eq!(review["provider_policy"], "auto");
+    assert_eq!(review["model_provider_policy"], "auto");
     assert_eq!(review["runtime_profile"], "gh-runner");
     assert_eq!(review["run_pass"], "opened");
     assert_eq!(review["depth"], "standard");

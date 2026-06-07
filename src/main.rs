@@ -2708,6 +2708,10 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_pass = resolved_run_pass(args.run_pass);
     let (config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    // D2 precedence (spec 0006): an explicit --provider-policy / env value
+    // wins; `auto` defers to the repo's [providers].policy; with neither,
+    // `auto` keeps its built-in minimax-primary semantics.
+    args.provider_policy = resolved_provider_policy(&config, args.provider_policy);
     let profile = config.selected_profile()?;
     apply_runtime_profile_limits(&mut args, profile)?;
     let selected_model_lanes = selected_review_lanes_for_args(&plan, &args)?;
@@ -14924,6 +14928,27 @@ fn provider_spec_for_lane(lane: &LanePlan, args: &RunArgs) -> ProviderSpec {
     )
 }
 
+/// D2 precedence for the provider policy (spec 0006, decision D2: config
+/// wins, CLI overrides). An explicit CLI/env value (anything but `auto`)
+/// wins outright; `auto` defers to a configured `[providers].policy`
+/// (already validated at load - an invalid value was stripped with a
+/// `PolicyError` receipt and reads as unset here); with neither, `auto`
+/// keeps its built-in minimax-primary semantics in the dispatch functions.
+fn resolved_provider_policy(
+    config: &Config,
+    cli_policy: ModelProviderPolicy,
+) -> ModelProviderPolicy {
+    if cli_policy != ModelProviderPolicy::Auto {
+        return cli_policy;
+    }
+    let configured = config.providers.policy.trim();
+    if configured.is_empty() {
+        return ModelProviderPolicy::Auto;
+    }
+    <ModelProviderPolicy as clap::ValueEnum>::from_str(configured, false)
+        .unwrap_or(ModelProviderPolicy::Auto)
+}
+
 fn provider_spec_for_lane_with_key_state(
     lane: &LanePlan,
     args: &RunArgs,
@@ -23061,21 +23086,21 @@ mod tests {
         proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
-        resolved_candidate_records, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_command_to_files,
-        run_gate_failure_message, run_refuter_pass, run_sensor, runtime_fallback_retry_spec,
-        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_final_orchestrator_artifact,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
-        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
-        write_proof_request_artifacts, write_resolved_candidate_artifacts,
-        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
-        write_witness_artifacts,
+        resolved_candidate_records, resolved_provider_policy, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_available_model_lanes_with_runner,
+        run_command_to_files, run_gate_failure_message, run_refuter_pass, run_sensor,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
+        write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
+        write_sensor_status, write_witness_artifacts,
     };
 
     #[test]
@@ -24223,6 +24248,66 @@ open_cap = 1
             vec!["EffortlessMetrics/ripr-swarm".to_owned()]
         );
         assert_eq!(explicit.issues.open_cap, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn providers_policy_config_parses_resolves_and_receipts_invalid_values() -> Result<()> {
+        use super::ModelProviderPolicy;
+        // Exact-value oracle for the consumed [providers] surface: absent
+        // section reads as unset; an explicit policy round-trips; the
+        // documented-intent sub-table keys parse without error and without
+        // effect.
+        let absent: Config = toml::from_str("")?;
+        assert_eq!(absent.providers.policy, "");
+
+        let explicit: Config = toml::from_str(
+            r#"
+[providers]
+policy = "primary-with-fallback"
+
+[providers.minimax]
+enabled = true
+max_concurrency = 12
+"#,
+        )?;
+        assert_eq!(explicit.providers.policy, "primary-with-fallback");
+
+        // D2 precedence matrix: explicit CLI wins; auto defers to config;
+        // auto with no config stays auto (built-in minimax-primary
+        // semantics in the dispatch functions).
+        assert_eq!(
+            resolved_provider_policy(&explicit, ModelProviderPolicy::MinimaxOnly),
+            ModelProviderPolicy::MinimaxOnly,
+        );
+        assert_eq!(
+            resolved_provider_policy(&explicit, ModelProviderPolicy::Auto),
+            ModelProviderPolicy::PrimaryWithFallback,
+        );
+        assert_eq!(
+            resolved_provider_policy(&absent, ModelProviderPolicy::Auto),
+            ModelProviderPolicy::Auto,
+        );
+
+        // An invalid policy value is stripped with a PolicyError receipt -
+        // a typo can never silently fall back while looking configured.
+        let temp = tempfile::tempdir()?;
+        let config_path = temp.path().join(".ub-review.toml");
+        fs::write(&config_path, "[providers]\npolicy = \"minimax-primry\"\n")?;
+        let loaded = Config::load_or_default(&config_path, None)?;
+        assert_eq!(loaded.providers.policy, "");
+        assert!(
+            loaded.policy_errors.iter().any(|error| {
+                error.section == "providers"
+                    && error.detail.contains("invalid [providers] policy value")
+            }),
+            "expected a providers PolicyError receipt: {:?}",
+            loaded.policy_errors
+        );
+        assert_eq!(
+            resolved_provider_policy(&loaded, ModelProviderPolicy::Auto),
+            ModelProviderPolicy::Auto,
+        );
         Ok(())
     }
 

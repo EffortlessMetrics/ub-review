@@ -146,8 +146,8 @@ inputs:
     default: ''
     required: false
   provider-policy:
-    description: 'Provider policy: primary-with-fallback, minimax-primary, minimax-only, opencode-go-canary, opencode-go-wide, or auto.'
-    default: minimax-primary
+    description: 'Provider policy: auto (defers to [providers].policy in the repo config, else minimax-primary), primary-with-fallback, minimax-primary, minimax-only, opencode-go-canary, or opencode-go-wide. An explicit value overrides config.'
+    default: auto
     required: false
   lane-width:
     description: 'Bun model lane width: 6, 10, or 20.'

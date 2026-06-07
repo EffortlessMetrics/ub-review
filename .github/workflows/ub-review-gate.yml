@@ -64,7 +64,10 @@ jobs:
           posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
           model-mode: auto
           depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
-          provider-policy: primary-with-fallback
+          # provider-policy is deliberately omitted: the action default is
+          # auto, which defers to [providers].policy in .ub-review.toml
+          # (primary-with-fallback) - the live proof that repo config drives
+          # provider routing (D1/D2, spec 0006).
           minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
           minimax-provider-kind: anthropic
           minimax-model: MiniMax-M3

@@ -4,20 +4,35 @@ schema_version = 1
 # every entry carries owner + reason per the suppression-health contract.
 #
 # Ledger history (line-keyed ids rot when src/config.rs moves, ripr-swarm#1053):
-# - 2026-06-07: removed the probe:src_config.rs:40:call_deletion entry twice.
-#   First written for RepoLane (#342, matcher defect ripr-swarm#1052), it
-#   silently transferred to IssuesConfig when that struct landed on line 40
-#   (PR #346), then went dead entirely when IssuesConfig grew and moved off
-#   the line. Three id-instability instances from one file in one day.
+# - 2026-06-07 (instance 1-3): the probe:src_config.rs:40 entry was written
+#   for RepoLane (#342), silently transferred to IssuesConfig (PR #346),
+#   then went dead when the struct moved again.
+# - 2026-06-07 (instance 4): the two line-47 open_cap entries went dead when
+#   ProvidersConfig was inserted above IssuesConfig. Removed; their
+#   underlying gaps are healed structurally - config-parse oracles now live
+#   in src/config.rs's own `mod tests`, which fixed every reach-class
+#   false negative (7 gaps -> 4 on the same diff).
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_config.rs:47:call_deletion"
+finding_id = "probe:src_config.rs:946:side_effect"
 owner = "ub-review/core"
-reason = "RIPR reach false-negative (ripr-swarm#1054): no_static_path reported for IssuesConfig.open_cap although issues_toml_parse_pins_exact_field_defaults asserts it on both parse paths and issue_broker_plan_gates_on_mode_allowlist_and_cap pins the cap behavior; the sibling field open_in, asserted by the same test, reaches fine. Line-keyed id currently points at src/config.rs:47 (open_cap); re-verify the target after any edit to config.rs. Remove when the reach analyzer connects sibling fields consistently."
+reason = "RIPR discriminate false-negative (ripr-swarm#1054, second family): side_effect probe on the errors.push(PolicyError) in sanitize_providers_section stays weakly_exposed although the same-file test providers_section_parses_policy_and_receipts_invalid_values pins the push with an exact oracle (errors.len()==1, exact section, detail starts_with + value + vocabulary). Line-keyed id; re-verify the target after any edit to config.rs."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_config.rs:47:field_construction"
+finding_id = "probe:src_config.rs:947:side_effect"
 owner = "ub-review/core"
-reason = "Same reach false-negative as the call_deletion twin above (ripr-swarm#1054): field_construction probe on IssuesConfig.open_cap, exactly asserted by issues_toml_parse_pins_exact_field_defaults and constructed explicitly in issue_broker_plan_gates_on_mode_allowlist_and_cap. Line-keyed id; re-verify the target after any edit to config.rs."
+reason = "Twin of the side_effect probe above (ripr-swarm#1054): closing brace of the same exactly-asserted errors.push in sanitize_providers_section. Line-keyed id; re-verify the target after any edit to config.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1322:error_path"
+owner = "ub-review/core"
+reason = "Probe fired on #[cfg(test)] code (ripr-swarm#1055): error_path of a toml::from_str(...)? inside the test providers_section_parses_policy_and_receipts_invalid_values itself. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Remove when probes skip cfg(test) items. Line-keyed id; re-verify after any edit to config.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1362:error_path"
+owner = "ub-review/core"
+reason = "Twin of the test-code error_path above (ripr-swarm#1055): toml::from_str(...)? inside the test issues_section_parses_exact_field_defaults. Line-keyed id; re-verify after any edit to config.rs. Rot instance 5 (ripr-swarm#1053): the id was written pre-rustfmt at line 1363 and the formatter moved it - ripr must be the last local check, after fmt."

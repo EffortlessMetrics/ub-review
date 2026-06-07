@@ -133,7 +133,7 @@ impl ReviewDepth {
     }
 }
 
-#[derive(Clone, Copy, Debug, ValueEnum)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub(crate) enum ModelProviderPolicy {
     Auto,
     MinimaxPrimary,
@@ -445,12 +445,15 @@ pub(crate) struct RunArgs {
         env = "UB_REVIEW_MAX_MODEL_CALLS"
     )]
     pub(crate) max_model_calls: usize,
-    /// Provider policy.
+    /// Provider policy. `auto` (the default) defers to `[providers].policy`
+    /// in the repo config when set, else behaves as `minimax-primary`; an
+    /// explicit flag or env value overrides config (D2: config wins, CLI
+    /// overrides).
     #[arg(
         long = "provider-policy",
         alias = "model-provider-policy",
         value_enum,
-        default_value = "minimax-primary",
+        default_value = "auto",
         env = "UB_REVIEW_PROVIDER_POLICY"
     )]
     pub(crate) provider_policy: ModelProviderPolicy,
