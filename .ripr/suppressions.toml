@@ -150,3 +150,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:5252:predicate"
 owner = "ub-review/core"
 reason = "Internally inconsistent verdict (ripr-swarm#1054 comment): the finding itself reports discriminate 'Strong oracle found: whole-object equality assertion' yet classifies weakly_exposed. The clip boundary is exactly pinned by ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape (200-byte input kept verbatim, 201-byte input clipped; <= to < mutation fails). Line-keyed id; re-verify after any edit to main.rs near the clip helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:5459:predicate"
+owner = "ub-review/core"
+reason = "CI-side key of the clip-predicate finding suppressed above as probe:src_main.rs:5252:predicate - identical code, different line key because probe ids derive from diff-hunk numbering and CI's merge-ref diff shapes hunks differently than a local branch diff (rot instance 6, ripr-swarm#1053 comment). The boundary is exactly pinned by ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape; ripr itself reports a strong oracle on this probe (ripr-swarm#1054)."
