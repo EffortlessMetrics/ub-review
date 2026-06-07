@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{BoxState, DEFAULT_REVIEW_PROFILE, builtin_profiles, builtin_tools};
+use clap::ValueEnum as _;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -21,12 +22,27 @@ pub(crate) struct Config {
     pub(crate) tools: BTreeMap<String, ToolPolicy>,
     pub(crate) lanes: Vec<RepoLane>,
     pub(crate) issues: IssuesConfig,
+    pub(crate) providers: ProvidersConfig,
     /// Malformed gate-policy sections recorded at load time. Serialized into
     /// `effective-config.json` so the gate's `policy` fail reasons point at a
     /// receipt that names the parse error (roadmap #24: policy parse errors
     /// become receipted gate failures, never silent defaults).
     #[serde(skip_deserializing, skip_serializing_if = "Vec::is_empty")]
     pub(crate) policy_errors: Vec<PolicyError>,
+}
+
+/// The `[providers]` section (D1/D2, spec 0006). Exactly one key is consumed
+/// today: `policy`, the provider routing policy the run uses when the CLI
+/// flag is `auto` (D2 precedence: an explicit `--provider-policy`/env value
+/// overrides config; config overrides the built-in default). An invalid
+/// `policy` value is stripped at load with a `PolicyError` receipt. The
+/// per-provider sub-tables (`[providers.minimax]`, `[providers.opencode]`)
+/// remain documentation of intent - `env`, `role`, `models`, `prompt_cache`,
+/// and `max_concurrency` are not read; wiring routes through #310.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ProvidersConfig {
+    pub(crate) policy: String,
 }
 
 /// Follow-up issue-capture posture (`[issues]`). `mode = "off"` keeps every
@@ -513,6 +529,7 @@ impl Default for Config {
             tools,
             lanes: Vec::new(),
             issues: IssuesConfig::default(),
+            providers: ProvidersConfig::default(),
             policy_errors: Vec::new(),
         }
     }
@@ -822,9 +839,10 @@ impl Config {
 /// Top-level keys `Config` deserializes. Unknown top-level keys are stripped
 /// and recorded as `PolicyError` receipts so a misspelled section (for
 /// example `[gatee]` or `[prooof]`) can never silently de-fang repo policy.
-/// `providers` is reserved: `.ub-review.toml` documents the
-/// roadmap provider-policy surface there while provider selection still comes
-/// from CLI flags, so it is tolerated without a receipt.
+/// `[providers]` consumes exactly one key today - `policy`, validated by
+/// `sanitize_providers_section` (D2: config wins when the CLI flag is
+/// `auto`); its per-provider sub-tables remain documentation of intent
+/// tolerated without receipts (#310).
 const KNOWN_TOP_LEVEL_KEYS: &[&str] = &[
     "review_profile",
     "profile",
@@ -894,7 +912,41 @@ fn sanitize_policy_sections(value: &mut toml::Value) -> Vec<PolicyError> {
     sanitize_review_body_section(table, &mut errors);
     sanitize_tools_section(table, &mut errors);
     sanitize_proof_section(table, &mut errors);
+    sanitize_providers_section(table, &mut errors);
     errors
+}
+
+/// Validate the one consumed `[providers]` key: `policy` must name a
+/// provider policy the CLI enum knows (`auto`, `minimax-primary`,
+/// `primary-with-fallback`, `minimax-only`, `opencode-go-canary`,
+/// `opencode-go-wide`). An invalid or non-string value is stripped with a
+/// `PolicyError` receipt so a typo'd policy can never silently fall back to
+/// the default while looking configured. Every other `[providers]` key stays
+/// tolerated as documentation of intent (#310 routes the wiring).
+fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    let Some(providers) = table
+        .get_mut("providers")
+        .and_then(toml::Value::as_table_mut)
+    else {
+        return;
+    };
+    let Some(policy) = providers.get("policy") else {
+        return;
+    };
+    let valid = policy
+        .as_str()
+        .is_some_and(|value| crate::cli::ModelProviderPolicy::from_str(value, false).is_ok());
+    if !valid {
+        errors.push(PolicyError {
+            section: "providers".to_owned(),
+            detail: format!(
+                "invalid [providers] policy value {policy}; expected one of: auto, \
+                 minimax-primary, primary-with-fallback, minimax-only, \
+                 opencode-go-canary, opencode-go-wide"
+            ),
+        });
+        providers.remove("policy");
+    }
 }
 
 /// Per-key validation for `[review_body]`, mirroring `[gate]`: each key is
@@ -1247,4 +1299,74 @@ pub(crate) fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
         },
         trusted_repo: profile.trusted_repo,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Config-parse oracles live in this module, next to the structs they
+    // pin, so reach analysis connects them without crossing files (the
+    // main.rs test mod's cross-file reach is unreliable upstream,
+    // ripr-swarm#1054, and line-keyed suppressions rot, ripr-swarm#1053).
+    // The behavior-level twins (D2 precedence, broker planning, lane
+    // merging) stay in main.rs where those functions live.
+
+    #[test]
+    fn providers_section_parses_policy_and_receipts_invalid_values() -> anyhow::Result<()> {
+        let absent: Config = toml::from_str("")?;
+        assert_eq!(absent.providers.policy, "");
+
+        let explicit: Config = toml::from_str(
+            "[providers]\npolicy = \"primary-with-fallback\"\n\n[providers.minimax]\nenabled = true\nmax_concurrency = 12\n",
+        )?;
+        assert_eq!(explicit.providers.policy, "primary-with-fallback");
+
+        // sanitize_providers_section strips an invalid policy value with a
+        // receipt: parse the raw document the way load_or_default does.
+        let mut value: toml::Value = toml::from_str("[providers]\npolicy = \"minimax-primry\"\n")?;
+        let errors = sanitize_policy_sections(&mut value);
+        // Exact oracle on the receipt push: exactly one error, exact
+        // section, and a detail that names both the rejected value and the
+        // accepted vocabulary.
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].section, "providers");
+        assert!(
+            errors[0]
+                .detail
+                .starts_with("invalid [providers] policy value")
+        );
+        assert!(errors[0].detail.contains("minimax-primry"));
+        assert!(errors[0].detail.contains("opencode-go-wide"));
+        let sanitized: Config = value.try_into()?;
+        assert_eq!(sanitized.providers.policy, "");
+
+        // A valid policy survives sanitization untouched.
+        let mut valid: toml::Value = toml::from_str("[providers]\npolicy = \"minimax-only\"\n")?;
+        assert!(sanitize_policy_sections(&mut valid).is_empty());
+        let kept: Config = valid.try_into()?;
+        assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn issues_section_parses_exact_field_defaults() -> anyhow::Result<()> {
+        let absent: Config = toml::from_str("")?;
+        assert!(absent.issues.enabled);
+        assert_eq!(absent.issues.mode, "suggest");
+        assert_eq!(absent.issues.open_in, Vec::<String>::new());
+        assert_eq!(absent.issues.open_cap, 3);
+
+        let explicit: Config = toml::from_str(
+            "[issues]\nenabled = false\nmode = \"off\"\nopen_in = [\"EffortlessMetrics/ripr-swarm\"]\nopen_cap = 1\n",
+        )?;
+        assert!(!explicit.issues.enabled);
+        assert_eq!(explicit.issues.mode, "off");
+        assert_eq!(
+            explicit.issues.open_in,
+            vec!["EffortlessMetrics/ripr-swarm".to_owned()]
+        );
+        assert_eq!(explicit.issues.open_cap, 1);
+        Ok(())
+    }
 }
