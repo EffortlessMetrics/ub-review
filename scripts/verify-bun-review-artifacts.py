@@ -3725,10 +3725,17 @@ GATE_OUTCOME_REASON_KINDS = {
     "required-proof",
     "tool-gate",
     "required-sensor",
+    "required-tool-timeout",
     "blocking-finding",
     "policy",
     "internal",
 }
+
+# A required-tool-timeout reason is a capacity verdict ("lease expired before
+# the threshold evaluated"), so its detail must name the expired lease in
+# seconds and the reason must carry the operator's next move. Without these
+# the kind degrades into the generic gap text it exists to replace.
+REQUIRED_TOOL_TIMEOUT_DETAIL_PATTERN = re.compile(r"timeout_sec \d+")
 
 
 # suggested joined the vocabulary with release lane step 5 (rendering);
@@ -3992,6 +3999,20 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                 f"gate outcome reason {index + 1} receipt does not resolve "
                 f"to a packet file: {reason['receipt']!r}"
             )
+        if kind == "required-tool-timeout":
+            if not REQUIRED_TOOL_TIMEOUT_DETAIL_PATTERN.search(reason["detail"]):
+                fail(
+                    f"gate outcome reason {index + 1} (required-tool-timeout) "
+                    "detail does not name the expired lease as "
+                    f"`timeout_sec <seconds>`: {reason['detail']!r}"
+                )
+            next_action = reason.get("next_action")
+            if not isinstance(next_action, str) or not next_action:
+                fail(
+                    f"gate outcome reason {index + 1} (required-tool-timeout) "
+                    "next_action is not a non-empty string: "
+                    f"{next_action!r}"
+                )
     required_proof = outcome.get("required_proof")
     if not isinstance(required_proof, dict):
         fail("gate outcome required_proof is not an object")
@@ -6457,6 +6478,55 @@ def self_test_gate_outcome_contract() -> None:
         "gate-outcome failed tool gate without reason",
         "do not match failed",
         lambda root=root: require_gate_outcome(root),
+    )
+
+    # required-tool-timeout is a capacity verdict: a complete reason (tool id,
+    # lease seconds in the detail, resolvable sensor receipt, operator
+    # next_action) passes; dropping the lease seconds, the next_action, or
+    # the receipt fails closed.
+    def timeout_reason(**overrides) -> dict:
+        base = {
+            "kind": "required-tool-timeout",
+            "id": "ripr",
+            "detail": "required tool `ripr` timed out (timeout_sec 240): "
+            "sensor timed out; configured threshold [tools.ripr.gate] "
+            "max_new_unsuppressed=0 was never evaluated",
+            "receipt": "sensors/ripr/ub-review-sensor-status.json",
+            "next_action": "rerun with extended lease or split the PR",
+        }
+        base.update(overrides)
+        return base
+
+    def write_timeout_root(reason: dict) -> "pathlib.Path":
+        timeout_root = write_root(outcome(reasons=[reason]))
+        sensor_dir = timeout_root / "sensors/ripr"
+        sensor_dir.mkdir(parents=True)
+        (sensor_dir / "ub-review-sensor-status.json").write_text(
+            "{}", encoding="utf-8"
+        )
+        return timeout_root
+
+    require_gate_outcome(write_timeout_root(timeout_reason()))
+    expect_self_test_failure(
+        "gate-outcome timeout reason without lease seconds",
+        "does not name the expired lease",
+        lambda root=write_timeout_root(
+            timeout_reason(detail="required tool `ripr` timed out: sensor timed out")
+        ): require_gate_outcome(root),
+    )
+    expect_self_test_failure(
+        "gate-outcome timeout reason without next_action",
+        "next_action is not a non-empty string",
+        lambda root=write_timeout_root(
+            {key: value for key, value in timeout_reason().items() if key != "next_action"}
+        ): require_gate_outcome(root),
+    )
+    expect_self_test_failure(
+        "gate-outcome timeout reason with dangling sensor receipt",
+        "receipt does not resolve",
+        lambda root=write_root(
+            outcome(reasons=[timeout_reason()])
+        ): require_gate_outcome(root),
     )
 
 

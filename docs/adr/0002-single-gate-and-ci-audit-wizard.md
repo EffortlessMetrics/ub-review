@@ -79,7 +79,7 @@ posting trouble is not gate trouble.
   "terminal_status": "sufficient",
   "reasons": [
     {
-      "kind": "required-proof | tool-gate | required-sensor | blocking-finding | policy | internal",
+      "kind": "required-proof | tool-gate | required-sensor | required-tool-timeout | blocking-finding | policy | internal",
       "id": "cargo-check",
       "detail": "exit 101 after 41s",
       "receipt": "review/proof_receipts.json#cargo-check"

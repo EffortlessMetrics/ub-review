@@ -42,9 +42,11 @@ argument.
 
 ## Gate semantics invariants
 
-- Reason kinds: required-proof, tool-gate, required-sensor, blocking-finding,
-  policy; internal is declared-but-unemitted. The `[gate.blocking]` opt-ins
-  surface as blocking-finding, never as required-proof/tool-gate kinds.
+- Reason kinds: required-proof, tool-gate, required-sensor,
+  required-tool-timeout (timed_out required sensor; carries timeout_sec and a
+  next_action), blocking-finding, policy; internal is declared-but-unemitted.
+  The `[gate.blocking]` opt-ins surface as blocking-finding, never as
+  required-proof/tool-gate kinds.
 - `review-direct` is a legacy alias of review-byok and never enforces.
 - Model and provider failures never redden the gate; missing evidence is
   recorded as missing evidence, never as clean evidence.

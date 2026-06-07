@@ -147,6 +147,13 @@ pub(crate) struct GateReason {
     pub(crate) id: String,
     pub(crate) detail: String,
     pub(crate) receipt: String,
+    /// The operator's next move, present only on reason kinds where the fix
+    /// is operational rather than a code change (today:
+    /// `required-tool-timeout`, where the tool ran out of lease — a capacity
+    /// gap, not a finding). Skipped from serialization when absent so every
+    /// other reason kind keeps its exact pre-existing shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) next_action: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Serialize)]
@@ -215,6 +222,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
             id: error.section.clone(),
             detail: error.detail.clone(),
             receipt: "effective-config.json".to_owned(),
+            next_action: None,
         });
     }
 
@@ -244,6 +252,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                         required_proof_reason_id(request)
                     ),
                     receipt: "review/proof_requests.json".to_owned(),
+                    next_action: None,
                 });
             }
             continue;
@@ -264,6 +273,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                             receipt.result
                         ),
                         receipt: format!("review/proof_receipts.json#{}", receipt.id),
+                        next_action: None,
                     });
                 }
             }
@@ -277,6 +287,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                     id: required_proof_reason_id(request),
                     detail: required_proof_failure_detail(request, receipt),
                     receipt: format!("review/proof_receipts.json#{}", receipt.id),
+                    next_action: None,
                 });
             }
         }
@@ -306,6 +317,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                     id: entry.tool.clone(),
                     detail: entry.reason.clone(),
                     receipt: format!("review/tool-gate-outcomes.json#{}", entry.tool),
+                    next_action: None,
                 });
             }
             "missing_evidence" if entry.required && blocking_policy.tool_gate_missing_evidence => {
@@ -318,6 +330,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                         entry.reason
                     ),
                     receipt: format!("review/tool-gate-outcomes.json#{}", entry.tool),
+                    next_action: None,
                 });
             }
             _ => {}
@@ -330,15 +343,26 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
     for issue in input.missing_or_failed_sensor_evidence {
         if enforce_required_sensors && sensor_issue_is_required(input.plan, issue) {
             evidence_gaps_blocking += 1;
-            reasons.push(GateReason {
-                kind: "required-sensor".to_owned(),
-                id: issue.sensor.clone(),
-                detail: format!(
-                    "required sensor evidence gap (status `{}`): {}",
-                    issue.status, issue.reason
-                ),
-                receipt: required_sensor_gap_receipt(issue),
-            });
+            // A timed-out required tool is a capacity gap, not a tool defect
+            // or a finding: the lease expired before any verdict existed
+            // (PR #387, run 27102118267: ripr hit its 240s timeout and the
+            // generic gap text read like a sensor failure). It gets its own
+            // reason kind naming the expired lease, the threshold that never
+            // evaluated, and the operator's next move.
+            if issue.status == "timed_out" {
+                reasons.push(required_tool_timeout_reason(input.plan, issue));
+            } else {
+                reasons.push(GateReason {
+                    kind: "required-sensor".to_owned(),
+                    id: issue.sensor.clone(),
+                    detail: format!(
+                        "required sensor evidence gap (status `{}`): {}",
+                        issue.status, issue.reason
+                    ),
+                    receipt: required_sensor_gap_receipt(issue),
+                    next_action: None,
+                });
+            }
         } else {
             evidence_gaps_advisory += 1;
         }
@@ -429,6 +453,48 @@ pub(crate) fn required_sensor_gap_receipt(issue: &SensorEvidenceIssue) -> String
         "review/terminal_state.json".to_owned()
     } else {
         format!("sensors/{}/ub-review-sensor-status.json", issue.sensor)
+    }
+}
+
+/// Build the `required-tool-timeout` reason for a required sensor whose
+/// status is `timed_out`. The detail names the configured lease
+/// (`timeout_sec` from the plan) and, when the tool carries a
+/// `[tools.<id>.gate]` policy, the threshold that never got to evaluate —
+/// so the red check reads as "capacity ran out before the verdict", never
+/// as a finding or a tool defect. `next_action` carries the operator's
+/// move; the receipt stays the sensor's own status receipt (which records
+/// `timed_out: true` and the same `timeout_sec`).
+pub(crate) fn required_tool_timeout_reason(plan: &Plan, issue: &SensorEvidenceIssue) -> GateReason {
+    let sensor = plan.sensors.iter().find(|sensor| sensor.id == issue.sensor);
+    let mut detail = match sensor.map(|sensor| sensor.timeout_sec) {
+        Some(timeout_sec) => format!(
+            "required tool `{}` timed out (timeout_sec {timeout_sec}): {}",
+            issue.sensor, issue.reason
+        ),
+        // The issue was classified required against this plan, so the lookup
+        // succeeds in practice; stay honest rather than inventing a number
+        // if a future caller passes a foreign plan.
+        None => format!(
+            "required tool `{}` timed out (timeout_sec not in plan): {}",
+            issue.sensor, issue.reason
+        ),
+    };
+    if let Some(max) = sensor
+        .and_then(|sensor| sensor.gate.as_ref())
+        .and_then(|gate| gate.max_new_unsuppressed)
+    {
+        detail.push_str(&format!(
+            "; configured threshold [tools.{}.gate] max_new_unsuppressed={max} \
+             was never evaluated",
+            issue.sensor
+        ));
+    }
+    GateReason {
+        kind: "required-tool-timeout".to_owned(),
+        id: issue.sensor.clone(),
+        detail,
+        receipt: required_sensor_gap_receipt(issue),
+        next_action: Some("rerun with extended lease or split the PR".to_owned()),
     }
 }
 
@@ -816,6 +882,147 @@ mod tests {
         assert_eq!(gate.reasons[0].kind, "required-sensor");
         assert_eq!(gate.reasons[0].id, "actionlint");
         assert_eq!(gate.reasons[0].receipt, "review/terminal_state.json");
+    }
+
+    #[test]
+    fn gate_outcome_timed_out_required_tool_gets_structured_timeout_reason() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        // The production shape from run 27102118267: ripr required, 240s
+        // lease, [tools.ripr.gate] max_new_unsuppressed = 0 configured.
+        let mut required_ripr = sensor_plan("ripr", "ripr", true);
+        required_ripr.required = true;
+        required_ripr.timeout_sec = 240;
+        required_ripr.gate = Some(crate::config::ToolGatePolicy {
+            scope: None,
+            max_new_unsuppressed: Some(0),
+        });
+        let plan = test_plan(vec![required_ripr]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "ripr".to_owned(),
+            status: "timed_out".to_owned(),
+            reason: "sensor timed out".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.evidence_gaps_blocking, 1);
+        assert_eq!(gate.reasons.len(), 1);
+        let reason = &gate.reasons[0];
+        // A timeout is a capacity gap, not a generic sensor defect: distinct
+        // kind, the expired lease in seconds, the threshold that never got
+        // to evaluate, the sensor's own receipt, and the operator's move.
+        assert_eq!(reason.kind, "required-tool-timeout");
+        assert_eq!(reason.id, "ripr");
+        assert_eq!(
+            reason.detail,
+            "required tool `ripr` timed out (timeout_sec 240): sensor timed out; \
+             configured threshold [tools.ripr.gate] max_new_unsuppressed=0 \
+             was never evaluated"
+        );
+        assert_eq!(reason.receipt, "sensors/ripr/ub-review-sensor-status.json");
+        assert_eq!(
+            reason.next_action.as_deref(),
+            Some("rerun with extended lease or split the PR")
+        );
+    }
+
+    #[test]
+    fn gate_outcome_timed_out_tool_without_gate_policy_omits_threshold_clause() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_actionlint = sensor_plan("actionlint", "actionlint", true);
+        required_actionlint.required = true;
+        required_actionlint.timeout_sec = 60;
+        let plan = test_plan(vec![required_actionlint]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "actionlint".to_owned(),
+            status: "timed_out".to_owned(),
+            reason: "sensor timed out".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.reasons.len(), 1);
+        let reason = &gate.reasons[0];
+        assert_eq!(reason.kind, "required-tool-timeout");
+        // No [tools.actionlint.gate] policy exists, so no threshold clause:
+        // the detail never asserts a configuration the repo did not write.
+        assert_eq!(
+            reason.detail,
+            "required tool `actionlint` timed out (timeout_sec 60): sensor timed out"
+        );
+        assert_eq!(
+            reason.next_action.as_deref(),
+            Some("rerun with extended lease or split the PR")
+        );
+    }
+
+    #[test]
+    fn gate_outcome_non_timeout_required_gap_keeps_generic_kind() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_ripr = sensor_plan("ripr", "ripr", true);
+        required_ripr.required = true;
+        let plan = test_plan(vec![required_ripr]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "ripr".to_owned(),
+            status: "failed".to_owned(),
+            reason: "exit 1".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.reasons.len(), 1);
+        let reason = &gate.reasons[0];
+        // Only timeouts get the capacity kind; a genuine failure stays the
+        // generic required-sensor gap with no next_action, byte-identical to
+        // the pre-existing shape.
+        assert_eq!(reason.kind, "required-sensor");
+        assert_eq!(
+            reason.detail,
+            "required sensor evidence gap (status `failed`): exit 1"
+        );
+        assert_eq!(reason.next_action, None);
+        let serialized = serde_json::to_value(reason).unwrap_or_default();
+        assert!(
+            serialized.get("next_action").is_none(),
+            "absent next_action must be skipped from serialization: {serialized}"
+        );
     }
 
     #[test]

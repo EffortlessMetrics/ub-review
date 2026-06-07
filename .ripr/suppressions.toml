@@ -2266,3 +2266,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_github.rs:2348:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:361:side_effect"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative (ripr-swarm#1054): side_effect probe on the closing punctuation of the required-sensor GateReason push in build_gate_outcome; the colocated test gate_outcome_non_timeout_required_gap_keeps_generic_kind pins this exact push with exact-equality oracles on kind, detail, and next_action, and gate_outcome_fail_reasons_always_carry_receipts iterates every reason. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:364:side_effect"
+owner = "ub-review/core"
+reason = "Twin of the side_effect probe above (ripr-swarm#1054): closing brace of the same exactly-asserted required-sensor GateReason push. Line-keyed id; re-verify after any edit to gate.rs."

@@ -169,8 +169,16 @@ required-proof      a matched [[proof.required]] task failed (head_failed,
 tool-gate           a configured [tools.*.gate] threshold was evaluated and
                     exceeded
 required-sensor     a required sensor's matched trigger produced no evidence
-                    (receipt-absent, failed, skipped, timed-out);
-                    intelligent-ci mode only
+                    (receipt-absent, failed, skipped); intelligent-ci mode
+                    only
+required-tool-timeout
+                    a required sensor's status is timed_out: the lease
+                    expired before any threshold evaluated — a capacity
+                    verdict, not a finding. detail names the configured
+                    timeout_sec and (when [tools.<id>.gate] exists) the
+                    threshold that never evaluated; the reason carries a
+                    next_action ("rerun with extended lease or split the
+                    PR"); intelligent-ci mode only
 blocking-finding    today emitted only by the two [gate.blocking] evidence
                     opt-ins (required_proof_unproven,
                     tool_gate_missing_evidence); per-finding-class
