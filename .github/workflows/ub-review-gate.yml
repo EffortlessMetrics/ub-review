@@ -57,7 +57,14 @@ jobs:
           mode: intelligent-ci
           run-pass: auto
           # Lease the heavy witness classes so the enabled coverage sensor runs.
-          allow-heavy: 'true'
+          # TEMPORARY (2026-06-07): GitHub-hosted runners are evicting jobs
+          # past ~10 minutes ('runner has received a shutdown signal', six
+          # kills on this PR's runs). Coverage is the long pole and is
+          # advisory (required = false); skipping its lease fits the gate
+          # under the eviction window. The skip writes a receipted
+          # missing-evidence sensor status, never clean evidence. Restore
+          # to 'true' in the next train PR once runs complete again.
+          allow-heavy: 'false'
           root: .
           out: target/ub-review
           github-token: ${{ github.token }}
