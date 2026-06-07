@@ -5,7 +5,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{BoxState, DEFAULT_REVIEW_PROFILE, LanePlan, builtin_profiles, builtin_tools};
+use crate::{BoxState, DEFAULT_REVIEW_PROFILE, builtin_profiles, builtin_tools};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
@@ -19,13 +19,31 @@ pub(crate) struct Config {
     pub(crate) proof: ProofPolicyConfig,
     pub(crate) profiles: BTreeMap<String, Profile>,
     pub(crate) tools: BTreeMap<String, ToolPolicy>,
-    pub(crate) lanes: Vec<LanePlan>,
+    pub(crate) lanes: Vec<RepoLane>,
     /// Malformed gate-policy sections recorded at load time. Serialized into
     /// `effective-config.json` so the gate's `policy` fail reasons point at a
     /// receipt that names the parse error (roadmap #24: policy parse errors
     /// become receipted gate failures, never silent defaults).
     #[serde(skip_deserializing, skip_serializing_if = "Vec::is_empty")]
     pub(crate) policy_errors: Vec<PolicyError>,
+}
+
+/// A repo-declared review lane (`[[lanes]]` in `.ub-review.toml`). The
+/// minimal authoring surface is `id` + `role` + `focus`; `receives` defaults
+/// to the common sensor trio at plan time, `model` defaults to the lane
+/// default, and `diff_classes` defaults to every diff class. What makes a
+/// good lane - the evidence a finding must cite, the failure mode, the
+/// never-do set - is doctrine, not schema: see
+/// docs/specs/UB-REVIEW-SPEC-0011-lane-doctrine.md.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct RepoLane {
+    pub(crate) id: String,
+    pub(crate) role: String,
+    pub(crate) focus: String,
+    pub(crate) receives: Vec<String>,
+    pub(crate) model: String,
+    pub(crate) diff_classes: Vec<String>,
 }
 
 /// One malformed policy key or section (an unknown top-level key, a `[gate]`
