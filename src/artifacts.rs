@@ -65,6 +65,7 @@ pub(crate) const TERMINAL_STATE_SCHEMA: &str = "ub-review.terminal_state.v1";
 pub(crate) const TOOL_GATE_OUTCOMES_SCHEMA: &str = "ub-review.tool_gate_outcomes.v1";
 pub(crate) const TOOL_GATE_OUTCOME_SCHEMA: &str = "ub-review.tool_gate_outcome.v1";
 pub(crate) const TOOL_STATUS_SCHEMA: &str = "ub-review.tool_status.v1";
+pub(crate) const UB_REVIEW_COST_SCHEMA: &str = "ub-review.cost_receipt.v1";
 pub(crate) const WITNESS_REGISTRY_SCHEMA: &str = "ub-review.witness_registry.v1";
 pub(crate) const WITNESS_SCHEMA: &str = "ub-review.witness.v1";
 pub(crate) const WORK_EVENT_SCHEMA: &str = "ub-review.work_event.v1";

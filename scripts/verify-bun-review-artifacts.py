@@ -915,6 +915,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/provider-preflight-status.json",
         "review/model_stages.json",
         "review/metrics.json",
+        "review/ub-review-cost.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -1443,6 +1444,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resolved_candidate_artifacts(root, follow_up_results, follow_up_outputs)
     require_final_compiler_input(root, review, follow_up_evidence)
     require_gate_outcome(root)
+    require_cost_receipt(root)
     require_issue_capture_artifacts(root)
     require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
@@ -4046,6 +4048,56 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                 )
 
 
+def require_cost_receipt(root: pathlib.Path) -> None:
+    """#336: the per-run cost receipt must receipt its own gaps. Every entry
+    in `missing` names an input with a non-empty reason, and the composable
+    inputs (estimated_cost_usd, required_floor_wall_seconds) are present
+    exactly when they are not named in missing — a receipt that fakes a
+    value or silently omits one is rejected. suggested_fill_seconds is
+    deferred to #337 and must not appear in v1."""
+    receipt = load_json(root / "review/ub-review-cost.json")
+    if not isinstance(receipt, dict):
+        fail("review/ub-review-cost.json is not an object")
+    if receipt.get("schema") != "ub-review.cost_receipt.v1":
+        fail(f"cost receipt has wrong schema: {receipt.get('schema')!r}")
+    runner_kind = receipt.get("runner_kind")
+    if runner_kind not in {"github-hosted", "local"}:
+        fail(f"cost receipt runner_kind is invalid: {runner_kind!r}")
+    missing = receipt.get("missing")
+    if not isinstance(missing, list):
+        fail("cost receipt missing is not an array")
+    missing_inputs = set()
+    for index, entry in enumerate(missing):
+        if not isinstance(entry, dict):
+            fail(f"cost receipt missing entry {index + 1} is not an object")
+        for field in ("input", "reason"):
+            value = entry.get(field)
+            if not isinstance(value, str) or not value:
+                fail(
+                    f"cost receipt missing entry {index + 1} {field} is not "
+                    f"a non-empty string: {value!r}"
+                )
+        missing_inputs.add(entry["input"])
+    for field in ("estimated_cost_usd", "required_floor_wall_seconds"):
+        present = field in receipt
+        named = field in missing_inputs
+        if present == named:
+            fail(
+                f"cost receipt {field} must be present exactly when it is "
+                f"not named in missing: present={present} "
+                f"named_in_missing={named}"
+            )
+        if present:
+            value = receipt[field]
+            if not isinstance(value, (int, float)) or isinstance(value, bool) or value < 0:
+                fail(f"cost receipt {field} is not a non-negative number: {value!r}")
+    if "suggested_fill_seconds" in receipt:
+        fail(
+            "cost receipt suggested_fill_seconds is not part of v1 "
+            "(fill accounting is issue #337)"
+        )
+
+
 def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> list[dict]:
     witnesses = load_json(root / "review/witnesses.json")
     if not isinstance(witnesses, list):
@@ -6408,6 +6460,124 @@ def self_test_gate_outcome_contract() -> None:
     )
 
 
+def self_test_cost_receipt_contract() -> None:
+    """#336: the cost receipt's gaps are themselves receipted. A receipt
+    that silently omits a composable input, fakes one it also calls
+    missing, leaves a gap unexplained, or smuggles the #337-deferred
+    fill field must redden the verifier."""
+    import tempfile
+
+    def write_root(receipt: dict) -> "pathlib.Path":
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        review_dir = tmp / "review"
+        review_dir.mkdir()
+        (review_dir / "ub-review-cost.json").write_text(
+            json.dumps(receipt), encoding="utf-8"
+        )
+        return tmp
+
+    def receipt(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.cost_receipt.v1",
+            "run_id": "9876543210",
+            "runner_kind": "github-hosted",
+            "target_minutes": 30,
+            "cap_minutes": 60,
+            "elapsed_seconds": 120.0,
+            "required_floor_wall_seconds": 47.5,
+            "tokens": {"fresh_input": 12400, "cached_input": 89000, "output": 3100},
+            "estimated_cost_usd": 1.0,
+            "missing": [],
+        }
+        base.update(overrides)
+        return base
+
+    # Fully composed receipt passes.
+    require_cost_receipt(write_root(receipt()))
+    # Honest-gap shape passes: cost and floor are absent AND receipted.
+    gapped = receipt(
+        runner_kind="local",
+        missing=[
+            {
+                "input": "estimated_cost_usd",
+                "reason": "policy/ci-budget.toml is not present at the repo root; "
+                "runner-minute pricing unavailable",
+            },
+            {
+                "input": "required_floor_wall_seconds",
+                "reason": "sensors/unsafe-review/unsafe-review-gate.json has no "
+                "numeric required_floor_wall_seconds field (SPEC-0034 not "
+                "shipped upstream yet)",
+            },
+        ],
+    )
+    gapped.pop("estimated_cost_usd")
+    gapped.pop("required_floor_wall_seconds")
+    require_cost_receipt(write_root(gapped))
+
+    expect_self_test_failure(
+        "cost receipt wrong schema",
+        "wrong schema",
+        lambda root=write_root(
+            receipt(schema="ub-review.cost_receipt.v0")
+        ): require_cost_receipt(root),
+    )
+    expect_self_test_failure(
+        "cost receipt invalid runner kind",
+        "runner_kind is invalid",
+        lambda root=write_root(
+            receipt(runner_kind="self-hosted")
+        ): require_cost_receipt(root),
+    )
+    silently_omitted = receipt()
+    silently_omitted.pop("estimated_cost_usd")
+    expect_self_test_failure(
+        "cost receipt silently omits estimated_cost_usd",
+        "present exactly when it is not named in missing",
+        lambda root=write_root(silently_omitted): require_cost_receipt(root),
+    )
+    expect_self_test_failure(
+        "cost receipt fakes a floor it also calls missing",
+        "present exactly when it is not named in missing",
+        lambda root=write_root(
+            receipt(
+                missing=[
+                    {
+                        "input": "required_floor_wall_seconds",
+                        "reason": "floor artifact absent",
+                    }
+                ]
+            )
+        ): require_cost_receipt(root),
+    )
+    unexplained = receipt()
+    unexplained.pop("required_floor_wall_seconds")
+    expect_self_test_failure(
+        "cost receipt gap without a reason",
+        "reason is not a non-empty string",
+        lambda root=write_root(
+            dict(
+                unexplained,
+                missing=[{"input": "required_floor_wall_seconds", "reason": ""}],
+            )
+        ): require_cost_receipt(root),
+    )
+    expect_self_test_failure(
+        "cost receipt negative estimated cost",
+        "is not a non-negative number",
+        lambda root=write_root(
+            receipt(estimated_cost_usd=-0.5)
+        ): require_cost_receipt(root),
+    )
+    expect_self_test_failure(
+        "cost receipt smuggles v1-excluded fill seconds",
+        "not part of v1",
+        lambda root=write_root(
+            receipt(suggested_fill_seconds=18.1)
+        ): require_cost_receipt(root),
+    )
+
+
 def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
     """Loop-closure pin for #314: a refuted candidate's surface reaching the
     final compiler input must redden the verifier, end to end - not just the
@@ -7264,6 +7434,7 @@ def run_self_tests() -> None:
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_cost_receipt_contract()
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()

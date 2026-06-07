@@ -175,6 +175,7 @@ fn active_len_tracks_view_after_resize() {
         "review/pr_thread_context.json",
         "review/terminal_state.json",
         "review/gate_outcome.json",
+        "review/ub-review-cost.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
         "review/tool-gate-outcomes.json",

@@ -5301,6 +5301,43 @@ fn write_review_artifacts(
         review_dir.join("gate_outcome.json"),
         serde_json::to_vec_pretty(&gate_outcome)?,
     )?;
+    // #336: one receipted artifact answers "what did this gate pass cost?".
+    // Every input that could not be composed lands in `missing` with a
+    // reason — missing evidence is recorded, never faked as clean.
+    let fresh_uncached_tokens =
+        sum_reported_usage_tokens(&review, &follow_up_results, |usage| usage.input_tokens);
+    let fresh_cache_write_tokens =
+        sum_reported_usage_tokens(&review, &follow_up_results, |usage| {
+            usage.cache_creation_input_tokens
+        });
+    let fresh_input_tokens = match (fresh_uncached_tokens, fresh_cache_write_tokens) {
+        (None, None) => None,
+        (uncached, cache_writes) => Some(
+            uncached
+                .unwrap_or(0)
+                .saturating_add(cache_writes.unwrap_or(0)),
+        ),
+    };
+    let cost_receipt = build_cost_receipt(CostReceiptInput {
+        run_id: std::env::var("GITHUB_RUN_ID").ok(),
+        github_actions: box_state.github_actions,
+        target_minutes: config.gate.target_minutes,
+        cap_minutes: config.gate.hard_timeout_minutes,
+        elapsed_seconds: elapsed.as_secs_f64(),
+        fresh_input_tokens,
+        cached_input_tokens: sum_reported_usage_tokens(&review, &follow_up_results, |usage| {
+            usage.cache_read_input_tokens
+        }),
+        output_tokens: sum_reported_usage_tokens(&review, &follow_up_results, |usage| {
+            usage.output_tokens
+        }),
+        required_floor_wall_seconds: compose_required_floor_wall_seconds(out),
+        linux_minute_rate_usd: compose_linux_minute_rate_usd(root),
+    });
+    fs::write(
+        review_dir.join("ub-review-cost.json"),
+        serde_json::to_vec_pretty(&cost_receipt)?,
+    )?;
     event_log.append(
         "gate_outcome",
         serde_json::json!({
@@ -6266,6 +6303,194 @@ fn model_prompt_cache_metrics(
         lane_misses,
         lane_unknown,
     }
+}
+
+/// Inputs for the per-run cost receipt (#336), composed entirely at the
+/// call site so the builder stays pure and the honesty rule is testable
+/// without a run: an input that could not be composed is receipted in the
+/// `missing` array with a reason — never faked and never silently omitted.
+struct CostReceiptInput {
+    /// `GITHUB_RUN_ID` when present. A local run has no run id; the gap is
+    /// receipted instead of substituting a fabricated identifier.
+    run_id: Option<String>,
+    /// Whether the run executes under GitHub Actions (`BoxState::detect`).
+    github_actions: bool,
+    /// `[gate].target_minutes` from repo policy.
+    target_minutes: u64,
+    /// `[gate].hard_timeout_minutes` from repo policy.
+    cap_minutes: u64,
+    /// Whole-run wall clock at emission time.
+    elapsed_seconds: f64,
+    /// Input tokens processed without cache benefit (uncached `input_tokens`
+    /// plus `cache_creation_input_tokens`); `None` when no call reported it.
+    fresh_input_tokens: Option<u64>,
+    /// `cache_read_input_tokens` total; `None` when no call reported it.
+    cached_input_tokens: Option<u64>,
+    /// `output_tokens` total; `None` when no call reported it.
+    output_tokens: Option<u64>,
+    /// Composed from `sensors/unsafe-review/unsafe-review-gate.json`
+    /// (SPEC-0034) — ub-review does not own the floor clock. `Err` carries
+    /// the receipted reason the value is missing.
+    required_floor_wall_seconds: Result<f64, String>,
+    /// `[budget].linux_minute_rate_usd` from `policy/ci-budget.toml`.
+    /// `Err` carries the receipted reason the value is missing.
+    linux_minute_rate_usd: Result<f64, String>,
+}
+
+/// Build `review/ub-review-cost.json` (`ub-review.cost_receipt.v1`).
+///
+/// v1 prices only the runner-minutes component (`elapsed_minutes x
+/// linux_minute_rate_usd`); token pricing is not invented here.
+/// `suggested_fill_seconds` is deliberately absent until the fill ledger
+/// exists (#337).
+fn build_cost_receipt(input: CostReceiptInput) -> serde_json::Value {
+    fn record_missing(missing: &mut Vec<serde_json::Value>, name: &str, reason: String) {
+        missing.push(serde_json::json!({ "input": name, "reason": reason }));
+    }
+    let mut receipt = serde_json::Map::new();
+    let mut missing: Vec<serde_json::Value> = Vec::new();
+    receipt.insert("schema".to_owned(), UB_REVIEW_COST_SCHEMA.into());
+    match input.run_id {
+        Some(run_id) => {
+            receipt.insert("run_id".to_owned(), run_id.into());
+        }
+        None => record_missing(
+            &mut missing,
+            "run_id",
+            "GITHUB_RUN_ID is not set; this is not a GitHub Actions run".to_owned(),
+        ),
+    }
+    receipt.insert(
+        "runner_kind".to_owned(),
+        if input.github_actions {
+            "github-hosted".into()
+        } else {
+            "local".into()
+        },
+    );
+    receipt.insert("target_minutes".to_owned(), input.target_minutes.into());
+    receipt.insert("cap_minutes".to_owned(), input.cap_minutes.into());
+    receipt.insert("elapsed_seconds".to_owned(), input.elapsed_seconds.into());
+    match input.required_floor_wall_seconds {
+        Ok(seconds) => {
+            receipt.insert("required_floor_wall_seconds".to_owned(), seconds.into());
+        }
+        Err(reason) => record_missing(&mut missing, "required_floor_wall_seconds", reason),
+    }
+    let mut tokens = serde_json::Map::new();
+    for (name, value) in [
+        ("fresh_input", input.fresh_input_tokens),
+        ("cached_input", input.cached_input_tokens),
+        ("output", input.output_tokens),
+    ] {
+        match value {
+            Some(total) => {
+                tokens.insert(name.to_owned(), total.into());
+            }
+            None => record_missing(
+                &mut missing,
+                &format!("tokens.{name}"),
+                format!("no model call reported {name} tokens in its usage receipt"),
+            ),
+        }
+    }
+    receipt.insert("tokens".to_owned(), serde_json::Value::Object(tokens));
+    match input.linux_minute_rate_usd {
+        Ok(rate) => {
+            receipt.insert(
+                "estimated_cost_usd".to_owned(),
+                (input.elapsed_seconds / 60.0 * rate).into(),
+            );
+        }
+        Err(reason) => record_missing(&mut missing, "estimated_cost_usd", reason),
+    }
+    receipt.insert("missing".to_owned(), serde_json::Value::Array(missing));
+    serde_json::Value::Object(receipt)
+}
+
+/// SPEC-0034: compose the deterministic floor's exported wall time from the
+/// unsafe-review gate artifact. ub-review never re-measures the floor; when
+/// the artifact or the field is absent the reason is returned for the cost
+/// receipt's `missing` array.
+fn compose_required_floor_wall_seconds(out: &Path) -> Result<f64, String> {
+    let rel = "sensors/unsafe-review/unsafe-review-gate.json";
+    let path = out
+        .join("sensors")
+        .join("unsafe-review")
+        .join("unsafe-review-gate.json");
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(_) => return Err(format!("{rel} is not present in this run")),
+    };
+    let value: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(error) => return Err(format!("{rel} is not valid JSON: {error}")),
+    };
+    value
+        .get("required_floor_wall_seconds")
+        .and_then(serde_json::Value::as_f64)
+        .ok_or_else(|| {
+            format!(
+                "{rel} has no numeric required_floor_wall_seconds field \
+                 (SPEC-0034 not shipped upstream yet)"
+            )
+        })
+}
+
+/// Read `[budget].linux_minute_rate_usd` from the reviewed repo's
+/// `policy/ci-budget.toml`. The rate is repo policy, not a built-in price
+/// table; when it cannot be composed the reason is returned for the cost
+/// receipt's `missing` array.
+fn compose_linux_minute_rate_usd(root: &Path) -> Result<f64, String> {
+    let rel = "policy/ci-budget.toml";
+    let path = root.join("policy").join("ci-budget.toml");
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(_) => {
+            return Err(format!(
+                "{rel} is not present at the repo root; runner-minute pricing unavailable"
+            ));
+        }
+    };
+    let value: toml::Value = match toml::from_str(&text) {
+        Ok(value) => value,
+        Err(error) => return Err(format!("{rel} is not valid TOML: {error}")),
+    };
+    value
+        .get("budget")
+        .and_then(|budget| budget.get("linux_minute_rate_usd"))
+        .and_then(toml::Value::as_float)
+        .ok_or_else(|| format!("{rel} has no [budget].linux_minute_rate_usd float"))
+}
+
+/// Sum one usage field across every model-call receipt that reported it —
+/// the same sources `model_prompt_cache_metrics` aggregates (provider
+/// preflights, model lanes, follow-up calls). `None` means no call reported
+/// the field at all, which the cost receipt records as missing evidence
+/// rather than a fabricated zero.
+fn sum_reported_usage_tokens(
+    review: &ReviewArtifacts,
+    follow_up_results: &[FollowUpResult],
+    field: fn(&ModelCacheUsage) -> Option<u64>,
+) -> Option<u64> {
+    let mut total: Option<u64> = None;
+    for usage in review
+        .provider_preflights
+        .iter()
+        .map(|receipt| &receipt.cache_usage)
+        .chain(
+            review
+                .model_lanes
+                .iter()
+                .map(|receipt| &receipt.cache_usage),
+        )
+        .chain(follow_up_results.iter().map(|result| &result.cache_usage))
+    {
+        if let Some(value) = field(usage) {
+            total = Some(total.unwrap_or(0).saturating_add(value));
+        }
+    }
+    total
 }
 
 fn combined_observations(review: &ReviewArtifacts) -> Vec<Observation> {
@@ -24137,6 +24362,34 @@ required_proof_unprooven = true
             summary
                 .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
         );
+        // #336: the cost receipt is emitted alongside the gate outcome. This
+        // fixture has no unsafe-review gate artifact and no repo budget
+        // policy, so both must be receipted in `missing` — not faked. The
+        // run_id entry is env-dependent (GITHUB_RUN_ID is set in CI), so it
+        // is deliberately not asserted here.
+        let cost: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/ub-review-cost.json"))?)?;
+        assert_eq!(cost["schema"], "ub-review.cost_receipt.v1");
+        assert_eq!(cost["runner_kind"], "local");
+        assert_eq!(cost["target_minutes"], 30);
+        assert_eq!(cost["cap_minutes"], 60);
+        let missing_inputs: Vec<&str> = cost["missing"]
+            .as_array()
+            .map(|entries| {
+                entries
+                    .iter()
+                    .filter_map(|entry| entry["input"].as_str())
+                    .collect()
+            })
+            .unwrap_or_default();
+        assert!(missing_inputs.contains(&"required_floor_wall_seconds"));
+        assert!(missing_inputs.contains(&"estimated_cost_usd"));
+        assert!(cost.get("required_floor_wall_seconds").is_none());
+        assert!(cost.get("estimated_cost_usd").is_none());
+        assert!(
+            cost.get("suggested_fill_seconds").is_none(),
+            "fill accounting is deferred to #337 and must not be emitted in v1"
+        );
         Ok(())
     }
 
@@ -26527,6 +26780,176 @@ index 1111111..2222222 100644
         assert_eq!(metrics.resource_leases, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
+    }
+
+    #[test]
+    fn cost_receipt_with_all_inputs_composed_has_empty_missing() {
+        // #336 oracle: exact-equality against the full v1 shape, so any
+        // accidental key (including the #337-deferred suggested_fill_seconds)
+        // fails the test instead of slipping into the artifact contract.
+        let receipt = super::build_cost_receipt(super::CostReceiptInput {
+            run_id: Some("9876543210".to_owned()),
+            github_actions: true,
+            target_minutes: 30,
+            cap_minutes: 60,
+            elapsed_seconds: 120.0,
+            fresh_input_tokens: Some(12_400),
+            cached_input_tokens: Some(89_000),
+            output_tokens: Some(3_100),
+            required_floor_wall_seconds: Ok(47.5),
+            linux_minute_rate_usd: Ok(0.5),
+        });
+        assert_eq!(
+            receipt,
+            serde_json::json!({
+                "schema": "ub-review.cost_receipt.v1",
+                "run_id": "9876543210",
+                "runner_kind": "github-hosted",
+                "target_minutes": 30,
+                "cap_minutes": 60,
+                "elapsed_seconds": 120.0,
+                "required_floor_wall_seconds": 47.5,
+                "tokens": {
+                    "fresh_input": 12_400,
+                    "cached_input": 89_000,
+                    "output": 3_100,
+                },
+                // 120 s = 2 runner minutes at 0.5 USD/minute. v1 prices only
+                // the runner-minutes component; no token pricing is invented.
+                "estimated_cost_usd": 1.0,
+                "missing": [],
+            })
+        );
+    }
+
+    #[test]
+    fn cost_receipt_receipts_every_uncomposable_input_with_a_reason() -> anyhow::Result<()> {
+        // #336 honesty rule: absent floor artifact, absent budget policy, and
+        // unset GITHUB_RUN_ID each land in `missing` with a reason. Nothing
+        // is fabricated: no zero floor, no zero cost, no placeholder run id.
+        // The compose helpers run against an empty tree so the receipted
+        // reasons are the real ones, not test fictions.
+        let temp = tempfile::tempdir()?;
+        let receipt = super::build_cost_receipt(super::CostReceiptInput {
+            run_id: None,
+            github_actions: false,
+            target_minutes: 30,
+            cap_minutes: 60,
+            elapsed_seconds: 61.5,
+            fresh_input_tokens: None,
+            cached_input_tokens: None,
+            output_tokens: None,
+            required_floor_wall_seconds: super::compose_required_floor_wall_seconds(temp.path()),
+            linux_minute_rate_usd: super::compose_linux_minute_rate_usd(temp.path()),
+        });
+        assert_eq!(
+            receipt,
+            serde_json::json!({
+                "schema": "ub-review.cost_receipt.v1",
+                "runner_kind": "local",
+                "target_minutes": 30,
+                "cap_minutes": 60,
+                "elapsed_seconds": 61.5,
+                "tokens": {},
+                "missing": [
+                    {
+                        "input": "run_id",
+                        "reason": "GITHUB_RUN_ID is not set; this is not a GitHub Actions run",
+                    },
+                    {
+                        "input": "required_floor_wall_seconds",
+                        "reason": "sensors/unsafe-review/unsafe-review-gate.json is not present in this run",
+                    },
+                    {
+                        "input": "tokens.fresh_input",
+                        "reason": "no model call reported fresh_input tokens in its usage receipt",
+                    },
+                    {
+                        "input": "tokens.cached_input",
+                        "reason": "no model call reported cached_input tokens in its usage receipt",
+                    },
+                    {
+                        "input": "tokens.output",
+                        "reason": "no model call reported output tokens in its usage receipt",
+                    },
+                    {
+                        "input": "estimated_cost_usd",
+                        "reason": "policy/ci-budget.toml is not present at the repo root; runner-minute pricing unavailable",
+                    },
+                ],
+            })
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cost_receipt_schema_string_is_the_pinned_literal() {
+        // Literal on purpose (see src/artifacts.rs header): asserting the
+        // constant against itself would be tautological. The verifier pins
+        // the same literal on the Python side.
+        let receipt = super::build_cost_receipt(super::CostReceiptInput {
+            run_id: None,
+            github_actions: false,
+            target_minutes: 1,
+            cap_minutes: 2,
+            elapsed_seconds: 0.0,
+            fresh_input_tokens: None,
+            cached_input_tokens: None,
+            output_tokens: None,
+            required_floor_wall_seconds: Err("floor unavailable".to_owned()),
+            linux_minute_rate_usd: Err("rate unavailable".to_owned()),
+        });
+        assert_eq!(receipt["schema"], "ub-review.cost_receipt.v1");
+    }
+
+    #[test]
+    fn cost_receipt_floor_composes_from_spec_0034_field_only() -> anyhow::Result<()> {
+        // SPEC-0034: the floor wall time is composed from the unsafe-review
+        // gate artifact, never re-measured. A gate file without the field
+        // (today's upstream) is missing evidence with the SPEC pointer.
+        let temp = tempfile::tempdir()?;
+        let gate_dir = temp.path().join("sensors").join("unsafe-review");
+        fs::create_dir_all(&gate_dir)?;
+        let gate_path = gate_dir.join("unsafe-review-gate.json");
+        fs::write(&gate_path, br#"{"verdict": "pass"}"#)?;
+        let reason = super::compose_required_floor_wall_seconds(temp.path())
+            .err()
+            .unwrap_or_default();
+        assert_eq!(
+            reason,
+            "sensors/unsafe-review/unsafe-review-gate.json has no numeric \
+             required_floor_wall_seconds field (SPEC-0034 not shipped upstream yet)"
+        );
+        fs::write(
+            &gate_path,
+            br#"{"verdict": "pass", "required_floor_wall_seconds": 47.5}"#,
+        )?;
+        assert_eq!(
+            super::compose_required_floor_wall_seconds(temp.path()),
+            Ok(47.5)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cost_receipt_rate_composes_from_repo_budget_policy() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let policy_dir = temp.path().join("policy");
+        fs::create_dir_all(&policy_dir)?;
+        fs::write(
+            policy_dir.join("ci-budget.toml"),
+            b"[budget]\nlinux_minute_rate_usd = 0.008\n",
+        )?;
+        assert_eq!(super::compose_linux_minute_rate_usd(temp.path()), Ok(0.008));
+        fs::write(policy_dir.join("ci-budget.toml"), b"[budget]\n")?;
+        let reason = super::compose_linux_minute_rate_usd(temp.path())
+            .err()
+            .unwrap_or_default();
+        assert_eq!(
+            reason,
+            "policy/ci-budget.toml has no [budget].linux_minute_rate_usd float"
+        );
+        Ok(())
     }
 
     #[test]
