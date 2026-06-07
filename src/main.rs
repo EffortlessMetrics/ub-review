@@ -18313,6 +18313,94 @@ enabled = false
     }
 
     #[test]
+    fn swarm_recommended_config_parses_with_advisory_floor_budget_and_providers() -> Result<()> {
+        // The recommended unsafe-review-swarm adoption config (#361) is under
+        // executed-behavior test here: a config-schema change that breaks the
+        // recommended path fails this repo's CI, not the adopter's.
+        let mut config = Config::from_toml_with_policy_receipts(include_str!(
+            "../configs/unsafe-review-swarm.ub-review.toml"
+        ))?;
+        assert!(
+            config.policy_errors.is_empty(),
+            "recommended config must carry zero policy-error receipts: {:?}",
+            config.policy_errors
+        );
+        config.merge_defaults();
+
+        assert_eq!(config.review_profile, "bun-ub-v0");
+        assert_eq!(config.profile, "gh-runner-full");
+        assert_eq!(config.repo.kind, "rust");
+
+        // 30/60-minute budget; posting limited to first-look passes.
+        assert_eq!(config.gate.required_check, "ub-review/gate");
+        assert_eq!(config.gate.target_minutes, 30);
+        assert_eq!(config.gate.hard_timeout_minutes, 60);
+        assert_eq!(
+            config.gate.post_review_on,
+            vec!["opened".to_owned(), "ready_for_review".to_owned()]
+        );
+
+        // Deterministic floor hard-blocks the gate verdict; composition gaps
+        // stay advisory.
+        assert!(config.gate.blocking.required_proof_unproven);
+        assert!(!config.gate.blocking.tool_gate_missing_evidence);
+
+        // The proof floor mirrors the swarm ci.yml gate exactly.
+        let proof_ids = config
+            .proof
+            .required
+            .iter()
+            .map(|policy| policy.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            proof_ids,
+            vec!["cargo-fmt", "cargo-clippy", "cargo-test", "check-pr"]
+        );
+        for policy in &config.proof.required {
+            assert!(policy.required, "{} must be required", policy.id);
+            assert!(policy.enabled, "{} must be enabled", policy.id);
+            assert!(!policy.command.trim().is_empty());
+        }
+
+        // unsafe-review sensor enabled and required so the structured gate
+        // artifact (unsafe-review-gate/v1) lands in lane context.
+        let unsafe_review = config
+            .tools
+            .get("unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("swarm config missing unsafe-review tool"))?;
+        assert!(unsafe_review.enabled);
+        assert!(unsafe_review.required);
+        assert_eq!(
+            unsafe_review.default,
+            super::Trigger::UnsafeOrNativeRiskChanged
+        );
+
+        // ripr stays advisory for swarm: enabled, not required, and no gate
+        // threshold until the tool is pinned in the swarm image.
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("swarm config missing ripr tool"))?;
+        assert!(ripr.enabled);
+        assert!(!ripr.required);
+        assert!(
+            ripr.gate.is_none(),
+            "ripr gate threshold is the documented stricter posture, not the default"
+        );
+
+        // MiniMax primary / OpenCode fallback routing with consumed wave caps.
+        assert_eq!(config.providers.policy, "primary-with-fallback");
+        assert_eq!(config.providers.minimax.max_concurrency, 12);
+        assert_eq!(config.providers.opencode.max_concurrency, 8);
+
+        assert_eq!(
+            config.review_body.summary_only_body,
+            SummaryOnlyBodyPolicy::PostSubstantive
+        );
+        Ok(())
+    }
+
+    #[test]
     fn gate_config_rejects_unknown_fields() {
         let top_level = toml::from_str::<Config>(
             r#"
@@ -22411,6 +22499,7 @@ max_new_unsuppressed = 0
             include_str!("../.ub-review.toml"),
             include_str!("../profiles/bun-ub-v0.toml"),
             include_str!("../configs/ub-review.example.toml"),
+            include_str!("../configs/unsafe-review-swarm.ub-review.toml"),
         ] {
             let config = Config::from_toml_with_policy_receipts(text)?;
             assert!(

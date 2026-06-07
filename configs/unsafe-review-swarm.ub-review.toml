@@ -1,0 +1,222 @@
+# Recommended ub-review config for EffortlessMetrics/unsafe-review-swarm (#361).
+#
+# Posture: advisory-first. `ub-review/gate` is NOT a required branch-protection
+# check in the swarm repo — the existing ci.yml gate (fmt/check/clippy/test/
+# check-pr via .github/scripts/unsafe-review-rust-gate.sh) stays the blocking
+# required check. Adopting this file mutates no branch protection; it adds a
+# bounded advisory review pass on top of the deterministic floor.
+#
+# What hard-blocks vs what stays advisory:
+# - The deterministic floor hard-blocks the ub-review gate verdict:
+#   [gate.blocking].required_proof_unproven = true, so a matched
+#   [[proof.required]] entry (each one mirrors a command ci.yml already
+#   requires) with no passing receipt reddens the gate. That verdict is still
+#   advisory at merge time because the check is not required.
+# - ub-review composition (model lanes, sensor gaps) stays advisory:
+#   tool_gate_missing_evidence = false, and no [tools.<id>.gate] thresholds
+#   are configured. Adopters wanting stricter posture add a threshold (for
+#   example [tools.ripr.gate] max_new_unsuppressed = 0, as in
+#   configs/ub-review.example.toml) once the tool is pinned in the swarm image.
+#
+# Secrets/tools preflight: `ub-review doctor --config <this file>` already
+# explains the required surface — per-tool found/missing rows for every
+# enabled sensor and provider-key presence (UB_REVIEW_MINIMAX_API_KEY,
+# UB_REVIEW_OPENCODE_API_KEY; the action maps secrets minimax-api-key /
+# opencode-api-key onto those, see action.yml). Missing keys and missing
+# tools are recorded as missing evidence, never as clean evidence.
+
+review_profile = "bun-ub-v0"
+profile = "gh-runner-full"
+
+[repo]
+kind = "rust"
+ledger = "docs/dogfood" # unsafe-review's own dogfood corpus
+base = "origin/main"
+head = "HEAD"
+
+[review]
+posting_engine = "artifact"
+custom_poster = false
+ban_standalone_approval = true
+require_zero_finding_audit = true
+enable_default_lanes = true
+
+[review_body]
+include_successful_lane_table = false
+include_provider_table = "on_failure"
+include_sensor_table = "on_failure"
+include_execution_summary = "none"
+summary_only_body = "post_substantive"
+
+# Required floor = exactly the commands ci.yml already gates on. These entries
+# add no new merge gate; they make the ub-review run verify the floor passed
+# and capture the receipts as lane evidence. The external ci.yml check stays
+# the authoritative merge gate.
+[[proof.required]]
+id = "cargo-fmt"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo fmt --check"
+reason = "Format check — already required by the swarm ci.yml gate."
+cost = "focused-build"
+timeout_sec = 120
+required = true
+enabled = true
+
+[[proof.required]]
+id = "cargo-clippy"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo clippy --workspace --all-targets --locked -- -D warnings"
+reason = "Clippy -D warnings — already required by the swarm ci.yml gate."
+cost = "focused-build"
+timeout_sec = 600
+required = true
+enabled = true
+
+[[proof.required]]
+id = "cargo-test"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo test --workspace --locked"
+reason = "Full test suite — already required by the swarm ci.yml gate."
+cost = "focused-build"
+timeout_sec = 900
+required = true
+enabled = true
+
+[[proof.required]]
+id = "check-pr"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo run --locked -p xtask -- check-pr"
+reason = "xtask check-pr — already required by the swarm ci.yml gate."
+cost = "focused-build"
+timeout_sec = 300
+required = true
+enabled = true
+
+# unsafe-review as a sensor: the swarm repo already runs it in ci.yml;
+# ub-review re-runs it so the structured gate artifact
+# (unsafe-review-gate.json, schema unsafe-review-gate/v1) lands in lane
+# context via the schema-routed ingestion (#359). Required when unsafe or
+# native risk changed — the existing trigger policy.
+[tools.unsafe-review]
+enabled = true
+class = "static"
+default = "unsafe-or-native-risk-changed"
+required = true
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+# Advisory for swarm: ripr is not yet pinned in the swarm image. No
+# [tools.ripr.gate] threshold — adding one is the documented path to a
+# stricter posture once the tool is pinned.
+[tools.ripr]
+enabled = true
+class = "static"
+default = "rust-behavior-or-tests-changed"
+required = false
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.cargo-allow]
+enabled = true
+class = "static"
+default = "source-exception-changed"
+required = false
+weight = 2
+timeout_sec = 120
+artifact_budget_mb = 64
+requires_lease = false
+
+[tools.tokmd]
+enabled = true
+class = "packet"
+default = "always"
+required = false
+weight = 2
+timeout_sec = 300
+artifact_budget_mb = 192
+requires_lease = false
+
+[tools.ast-grep]
+enabled = true
+class = "search"
+default = "source-changed"
+required = false
+weight = 1
+timeout_sec = 60
+artifact_budget_mb = 64
+requires_lease = false
+
+# Keep the first pass lean: missing commands already become explicit missing
+# evidence, but disabling uncommon tools keeps the plan quiet.
+[tools.semgrep]
+enabled = false
+
+[tools.osv-scanner]
+enabled = false
+
+[tools.cargo-audit]
+enabled = false
+
+[tools.cargo-deny]
+enabled = false
+
+[tools.shellcheck]
+enabled = false
+
+[tools.cppcheck]
+enabled = false
+
+[tools.zizmor]
+enabled = false
+
+[tools.gitleaks]
+enabled = false
+
+# 30/60-minute budget matches the swarm ci.yml timeouts (45 min self-hosted,
+# 30 min GitHub-hosted). Note: [gate].synchronize_mode was removed (#306);
+# posting policy is post_review_on alone, and synchronize/reopened passes
+# stay gate-only with artifact diagnostics.
+[gate]
+required_check = "ub-review/gate"
+target_minutes = 30
+hard_timeout_minutes = 60
+post_review_on = ["opened", "ready_for_review"]
+
+[gate.blocking]
+# Deterministic floor hard-blocks the gate verdict: a matched
+# [[proof.required]] entry with no passing receipt is a blocking reason.
+required_proof_unproven = true
+# Composition stays advisory: an unevaluated tool-gate threshold (sensor
+# failed/timed out, missing or malformed gate-decision receipt) does not
+# block. Flip to true for a stricter posture.
+tool_gate_missing_evidence = false
+
+# MiniMax-M3 primary, OpenCode fallback — the same routing and cost
+# discipline as ub-review's own config (#336–#339). Only `policy` and
+# `max_concurrency` are consumed today; env/model/role/prompt_cache document
+# intent for the adopting workflow.
+[providers]
+policy = "primary-with-fallback"
+
+[providers.minimax]
+enabled = true
+env = "MINIMAX_API_KEY"
+model = "MiniMax-M3"
+role = "primary"
+prompt_cache = "explicit-anthropic"
+max_concurrency = 12
+
+[providers.opencode]
+enabled = true
+env = "OPENCODE"
+role = "fallback"
+models = ["deepseek-v4-flash", "mimo-v2.5"]
+max_concurrency = 8
