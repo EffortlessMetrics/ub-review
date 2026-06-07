@@ -1442,6 +1442,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resolved_candidate_artifacts(root, follow_up_results, follow_up_outputs)
     require_final_compiler_input(root, review, follow_up_evidence)
     require_gate_outcome(root)
+    require_issue_capture_artifacts(root)
     require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
     require_observation_files(root, observations, orchestrator_plan["follow_up_tasks"])
@@ -3727,6 +3728,69 @@ GATE_OUTCOME_REASON_KINDS = {
 }
 
 
+ISSUE_ACTION_V0_VOCABULARY = {"artifact-only", "duplicate", "invalid"}
+
+
+def require_issue_capture_artifacts(root: pathlib.Path) -> None:
+    """Release lane step 4: candidates and their action ledger are schema-
+    checked with NDJSON parity, every action references a known candidate,
+    and the v0 vocabulary excludes opened/failed_to_open - no auto-file is
+    possible before the broker exists, and the verifier proves it."""
+    candidates = load_json(root / "review/issue_candidates.json")
+    if not isinstance(candidates, list):
+        fail("review/issue_candidates.json is not an array")
+    actions = load_json(root / "review/issue_actions.json")
+    if not isinstance(actions, list):
+        fail("review/issue_actions.json is not an array")
+    candidate_ids = set()
+    for index, candidate in enumerate(candidates):
+        if not isinstance(candidate, dict):
+            fail(f"issue candidate {index + 1} is not an object")
+        if candidate.get("schema") != "ub-review.issue_candidate.v1":
+            fail(f"issue candidate {index + 1} has wrong schema")
+        for field in ("id", "source", "target_repo", "title"):
+            value = candidate.get(field)
+            if not isinstance(value, str) or not value:
+                fail(f"issue candidate {index + 1} {field} is not a non-empty string")
+        candidate_ids.add(candidate["id"])
+    if len(actions) != len(candidates):
+        fail("issue_actions.json must record one action per candidate")
+    for index, action in enumerate(actions):
+        if not isinstance(action, dict):
+            fail(f"issue action {index + 1} is not an object")
+        if action.get("schema") != "ub-review.issue_action.v1":
+            fail(f"issue action {index + 1} has wrong schema")
+        if action.get("action") not in ISSUE_ACTION_V0_VOCABULARY:
+            fail(
+                f"issue action {index + 1} uses `{action.get('action')!r}`; v0 allows "
+                f"only {sorted(ISSUE_ACTION_V0_VOCABULARY)!r} (no auto-file before "
+                "the broker exists)"
+            )
+        if action.get("candidate_id") not in candidate_ids:
+            fail(f"issue action {index + 1} references an unknown candidate")
+        if action.get("action") == "duplicate" and not action.get("existing"):
+            fail(f"issue action {index + 1} duplicate without an existing pointer")
+        reason = action.get("reason")
+        if not isinstance(reason, str) or not reason:
+            fail(f"issue action {index + 1} reason is not a non-empty string")
+    for name, expected in (
+        ("issue_candidates.ndjson", candidates),
+        ("issue_actions.ndjson", actions),
+    ):
+        lines = [line for line in read_text(root / name).splitlines() if line.strip()]
+        if len(lines) != len(expected):
+            fail(f"{name} line count does not match its JSON artifact")
+        for index, line in enumerate(lines):
+            try:
+                parsed = json.loads(line)
+            except json.JSONDecodeError as error:
+                fail(f"invalid {name} line {index + 1}: {error}")
+            if parsed != expected[index]:
+                fail(f"{name} line {index + 1} does not match JSON artifact")
+    if not (root / "review/suggested_issues.md").is_file():
+        fail("missing review/suggested_issues.md")
+
+
 def require_gate_outcome(root: pathlib.Path) -> None:
     """The verdict artifact decides pass/fail; the verifier audits it
     (release lane step 3 / decision D5): schema, reason shapes, receipt
@@ -5731,6 +5795,84 @@ def self_test_noise_rule_phrase_parity_with_rust() -> None:
             )
 
 
+def self_test_issue_capture_contract() -> None:
+    """Release lane step 4: the action vocabulary is fail-closed - opened/
+    failed_to_open are rejected until the broker exists - and the ledger
+    must reference real candidates with NDJSON parity."""
+    import tempfile
+
+    candidate = {
+        "schema": "ub-review.issue_candidate.v1",
+        "id": "issue-candidate-000-abc123def456",
+        "source": "tests-red-green",
+        "target_repo": "EffortlessMetrics/ub-review",
+        "kind": "test-gap",
+        "confidence": "high",
+        "current_pr_disposition": "do-not-block",
+        "title": "Add base+tests red/green for focused proof requests",
+        "problem": "p",
+        "why_not_this_pr": "w",
+        "evidence": [{"type": "artifact", "path": "review/proof_plan.md"}],
+        "implementation_plan": ["step"],
+        "acceptance": ["done"],
+        "labels": [],
+    }
+    action = {
+        "schema": "ub-review.issue_action.v1",
+        "candidate_id": candidate["id"],
+        "action": "artifact-only",
+        "reason": "v0 terminal state",
+    }
+
+    def write_root(candidates: list, actions: list) -> "pathlib.Path":
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        (tmp / "review").mkdir()
+        (tmp / "review/issue_candidates.json").write_text(
+            json.dumps(candidates), encoding="utf-8"
+        )
+        (tmp / "review/issue_actions.json").write_text(
+            json.dumps(actions), encoding="utf-8"
+        )
+        (tmp / "issue_candidates.ndjson").write_text(
+            "".join(json.dumps(item) + "\n" for item in candidates), encoding="utf-8"
+        )
+        (tmp / "issue_actions.ndjson").write_text(
+            "".join(json.dumps(item) + "\n" for item in actions), encoding="utf-8"
+        )
+        (tmp / "review/suggested_issues.md").write_text("# Suggested issues\n", encoding="utf-8")
+        return tmp
+
+    require_issue_capture_artifacts(write_root([candidate], [action]))
+    require_issue_capture_artifacts(write_root([], []))
+
+    expect_self_test_failure(
+        "issue capture auto-file rejected",
+        "no auto-file before",
+        lambda root=write_root(
+            [candidate], [dict(action, action="opened")]
+        ): require_issue_capture_artifacts(root),
+    )
+    expect_self_test_failure(
+        "issue capture unknown candidate ref",
+        "references an unknown candidate",
+        lambda root=write_root(
+            [candidate], [dict(action, candidate_id="issue-candidate-999-zzz")]
+        ): require_issue_capture_artifacts(root),
+    )
+    expect_self_test_failure(
+        "issue capture duplicate without pointer",
+        "duplicate without an existing pointer",
+        lambda root=write_root(
+            [candidate], [dict(action, action="duplicate")]
+        ): require_issue_capture_artifacts(root),
+    )
+    expect_self_test_failure(
+        "issue capture action count parity",
+        "one action per candidate",
+        lambda root=write_root([candidate], []): require_issue_capture_artifacts(root),
+    )
+
+
 def self_test_gate_outcome_contract() -> None:
     """Release lane step 3: the verdict artifact is audited, not just
     executed. A valid red outcome passes; each violation class fails."""
@@ -6716,6 +6858,7 @@ def run_self_tests() -> None:
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_issue_capture_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(

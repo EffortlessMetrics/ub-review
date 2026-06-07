@@ -1282,6 +1282,76 @@ struct CandidateRecord {
     side: Option<String>,
 }
 
+/// A follow-up too broad for the current PR, preserved as structured work
+/// instead of blocking the PR or vanishing (release lane step 4). Lanes may
+/// emit these; they never open issues - in v0 every valid candidate is
+/// artifact-only and the only side-effect surface (the issue broker) does
+/// not exist yet.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+struct IssueCandidate {
+    schema: String,
+    id: String,
+    source: String,
+    target_repo: String,
+    kind: String,
+    confidence: String,
+    current_pr_disposition: String,
+    title: String,
+    problem: String,
+    why_not_this_pr: String,
+    evidence: Vec<IssueCandidateEvidence>,
+    implementation_plan: Vec<String>,
+    acceptance: Vec<String>,
+    labels: Vec<String>,
+}
+
+impl Default for IssueCandidate {
+    fn default() -> Self {
+        Self {
+            schema: "ub-review.issue_candidate.v1".to_owned(),
+            id: String::new(),
+            source: String::new(),
+            target_repo: String::new(),
+            kind: String::new(),
+            confidence: String::new(),
+            current_pr_disposition: "do-not-block".to_owned(),
+            title: String::new(),
+            problem: String::new(),
+            why_not_this_pr: String::new(),
+            evidence: Vec::new(),
+            implementation_plan: Vec::new(),
+            acceptance: Vec::new(),
+            labels: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+struct IssueCandidateEvidence {
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    path: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<String>,
+}
+
+/// What ub-review did with each issue candidate. v0 emits exactly
+/// artifact-only, duplicate, or invalid; suggested/opened/failed_to_open
+/// belong to the rendering and broker steps and are verifier-rejected until
+/// those land.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct IssueAction {
+    schema: String,
+    candidate_id: String,
+    action: String,
+    reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    existing: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct ResolvedCandidateRecord {
     schema: String,
@@ -1525,6 +1595,7 @@ struct LaneModelOutput {
     observations: Vec<ModelCandidateObservation>,
     failed_objections: Vec<ModelFailedObjection>,
     proof_requests: Vec<ModelProofRequest>,
+    issue_candidates: Vec<IssueCandidate>,
     degraded: bool,
 }
 
@@ -1543,6 +1614,8 @@ struct LaneModelOutputWire {
     failed_objections: Vec<ModelFailedObjection>,
     #[serde(default)]
     proof_requests: Vec<ModelProofRequest>,
+    #[serde(default)]
+    issue_candidates: Vec<IssueCandidate>,
 }
 
 impl<'de> Deserialize<'de> for LaneModelOutput {
@@ -1564,6 +1637,7 @@ impl<'de> Deserialize<'de> for LaneModelOutput {
             observations,
             failed_objections: wire.failed_objections,
             proof_requests: wire.proof_requests,
+            issue_candidates: wire.issue_candidates,
             degraded: normalization.degraded,
         })
     }
@@ -5649,6 +5723,7 @@ fn write_review_artifacts(
     let mut summary_only_findings = Vec::new();
     let mut inline_comments = Vec::new();
     let mut model_observations = Vec::new();
+    let mut issue_candidates: Vec<IssueCandidate> = Vec::new();
     let mut model_calls_used = 0usize;
     let seeded_proof_requests = proof_requests.clone();
 
@@ -5706,6 +5781,7 @@ fn write_review_artifacts(
                 &mut summary_only_findings,
                 &mut model_observations,
                 &mut proof_requests,
+                &mut issue_candidates,
             )?;
             dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
             model_calls_used += run_proof_planner_model_lane(
@@ -6008,6 +6084,12 @@ fn write_review_artifacts(
     )?;
     let receipt_routes = receipt_route_artifacts(&review.proof_receipts, &review.resource_leases);
     write_receipt_route_artifacts(out, &receipt_routes)?;
+    // Release lane step 4: lane-emitted follow-up candidates become the
+    // issue-capture artifacts. v0 is artifact-only - no PR-body rendering,
+    // no GitHub side effects; classification is the whole pipeline.
+    let (issue_capture_candidates, issue_capture_actions) =
+        classify_issue_candidates(std::mem::take(&mut issue_candidates));
+    write_issue_capture_artifacts(out, &issue_capture_candidates, &issue_capture_actions)?;
     let final_orchestrator_plan = build_final_orchestrator_plan(
         &candidates,
         &observation_summary.unique,
@@ -8214,6 +8296,220 @@ fn write_resolved_candidate_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("resolved_candidates.ndjson"), ndjson)?;
+    Ok(())
+}
+
+/// Issue-candidate kinds the capture surface accepts (release lane step 4;
+/// security/release/deploy/compliance classes are deliberately absent - they
+/// stay suggest-only by contract even after the broker exists).
+const ISSUE_CANDIDATE_KINDS: &[&str] = &[
+    "implementation-follow-up",
+    "tool-defect",
+    "repo-policy",
+    "test-gap",
+    "proof-broker-gap",
+];
+
+fn issue_candidate_fingerprint(candidate: &IssueCandidate) -> String {
+    let normalized_title = candidate
+        .title
+        .to_ascii_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { ' ' })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    sha256_hex(
+        format!(
+            "{}\n{}\n{normalized_title}",
+            candidate.target_repo, candidate.kind
+        )
+        .as_bytes(),
+    )
+}
+
+/// The bar a follow-up must meet to exist at all: specific repo, specific
+/// problem, why it is not in this PR, evidence, an implementation plan, and
+/// acceptance criteria. Below the bar is `invalid`, never silently dropped.
+fn issue_candidate_invalid_reason(candidate: &IssueCandidate) -> Option<String> {
+    if candidate.target_repo.trim().is_empty() {
+        return Some("target_repo is required".to_owned());
+    }
+    if candidate.title.trim().is_empty() {
+        return Some("title is required".to_owned());
+    }
+    if candidate.problem.trim().is_empty() {
+        return Some("problem is required".to_owned());
+    }
+    if candidate.why_not_this_pr.trim().is_empty() {
+        return Some("why_not_this_pr is required".to_owned());
+    }
+    if !ISSUE_CANDIDATE_KINDS.contains(&candidate.kind.as_str()) {
+        return Some(format!(
+            "kind `{}` is not in the allowed set {ISSUE_CANDIDATE_KINDS:?}",
+            candidate.kind
+        ));
+    }
+    if !matches!(candidate.confidence.as_str(), "low" | "medium" | "high") {
+        return Some(format!(
+            "confidence `{}` must be low, medium, or high",
+            candidate.confidence
+        ));
+    }
+    if !matches!(
+        candidate.current_pr_disposition.as_str(),
+        "do-not-block" | "blocks-if-claimed"
+    ) {
+        return Some(format!(
+            "current_pr_disposition `{}` must be do-not-block or blocks-if-claimed",
+            candidate.current_pr_disposition
+        ));
+    }
+    if !candidate.evidence.iter().any(|evidence| {
+        evidence
+            .path
+            .as_deref()
+            .is_some_and(|value| !value.trim().is_empty())
+            || evidence
+                .url
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+    }) {
+        return Some("at least one evidence entry with a path or url is required".to_owned());
+    }
+    if candidate
+        .implementation_plan
+        .iter()
+        .all(|step| step.trim().is_empty())
+    {
+        return Some("a non-empty implementation_plan is required".to_owned());
+    }
+    if candidate
+        .acceptance
+        .iter()
+        .all(|item| item.trim().is_empty())
+    {
+        return Some("non-empty acceptance criteria are required".to_owned());
+    }
+    None
+}
+
+/// Assign ids, validate, and dedupe lane-emitted issue candidates into the
+/// candidate list plus the action ledger. v0 terminal states are exactly
+/// artifact-only, duplicate, and invalid - rendering (release lane step 5)
+/// and the opt-in broker (step 6) extend the vocabulary later, and the
+/// verifier rejects opened/failed_to_open until the broker exists.
+fn classify_issue_candidates(raw: Vec<IssueCandidate>) -> (Vec<IssueCandidate>, Vec<IssueAction>) {
+    let mut candidates = Vec::new();
+    let mut actions = Vec::new();
+    let mut seen: BTreeMap<String, String> = BTreeMap::new();
+    for (index, mut candidate) in raw.into_iter().enumerate() {
+        candidate.schema = "ub-review.issue_candidate.v1".to_owned();
+        let fingerprint = issue_candidate_fingerprint(&candidate);
+        candidate.id = format!("issue-candidate-{index:03}-{}", &fingerprint[..12]);
+        let action = if let Some(reason) = issue_candidate_invalid_reason(&candidate) {
+            IssueAction {
+                schema: "ub-review.issue_action.v1".to_owned(),
+                candidate_id: candidate.id.clone(),
+                action: "invalid".to_owned(),
+                reason,
+                existing: None,
+            }
+        } else if let Some(existing) = seen.get(&fingerprint) {
+            IssueAction {
+                schema: "ub-review.issue_action.v1".to_owned(),
+                candidate_id: candidate.id.clone(),
+                action: "duplicate".to_owned(),
+                reason: "same target repo, kind, and normalized title as an earlier candidate"
+                    .to_owned(),
+                existing: Some(existing.clone()),
+            }
+        } else {
+            seen.insert(fingerprint, candidate.id.clone());
+            IssueAction {
+                schema: "ub-review.issue_action.v1".to_owned(),
+                candidate_id: candidate.id.clone(),
+                action: "artifact-only".to_owned(),
+                reason: "v0 terminal state: rendering and the issue broker are later \
+                         release-lane steps; no GitHub side effects"
+                    .to_owned(),
+                existing: None,
+            }
+        };
+        actions.push(action);
+        candidates.push(candidate);
+    }
+    (candidates, actions)
+}
+
+fn write_issue_capture_artifacts(
+    out: &Path,
+    candidates: &[IssueCandidate],
+    actions: &[IssueAction],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("issue_candidates.json"),
+        serde_json::to_vec_pretty(candidates)?,
+    )?;
+    fs::write(
+        review_dir.join("issue_actions.json"),
+        serde_json::to_vec_pretty(actions)?,
+    )?;
+    let mut candidate_lines = String::new();
+    for candidate in candidates {
+        candidate_lines.push_str(&serde_json::to_string(candidate)?);
+        candidate_lines.push('\n');
+    }
+    fs::write(out.join("issue_candidates.ndjson"), candidate_lines)?;
+    let mut action_lines = String::new();
+    for action in actions {
+        action_lines.push_str(&serde_json::to_string(action)?);
+        action_lines.push('\n');
+    }
+    fs::write(out.join("issue_actions.ndjson"), action_lines)?;
+
+    let mut drafts = String::from(
+        "# Suggested issues\n\nHuman-readable drafts for valid issue candidates. v0 is \
+         artifact-only: nothing here was posted, suggested in the PR body, or opened on \
+         GitHub - those are later release-lane steps.\n",
+    );
+    let valid_ids = actions
+        .iter()
+        .filter(|action| action.action == "artifact-only")
+        .map(|action| action.candidate_id.as_str())
+        .collect::<BTreeSet<_>>();
+    for candidate in candidates {
+        if !valid_ids.contains(candidate.id.as_str()) {
+            continue;
+        }
+        drafts.push_str(&format!(
+            "\n## {} ({})\n\nProblem: {}\n\nSource lane: {}\n",
+            candidate.title, candidate.target_repo, candidate.problem, candidate.source
+        ));
+        for evidence in &candidate.evidence {
+            if let Some(path) = &evidence.path {
+                drafts.push_str(&format!("- {}: {path}\n", evidence.kind));
+            }
+            if let Some(url) = &evidence.url {
+                drafts.push_str(&format!("- {}: {url}\n", evidence.kind));
+            }
+        }
+        drafts.push_str(&format!(
+            "\nWhy not this PR: {}\n\nImplementation plan:\n",
+            candidate.why_not_this_pr
+        ));
+        for (index, step) in candidate.implementation_plan.iter().enumerate() {
+            drafts.push_str(&format!("{}. {step}\n", index + 1));
+        }
+        drafts.push_str("\nAcceptance:\n");
+        for item in &candidate.acceptance {
+            drafts.push_str(&format!("- [ ] {item}\n"));
+        }
+    }
+    fs::write(review_dir.join("suggested_issues.md"), drafts)?;
     Ok(())
 }
 
@@ -14544,6 +14840,10 @@ fn sanitize_artifact_name(value: &str) -> String {
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
 fn run_available_model_lanes(
     context: ModelRunContext<'_>,
     model_lanes: &mut [ModelLaneReceipt],
@@ -14552,6 +14852,7 @@ fn run_available_model_lanes(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
+    issue_candidates: &mut Vec<IssueCandidate>,
 ) -> Result<usize> {
     run_available_model_lanes_with_runner(
         context,
@@ -14561,6 +14862,7 @@ fn run_available_model_lanes(
         summary_only_findings,
         model_observations,
         proof_requests,
+        issue_candidates,
         run_model_lane_tasks,
     )
 }
@@ -14581,6 +14883,7 @@ fn run_available_model_lanes_with_runner(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
+    issue_candidates: &mut Vec<IssueCandidate>,
     runner: impl Fn(&ModelRunContext<'_>, &Path, Vec<ModelLaneTask>) -> Result<Vec<ModelLaneTaskResult>>,
 ) -> Result<usize> {
     let model_dir = context.review_dir.join("model");
@@ -14713,6 +15016,7 @@ fn run_available_model_lanes_with_runner(
                             summary_only_findings,
                             model_observations,
                             proof_requests,
+                            issue_candidates,
                         },
                     );
                 }
@@ -15109,6 +15413,9 @@ fn follow_up_output_record(
     let mut summary_only_findings = Vec::new();
     let mut observations = Vec::new();
     let mut proof_requests = Vec::new();
+    // Follow-up strict-JSON contracts do not request issue_candidates; the
+    // sink is local so an off-contract emission is dropped, not crashed on.
+    let mut follow_up_issue_candidates = Vec::new();
     apply_model_output(
         &lane,
         output,
@@ -15119,6 +15426,7 @@ fn follow_up_output_record(
             summary_only_findings: &mut summary_only_findings,
             model_observations: &mut observations,
             proof_requests: &mut proof_requests,
+            issue_candidates: &mut follow_up_issue_candidates,
         },
     );
     FollowUpOutputRecord {
@@ -15620,10 +15928,12 @@ fn apply_proof_planner_model_output(
         observations: output.observations,
         failed_objections: output.failed_objections,
         proof_requests: output.proof_requests,
+        issue_candidates: output.issue_candidates,
         degraded: output.degraded,
     };
     let mut ignored_inline_comments = Vec::new();
     let mut ignored_summary_only_findings = Vec::new();
+    let mut ignored_issue_candidates = Vec::new();
     apply_model_output(
         lane,
         advisory_output,
@@ -15634,6 +15944,7 @@ fn apply_proof_planner_model_output(
             summary_only_findings: &mut ignored_summary_only_findings,
             model_observations,
             proof_requests,
+            issue_candidates: &mut ignored_issue_candidates,
         },
     );
 }
@@ -15950,6 +16261,7 @@ fn degraded_lane_model_output(raw: &str, reason: &str, parse_path: &Path) -> Lan
         )],
         failed_objections: Vec::new(),
         proof_requests: Vec::new(),
+        issue_candidates: Vec::new(),
         degraded: true,
     }
 }
@@ -16088,6 +16400,7 @@ struct ModelOutputSinks<'a> {
     summary_only_findings: &'a mut Vec<SummaryOnlyFinding>,
     model_observations: &'a mut Vec<Observation>,
     proof_requests: &'a mut Vec<ProofRequest>,
+    issue_candidates: &'a mut Vec<IssueCandidate>,
 }
 
 fn apply_model_output(
@@ -16102,7 +16415,15 @@ fn apply_model_output(
         summary_only_findings,
         model_observations,
         proof_requests,
+        issue_candidates,
     } = sinks;
+    for mut candidate in output.issue_candidates {
+        // Raw collection only: the lane is recorded as the source; ids,
+        // validation, dedupe, and the action ledger happen centrally in
+        // classify_issue_candidates. Lanes never open issues.
+        candidate.source = lane.id.clone();
+        issue_candidates.push(candidate);
+    }
     if let Some(summary) = output.summary {
         if let Some(observation) = sibling_completeness_overclaim_observation_from_text(
             lane,
@@ -22183,27 +22504,28 @@ mod tests {
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
         CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
         FailOnGate, FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GateOutcomeInput,
-        GitHubReview, GitHubReviewComment, LaneModelOutput, LanePlan, Limits, ModelAssignment,
-        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
-        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
-        ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofReceipt, ProofRequest, ProofRequestGroup,
-        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, ToolGateOutcomeEntry, ToolGateOutcomeMetrics,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_final_orchestrator_plan, build_gate_outcome,
-        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
-        build_tokmd_sensor_commands, build_witness_records, builtin_profiles,
-        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
-        classify_diff, classify_diff_class, classify_proof_cost, cmd_gate_check, cmd_post,
+        GitHubReview, GitHubReviewComment, IssueCandidate, IssueCandidateEvidence, LaneModelOutput,
+        LanePlan, Limits, ModelAssignment, ModelCacheUsage, ModelCallOutcome,
+        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelLaneTaskResult, ModelMode,
+        ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
+        Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
+        PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
+        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
+        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
+        ToolGateOutcomeMetrics, append_follow_up_evidence_witnesses,
+        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_final_orchestrator_plan, build_gate_outcome, build_orchestrator_plan,
+        build_review_metrics, build_review_terminal_state, build_tokmd_sensor_commands,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
+        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
         collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
         default_lanes, direct_minimax_spec, extract_model_content, fallback_provider_spec_for_lane,
@@ -22226,8 +22548,8 @@ mod tests {
         validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
         write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_github_review_payload, write_issue_capture_artifacts, write_observation_artifacts,
+        write_orchestrator_artifacts, write_proof_receipt_artifacts, write_proof_request_artifacts,
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
@@ -24593,12 +24915,14 @@ max_new_unsuppressed_findings = 0
             observations: Vec::new(),
             failed_objections: Vec::new(),
             proof_requests: Vec::new(),
+            issue_candidates: Vec::new(),
             degraded: false,
         };
         let mut inline_comments = Vec::new();
         let mut summary_only_findings = Vec::new();
         let mut observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
 
         apply_model_output(
             &lane,
@@ -24610,6 +24934,7 @@ max_new_unsuppressed_findings = 0
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -24833,12 +25158,14 @@ index 1111111..2222222 100644
             observations: Vec::new(),
             failed_objections: Vec::new(),
             proof_requests: Vec::new(),
+            issue_candidates: Vec::new(),
             degraded: false,
         };
         let mut inline_comments = Vec::new();
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
 
         apply_model_output(
             &lane,
@@ -24850,6 +25177,7 @@ index 1111111..2222222 100644
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut model_observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -24932,6 +25260,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
 
         apply_model_output(
             &lane,
@@ -24943,6 +25272,7 @@ index 1111111..2222222 100644
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -25039,6 +25369,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         apply_model_output(
             &lane,
             output,
@@ -25049,6 +25380,7 @@ index 1111111..2222222 100644
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -25089,6 +25421,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         apply_model_output(
             &lane,
             output,
@@ -25099,6 +25432,7 @@ index 1111111..2222222 100644
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -27541,6 +27875,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
 
         apply_model_output(
             &lane,
@@ -27552,6 +27887,7 @@ index 1111111..2222222 100644
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -27599,6 +27935,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
 
         apply_model_output(
             &lane,
@@ -27610,6 +27947,7 @@ index 1111111..2222222 100644
                 summary_only_findings: &mut summary_only_findings,
                 model_observations: &mut observations,
                 proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
             },
         );
 
@@ -27648,12 +27986,14 @@ index 1111111..2222222 100644
                 observations: Vec::new(),
                 failed_objections: Vec::new(),
                 proof_requests: Vec::new(),
+                issue_candidates: Vec::new(),
                 degraded: false,
             };
             let mut inline_comments = Vec::new();
             let mut summary_only_findings = Vec::new();
             let mut model_observations = Vec::new();
             let mut proof_requests = Vec::new();
+            let mut issue_candidates = Vec::new();
 
             apply_model_output(
                 &lane,
@@ -27665,6 +28005,7 @@ index 1111111..2222222 100644
                     summary_only_findings: &mut summary_only_findings,
                     model_observations: &mut model_observations,
                     proof_requests: &mut proof_requests,
+                    issue_candidates: &mut issue_candidates,
                 },
             );
 
@@ -27897,6 +28238,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         let line_map = BTreeSet::new();
 
         let calls = run_available_model_lanes(
@@ -27916,6 +28258,7 @@ index 1111111..2222222 100644
             &mut summary_only_findings,
             &mut model_observations,
             &mut proof_requests,
+            &mut issue_candidates,
         )?;
 
         assert_eq!(calls, 0);
@@ -27948,6 +28291,7 @@ index 1111111..2222222 100644
             observations: Vec::new(),
             failed_objections: Vec::new(),
             proof_requests: Vec::new(),
+            issue_candidates: Vec::new(),
             degraded: false,
         }
     }
@@ -28100,6 +28444,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         let line_map = BTreeSet::new();
 
         let calls = run_available_model_lanes_with_runner(
@@ -28119,6 +28464,7 @@ index 1111111..2222222 100644
             &mut summary_only_findings,
             &mut model_observations,
             &mut proof_requests,
+            &mut issue_candidates,
             |_context, _model_dir, tasks| {
                 Ok(tasks
                     .into_iter()
@@ -28184,6 +28530,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         let line_map = BTreeSet::new();
 
         let calls = run_available_model_lanes_with_runner(
@@ -28203,6 +28550,7 @@ index 1111111..2222222 100644
             &mut summary_only_findings,
             &mut model_observations,
             &mut proof_requests,
+            &mut issue_candidates,
             |_context, _model_dir, tasks| {
                 Ok(tasks
                     .into_iter()
@@ -28247,6 +28595,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         let line_map = BTreeSet::new();
 
         let calls = run_available_model_lanes_with_runner(
@@ -28266,6 +28615,7 @@ index 1111111..2222222 100644
             &mut summary_only_findings,
             &mut model_observations,
             &mut proof_requests,
+            &mut issue_candidates,
             |_context, _model_dir, tasks| {
                 Ok(tasks
                     .into_iter()
@@ -28306,6 +28656,7 @@ index 1111111..2222222 100644
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
         let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
         let line_map = BTreeSet::new();
 
         let calls = run_available_model_lanes_with_runner(
@@ -28325,6 +28676,7 @@ index 1111111..2222222 100644
             &mut summary_only_findings,
             &mut model_observations,
             &mut proof_requests,
+            &mut issue_candidates,
             |_context, _model_dir, tasks| {
                 Ok(tasks
                     .into_iter()
@@ -35806,6 +36158,82 @@ index 1111111..2222222 100644
             .collect::<std::result::Result<Vec<_>, _>>()?;
         assert_eq!(written.as_array().map(Vec::len), Some(candidates.len()));
         assert_eq!(written.as_array().cloned().unwrap_or_default(), ndjson);
+        Ok(())
+    }
+
+    #[test]
+    fn issue_candidates_classify_validate_and_dedupe() -> Result<()> {
+        fn valid_candidate(title: &str) -> IssueCandidate {
+            IssueCandidate {
+                source: "tests-red-green".to_owned(),
+                target_repo: "EffortlessMetrics/ub-review".to_owned(),
+                kind: "test-gap".to_owned(),
+                confidence: "high".to_owned(),
+                title: title.to_owned(),
+                problem: "base+tests discrimination remains unimplemented".to_owned(),
+                why_not_this_pr: "needs worktree setup and separate receipt states".to_owned(),
+                evidence: vec![IssueCandidateEvidence {
+                    kind: "artifact".to_owned(),
+                    path: Some("review/proof_plan.md".to_owned()),
+                    url: None,
+                }],
+                implementation_plan: vec!["create base worktree".to_owned()],
+                acceptance: vec!["discriminating receipt renders".to_owned()],
+                ..IssueCandidate::default()
+            }
+        }
+        let raw = vec![
+            valid_candidate("Run base+tests red/green"),
+            // Same repo/kind, title differing only in case/punctuation:
+            // a duplicate by fingerprint.
+            valid_candidate("run BASE+TESTS red/green!"),
+            // Below the bar: no implementation plan.
+            IssueCandidate {
+                implementation_plan: Vec::new(),
+                ..valid_candidate("Different follow-up entirely")
+            },
+            // Disallowed kind.
+            IssueCandidate {
+                kind: "security-downgrade".to_owned(),
+                ..valid_candidate("Sensitive thing")
+            },
+        ];
+        let (candidates, actions) = classify_issue_candidates(raw);
+        assert_eq!(candidates.len(), 4);
+        assert_eq!(actions.len(), 4);
+        assert_eq!(actions[0].action, "artifact-only");
+        assert_eq!(actions[1].action, "duplicate");
+        assert_eq!(
+            actions[1].existing.as_deref(),
+            Some(candidates[0].id.as_str())
+        );
+        assert_eq!(actions[2].action, "invalid");
+        assert!(actions[2].reason.contains("implementation_plan"));
+        assert_eq!(actions[3].action, "invalid");
+        assert!(actions[3].reason.contains("not in the allowed set"));
+        assert!(
+            candidates
+                .iter()
+                .all(|candidate| candidate.id.starts_with("issue-candidate-"))
+        );
+
+        let temp = tempfile::tempdir()?;
+        write_issue_capture_artifacts(temp.path(), &candidates, &actions)?;
+        let written: Vec<serde_json::Value> =
+            serde_json::from_slice(&fs::read(temp.path().join("review/issue_candidates.json"))?)?;
+        assert_eq!(written.len(), 4);
+        let ndjson = fs::read_to_string(temp.path().join("issue_actions.ndjson"))?;
+        assert_eq!(ndjson.lines().count(), 4);
+        let drafts = fs::read_to_string(temp.path().join("review/suggested_issues.md"))?;
+        assert!(drafts.contains("Run base+tests red/green"));
+        assert!(
+            !drafts.contains("Different follow-up entirely"),
+            "invalid candidates must not render as drafts"
+        );
+        assert!(
+            drafts.contains("artifact-only"),
+            "v0 posture stated in the drafts header"
+        );
         Ok(())
     }
 
