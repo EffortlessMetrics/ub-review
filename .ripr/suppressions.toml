@@ -2,9 +2,16 @@ schema_version = 1
 
 # Durable RIPR suppressions. Suppressed findings stay visible as suppressed;
 # every entry carries owner + reason per the suppression-health contract.
+#
+# 2026-06-07: removed the probe:src_config.rs:40:call_deletion entry written
+# for the RepoLane struct (#342). RepoLane moved off line 40 and its gap is
+# healed by repo_lane_toml_parse_pins_exact_field_defaults; the line-keyed
+# finding id had silently transferred the suppression to the unrelated
+# IssuesConfig struct that now occupies the line (PR #346 gate run
+# 27080588485). Id instability filed upstream on ripr-swarm.
 
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_config.rs:40:call_deletion"
 owner = "ub-review/core"
-reason = "RIPR's related-test matcher associates the RepoLane struct declaration with unrelated body-rendering tests and misses the adjacent exact-value oracle (repo_lane_toml_parse_pins_exact_field_defaults pins every field of the parse contract). Matcher defect filed upstream in ripr-swarm; remove this entry when the matcher connects owner-adjacent oracles."
+reason = "Same matcher defect as ripr-swarm#1052, second instance: RIPR's related-test matcher associates the IssuesConfig struct declaration with unrelated body-rendering tests (pr_review_body_drops_structurally_answered_red_green_question) and misses the adjacent exact-value oracle (issues_toml_parse_pins_exact_field_defaults pins every field of the [issues] parse contract). Remove when the matcher connects owner-adjacent oracles. NOTE: this id is line-keyed and currently points at IssuesConfig at src/config.rs:40; if the struct moves, re-verify the target before trusting this entry."

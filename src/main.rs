@@ -23750,6 +23750,28 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
+    fn issues_toml_parse_pins_exact_field_defaults() -> Result<()> {
+        // Exact-value oracle for the [issues] authoring contract: an absent
+        // section deserializes to the documented defaults (enabled, suggest),
+        // and an explicit section round-trips field-for-field. Pins the serde
+        // surface the issue-capture posture documents.
+        let absent: Config = toml::from_str("")?;
+        assert!(absent.issues.enabled);
+        assert_eq!(absent.issues.mode, "suggest");
+
+        let explicit: Config = toml::from_str(
+            r#"
+[issues]
+enabled = false
+mode = "off"
+"#,
+        )?;
+        assert!(!explicit.issues.enabled);
+        assert_eq!(explicit.issues.mode, "off");
+        Ok(())
+    }
+
+    #[test]
     fn repo_lanes_merge_with_defaults_replacement_and_diff_class_gating() -> Result<()> {
         let mut config: Config = toml::from_str(
             r#"
