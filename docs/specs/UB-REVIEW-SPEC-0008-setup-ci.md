@@ -2,15 +2,22 @@
 
 Status: authored 2026-06-06 (release surface spec wave, docs-only).
 Umbrella: [UB-REVIEW-SPEC-0001](UB-REVIEW-SPEC-0001-release-surface.md).
-Maturity: ENTIRELY UNIMPLEMENTED. There is no `setup-ci` subcommand (the
-`Command` enum in src/cli.rs ends at `GateCheck`), no `cmd_setup_ci`
-function, and no PR-generation code anywhere in the tree. The only code that
-mentions setup-ci is a comment: the audit-ci report reuses the setup-ci
-PR-body section headings in its own decision-relevance order (src/main.rs
-`CI_AUDIT_REPORT_TIER_SECTIONS`). This spec is contract-first per roadmap
-item 28 (docs/ROADMAP.md) and the locked contract in docs/CI_AUDIT_WIZARD.md;
-every section below is contract intent, not current behavior, except where a
-sentence explicitly describes what exists today.
+Maturity: slice 1 implemented - `setup-ci --print-pr` exists
+(`Command::SetupCi`, src/cli.rs; `cmd_setup_ci`, src/main.rs). It reads a
+prior audit-ci run's five receipts fail-closed (missing artifacts and
+schema mismatches are named errors), takes an explicit
+`--accept <job>=<command>` list (adaptive tier only; the maintainer
+supplies the command because the receipts never record it), renders the
+migration plan with the eight PR-body sections to stdout and
+`<out>/ci-audit/migration-plan.md`, refuses to invent the
+branch-protection remove list while `required_check_source` is `unknown`,
+and self-checks the generated `.ub-review.toml` block through the config
+loader - any `PolicyError` receipt aborts as a generator failure. No repo
+writes, no network, no GitHub calls; output is byte-identical across runs
+over the same receipts. Everything past slice 1 - repo-file generation,
+workflow edits, PR opening, `--apply-branch-protection` - remains contract
+intent per roadmap item 28 (docs/ROADMAP.md) and docs/CI_AUDIT_WIZARD.md;
+sections below say which side of that line they are on.
 
 ## Purpose
 
@@ -322,22 +329,25 @@ as available until the slices below land.
 
 ## Validation commands
 
-Today, the only honest validations are of absence and of the contract docs:
+Slice-1 validations, runnable today:
 
 ```bash
-ub-review setup-ci 2>&1 | head -3   # clap rejects the subcommand: the
-                                    # surface does not exist
-ub-review audit-ci --out target/ub-review   # the input side that does exist
+ub-review audit-ci --out target/ub-review     # the input side
+ub-review setup-ci --print-pr --out target/ub-review
+  # renders the migration plan; byte-identical on repeat runs over the same
+  # receipts; only file write is <out>/ci-audit/migration-plan.md; zero
+  # network calls
+ub-review setup-ci 2>&1 | head -2   # names the unimplemented PR-opening
+                                    # slice and says to pass --print-pr
+cargo test --bin ub-review --locked setup_ci  # fail-closed paths + the
+                                              # round-trip oracle
 cargo xtask policy-check            # this spec is a governed docs surface
 ```
 
-Future acceptance commands, runnable only once the slices land (these are
-the acceptance criteria of roadmap item 28 turned into commands):
+Future acceptance commands, runnable only once the later slices land (the
+acceptance criteria of roadmap item 28 turned into commands):
 
 ```bash
-ub-review setup-ci --print-pr --out target/ub-review
-  # renders full PR contents; byte-identical on repeat runs over the same
-  # receipts; zero file writes outside <out>/ci-audit/; zero network calls
 ub-review setup-ci --out target/ub-review --accept <ids>
   # opens exactly one PR; git diff against the branch touches only the
   # contract-listed files; security-pattern workflows untouched
