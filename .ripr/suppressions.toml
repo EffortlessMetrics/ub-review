@@ -1882,3 +1882,387 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:2407:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path on the new base_patch_failed surfacing test's own ? operator; the harness observes a test's Err directly. The production change (receipt reason carries the patch error) is pinned by an exact-equality oracle in the same test. Line-keyed id; re-verify after edits."
+
+# Step-9a extraction (github.rs) - motion probes on moved code and
+# probes on the colocated moved test mod (no move detection upstream;
+# ripr-swarm#1054/#1053; test-code probes ripr-swarm#1055). Identical
+# code probed clean in src/main.rs before the move. Remove on move
+# detection.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:44:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:67:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:69:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:111:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:291:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:580:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:590:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:605:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:614:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:622:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:635:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:680:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:682:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:685:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:687:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:736:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:793:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:902:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:904:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1062:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1129:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1149:predicate"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): predicate probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1172:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1248:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1252:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-9a extraction of github.rs; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1336:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1534:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1545:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1556:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1673:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1740:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:1768:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2160:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2162:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2165:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2168:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2169:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2170:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2172:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2173:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2174:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2175:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2177:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2222:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2234:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2241:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2266:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2268:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2271:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2274:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2275:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2276:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2278:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2279:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2280:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2281:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2283:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2312:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2321:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2331:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2339:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2347:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github.rs:2348:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-9a extraction's colocated test mod in github.rs; a test's own ? operator / fixture is oracle plumbing. The tests moved verbatim from src/main.rs's mod tests. Line-keyed id; re-verify after edits."
