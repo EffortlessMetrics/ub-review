@@ -22629,6 +22629,18 @@ mod tests {
             vec!["opened".to_owned(), "ready_for_review".to_owned()]
         );
         assert_eq!(config.gate.synchronize_mode, "gate-only");
+        // The three doctrine lanes the corpus mandated
+        // (UB-REVIEW-SPEC-0011): the builtin lanes were blind to this
+        // repo's mirror drifts and spec overclaims.
+        assert_eq!(
+            config
+                .lanes
+                .iter()
+                .map(|lane| lane.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["contract-mirror", "gate-semantics", "spec-honesty"]
+        );
+        assert_eq!(config.repo.ledger, "docs/REVIEW_LEDGER.md");
         for id in [
             "cargo-fmt",
             "cargo-check",
