@@ -10,6 +10,7 @@ use std::fs;
 use anyhow::{Context as _, Result, bail};
 use serde::{Deserialize, Serialize};
 
+use crate::artifacts::GATE_OUTCOME_SCHEMA;
 use crate::cli::GateCheckArgs;
 use crate::config::Config;
 use crate::{
@@ -173,7 +174,6 @@ pub(crate) fn run_gate_failure_message(completion: &RunCompletion) -> Option<Str
     ))
 }
 
-pub(crate) const GATE_OUTCOME_SCHEMA: &str = "ub-review.gate_outcome.v1";
 pub(crate) const REQUIRED_PROOF_POLICY_LANE: &str = "intelligent-ci-policy";
 
 pub(crate) struct GateOutcomeInput<'a> {
