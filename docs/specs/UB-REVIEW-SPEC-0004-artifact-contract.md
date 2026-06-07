@@ -54,8 +54,8 @@ downstream automation     downloads the out dir as a workflow artifact and
                           reads stable files (the Bun hunt verifier flow)
 the artifact verifier     scripts/verify-bun-review-artifacts.py, the
                           contract enforcement itself
-gate-check                reads review/gate_outcome.json (the one stable
-                          artifact the verifier does not cover; see below)
+gate-check                reads review/gate_outcome.json (also verifier-
+                          covered since #340, require_gate_outcome)
 action outputs            path mapping only: gate-outcome-path,
                           review-json-path, metrics-json-path,
                           github-review-path, post-* paths (action.yml)
@@ -462,9 +462,10 @@ Exact equality is the default; anything weaker is named here explicitly.
 
 Honest current-state limits a consumer must know:
 
-- `gate_outcome.json` is not verifier-covered. Its enforcement path
-  (gate-check) is real and fail-closed, but a malformed gate_outcome would
-  not fail artifact verification - only gate enforcement.
+- `gate_outcome.json` is enforced twice since #340: gate-check turns it
+  into the verdict, and the verifier audits it on every full-tree run
+  (`require_gate_outcome`: schema, conclusion-iff-reasons, receipt-pointer
+  resolution, count coherence, terminal_status mirror).
 - The gate config block that `resolved-profile.json`/`resolved-plan.json`
   must carry includes `synchronize_mode` as a required non-empty string
   (verifier `require_gate_config`) even though no functional code consumes
@@ -493,6 +494,86 @@ Honest current-state limits a consumer must know:
 - Never claim the artifact tree proves code correct or UB-free (umbrella
   0001); the tree records what ran and what it saw, including missing
   evidence as missing evidence.
+
+## Artifact maturity
+
+Maturity is a promise about shape stability, not about enforcement -
+several experimental artifacts below are already verifier-required.
+Changing a row's maturity tier is a spec PR. A deprecation gets one
+minor-version overlap during which both the old and the new artifact are
+written. Nothing in this table may be removed or reshaped without updating
+the verifier and this table in the same PR - the same rule
+`final_compiler_input.v2` followed (PR #309).
+
+Tiers: stable - verifier- or gate-check-enforced contract a consumer may
+build on. experimental - schema'd and (mostly) enforced but young; shape
+may still move via a verifier+spec PR (the issue-capture and broker
+artifacts, the coverage sidecar, ci-audit/*). internal - everything else
+under the out dir; no contract, canonical surface elsewhere.
+
+Verifier status values: required - checked on every full-tree run, by the
+named function. conditional - checked when present, presence rule named.
+gate-check - enforced by `ub-review gate-check` (src/main.rs
+`cmd_gate_check`), not the verifier. none (tests only) - pinned only by the
+named Rust test in src/main.rs. The schema column abbreviates
+`ub-review.<name>.vN` to `<name>.vN`; the pinned literal always carries the
+`ub-review.` prefix.
+
+| artifact | maturity | schema | consumer | verifier status |
+|---|---|---|---|---|
+| plan.json | stable | none (existence only) | downstream automation | required (require_common_tree) |
+| resolved-profile.json | stable | resolved_profile.v1 | downstream automation | required (require_profile_artifacts, require_gate_config) |
+| resolved-plan.json | stable | resolved_plan.v1 | downstream automation; verifier (lane-set source) | required (require_profile_artifacts; lane set in require_common_tree) |
+| resolved-tools.json + review/ mirror | stable | resolved_tools.v1 | downstream automation | required (require_tool_registry_artifacts; exact mirror equality) |
+| tool-status.json + review/ mirror | stable | tool_status.v1 | downstream automation | required (require_tool_registry_artifacts) |
+| tool-gate-outcomes.json + review/ mirror | stable | tool_gate_outcomes.v1; entries tool_gate_outcome.v1 | downstream automation; gate-check cross-check | required (require_tool_gate_outcome_artifacts) |
+| work_queue.json | stable | work_queue.v1; tasks work_queue_task.v1 | downstream automation | required (require_work_queue_artifacts) |
+| work_events.ndjson | stable | work_event.v1 lines | downstream automation | required (require_work_queue_artifacts) |
+| events.ndjson | stable | none (ts/kind/payload; eight required kinds) | downstream automation | required (require_events) |
+| running-summary.md | stable | five required headings | humans (GitHub step summary) | required (require_summary) |
+| input/changed-files.txt, input/diff.patch, input/diff-context.json | stable | none | downstream automation | required (require_common_tree) |
+| lanes/<sanitized-lane>.md | stable | `[<lane>]` prefix; exact set vs effective_model_lanes | humans; downstream automation | required (require_common_tree, set equality) |
+| sensors/<id>/ub-review-sensor-status.json (all six sensors) | stable | status enum + mandatory reason | downstream automation | required (require_common_tree, require_sensor_receipts) |
+| root NDJSON streams (candidates, resolved_candidates, model_stages, witnesses, proof_requests, proof_tasks, proof_receipts, receipt_routes, tool_gate_outcomes, resource_leases, follow_up_results, follow_up_outputs, follow_up_questions) | stable | per-stream vN lines | downstream automation | required (per-stream require_* functions, line parity with review/ arrays) |
+| review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
+| review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
+| review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
+| review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |
+| review/review.md | stable | seven required headings | humans | required (require_review) |
+| review/terminal_state.json | stable | terminal_state.v1 | downstream automation; gate-check cross-check | required (require_review; status mirror in require_gate_outcome) |
+| review/pr_thread_context.json | stable | pr_thread_context.v1 | downstream automation | required (require_review) |
+| review/github-review.json XOR github-review-skip.json | stable | none (field-checked; skip statuses pinned) | `ub-review post` (cmd_post); downstream automation | required (require_common_tree XOR; require_review; require_pr_review_body_policy) |
+| review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
+| review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |
+| review/observations.json + unique/merged/dropped_observations.json | stable | per-record fields, grouped records | downstream automation | required (require_metrics, require_observation_schema, require_observation_summary_artifacts) |
+| review/candidates.json + resolved_candidates.json | stable | candidate.v1, resolved_candidate.v1 | downstream automation | required (require_candidate_artifacts, require_resolved_candidate_artifacts) |
+| review/orchestrator_plan.json + final_orchestrator_plan.json | stable | orchestrator_plan.v1 | downstream automation | required (require_orchestrator_plan, expected_final_orchestrator_plan) |
+| review/follow_up_results.json + follow_up_outputs.json + follow_up_evidence.json | stable | per-record fields | downstream automation | required (require_follow_up_results/_outputs/_evidence + schema checks) |
+| review/model_stages.json | stable | model_stage.v1 records | downstream automation | required (require_model_stage_artifacts) |
+| review/final_compiler_input.json | stable | final_compiler_input.v2 | downstream automation | required (require_final_compiler_input) |
+| review/witnesses.json + witness_registry.json | stable | witness.v1, witness_registry.v1 | downstream automation | required (require_witness_artifacts, require_witness_registry) |
+| review/proof_requests.json + proof_request_groups.json + proof_planner_input.json + proof_planner_output.json + proof_receipts.json | stable | proof_request_group.v1, proof_planner_input.v1, proof_planner_output.v1, proof_task.v1, proof_receipt.v1 | downstream automation | required (require_proof_request_groups, require_proof_planner_artifacts, schema checks) |
+| review/receipt_routes.json + resource_leases.json | stable | receipt_routes.v1/receipt_route.v1, resource_lease.v1 | downstream automation | required (require_receipt_route_artifacts, require_resource_lease_artifacts) |
+| review/proof_plan.md, review/resource_plan.md | stable (existence only) | none; prose uncontracted | humans | required (require_common_tree) |
+| candidates/<sanitized-id>.json | stable | candidate.v1 copies, exact set | downstream automation | conditional (require_candidate_artifacts; dir required iff array non-empty) |
+| proof_requests/<sanitized-id>.json | stable | per-record copies, exact set | downstream automation | conditional (require_proof_request_files; dir required iff array non-empty) |
+| review/issue_candidates.json + issue_candidates.ndjson (root twin) | experimental | issue_candidate.v1 records | humans; the broker | required (require_issue_capture_artifacts; full tree since #345) |
+| review/issue_actions.json + issue_actions.ndjson (root twin) | experimental | issue_action.v1 records; run-side vocabulary excludes opened/failed_to_open | humans; the broker | required (require_issue_capture_artifacts; one action per candidate) |
+| review/suggested_issues.md | experimental | none (rendered issue drafts) | humans (PR body links here since #346) | required (require_issue_capture_artifacts, existence) |
+| review/issue_broker_plan.json + issue_broker_plan.ndjson (root twin) | experimental | issue_broker_plan.v1 records | the broker (run decides and renders; post reads the plan) | conditional (require_issue_broker_artifacts; written only when [issues] mode=open-high-confidence, #348) |
+| review/issue_broker_results.json + issue_broker_results.ndjson (root twin) | experimental | issue_broker_result.v1 records | humans; downstream automation (the broker's receipts) | conditional (require_issue_broker_artifacts; post-side, checked when present; results without a plan fail) |
+| sensors/coverage/status.json (+ coverage-summary.json, changed-lines.json, upload.json, lcov.info) | experimental | coverage_status.v1, coverage_summary.v1 | gate-check (coverage tool gate); downstream automation | conditional (require_coverage_status_artifact; runs when tool-status carries the coverage tool) |
+| ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci (spec 0008, planned); humans; contract deferred to spec 0007 | none (tests only - ci_audit_artifacts_carry_schema_fields_and_receipts, src/main.rs) |
+| ci-audit/audit-report.md | experimental | none (tier-ordered report) | humans | none (tests only - ci_audit_report_lines_carry_receipts_without_boilerplate, src/main.rs) |
+| post-result.json / post-error.json | internal | none | downstream automation via action outputs post-result-path / post-error-path | conditional (require_post_receipt; one must exist on posting passes, status/validity fields fail-closed) |
+| everything else under the out dir (box-state.json, post payload/stdout/stderr receipts, observations/<lane>.ndjson, questions/**, input/pr.md, input/claims.md) | internal | none | none contracted | none (some internally exact-checked; no row here defends them) |
+
+### Deprecated
+
+None today. When a row is deprecated it moves to this subsection naming the
+replacement, both artifacts are written for one minor-version overlap, and
+the verifier keeps checking both until the removal PR deletes the old row,
+the old writer, and the old check together.
 
 ## Validation commands
 
