@@ -668,4 +668,33 @@ pub(crate) struct SetupCiArgs {
     /// Existing repo config, consulted only for [gate].required_check.
     #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
     pub(crate) config: PathBuf,
+    /// Open the migration PR on GitHub: create a branch, add the generated
+    /// files (.ub-review.toml, the gate workflow, docs/ci/ub-review-migration.md),
+    /// and open one PR whose body is the migration plan. Never touches
+    /// branch protection. Requires --action-sha plus a token, and refuses
+    /// to edit a repo that already has a .ub-review.toml.
+    #[arg(long = "open-pr")]
+    pub(crate) open_pr: bool,
+    /// Target owner/repo for --open-pr.
+    #[arg(long, env = "GITHUB_REPOSITORY")]
+    pub(crate) repo: Option<String>,
+    /// GitHub token for --open-pr (ambient GITHUB_TOKEN, matching audit-ci's
+    /// zero-setup posture).
+    #[arg(long = "github-token", env = "GITHUB_TOKEN")]
+    pub(crate) github_token: Option<String>,
+    /// GitHub API base URL.
+    #[arg(
+        long = "github-api-url",
+        default_value = "https://api.github.com",
+        env = "UB_REVIEW_GITHUB_API_URL"
+    )]
+    pub(crate) github_api_url: String,
+    /// Full 40-hex commit SHA of EffortlessMetrics/ub-review to pin in the
+    /// generated gate workflow. Required for --open-pr: the generator
+    /// refuses to invent a pin.
+    #[arg(long = "action-sha")]
+    pub(crate) action_sha: Option<String>,
+    /// Branch name the migration PR is opened from.
+    #[arg(long, default_value = "ub-review/setup-ci-migration")]
+    pub(crate) branch: String,
 }
