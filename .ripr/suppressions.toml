@@ -36,3 +36,111 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:1362:error_path"
 owner = "ub-review/core"
 reason = "Twin of the test-code error_path above (ripr-swarm#1055): toml::from_str(...)? inside the test issues_section_parses_exact_field_defaults. Line-keyed id; re-verify after any edit to config.rs. Rot instance 5 (ripr-swarm#1053): the id was written pre-rustfmt at line 1363 and the formatter moved it - ripr must be the last local check, after fmt."
+
+# PR #362 (extract gate.rs) - 17 entries from pure code motion: ripr re-probes
+# moved lines as new (no move detection; ripr-swarm#1054 covers the 14
+# production-side probes, ripr-swarm#1055 the 3 test-side probes). The
+# identical code probed clean in src/main.rs before the move. Remove this
+# block when upstream lands move detection or cfg(test) skipping.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:59:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:65:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:91:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:218:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:245:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:247:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:265:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:267:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:280:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:309:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:319:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:321:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:339:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:341:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:1066:predicate"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): predicate inside gate.rs's moved test mod (fixture initializers / a test's own ? operator are oracle plumbing). Line-keyed id from the PR #362 pure-code-motion; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:1067:predicate"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): predicate inside gate.rs's moved test mod (fixture initializers / a test's own ? operator are oracle plumbing). Line-keyed id from the PR #362 pure-code-motion; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_gate.rs:1213:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside gate.rs's moved test mod (fixture initializers / a test's own ? operator are oracle plumbing). Line-keyed id from the PR #362 pure-code-motion; re-verify after any edit to gate.rs."
