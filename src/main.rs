@@ -346,6 +346,13 @@ struct Plan {
     changed_files: Vec<String>,
     sensors: Vec<SensorPlan>,
     lanes: Vec<LanePlan>,
+    /// Repo-declared `[[lanes]]` whose diff_classes matched this run,
+    /// converted at plan time. Kept separate from `lanes` (the builtin
+    /// planning view) so lane-width selection can merge them into the
+    /// EXECUTED set at every width and diff class - the first wiring pass
+    /// only reached the plan artifact, not execution.
+    #[serde(default)]
+    repo_lanes: Vec<LanePlan>,
     docs_only: bool,
     notes: Vec<String>,
 }
@@ -4230,12 +4237,7 @@ fn build_plan(
             profile.name
         ));
     }
-    let mut lanes = if config.review.enable_default_lanes {
-        default_lanes_for_diff_class(diff.diff_class)
-    } else {
-        Vec::new()
-    };
-    merge_repo_lanes(&mut lanes, &config.lanes, diff, &mut notes);
+    let repo_lanes = repo_lane_plans(&config.lanes, diff, &mut notes);
     Plan {
         base: diff.base.clone(),
         head: diff.head.clone(),
@@ -4243,7 +4245,12 @@ fn build_plan(
         diff_class: diff.diff_class,
         changed_files: diff.changed_files.clone(),
         sensors,
-        lanes,
+        lanes: if config.review.enable_default_lanes {
+            default_lanes_for_diff_class(diff.diff_class)
+        } else {
+            Vec::new()
+        },
+        repo_lanes,
         docs_only: diff.flags.docs_only,
         notes,
     }
@@ -4252,18 +4259,18 @@ fn build_plan(
 /// Default sensor packet for repo lanes that do not declare `receives`.
 const REPO_LANE_DEFAULT_RECEIVES: &[&str] = &["tokmd", "ripr", "ast-grep"];
 
-/// Fold `[[lanes]]` from repo config into the plan: a repo lane whose
-/// `diff_classes` match replaces a same-id builtin, otherwise appends.
+/// Convert `[[lanes]]` from repo config into planned lanes for this run.
 /// Entries missing `id` or `focus` are skipped with a plan note - they shape
 /// review output, not the gate verdict, so the loud-but-non-fatal surface is
-/// the plan notes (visible in resolved-plan.json). Lane doctrine lives in
-/// docs/specs/UB-REVIEW-SPEC-0011-lane-doctrine.md.
-fn merge_repo_lanes(
-    lanes: &mut Vec<LanePlan>,
+/// the plan notes (visible in resolved-plan.json). A lane whose
+/// `diff_classes` do not match this diff is silently inapplicable. Lane
+/// doctrine lives in docs/specs/UB-REVIEW-SPEC-0011-lane-doctrine.md.
+fn repo_lane_plans(
     repo_lanes: &[RepoLane],
     diff: &DiffContext,
     notes: &mut Vec<String>,
-) {
+) -> Vec<LanePlan> {
+    let mut lanes: Vec<LanePlan> = Vec::new();
     for repo_lane in repo_lanes {
         if repo_lane.id.trim().is_empty() || repo_lane.focus.trim().is_empty() {
             notes.push(format!(
@@ -4306,15 +4313,30 @@ fn merge_repo_lanes(
                 focus: repo_lane.focus.clone(),
             }
         };
+        notes.push(format!(
+            "repo lane `{}` registered for execution",
+            plan_lane.id
+        ));
         if let Some(existing) = lanes.iter_mut().find(|lane| lane.id == plan_lane.id) {
-            notes.push(format!(
-                "repo lane `{}` replaces the builtin lane of the same id",
-                plan_lane.id
-            ));
             *existing = plan_lane;
         } else {
-            notes.push(format!("repo lane `{}` added", plan_lane.id));
             lanes.push(plan_lane);
+        }
+    }
+    lanes
+}
+
+/// Merge repo lanes into a selected execution lane set: a repo lane replaces
+/// a same-id builtin, otherwise appends. Applied after lane-width selection
+/// so repo lanes execute at every width and diff class - the first wiring
+/// pass only reached the plan artifact (PR #344's run proved the gap: plan
+/// notes recorded the lanes, the executed set did not contain them).
+fn merge_repo_lanes_into(lanes: &mut Vec<LanePlan>, repo_lanes: &[LanePlan]) {
+    for repo_lane in repo_lanes {
+        if let Some(existing) = lanes.iter_mut().find(|lane| lane.id == repo_lane.id) {
+            *existing = repo_lane.clone();
+        } else {
+            lanes.push(repo_lane.clone());
         }
     }
 }
@@ -13653,12 +13675,14 @@ fn is_ledger_excerpt_candidate(path: &Path) -> bool {
 }
 
 fn review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Vec<LanePlan> {
-    match (args.lane_width, args.provider_policy) {
+    let mut lanes = match (args.lane_width, args.provider_policy) {
         (20, ModelProviderPolicy::OpencodeGoWide) if plan.diff_class == DiffClass::SourceUb => {
             opencode_go_wide_lanes()
         }
         (width, _) => review_lanes_for_width(width, plan),
-    }
+    };
+    merge_repo_lanes_into(&mut lanes, &plan.repo_lanes);
+    lanes
 }
 
 fn selected_review_lanes_for_args(plan: &Plan, args: &RunArgs) -> Result<Vec<LanePlan>> {
@@ -23368,10 +23392,11 @@ diff_classes = ["docs-only"]
             true,
         );
 
-        // A new repo lane appends with the default sensor trio and the
-        // default lane model.
+        // Conversion: a new repo lane registers with the default sensor trio
+        // and the default lane model; the diff-class-gated and invalid
+        // entries do not.
         let mirror = plan
-            .lanes
+            .repo_lanes
             .iter()
             .find(|lane| lane.id == "contract-mirror")
             .ok_or_else(|| anyhow::anyhow!("repo lane contract-mirror missing"))?;
@@ -23381,22 +23406,9 @@ diff_classes = ["docs-only"]
             mirror.focus,
             "Check both sides of mirrored contracts moved together."
         );
-
-        // A repo lane with a builtin id replaces the builtin, exactly once.
-        let oppositions = plan
-            .lanes
-            .iter()
-            .filter(|lane| lane.id == "opposition")
-            .collect::<Vec<_>>();
-        assert_eq!(oppositions.len(), 1, "replacement must not duplicate");
-        assert_eq!(oppositions[0].model, "custom:test-model");
-        assert_eq!(oppositions[0].role, "Repo-tuned opposition");
-
-        // A lane gated to a non-matching diff class does not run; the
-        // invalid entry is skipped with a note.
         assert!(
-            !plan.lanes.iter().any(|lane| lane.id == "docs-claims"),
-            "docs-only lane must not run on a {} diff",
+            !plan.repo_lanes.iter().any(|lane| lane.id == "docs-claims"),
+            "docs-only lane must not register on a {} diff",
             plan.diff_class.key()
         );
         assert!(
@@ -23409,36 +23421,38 @@ diff_classes = ["docs-only"]
         assert!(
             plan.notes
                 .iter()
-                .any(|note| note.contains("repo lane `opposition` replaces")),
-        );
-        assert!(
-            plan.notes
-                .iter()
-                .any(|note| note.contains("repo lane `contract-mirror` added")),
+                .any(|note| note.contains("repo lane `contract-mirror` registered")),
         );
 
-        // Without builtin defaults, repo lanes stand alone.
-        config.review.enable_default_lanes = false;
-        let solo_plan = super::build_plan(
-            &config,
-            config.selected_profile()?,
-            &BoxState {
-                cpus: 4,
-                free_mem_mb: Some(8_000),
-                free_disk_mb: Some(20_000),
-                load_1m: Some(0.5),
-                github_actions: true,
-            },
-            &test_diff(),
-            Path::new("."),
-            true,
-        );
-        let solo_ids = solo_plan
-            .lanes
+        // Execution: the EXECUTED lane set carries the repo lanes at every
+        // lane width - PR #344's first live run proved plan-only wiring is
+        // not execution (plan notes recorded the lanes, the executed set did
+        // not contain them).
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let executed = super::review_lanes_for_args(&plan, &args);
+        let executed_mirror = executed
             .iter()
-            .map(|lane| lane.id.as_str())
+            .find(|lane| lane.id == "contract-mirror")
+            .ok_or_else(|| anyhow::anyhow!("contract-mirror missing from executed set"))?;
+        assert_eq!(
+            executed_mirror.focus,
+            "Check both sides of mirrored contracts moved together."
+        );
+        let executed_oppositions = executed
+            .iter()
+            .filter(|lane| lane.id == "opposition")
             .collect::<Vec<_>>();
-        assert_eq!(solo_ids, vec!["contract-mirror", "opposition"]);
+        assert_eq!(
+            executed_oppositions.len(),
+            1,
+            "replacement must not duplicate in the executed set"
+        );
+        assert_eq!(executed_oppositions[0].model, "custom:test-model");
+        assert_eq!(executed_oppositions[0].role, "Repo-tuned opposition");
+        assert!(
+            !executed.iter().any(|lane| lane.id == "docs-claims"),
+            "diff-class gating holds through execution selection"
+        );
         Ok(())
     }
 
@@ -36860,6 +36874,7 @@ index 1111111..2222222 100644
                 receives: vec!["ripr".to_owned()],
                 focus: "Check test proof.".to_owned(),
             }],
+            repo_lanes: Vec::new(),
             docs_only: false,
             notes: Vec::new(),
         }
