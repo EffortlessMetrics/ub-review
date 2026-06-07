@@ -24,6 +24,47 @@ this one proves useful on real PRs. The Bun-specific operating handoff lives in
 in [examples/bun/packets/README.md](examples/bun/packets/README.md). For other
 Rust repos, use [docs/PORTING_BASELINE.md](docs/PORTING_BASELINE.md).
 
+## Start here: the adoption path
+
+Four commands take a repo from curious to one required gate, each with
+receipts and nothing applied without your say-so:
+
+```bash
+ub-review init --mode review-byok   # starter config: BYOK review, bounded
+                                    # lanes, one grouped review, non-blocking
+
+ub-review audit-ci                  # read-only CI right-sizing report under
+                                    # ci-audit/: which existing jobs actually
+                                    # change merge decisions (receipts: run
+                                    # history, costs, failure correlation)
+
+ub-review setup-ci --print-pr       # render the migration PR - generated
+                                    # .ub-review.toml, gate workflow, plan -
+                                    # without writing or opening anything
+
+ub-review setup-ci --open-pr \
+  --accept <job>="<command>" \
+  --action-sha <full-sha>           # open the migration PR: one branch,
+                                    # three new files, one PR whose body is
+                                    # the plan. Never touches branch
+                                    # protection; refuses repos that already
+                                    # have a .ub-review.toml
+```
+
+The migration ends with `ub-review/gate` as the repo's one required check:
+repo-mandated proofs run inside it, tool thresholds gate on receipts, and
+model lanes stay advisory until you opt in (the generated workflow ships at
+the zero-key tier, `model-mode: off`). What blocks vs. advises, which
+artifacts are stable to build automation on, and what this tool refuses to
+claim are specified per surface in
+[the umbrella spec](docs/specs/UB-REVIEW-SPEC-0001-release-surface.md)
+(surface table) and the artifact maturity table in
+[SPEC-0004](docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md).
+
+What it never claims: code correctness, UB-freedom, replacing security
+tooling, or model findings as proof. Missing evidence is recorded as missing
+evidence, never as clean evidence.
+
 ## Why this exists
 
 Most review bots do this:
