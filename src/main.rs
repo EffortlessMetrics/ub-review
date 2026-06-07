@@ -4115,8 +4115,27 @@ fn plan_tool(
     }
     match trigger_match(tool.default, &diff.flags) {
         Some(reason) => {
-            if tool.id == "cargo-allow" && !cargo_allow_policy_config_exists(root) {
-                return skipped(tool, "cargo-allow policy config not found", required);
+            if tool.id == "cargo-allow" {
+                match cargo_allow_policy_config_exists(root) {
+                    CargoAllowConfigState::Native => {}
+                    CargoAllowConfigState::Absent => {
+                        return skipped(tool, "cargo-allow policy config not found", required);
+                    }
+                    CargoAllowConfigState::ForeignDialect(path) => {
+                        // #318: a foreign-dialect ledger on the default
+                        // search path is an evidence gap with a reason, not
+                        // a schema red-fail.
+                        return skipped(
+                            tool,
+                            &format!(
+                                "{path} is not a cargo-allow-dialect ledger; add \
+                                 policy/cargo-allow.toml (see \
+                                 EffortlessMetrics/cargo-allow#1465)"
+                            ),
+                            required,
+                        );
+                    }
+                }
             }
             SensorPlan {
                 id: tool.id.clone(),
@@ -4144,15 +4163,56 @@ fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
 /// config discovery (`policy/allow.toml`, `.cargo/allow.toml`, `allow.toml`).
 const CARGO_ALLOW_NATIVE_LEDGER: &str = "policy/cargo-allow.toml";
 
-fn cargo_allow_policy_config_exists(root: &Path) -> bool {
-    [
+/// Whether a NATIVE cargo-allow ledger exists. #318: a foreign-dialect
+/// `policy/allow.toml` (this repo's xtask-owned repo-policy ledger squats
+/// cargo-allow's default search path) used to count as a config, so the
+/// sensor ran unpinned against a schema it cannot read and red-failed.
+/// Each candidate file is dialect-sniffed; a path that exists but is not
+/// cargo-allow's dialect is treated as no-config, and the planner skips
+/// with a reason linking the upstream issue
+/// (https://github.com/EffortlessMetrics/cargo-allow/issues/1465).
+fn cargo_allow_policy_config_exists(root: &Path) -> CargoAllowConfigState {
+    let mut foreign = None;
+    for path in [
         CARGO_ALLOW_NATIVE_LEDGER,
         "policy/allow.toml",
         ".cargo/allow.toml",
         "allow.toml",
-    ]
-    .iter()
-    .any(|path| root.join(path).is_file())
+    ] {
+        let candidate = root.join(path);
+        if !candidate.is_file() {
+            continue;
+        }
+        if cargo_allow_dialect_matches(&candidate) {
+            return CargoAllowConfigState::Native;
+        }
+        foreign.get_or_insert_with(|| path.to_owned());
+    }
+    match foreign {
+        Some(path) => CargoAllowConfigState::ForeignDialect(path),
+        None => CargoAllowConfigState::Absent,
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CargoAllowConfigState {
+    Native,
+    ForeignDialect(String),
+    Absent,
+}
+
+/// Cheap dialect sniff. Native cargo-allow ledgers carry
+/// `policy = "cargo-allow"` / `schema_version = "0.1"` (cargo-allow 0.1.6);
+/// the xtask repo-policy dialect carries `schema_version = "1"` +
+/// `tool = "cargo-allow"`, which cargo-allow rejects with an exit-2 schema
+/// error and no receipt. Unreadable files are treated as foreign: the
+/// sensor would fail on them anyway, and skipping with a reason beats an
+/// unexplained red-fail.
+fn cargo_allow_dialect_matches(path: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(path) else {
+        return false;
+    };
+    text.contains("policy = \"cargo-allow\"") || text.contains("schema_version = \"0.1\"")
 }
 
 fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {

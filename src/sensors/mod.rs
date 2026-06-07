@@ -981,7 +981,29 @@ mod tests {
 
         diff.flags.workflow_changed = true;
         fs::create_dir_all(temp.path().join("policy"))?;
-        fs::write(temp.path().join("policy/allow.toml"), "schema = 1\n")?;
+        // #318: a foreign-dialect ledger squatting cargo-allow's discovery
+        // path is not a config; the sensor skips with a reason naming the
+        // squatting file and linking the upstream issue instead of running
+        // unpinned and red-failing on cargo-allow's exit-2 schema error.
+        fs::write(
+            temp.path().join("policy/allow.toml"),
+            "schema_version = \"1\"\ntool = \"cargo-allow\"\n",
+        )?;
+        let foreign = super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
+
+        assert!(!foreign.run);
+        assert_eq!(
+            foreign.reason,
+            "policy/allow.toml is not a cargo-allow-dialect ledger; add \
+             policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)"
+        );
+
+        // The native ledger arriving makes the same diff plan the sensor;
+        // the foreign file stays ignored rather than shadowing it.
+        fs::write(
+            temp.path().join(super::CARGO_ALLOW_NATIVE_LEDGER),
+            "schema_version = \"0.1\"\npolicy = \"cargo-allow\"\n",
+        )?;
         let planned = super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
 
         assert!(planned.run);
