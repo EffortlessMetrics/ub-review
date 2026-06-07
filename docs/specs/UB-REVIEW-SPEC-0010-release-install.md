@@ -141,12 +141,10 @@ deliberately not an input and doctor does not check it
   `UB_REVIEW_ACTIONLINT_VERSION`); `full` adds only a notice that optional
   sensors (semgrep, gitleaks, osv-scanner, cargo-audit, cargo-deny,
   cppcheck, zizmor) must be preinstalled and enabled explicitly;
-- an unknown bundle value emits a workflow warning and installs `core`. It
-  is not silent - the `::warning::` annotation is real - but it is not a
-  failure either, so a typo degrades the bundle without failing the job.
-  That downgrade-on-typo is a gap worth a slice (see Implementation PR
-  slices). Note the action validates `install-mode` strictly but not
-  `tool-bundle`; the inconsistency is the point of the slice.
+- an unknown bundle value fails the install step with an `::error::`
+  annotation naming the accepted values, matching the strict
+  `install-mode` validation - a typo'd bundle can no longer silently
+  install a different sensor set than the workflow asked for.
 
 Each sensor install is individually best-effort: a failed install warns and
 the sensor is recorded as skipped at review time, never as clean evidence
@@ -274,9 +272,6 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
     `download_release_binary`). The receipt exists for humans and external
     automation; the action currently trusts GitHub release storage at the
     tag.
-  - unknown `tool-bundle` values warn and downgrade to `core` instead of
-    erroring (scripts/install-gh-runner-tools.sh), unlike `install-mode`,
-    which errors.
   - on the dev-side install surface, `cargo xtask precommit` records
     missing sensors as `success: true` skipped receipts with exit 0,
     indistinguishable from relevance skips (#320), and the receipts do not
@@ -369,8 +364,9 @@ This spec is docs-only; it routes open work:
 2. Verify the `.sha256` receipt in the action's download path before
    accepting the asset. Small, closes the integrity gap named above. No
    issue yet.
-3. Fail on unknown `tool-bundle` values instead of warning and installing
-   `core`, matching the strict `install-mode` validation. No issue yet.
+3. DONE: unknown `tool-bundle` values fail the install step with an error
+   naming the accepted values, matching the strict `install-mode`
+   validation.
 4. PARTIALLY DONE (#335): ripr (0.8.0) and unsafe-review (0.3.3) are
    pinned in the install script and doctor
    (`expected_standard_image_tool_version`); the ripr gate-decision

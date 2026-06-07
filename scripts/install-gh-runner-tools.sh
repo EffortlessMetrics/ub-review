@@ -98,14 +98,12 @@ case "$bundle" in
     install_go_bin actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
     ;;
   *)
-    echo "::warning::unknown UB_REVIEW_TOOL_BUNDLE=$bundle; using core"
-    tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
-    install_cargo_bin tokmd tokmd "$tokmd_version"
-    install_cargo_bin cargo-allow cargo-allow
-    install_cargo_bin ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.8.0}"
-    install_cargo_bin unsafe-review unsafe-review "${UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.3}"
-    install_npm_bin ast-grep @ast-grep/cli
-    install_go_bin actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
+    # Fail closed, matching the action's strict install-mode validation: a
+    # typo'd bundle silently downgrading to core would install a different
+    # sensor set than the workflow asked for (spec 0010 named this
+    # inconsistency as an open slice).
+    echo "::error::unknown UB_REVIEW_TOOL_BUNDLE='$bundle'; expected none, core, bun-fast, or full"
+    exit 1
     ;;
 esac
 
