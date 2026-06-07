@@ -323,6 +323,19 @@ this repository's `[review_body]` policy and lane rosters never post
 (docs/REVIEW_BODY_CONTRACT.md). The gate check and the artifacts carry the
 sensor story.
 
+Posting boundary with instrument-side posting surfaces, stated so it
+cannot go fuzzy: inside ub-review, **ub-review owns posting** - an
+instrument runs as a sensor, emits receipts, and nothing it produces
+reaches the PR except through the compiler's one grouped review.
+unsafe-review's own posting surface (its standalone PR-gate mode and its
+durable `comment-plan.json` artifact) is for running unsafe-review
+*without* ub-review; when both are present, the standalone poster stays
+off and ub-review consumes the receipts. Honest current state: the
+ub-review sensor invocation consumes unsafe-review's stdout/receipt
+surface, not `comment-plan.json` - consuming the plan artifact directly
+is integration intent owned by the unsafe-review interop specs, not
+wired behavior here.
+
 ## Fail-closed behavior
 
 - A missing tool is an evidence gap, never clean evidence: command not on
