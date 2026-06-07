@@ -322,8 +322,7 @@ human review are the mitigations, not a proof. The framing is right-sizing,
 not downgrading (docs/CI_AUDIT_WIZARD.md), and the PR must read that way.
 
 The gate it migrates repos onto has its own honest limits a maintainer
-inherits: tool-gate receipts are counts-only so a block does not name its
-findings in artifacts (#347), `[gate].synchronize_mode` is inert (#306),
+inherits: `[gate].synchronize_mode` is inert (#306),
 the proof broker has known edge cases around lease absence and base-patch
 failure routing (#312), and sensors can fail transiently and recover (the
 coverage exit-101 case, #313, stayed advisory by policy). Spec 0003 (gate

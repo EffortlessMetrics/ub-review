@@ -144,3 +144,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_gate.rs:1213:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside gate.rs's moved test mod (fixture initializers / a test's own ? operator are oracle plumbing). Line-keyed id from the PR #362 pure-code-motion; re-verify after any edit to gate.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:5252:predicate"
+owner = "ub-review/core"
+reason = "Internally inconsistent verdict (ripr-swarm#1054 comment): the finding itself reports discriminate 'Strong oracle found: whole-object equality assertion' yet classifies weakly_exposed. The clip boundary is exactly pinned by ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape (200-byte input kept verbatim, 201-byte input clipped; <= to < mutation fails). Line-keyed id; re-verify after any edit to main.rs near the clip helper."

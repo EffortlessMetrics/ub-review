@@ -52,6 +52,7 @@ pub(crate) const PR_THREAD_CONTEXT_SCHEMA: &str = "ub-review.pr_thread_context.v
 pub(crate) const QUESTION_OBSERVATIONS_SCHEMA: &str = "ub-review.question_observations.v1";
 pub(crate) const RECEIPT_ROUTES_SCHEMA: &str = "ub-review.receipt_routes.v1";
 pub(crate) const RECEIPT_ROUTE_SCHEMA: &str = "ub-review.receipt_route.v1";
+pub(crate) const RIPR_EXPOSURE_GAPS_SCHEMA: &str = "ub-review.ripr_exposure_gaps.v1";
 pub(crate) const RESOLVED_CANDIDATE_SCHEMA: &str = "ub-review.resolved_candidate.v1";
 pub(crate) const RESOLVED_PLAN_SCHEMA: &str = "ub-review.resolved_plan.v1";
 pub(crate) const RESOLVED_PROFILE_SCHEMA: &str = "ub-review.resolved_profile.v1";
