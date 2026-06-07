@@ -14,10 +14,18 @@ branch-protection remove list while `required_check_source` is `unknown`,
 and self-checks the generated `.ub-review.toml` block through the config
 loader - any `PolicyError` receipt aborts as a generator failure. No repo
 writes, no network, no GitHub calls; output is byte-identical across runs
-over the same receipts. Everything past slice 1 - repo-file generation,
-workflow edits, PR opening, `--apply-branch-protection` - remains contract
-intent per roadmap item 28 (docs/ROADMAP.md) and docs/CI_AUDIT_WIZARD.md;
-sections below say which side of that line they are on.
+over the same receipts. `--open-pr` opens the migration PR in its
+new-files-only v0: it requires `--action-sha` (the generator refuses to
+invent the workflow pin), refuses any repo that already carries a
+`.ub-review.toml`, creates one branch plus exactly three new files (the
+generated config, the SHA-pinned zero-key gate workflow, the migration
+plan under docs/ci/), opens one PR whose body is the plan, never touches
+branch protection, and writes `setup-pr-result.json` /
+`setup-pr-error.json` receipts under `<out>/ci-audit/`. Still contract
+intent: edits to existing workflows or configs (right-sizing diffs), a
+branch-protection remove list (prereq A), and
+`--apply-branch-protection`; sections below say which side of the line
+they are on.
 
 ## Purpose
 

@@ -60,7 +60,7 @@ Corollaries the specs hold everywhere:
 | 4 | Sensor/tool integration | 0005 | How do the six sensors and coverage feed the gate? | production — registry, receipts, and `[tools.*.gate]` thresholds production-proven (#335: evaluated + two real blocks, PR #342/#346); receipt depth stops at counts (#347) |
 | 5 | Provider/cache/fallback | 0006 | How do I configure model providers safely and cheaply? | partial — CLI-flag surface production (preflight + runtime fallback, prompt caching on by default); `[providers]` config parsing reserved (src/config.rs:776), per-provider concurrency unenforced (#310) |
 | 6 | `audit-ci` | 0007 | Which CI should stay required, become adaptive, or move? | v0 — deterministic judgment only; permissions/secrets extraction and branch-protection query not yet implemented |
-| 7 | `setup-ci` | 0008 | Can ub-review open the migration PR? | partial — `--print-pr` renders the migration plan from audit receipts (slice 1); repo-file generation and PR opening remain contract intent (roadmap item 28) |
+| 7 | `setup-ci` | 0008 | Can ub-review open the migration PR? | partial — `--print-pr` renders the plan from audit receipts; `--open-pr` opens the new-files-only migration PR (config + pinned workflow + plan doc; refuses repos with an existing config). Existing-CI edits and branch-protection changes remain contract intent |
 | 8 | `bun-ub` preset | 0009 | How does the Bun UB hunt use this gate? | production at the pinned SHA; consumer contract live |
 | 9 | Release binary / Action install | 0010 | How do I install this without rebuilding the world? | production — release binary with source-build fallback, doctor pins |
 
