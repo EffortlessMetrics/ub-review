@@ -60,6 +60,17 @@ created = "2026-06-06"
 review_after = "2026-09-06"
 
 [[exception]]
+id = "non-rust-ripr-suppressions"
+kind = "non-rust-file"
+glob = ".ripr/suppressions.toml"
+category = "configuration-and-policy"
+language = "toml"
+owner = "ub-review/core"
+reason = "RIPR's durable suppression manifest; every entry carries owner and reason per the suppression-health contract, and suppressed findings stay visible as suppressed in the gate receipt."
+created = "2026-06-07"
+review_after = "2026-09-07"
+
+[[exception]]
 id = "non-rust-release-scripts"
 kind = "non-rust-file"
 glob = "scripts/*"

@@ -4230,6 +4230,12 @@ fn build_plan(
             profile.name
         ));
     }
+    let mut lanes = if config.review.enable_default_lanes {
+        default_lanes_for_diff_class(diff.diff_class)
+    } else {
+        Vec::new()
+    };
+    merge_repo_lanes(&mut lanes, &config.lanes, diff, &mut notes);
     Plan {
         base: diff.base.clone(),
         head: diff.head.clone(),
@@ -4237,13 +4243,79 @@ fn build_plan(
         diff_class: diff.diff_class,
         changed_files: diff.changed_files.clone(),
         sensors,
-        lanes: if config.review.enable_default_lanes {
-            default_lanes_for_diff_class(diff.diff_class)
-        } else {
-            Vec::new()
-        },
+        lanes,
         docs_only: diff.flags.docs_only,
         notes,
+    }
+}
+
+/// Default sensor packet for repo lanes that do not declare `receives`.
+const REPO_LANE_DEFAULT_RECEIVES: &[&str] = &["tokmd", "ripr", "ast-grep"];
+
+/// Fold `[[lanes]]` from repo config into the plan: a repo lane whose
+/// `diff_classes` match replaces a same-id builtin, otherwise appends.
+/// Entries missing `id` or `focus` are skipped with a plan note - they shape
+/// review output, not the gate verdict, so the loud-but-non-fatal surface is
+/// the plan notes (visible in resolved-plan.json). Lane doctrine lives in
+/// docs/specs/UB-REVIEW-SPEC-0011-lane-doctrine.md.
+fn merge_repo_lanes(
+    lanes: &mut Vec<LanePlan>,
+    repo_lanes: &[RepoLane],
+    diff: &DiffContext,
+    notes: &mut Vec<String>,
+) {
+    for repo_lane in repo_lanes {
+        if repo_lane.id.trim().is_empty() || repo_lane.focus.trim().is_empty() {
+            notes.push(format!(
+                "repo lane skipped: id and focus are required (id=`{}`)",
+                repo_lane.id
+            ));
+            continue;
+        }
+        let diff_classes = if repo_lane.diff_classes.is_empty() {
+            &["all".to_owned()][..]
+        } else {
+            &repo_lane.diff_classes[..]
+        };
+        if !proof_policy_diff_class_matches(diff_classes, diff.diff_class.key()) {
+            continue;
+        }
+        let receives = if repo_lane.receives.is_empty() {
+            REPO_LANE_DEFAULT_RECEIVES
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect()
+        } else {
+            repo_lane.receives.clone()
+        };
+        let plan_lane = if repo_lane.model.trim().is_empty() {
+            let receives_refs = receives.iter().map(String::as_str).collect::<Vec<_>>();
+            model_lane(
+                &repo_lane.id,
+                &repo_lane.role,
+                &receives_refs,
+                &repo_lane.focus,
+            )
+        } else {
+            LanePlan {
+                id: repo_lane.id.clone(),
+                role: repo_lane.role.clone(),
+                model: repo_lane.model.clone(),
+                model_display: repo_lane.model.clone(),
+                receives,
+                focus: repo_lane.focus.clone(),
+            }
+        };
+        if let Some(existing) = lanes.iter_mut().find(|lane| lane.id == plan_lane.id) {
+            notes.push(format!(
+                "repo lane `{}` replaces the builtin lane of the same id",
+                plan_lane.id
+            ));
+            *existing = plan_lane;
+        } else {
+            notes.push(format!("repo lane `{}` added", plan_lane.id));
+            lanes.push(plan_lane);
+        }
     }
 }
 
@@ -23179,6 +23251,182 @@ mod tests {
                 "badge-json".to_owned(),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn repo_lane_toml_parse_pins_exact_field_defaults() -> Result<()> {
+        // Exact-value oracle for the RepoLane authoring contract: a minimal
+        // [[lanes]] entry deserializes with every optional field at its
+        // documented default (empty until plan-time defaulting), and a full
+        // entry round-trips field-for-field. Pins the serde surface the
+        // doctrine documents (UB-REVIEW-SPEC-0011).
+        let config: Config = toml::from_str(
+            r#"
+[[lanes]]
+id = "contract-mirror"
+role = "Cross-language mirror parity review"
+focus = "Check both sides of mirrored contracts moved together."
+"#,
+        )?;
+        let lane = &config.lanes[0];
+        assert_eq!(lane.id, "contract-mirror");
+        assert_eq!(lane.role, "Cross-language mirror parity review");
+        assert_eq!(
+            lane.focus,
+            "Check both sides of mirrored contracts moved together."
+        );
+        assert_eq!(lane.receives, Vec::<String>::new());
+        assert_eq!(lane.model, "");
+        assert_eq!(lane.diff_classes, Vec::<String>::new());
+
+        let full: Config = toml::from_str(
+            r#"
+[[lanes]]
+id = "x"
+role = "r"
+focus = "f"
+receives = ["tokmd"]
+model = "custom:m"
+diff_classes = ["docs-only"]
+"#,
+        )?;
+        let lane = &full.lanes[0];
+        assert_eq!(
+            (
+                lane.id.as_str(),
+                lane.role.as_str(),
+                lane.focus.as_str(),
+                lane.receives.clone(),
+                lane.model.as_str(),
+                lane.diff_classes.clone(),
+            ),
+            (
+                "x",
+                "r",
+                "f",
+                vec!["tokmd".to_owned()],
+                "custom:m",
+                vec!["docs-only".to_owned()],
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn repo_lanes_merge_with_defaults_replacement_and_diff_class_gating() -> Result<()> {
+        let mut config: Config = toml::from_str(
+            r#"
+[[lanes]]
+id = "contract-mirror"
+role = "Cross-language mirror parity review"
+focus = "Check both sides of mirrored contracts moved together."
+
+[[lanes]]
+id = "opposition"
+role = "Repo-tuned opposition"
+focus = "Route checkable objections to proof requests, never confident refutations."
+model = "custom:test-model"
+
+[[lanes]]
+id = ""
+role = "invalid"
+focus = "missing id"
+
+[[lanes]]
+id = "docs-claims"
+role = "Docs claims review"
+focus = "Spec claims versus code."
+diff_classes = ["docs-only"]
+"#,
+        )?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+
+        // A new repo lane appends with the default sensor trio and the
+        // default lane model.
+        let mirror = plan
+            .lanes
+            .iter()
+            .find(|lane| lane.id == "contract-mirror")
+            .ok_or_else(|| anyhow::anyhow!("repo lane contract-mirror missing"))?;
+        assert_eq!(mirror.receives, vec!["tokmd", "ripr", "ast-grep"]);
+        assert_eq!(mirror.model_display, "MiniMax-M3");
+        assert_eq!(
+            mirror.focus,
+            "Check both sides of mirrored contracts moved together."
+        );
+
+        // A repo lane with a builtin id replaces the builtin, exactly once.
+        let oppositions = plan
+            .lanes
+            .iter()
+            .filter(|lane| lane.id == "opposition")
+            .collect::<Vec<_>>();
+        assert_eq!(oppositions.len(), 1, "replacement must not duplicate");
+        assert_eq!(oppositions[0].model, "custom:test-model");
+        assert_eq!(oppositions[0].role, "Repo-tuned opposition");
+
+        // A lane gated to a non-matching diff class does not run; the
+        // invalid entry is skipped with a note.
+        assert!(
+            !plan.lanes.iter().any(|lane| lane.id == "docs-claims"),
+            "docs-only lane must not run on a {} diff",
+            plan.diff_class.key()
+        );
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("repo lane skipped: id and focus are required")),
+            "invalid lane entries surface in plan notes: {:?}",
+            plan.notes
+        );
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("repo lane `opposition` replaces")),
+        );
+        assert!(
+            plan.notes
+                .iter()
+                .any(|note| note.contains("repo lane `contract-mirror` added")),
+        );
+
+        // Without builtin defaults, repo lanes stand alone.
+        config.review.enable_default_lanes = false;
+        let solo_plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let solo_ids = solo_plan
+            .lanes
+            .iter()
+            .map(|lane| lane.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(solo_ids, vec!["contract-mirror", "opposition"]);
         Ok(())
     }
 
