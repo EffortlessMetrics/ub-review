@@ -9,9 +9,53 @@ profile = "gh-runner-full"
 
 [repo]
 kind = "ub-review"
-ledger = "docs/UB_LEDGER.md"
+ledger = "docs/REVIEW_LEDGER.md"
 base = "origin/main"
 head = "HEAD"
+
+# Repo-declared lanes per the lane doctrine
+# (docs/specs/UB-REVIEW-SPEC-0011-lane-doctrine.md). All three exist because
+# the measured corpus showed the builtin lanes blind to this repo's actual
+# defect classes: both 2026-06-06 mirror drifts were caught by CI, never by
+# a lane, and ten spec PRs sailed through with one-line reviews.
+
+[[lanes]]
+id = "contract-mirror"
+role = "Cross-language mirror parity review"
+focus = """
+For every changed file with a mirrored counterpart (Rust renderer,
+serializer, classifier, or noise rule <-> Python verifier expectation; see
+the mirror-pair map in docs/REVIEW_LEDGER.md), check whether both sides of
+the contract moved together. Cite both file paths and which side moved. If
+parity is mechanically checkable (phrase sets, schema strings, count
+parity, packet equality), emit a proof request or verification question
+naming the deterministic check; never assert or refute parity by argument.
+"""
+
+[[lanes]]
+id = "gate-semantics"
+role = "Gate verdict surface review"
+focus = """
+When the diff touches what can redden the gate, what stays advisory, or
+what posts (gate_outcome construction, reason kinds, [gate] policy keys,
+fail-on-gate resolution, pass policy, gate-check), name the affected
+branch and the SPEC-0003 clause it must agree with, and check the spec or
+doc text still matches the behavior. Provider and model failure paths are
+never gate-relevant. Cite the policy key or reason kind, not severity
+adjectives.
+"""
+
+[[lanes]]
+id = "spec-honesty"
+role = "Docs claims versus code review"
+focus = """
+For changed docs and specs, find any claim that presents intent as
+implemented behavior: a config key described as wired, a command described
+as existing, a threshold described as enforced, a maturity label without a
+citation. Cite the claim line and the code (or its absence) that
+contradicts it. Mark intent-as-intent phrasing as correct; only
+claim-truth, never style or voice.
+"""
 
 [review]
 posting_engine = "artifact"
