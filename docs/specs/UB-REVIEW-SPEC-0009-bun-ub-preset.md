@@ -121,10 +121,9 @@ The profile sets:
   commands would already be explicit missing evidence; disabling them keeps
   the plan quieter (comment in profiles/bun-ub-v0.toml).
 - No `[tools.<id>.gate]` thresholds and no `[gate].blocking` opt-ins: nothing
-  in this profile can redden a gate. Note the required ripr gate threshold on
-  the ub-review repo itself has evaluated on zero production runs because the
-  sensor never produces `sensors/ripr/gate-decision.json` (#316); Bun v0 does
-  not depend on it.
+  in this profile can redden a gate. The ripr threshold on the ub-review
+  repo itself production-enforces since #335 (#316 closed; blocks on
+  PR #342/#346); Bun v0 still does not depend on it.
 
 ### Model lanes: ten plus refuter, MiniMax-only
 
@@ -359,8 +358,9 @@ that is not yet implemented.
   (docs/ARCHITECTURE.md invariant).
 - Auxiliary bots (Droid focused review) stay auxiliary and fork-only; their
   output is never called a comparison (docs/ROADMAP.md operating rules).
-- Sensor defects are filed upstream with receipts (#316, #318, #319 are the
-  live examples touching this preset), not absorbed into preset glue.
+- Sensor defects are filed upstream with receipts (#318, #319, and the
+  ripr-swarm #1052/#1053/#1054 family are the live examples touching this
+  preset's sensors), not absorbed into preset glue.
 
 ## Reliance answers
 
@@ -411,9 +411,10 @@ docs/calibration/bun-ub-review-ledger.md.
 The preset is production; remaining slices harden edges it currently routes
 around:
 
-1. Make the ripr receipt chain real: emit
-   `sensors/ripr/gate-decision.json` upstream so a ripr threshold could ever
-   evaluate, for Bun or for this repo (#316).
+1. DONE (#335, closing #316): the ripr receipt chain is real —
+   `sensors/ripr/gate-decision.json` evaluates in production on this repo.
+   A Bun-side ripr threshold remains opt-in for the Bun maintainers;
+   receipt depth past counts routes through #347.
 2. Sensor failure-reason fidelity: tokmd version-drift reason on
    `--preset bun-ub` rejection (#319); cargo-allow foreign-dialect ledger
    skip-with-reason instead of schema red-fail (#318).

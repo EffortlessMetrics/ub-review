@@ -57,7 +57,7 @@ Corollaries the specs hold everywhere:
 | 1 | `review-byok` | 0002 | Useful AI PR review with my own key and minimal setup? | production (Bun pin live) |
 | 2 | `intelligent-ci` gate | 0003 | Can this replace my required PR CI gate? | production on this repo (sole required check; red/green proven, roadmap item 26) |
 | 3 | Artifact contract | 0004 | What files can I build automation against? | production, contract enforced by the artifact verifier |
-| 4 | Sensor/tool integration | 0005 | How do the six sensors and coverage feed the gate? | partial — registry and receipts production; `[tools.*.gate]` thresholds defined but not yet production-proven (#316) |
+| 4 | Sensor/tool integration | 0005 | How do the six sensors and coverage feed the gate? | production — registry, receipts, and `[tools.*.gate]` thresholds production-proven (#335: evaluated + two real blocks, PR #342/#346); receipt depth stops at counts (#347) |
 | 5 | Provider/cache/fallback | 0006 | How do I configure model providers safely and cheaply? | partial — CLI-flag surface production (preflight + runtime fallback, prompt caching on by default); `[providers]` config parsing reserved (src/config.rs:776), per-provider concurrency unenforced (#310) |
 | 6 | `audit-ci` | 0007 | Which CI should stay required, become adaptive, or move? | v0 — deterministic judgment only; permissions/secrets extraction and branch-protection query not yet implemented |
 | 7 | `setup-ci` | 0008 | Can ub-review open the migration PR? | unimplemented — roadmap item 28 only; spec defines the contract before the code exists |
@@ -154,10 +154,11 @@ What does success look like in ten minutes?
 - `[gate].synchronize_mode`: declared, defaulted, asserted in tests, read by
   no functional code (#306). Posting on quiet passes is governed solely by
   `[gate].post_review_on`.
-- `[tools.ripr.gate] max_new_unsuppressed`: configured on this repo but has
-  evaluated on zero production runs — the sensor never produces
-  `sensors/ripr/gate-decision.json` (#316). The threshold mechanism itself is
-  tested; the ripr receipt chain is not yet real.
+- `[tools.ripr.gate] max_new_unsuppressed`: production-enforcing since #335
+  (#316 closed) — the sensor persists `sensors/ripr/gate-decision.json` and
+  the threshold has blocked two real PRs (#342, #346). Remaining honesty
+  note: the receipt is counts-only, so a block does not name its findings in
+  artifacts (#347).
 - `setup-ci`: no command, no implementation; contract-first spec only.
 
 ## Spec index and authoring sequence

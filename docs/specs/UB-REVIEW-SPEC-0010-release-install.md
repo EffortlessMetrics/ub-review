@@ -260,16 +260,14 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
   are hard failures, not warnings (src/main.rs `cmd_doctor`;
   docs/RUNNER_IMAGE.md "Policy").
 - Honest gaps, where the surface does not fail closed today:
-  - ripr and unsafe-review (and cargo-allow, ast-grep) are NOT
-    version-pinned anywhere: the install scripts take latest, and doctor's
-    drift check covers only tokmd. Sensor drift on those tools is
-    undetected. This is part of how #316 stayed invisible - the ripr gate
-    threshold has never evaluated in production because the sensor emits
-    advisory output and nothing produces `sensors/ripr/gate-decision.json`,
-    and no pin would have flagged the contract mismatch. Adjacent sensor
-    contract-drift issues: #318 (cargo-allow runs unpinned against a
-    foreign-dialect ledger and red-fails on schema), #319 (tokmd below the
-    pinned version should be surfaced as the failure reason when
+  - cargo-allow and ast-grep are NOT version-pinned: the install scripts
+    take latest and doctor's drift check does not cover them. Since #335
+    the pins cover tokmd (1.12.0), ripr (0.8.0), and unsafe-review (0.3.3)
+    in both the install script and doctor — unpinned-ripr drift is how
+    #316 stayed invisible until a local 0.5/0.8 mismatch surfaced it.
+    Adjacent sensor contract-drift issues: #318 (cargo-allow runs unpinned
+    against a foreign-dialect ledger and red-fails on schema), #319 (tokmd
+    below the pinned version should be surfaced as the failure reason when
     `--preset bun-ub` is rejected).
   - the published `.sha256` receipt is not verified by the action's
     download path - it downloads the asset only (action.yml
@@ -293,8 +291,9 @@ release assets are integrity-receipted (.sha256) but not signature-verified,
 pinning by commit SHA pins the source you build; pinning by tag trusts
   GitHub release storage for the prebuilt asset
 missing sensors after install are missing evidence, never clean evidence
-doctor verifies presence and one version pin; it does not certify sensor
-  output contracts (see #316, #318, #319)
+doctor verifies presence and three version pins (tokmd, ripr,
+  unsafe-review since #335); it does not certify sensor output contracts
+  (see #318, #319)
 ```
 
 Version pinning doctrine: consumers pin the action by full commit SHA. The
@@ -372,11 +371,11 @@ This spec is docs-only; it routes open work:
    issue yet.
 3. Fail on unknown `tool-bundle` values instead of warning and installing
    `core`, matching the strict `install-mode` validation. No issue yet.
-4. Extend version pinning beyond tokmd: pin ripr/unsafe-review/cargo-allow
-   in both install scripts and teach
-   `expected_standard_image_tool_version` the new pins so doctor catches
-   drift. Routes the drift-detection part of the #316/#318/#319 family;
-   the ripr gate-decision receipt itself lands under spec 0005.
+4. PARTIALLY DONE (#335): ripr (0.8.0) and unsafe-review (0.3.3) are
+   pinned in the install script and doctor
+   (`expected_standard_image_tool_version`); the ripr gate-decision
+   receipt landed under spec 0005. Remaining: pin cargo-allow (the #318
+   family's drift half).
 5. Make xtask precommit missing-tool receipts honest and actionable:
    distinguish missing-tool skips from relevance skips (#320) and include
    install instructions in the receipt (#321).

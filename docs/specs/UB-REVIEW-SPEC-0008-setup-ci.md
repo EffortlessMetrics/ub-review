@@ -217,12 +217,13 @@ The generated `.ub-review.toml` must:
   unwired - src/config.rs), no `[gate].synchronize_mode` (declared but
   consumed by no functional code, #306). Generating documentation-only
   knobs into a consumer repo would launder intent as behavior;
-- not propose `[tools.<id>.gate]` thresholds whose receipt chain is not yet
-  real: the ripr threshold configured on this repo has evaluated on zero
-  production runs because nothing produces
-  `sensors/ripr/gate-decision.json` (#316). Until #316 lands, a generated
-  ripr threshold is decorative policy text, and the generator must not
-  ship decorative policy.
+- only propose `[tools.<id>.gate]` thresholds whose receipt chain is real:
+  the ripr threshold qualifies since #335 (#316 closed) — the sensor
+  produces `sensors/ripr/gate-decision.json` and the threshold has blocked
+  production PRs (#342, #346). The principle stands for every other tool:
+  a generated threshold whose sensor emits no gate-decision receipt is
+  decorative policy text, and the generator must not ship decorative
+  policy.
 
 ## Advisory vs blocking behavior
 
@@ -306,15 +307,14 @@ human review are the mitigations, not a proof. The framing is right-sizing,
 not downgrading (docs/CI_AUDIT_WIZARD.md), and the PR must read that way.
 
 The gate it migrates repos onto has its own honest limits a maintainer
-inherits: `[tools.*.gate]` thresholds are not production-proven (#316),
-`[gate].synchronize_mode` is inert (#306), the proof broker has known edge
-cases around lease absence and base-patch failure routing (#312), and
-sensors can fail transiently and recover (the coverage exit-101 case,
-#313, stayed advisory by policy). Spec 0003 (gate surface, authored in
-this wave) will carry those in full; until it lands, the receipts are the
-issues themselves (#306, #312, #313, #316). The migration plan doc should
-link them rather than restate them, because a migration PR that oversells
-its destination violates the no-vibes rule.
+inherits: tool-gate receipts are counts-only so a block does not name its
+findings in artifacts (#347), `[gate].synchronize_mode` is inert (#306),
+the proof broker has known edge cases around lease absence and base-patch
+failure routing (#312), and sensors can fail transiently and recover (the
+coverage exit-101 case, #313, stayed advisory by policy). Spec 0003 (gate
+surface) carries those in full; the migration plan doc should link them
+rather than restate them, because a migration PR that oversells its
+destination violates the no-vibes rule.
 
 And the largest non-claim of all, restated from the Status line: none of
 this exists. A release, a README, or a PR comment must not present setup-ci
@@ -376,7 +376,8 @@ slice 2   .ub-review.toml generation. Accepted move-to-ub-review-required
           carried over. Round-trip test: reload emits zero PolicyError
           receipts; assert the generated file contains no [providers] and
           no synchronize_mode (#306) and proposes no threshold whose
-          receipt chain is unproven (#316).
+          sensor emits no gate-decision receipt (the ripr chain is proven,
+          #335; every other tool's is not).
 slice 3   gate workflow + docs generation: ub-review-gate.yml pinned by
           full commit SHA, docs/ci/ub-review-migration.md, and
           docs/ci/branch-protection-change.md built from prereq A's
