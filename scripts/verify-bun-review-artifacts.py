@@ -475,6 +475,8 @@ def is_no_finding_workflow_pin_summary_noise(text: str) -> bool:
     )
     says_no_defect = (
         "no pinning defect introduced" in text
+        or "no actionable finding" in text
+        or "nothing to pin-review" in text
         or "pinning posture preserved" in text
         or "sha-pinning control remains effective" in text
         or "sha-pinning control is effective" in text
@@ -490,6 +492,10 @@ def is_no_finding_workflow_pin_summary_noise(text: str) -> bool:
         or "identical in posture" in text
         or "byte-identical" in text
         or "repo-level policy item" in text
+        or "no action versions" in text
+        or "no action references" in text
+        or "no workflow yaml" in text
+        or "no github actions yaml" in text
         or "unchanged from prior pin" in text
         or "net new secret/permission surface" in text
         or "net new secret surface" in text
@@ -2003,7 +2009,6 @@ def is_non_workflow_verifier_scope_noise(text: str) -> bool:
         or "no github actions yaml" in text
         or "no workflow yaml" in text
         or "no workflow file" in text
-        or "no workflow changes" in text
         or "no workflow files changed" in text
         or "no action versions" in text
         or "no action references" in text
@@ -5695,6 +5700,37 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
 
 
+def self_test_noise_rule_phrase_parity_with_rust() -> None:
+    """The artifact-only noise rules are mirrored Rust<->Python; phrase-set
+    drift between them is exactly how run 27077850477 went red (the Rust
+    rule gained six phrases the mirror never got - the second mirror strike
+    of the day after run 27073001145). When the Rust source is present
+    (repo CI / local dev), recompute phrase parity for every paired rule;
+    consumer self-test runs without the source skip this check."""
+    rust_path = pathlib.Path(__file__).resolve().parent.parent / "src" / "main.rs"
+    if not rust_path.is_file():
+        return
+    rust = rust_path.read_text(encoding="utf-8")
+    here = pathlib.Path(__file__).read_text(encoding="utf-8")
+    names = sorted(set(re.findall(r"fn (is_[a-z_]*noise[a-z_]*)\(", rust)))
+    names.append("is_pr_body_artifact_only_observation")
+    for name in names:
+        rust_match = re.search(rf"fn {name}\(.*?\n}}", rust, re.S)
+        py_match = re.search(rf"def {name}\(.*?\n(?=def |\Z)", here, re.S)
+        if rust_match is None:
+            fail(f"noise-rule parity: rust fn {name} not found")
+        if py_match is None:
+            fail(f"noise-rule parity: python mirror for {name} is missing")
+        rust_phrases = set(re.findall(r'contains\("([^"]+)"\)', rust_match.group(0)))
+        py_phrases = set(re.findall(r'"([^"]+)" in text', py_match.group(0)))
+        if rust_phrases != py_phrases:
+            fail(
+                f"noise-rule phrase drift in {name}: "
+                f"rust-only={sorted(rust_phrases - py_phrases)!r} "
+                f"python-only={sorted(py_phrases - rust_phrases)!r}"
+            )
+
+
 def self_test_gate_outcome_contract() -> None:
     """Release lane step 3: the verdict artifact is audited, not just
     executed. A valid red outcome passes; each violation class fails."""
@@ -6680,6 +6716,7 @@ def run_self_tests() -> None:
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
         "tool status metadata mismatch",
