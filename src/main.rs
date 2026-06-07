@@ -5946,6 +5946,7 @@ fn write_review_artifacts(
         observations: &model_observations,
         proof_receipts: &proof_receipts,
         final_follow_up_tasks: 0,
+        suggested_issues: &[],
     })?;
     let mut review = ReviewArtifacts {
         shared_context_id,
@@ -6088,8 +6089,18 @@ fn write_review_artifacts(
     // issue-capture artifacts. v0 is artifact-only - no PR-body rendering,
     // no GitHub side effects; classification is the whole pipeline.
     let (issue_capture_candidates, issue_capture_actions) =
-        classify_issue_candidates(std::mem::take(&mut issue_candidates));
+        classify_issue_candidates(&config.issues, std::mem::take(&mut issue_candidates));
     write_issue_capture_artifacts(out, &issue_capture_candidates, &issue_capture_actions)?;
+    let suggested_issue_ids = issue_capture_actions
+        .iter()
+        .filter(|action| action.action == "suggested")
+        .map(|action| action.candidate_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let suggested_issues = issue_capture_candidates
+        .iter()
+        .filter(|candidate| suggested_issue_ids.contains(candidate.id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
     let final_orchestrator_plan = build_final_orchestrator_plan(
         &candidates,
         &observation_summary.unique,
@@ -6156,6 +6167,7 @@ fn write_review_artifacts(
         summary_only_findings: &compiler_summary_only_findings,
         observations: &compiler_observations,
         proof_receipts: &review.proof_receipts,
+        suggested_issues: &suggested_issues,
         final_follow_up_tasks: final_orchestrator_plan.follow_up_tasks.len(),
     })?;
     let review_payload_status = final_surface.review_payload_status;
@@ -6311,6 +6323,7 @@ fn pr_body_has_reviewer_value(body: &str) -> bool {
         "## Proof results",
         "## Refuted",
         "## Parked follow-ups",
+        "## Suggested follow-up",
         "## Evidence gaps",
         "## Missing evidence",
     ]
@@ -6335,6 +6348,9 @@ struct ReviewCompilerInput<'a> {
     summary_only_findings: &'a [SummaryOnlyFinding],
     observations: &'a [Observation],
     proof_receipts: &'a [ProofReceipt],
+    /// Issue candidates the action ledger marked `suggested` (release lane
+    /// step 5): rendered as a follow-up section, never blocking.
+    suggested_issues: &'a [IssueCandidate],
     final_follow_up_tasks: usize,
 }
 
@@ -6421,6 +6437,35 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
+    // Release lane step 5: suggested follow-ups render last - they explain
+    // why the PR's scope was not broadened, never block, and only appear
+    // when the action ledger promoted a candidate to `suggested`. The full
+    // draft (plan + acceptance) lives in review/suggested_issues.md.
+    if !input.suggested_issues.is_empty() {
+        let mut section = String::from(
+            "
+## Suggested follow-up
+
+",
+        );
+        for candidate in input.suggested_issues {
+            section.push_str(&format!(
+                "- {} (`{}`). {} Plan and acceptance criteria: review/suggested_issues.md.
+",
+                escape_md(&candidate.title),
+                candidate.target_repo,
+                escape_md(&candidate.why_not_this_pr)
+            ));
+        }
+        if pr_body.is_empty() {
+            // A suggested follow-up is reviewer value on its own: it tells
+            // the reviewer why this PR stays small.
+            pr_body = section.trim_start().to_owned();
+        } else {
+            pr_body.push_str(&section);
+        }
+        pr_body = cap_review_body(pr_body.clone(), input.args.review_body_max_bytes);
+    }
     let substantive_summary_only_findings =
         count_substantive_summary_only_findings(input.summary_only_findings);
     let mut suppressed_artifact_only_pr_body = false;
@@ -8400,7 +8445,21 @@ fn issue_candidate_invalid_reason(candidate: &IssueCandidate) -> Option<String> 
 /// artifact-only, duplicate, and invalid - rendering (release lane step 5)
 /// and the opt-in broker (step 6) extend the vocabulary later, and the
 /// verifier rejects opened/failed_to_open until the broker exists.
-fn classify_issue_candidates(raw: Vec<IssueCandidate>) -> (Vec<IssueCandidate>, Vec<IssueAction>) {
+/// True when the issue posture lets a valid candidate render for the
+/// reviewer: enabled, mode suggest (or the reserved open-high-confidence,
+/// which degrades to suggest until the broker exists), high confidence, and
+/// a do-not-block disposition. Suggested follow-ups never block.
+fn issue_candidate_renders(issues: &IssuesConfig, candidate: &IssueCandidate) -> bool {
+    issues.enabled
+        && matches!(issues.mode.as_str(), "suggest" | "open-high-confidence")
+        && candidate.confidence == "high"
+        && candidate.current_pr_disposition == "do-not-block"
+}
+
+fn classify_issue_candidates(
+    issues: &IssuesConfig,
+    raw: Vec<IssueCandidate>,
+) -> (Vec<IssueCandidate>, Vec<IssueAction>) {
     let mut candidates = Vec::new();
     let mut actions = Vec::new();
     let mut seen: BTreeMap<String, String> = BTreeMap::new();
@@ -8427,14 +8486,33 @@ fn classify_issue_candidates(raw: Vec<IssueCandidate>) -> (Vec<IssueCandidate>, 
             }
         } else {
             seen.insert(fingerprint, candidate.id.clone());
-            IssueAction {
-                schema: "ub-review.issue_action.v1".to_owned(),
-                candidate_id: candidate.id.clone(),
-                action: "artifact-only".to_owned(),
-                reason: "v0 terminal state: rendering and the issue broker are later \
-                         release-lane steps; no GitHub side effects"
-                    .to_owned(),
-                existing: None,
+            if issue_candidate_renders(issues, &candidate) {
+                IssueAction {
+                    schema: "ub-review.issue_action.v1".to_owned(),
+                    candidate_id: candidate.id.clone(),
+                    action: "suggested".to_owned(),
+                    reason: if issues.mode == "open-high-confidence" {
+                        "high-confidence follow-up rendered for the reviewer; \
+                         open-high-confidence degrades to suggest until the issue \
+                         broker exists"
+                            .to_owned()
+                    } else {
+                        "high-confidence follow-up rendered for the reviewer; \
+                         suggested follow-ups never block"
+                            .to_owned()
+                    },
+                    existing: None,
+                }
+            } else {
+                IssueAction {
+                    schema: "ub-review.issue_action.v1".to_owned(),
+                    candidate_id: candidate.id.clone(),
+                    action: "artifact-only".to_owned(),
+                    reason: "below the rendering bar or rendering disabled; preserved \
+                             in artifacts with no GitHub side effects"
+                        .to_owned(),
+                    existing: None,
+                }
             }
         };
         actions.push(action);
@@ -8478,7 +8556,7 @@ fn write_issue_capture_artifacts(
     );
     let valid_ids = actions
         .iter()
-        .filter(|action| action.action == "artifact-only")
+        .filter(|action| matches!(action.action.as_str(), "artifact-only" | "suggested"))
         .map(|action| action.candidate_id.as_str())
         .collect::<BTreeSet<_>>();
     for candidate in candidates {
@@ -23672,6 +23750,28 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
+    fn issues_toml_parse_pins_exact_field_defaults() -> Result<()> {
+        // Exact-value oracle for the [issues] authoring contract: an absent
+        // section deserializes to the documented defaults (enabled, suggest),
+        // and an explicit section round-trips field-for-field. Pins the serde
+        // surface the issue-capture posture documents.
+        let absent: Config = toml::from_str("")?;
+        assert!(absent.issues.enabled);
+        assert_eq!(absent.issues.mode, "suggest");
+
+        let explicit: Config = toml::from_str(
+            r#"
+[issues]
+enabled = false
+mode = "off"
+"#,
+        )?;
+        assert!(!explicit.issues.enabled);
+        assert_eq!(explicit.issues.mode, "off");
+        Ok(())
+    }
+
+    #[test]
     fn repo_lanes_merge_with_defaults_replacement_and_diff_class_gating() -> Result<()> {
         let mut config: Config = toml::from_str(
             r#"
@@ -32170,6 +32270,7 @@ required_proof_unprooven = true
             observations: &[follow_up_observation],
             proof_receipts: &[],
             final_follow_up_tasks: 2,
+            suggested_issues: &[],
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -32213,6 +32314,7 @@ required_proof_unprooven = true
             observations: &[resolved_observation],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -32255,6 +32357,7 @@ required_proof_unprooven = true
             observations: &[],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -32300,6 +32403,7 @@ required_proof_unprooven = true
             observations: &[],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -32371,6 +32475,7 @@ required_proof_unprooven = true
             observations: &[],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })
     }
 
@@ -32513,6 +32618,7 @@ required_proof_unprooven = true
             observations: &[],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -32737,6 +32843,7 @@ required_proof_unprooven = true
             observations: &[],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -32785,6 +32892,7 @@ required_proof_unprooven = true
             observations: &[],
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(
@@ -32982,6 +33090,7 @@ required_proof_unprooven = true
             observations: &observations,
             proof_receipts: &[],
             final_follow_up_tasks: 0,
+            suggested_issues: &[],
         })?;
 
         assert!(
@@ -36162,6 +36271,69 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn suggested_follow_up_renders_in_pr_body_and_never_blocks() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("tests-red-green", "ok")];
+        let suggested = vec![IssueCandidate {
+            id: "issue-candidate-000-abc".to_owned(),
+            source: "tests-red-green".to_owned(),
+            target_repo: "EffortlessMetrics/ub-review".to_owned(),
+            kind: "test-gap".to_owned(),
+            confidence: "high".to_owned(),
+            title: "Track base+tests red/green for focused proof requests".to_owned(),
+            problem: "p".to_owned(),
+            why_not_this_pr: "This PR adds HEAD receipts; base+tests needs a separate                               worktree and test-only patch path."
+                .to_owned(),
+            evidence: vec![IssueCandidateEvidence {
+                kind: "artifact".to_owned(),
+                path: Some("review/proof_plan.md".to_owned()),
+                url: None,
+            }],
+            implementation_plan: vec!["step".to_owned()],
+            acceptance: vec!["done".to_owned()],
+            ..IssueCandidate::default()
+        }];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            suggested_issues: &suggested,
+            final_follow_up_tasks: 0,
+        })?;
+        assert!(
+            surface
+                .github_review
+                .body
+                .contains("## Suggested follow-up"),
+            "suggested section must render: {}",
+            surface.github_review.body
+        );
+        assert!(
+            surface
+                .github_review
+                .body
+                .contains("Track base+tests red/green")
+        );
+        // Never blocks: the suggested follow-up changes the body, not the
+        // terminal state class.
+        assert_ne!(surface.terminal_state.status, "failed-to-review");
+        Ok(())
+    }
+
+    #[test]
     fn issue_candidates_classify_validate_and_dedupe() -> Result<()> {
         fn valid_candidate(title: &str) -> IssueCandidate {
             IssueCandidate {
@@ -36198,10 +36370,13 @@ index 1111111..2222222 100644
                 ..valid_candidate("Sensitive thing")
             },
         ];
-        let (candidates, actions) = classify_issue_candidates(raw);
+        let issues = super::IssuesConfig::default();
+        let (candidates, actions) = classify_issue_candidates(&issues, raw);
         assert_eq!(candidates.len(), 4);
         assert_eq!(actions.len(), 4);
-        assert_eq!(actions[0].action, "artifact-only");
+        // Default posture is suggest: a valid high-confidence do-not-block
+        // candidate promotes to suggested (and never blocks).
+        assert_eq!(actions[0].action, "suggested");
         assert_eq!(actions[1].action, "duplicate");
         assert_eq!(
             actions[1].existing.as_deref(),
@@ -36234,6 +36409,23 @@ index 1111111..2222222 100644
             drafts.contains("artifact-only"),
             "v0 posture stated in the drafts header"
         );
+
+        // mode = off keeps everything artifact-only.
+        let off = super::IssuesConfig {
+            enabled: true,
+            mode: "off".to_owned(),
+        };
+        let (_, off_actions) =
+            classify_issue_candidates(&off, vec![valid_candidate("Run base+tests red/green")]);
+        assert_eq!(off_actions[0].action, "artifact-only");
+
+        // Medium confidence stays artifact-only even under suggest.
+        let medium = IssueCandidate {
+            confidence: "medium".to_owned(),
+            ..valid_candidate("Medium confidence follow-up")
+        };
+        let (_, medium_actions) = classify_issue_candidates(&issues, vec![medium]);
+        assert_eq!(medium_actions[0].action, "artifact-only");
         Ok(())
     }
 

@@ -230,6 +230,7 @@ def has_reviewer_value_heading(body: str) -> bool:
             "## Proof results",
             "## Refuted",
             "## Parked follow-ups",
+            "## Suggested follow-up",
             "## Evidence gaps",
             "## Missing evidence",
         ]
@@ -3728,7 +3729,9 @@ GATE_OUTCOME_REASON_KINDS = {
 }
 
 
-ISSUE_ACTION_V0_VOCABULARY = {"artifact-only", "duplicate", "invalid"}
+# suggested joined the vocabulary with release lane step 5 (rendering);
+# opened/failed_to_open stay rejected until the broker (step 6) exists.
+ISSUE_ACTION_VOCABULARY = {"artifact-only", "duplicate", "invalid", "suggested"}
 
 
 def require_issue_capture_artifacts(root: pathlib.Path) -> None:
@@ -3760,16 +3763,36 @@ def require_issue_capture_artifacts(root: pathlib.Path) -> None:
             fail(f"issue action {index + 1} is not an object")
         if action.get("schema") != "ub-review.issue_action.v1":
             fail(f"issue action {index + 1} has wrong schema")
-        if action.get("action") not in ISSUE_ACTION_V0_VOCABULARY:
+        if action.get("action") not in ISSUE_ACTION_VOCABULARY:
             fail(
                 f"issue action {index + 1} uses `{action.get('action')!r}`; v0 allows "
-                f"only {sorted(ISSUE_ACTION_V0_VOCABULARY)!r} (no auto-file before "
+                f"only {sorted(ISSUE_ACTION_VOCABULARY)!r} (no auto-file before "
                 "the broker exists)"
             )
         if action.get("candidate_id") not in candidate_ids:
             fail(f"issue action {index + 1} references an unknown candidate")
         if action.get("action") == "duplicate" and not action.get("existing"):
             fail(f"issue action {index + 1} duplicate without an existing pointer")
+        if action.get("action") == "suggested":
+            candidate = next(
+                (
+                    item
+                    for item in candidates
+                    if isinstance(item, dict)
+                    and item.get("id") == action.get("candidate_id")
+                ),
+                None,
+            )
+            if candidate is None or candidate.get("confidence") != "high":
+                fail(
+                    f"issue action {index + 1} suggested a candidate that is not "
+                    "high confidence"
+                )
+            if candidate.get("current_pr_disposition") != "do-not-block":
+                fail(
+                    f"issue action {index + 1} suggested a candidate whose "
+                    "disposition could block; suggested follow-ups never block"
+                )
         reason = action.get("reason")
         if not isinstance(reason, str) or not reason:
             fail(f"issue action {index + 1} reason is not a non-empty string")

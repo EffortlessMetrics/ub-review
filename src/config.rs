@@ -20,12 +20,35 @@ pub(crate) struct Config {
     pub(crate) profiles: BTreeMap<String, Profile>,
     pub(crate) tools: BTreeMap<String, ToolPolicy>,
     pub(crate) lanes: Vec<RepoLane>,
+    pub(crate) issues: IssuesConfig,
     /// Malformed gate-policy sections recorded at load time. Serialized into
     /// `effective-config.json` so the gate's `policy` fail reasons point at a
     /// receipt that names the parse error (roadmap #24: policy parse errors
     /// become receipted gate failures, never silent defaults).
     #[serde(skip_deserializing, skip_serializing_if = "Vec::is_empty")]
     pub(crate) policy_errors: Vec<PolicyError>,
+}
+
+/// Follow-up issue-capture posture (`[issues]`). `mode = "off"` keeps every
+/// candidate artifact-only; `mode = "suggest"` (the default) lets valid
+/// high-confidence do-not-block candidates render as a suggested follow-up
+/// in the PR body. `open-high-confidence` is reserved for the issue broker
+/// (release lane step 6); until the broker exists it behaves as `suggest`
+/// and the action ledger says so.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct IssuesConfig {
+    pub(crate) enabled: bool,
+    pub(crate) mode: String,
+}
+
+impl Default for IssuesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            mode: "suggest".to_owned(),
+        }
+    }
 }
 
 /// A repo-declared review lane (`[[lanes]]` in `.ub-review.toml`). The
@@ -482,6 +505,7 @@ impl Default for Config {
             profiles,
             tools,
             lanes: Vec::new(),
+            issues: IssuesConfig::default(),
             policy_errors: Vec::new(),
         }
     }
@@ -805,6 +829,7 @@ const KNOWN_TOP_LEVEL_KEYS: &[&str] = &[
     "profiles",
     "tools",
     "lanes",
+    "issues",
     "providers",
 ];
 
