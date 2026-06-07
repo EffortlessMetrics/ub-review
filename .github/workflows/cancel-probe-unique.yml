@@ -1,0 +1,19 @@
+name: cancel-probe-unique
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sleep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - run: |
+          echo "probe start $(date -u)"
+          for i in $(seq 1 900); do
+            echo "probe $i $(date -u)"
+            sleep 1
+          done
