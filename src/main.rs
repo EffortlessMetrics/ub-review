@@ -28,6 +28,8 @@ mod builtin;
 use builtin::*;
 mod gate;
 use gate::*;
+mod artifacts;
+use artifacts::*;
 
 const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
@@ -1167,7 +1169,7 @@ struct IssueCandidate {
 impl Default for IssueCandidate {
     fn default() -> Self {
         Self {
-            schema: "ub-review.issue_candidate.v1".to_owned(),
+            schema: ISSUE_CANDIDATE_SCHEMA.to_owned(),
             id: String::new(),
             source: String::new(),
             target_repo: String::new(),
@@ -2882,7 +2884,7 @@ fn execute_issue_broker(args: &PostArgs, plan_path: &Path) -> Result<Vec<IssueBr
     for (index, entry) in plan.iter().enumerate() {
         let result = if entry.decision != "attempt" {
             IssueBrokerResult {
-                schema: "ub-review.issue_broker_result.v1".to_owned(),
+                schema: ISSUE_BROKER_RESULT_SCHEMA.to_owned(),
                 candidate_id: entry.candidate_id.clone(),
                 target_repo: entry.target_repo.clone(),
                 action: "skipped".to_owned(),
@@ -2894,7 +2896,7 @@ fn execute_issue_broker(args: &PostArgs, plan_path: &Path) -> Result<Vec<IssueBr
             execute_issue_broker_attempt(args, api_url, token, entry, index)
         } else {
             IssueBrokerResult {
-                schema: "ub-review.issue_broker_result.v1".to_owned(),
+                schema: ISSUE_BROKER_RESULT_SCHEMA.to_owned(),
                 candidate_id: entry.candidate_id.clone(),
                 target_repo: entry.target_repo.clone(),
                 action: "failed_to_open".to_owned(),
@@ -2919,7 +2921,7 @@ fn execute_issue_broker_attempt(
     index: usize,
 ) -> IssueBrokerResult {
     let mut result = IssueBrokerResult {
-        schema: "ub-review.issue_broker_result.v1".to_owned(),
+        schema: ISSUE_BROKER_RESULT_SCHEMA.to_owned(),
         candidate_id: entry.candidate_id.clone(),
         target_repo: entry.target_repo.clone(),
         action: "failed_to_open".to_owned(),
@@ -3311,7 +3313,7 @@ struct PlanArtifactSelectors<'a> {
 
 fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::Value {
     serde_json::json!({
-        "schema": "ub-review.resolved_profile.v1",
+        "schema": RESOLVED_PROFILE_SCHEMA,
         "selected_profile": &profile.name,
         "selected_review_profile": &config.review_profile,
         "selected_runtime_profile": &profile.name,
@@ -3385,7 +3387,7 @@ fn resolved_tools_artifact(
         })
         .collect();
     ResolvedToolArtifact {
-        schema: "ub-review.resolved_tools.v1",
+        schema: RESOLVED_TOOLS_SCHEMA,
         runtime_profile: profile.name.clone(),
         tools,
     }
@@ -3472,7 +3474,7 @@ fn tool_status_artifact(
         })
         .collect();
     ToolStatusArtifact {
-        schema: "ub-review.tool_status.v1",
+        schema: TOOL_STATUS_SCHEMA,
         runtime_profile: profile.name.clone(),
         tools,
     }
@@ -3520,7 +3522,7 @@ fn tool_gate_outcome_artifact(
         })
         .collect();
     ToolGateOutcomeArtifact {
-        schema: "ub-review.tool_gate_outcomes.v1",
+        schema: TOOL_GATE_OUTCOMES_SCHEMA,
         runtime_profile: profile.name.clone(),
         outcomes,
     }
@@ -3602,7 +3604,7 @@ fn tool_gate_outcome_entry(
         source_artifacts.push(gate_decision_path);
     }
     ToolGateOutcomeEntry {
-        schema: "ub-review.tool_gate_outcome.v1",
+        schema: TOOL_GATE_OUTCOME_SCHEMA,
         tool: tool.id.clone(),
         policy,
         required,
@@ -3908,7 +3910,7 @@ fn resolved_plan_artifact(
         .unwrap_or("plan-default");
     let language_mix = classify_language_mix(&diff.changed_files);
     serde_json::json!({
-        "schema": "ub-review.resolved_plan.v1",
+        "schema": RESOLVED_PLAN_SCHEMA,
         "base": &plan.base,
         "head": &plan.head,
         "run_pass": run_pass,
@@ -3944,7 +3946,7 @@ fn resolved_proof_policy_artifact(
         .filter(|policy| required_proof_policy_matches_diff(policy, diff, language_mix))
         .collect::<Vec<_>>();
     serde_json::json!({
-        "schema": "ub-review.proof_policy_resolution.v1",
+        "schema": PROOF_POLICY_RESOLUTION_SCHEMA,
         "required": &config.proof.required,
         "matched_required": matched_required,
     })
@@ -5690,7 +5692,7 @@ fn write_sensor_status(
 fn write_coverage_status_receipt(dir: &Path, fields: SensorStatusWrite<'_>) -> Result<()> {
     let summary = coverage_summary_receipt(dir);
     let changed_lines = serde_json::json!({
-        "schema": "ub-review.coverage_changed_lines.v1",
+        "schema": COVERAGE_CHANGED_LINES_SCHEMA,
         "status": "not_collected",
         "reason": "changed-line coverage is not computed by the local coverage sensor yet",
         "execution_surface_only": true,
@@ -5698,7 +5700,7 @@ fn write_coverage_status_receipt(dir: &Path, fields: SensorStatusWrite<'_>) -> R
         "source_artifacts": ["sensors/coverage/lcov.info"],
     });
     let upload = serde_json::json!({
-        "schema": "ub-review.coverage_upload.v1",
+        "schema": COVERAGE_UPLOAD_SCHEMA,
         "status": "workflow_owned",
         "reason": "Codecov upload is performed by the coverage workflow, not this local sensor",
         "execution_surface_only": true,
@@ -5715,7 +5717,7 @@ fn write_coverage_status_receipt(dir: &Path, fields: SensorStatusWrite<'_>) -> R
     )?;
     fs::write(dir.join("upload.json"), serde_json::to_vec_pretty(&upload)?)?;
     let value = serde_json::json!({
-        "schema": "ub-review.coverage_status.v1",
+        "schema": COVERAGE_STATUS_SCHEMA,
         "status": fields.status,
         "reason": fields.reason,
         "execution_surface_only": true,
@@ -5763,7 +5765,7 @@ fn coverage_summary_receipt(dir: &Path) -> serde_json::Value {
         }
     }
     serde_json::json!({
-        "schema": "ub-review.coverage_summary.v1",
+        "schema": COVERAGE_SUMMARY_SCHEMA,
         "status": if present { "collected" } else { "not_collected" },
         "reason": if present { "lcov.info parsed" } else { "lcov.info not present" },
         "execution_surface_only": true,
@@ -6509,7 +6511,7 @@ fn write_review_artifacts(
     write_final_compiler_input_artifact(
         out,
         FinalCompilerInputArtifact {
-            schema: "ub-review.final_compiler_input.v2",
+            schema: FINAL_COMPILER_INPUT_V2_SCHEMA,
             phase: "final",
             source_artifacts: &[
                 "review/review.json",
@@ -7273,7 +7275,7 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
     };
 
     ReviewTerminalState {
-        schema: "ub-review.terminal_state.v1".to_owned(),
+        schema: TERMINAL_STATE_SCHEMA.to_owned(),
         status: status.to_owned(),
         reason,
         review_payload_status: input.review_payload_status.to_owned(),
@@ -7480,7 +7482,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
 
 fn write_scheduler_artifact(review_dir: &Path, run: &RunLoopMetrics) -> Result<()> {
     let artifact = SchedulerArtifact {
-        schema: "ub-review.scheduler.v1",
+        schema: SCHEDULER_SCHEMA,
         concurrency_model: &run.concurrency_model,
         scheduler_profile: &run.scheduler_profile,
         local_proof_wall_excludes_model_wait: run.local_proof_wall_excludes_model_wait,
@@ -7741,7 +7743,7 @@ fn make_observation(input: ObservationInput<'_>) -> Observation {
     let fingerprint = sha256_hex(fingerprint_input.as_bytes());
     let short = &fingerprint[..12];
     Observation {
-        schema: "ub-review.observation.v1".to_owned(),
+        schema: OBSERVATION_SCHEMA.to_owned(),
         id: format!("obs-{index:04}-{short}", index = input.index),
         lane: input.lane.to_owned(),
         question: input.question.to_owned(),
@@ -7843,7 +7845,7 @@ fn write_observation_artifacts(out: &Path, observations: &[Observation]) -> Resu
         let artifact = by_question
             .entry((lane_name, question_name))
             .or_insert_with(|| QuestionObservationArtifact {
-                schema: "ub-review.question_observations.v1",
+                schema: QUESTION_OBSERVATIONS_SCHEMA,
                 lane: &observation.lane,
                 question: &observation.question,
                 observations: Vec::new(),
@@ -8065,7 +8067,7 @@ fn build_candidate_records(
             .as_bytes(),
         );
         candidates.push(CandidateRecord {
-            schema: "ub-review.candidate.v1".to_owned(),
+            schema: CANDIDATE_SCHEMA.to_owned(),
             id: format!(
                 "candidate-{index:04}-{short}",
                 index = candidates.len(),
@@ -8093,7 +8095,7 @@ fn build_candidate_records(
             .as_bytes(),
         );
         candidates.push(CandidateRecord {
-            schema: "ub-review.candidate.v1".to_owned(),
+            schema: CANDIDATE_SCHEMA.to_owned(),
             id: format!(
                 "candidate-{index:04}-{short}",
                 index = candidates.len(),
@@ -8183,7 +8185,7 @@ fn candidate_review_surfaces(
     let mut inline_comments = Vec::new();
     let mut summary_only_findings = Vec::new();
     for candidate in candidates {
-        if candidate.schema != "ub-review.candidate.v1" {
+        if candidate.schema != CANDIDATE_SCHEMA {
             bail!("candidate {} has unsupported schema", candidate.id);
         }
         if !matches!(
@@ -8292,7 +8294,7 @@ fn build_orchestrator_plan(
         let fingerprint = sha256_hex(format!("{disposition}\n{evidence_need}").as_bytes());
         let group_id = format!("evidence-group-{}", &fingerprint[..12]);
         let group = OrchestratorEvidenceGroup {
-            schema: "ub-review.orchestrator_evidence_group.v1".to_owned(),
+            schema: ORCHESTRATOR_EVIDENCE_GROUP_SCHEMA.to_owned(),
             id: group_id.clone(),
             evidence_need: evidence_need.clone(),
             disposition: disposition.clone(),
@@ -8325,7 +8327,7 @@ fn build_orchestrator_plan(
         );
         let group_id = format!("orchestrator-{}", observation.id);
         let group = OrchestratorObservationGroup {
-            schema: "ub-review.orchestrator_observation_group.v1".to_owned(),
+            schema: ORCHESTRATOR_OBSERVATION_GROUP_SCHEMA.to_owned(),
             id: group_id.clone(),
             observation_group_id: observation.id.clone(),
             dedupe_key: observation.dedupe_key.clone(),
@@ -8352,7 +8354,7 @@ fn build_orchestrator_plan(
     }
 
     OrchestratorPlanArtifact {
-        schema: "ub-review.orchestrator_plan.v1".to_owned(),
+        schema: ORCHESTRATOR_PLAN_SCHEMA.to_owned(),
         candidates: candidates.len(),
         observations: observations.len(),
         evidence_groups,
@@ -8581,12 +8583,12 @@ fn classify_issue_candidates(
     let mut actions = Vec::new();
     let mut seen: BTreeMap<String, String> = BTreeMap::new();
     for (index, mut candidate) in raw.into_iter().enumerate() {
-        candidate.schema = "ub-review.issue_candidate.v1".to_owned();
+        candidate.schema = ISSUE_CANDIDATE_SCHEMA.to_owned();
         let fingerprint = issue_candidate_fingerprint(&candidate);
         candidate.id = format!("issue-candidate-{index:03}-{}", &fingerprint[..12]);
         let action = if let Some(reason) = issue_candidate_invalid_reason(&candidate) {
             IssueAction {
-                schema: "ub-review.issue_action.v1".to_owned(),
+                schema: ISSUE_ACTION_SCHEMA.to_owned(),
                 candidate_id: candidate.id.clone(),
                 action: "invalid".to_owned(),
                 reason,
@@ -8594,7 +8596,7 @@ fn classify_issue_candidates(
             }
         } else if let Some(existing) = seen.get(&fingerprint) {
             IssueAction {
-                schema: "ub-review.issue_action.v1".to_owned(),
+                schema: ISSUE_ACTION_SCHEMA.to_owned(),
                 candidate_id: candidate.id.clone(),
                 action: "duplicate".to_owned(),
                 reason: "same target repo, kind, and normalized title as an earlier candidate"
@@ -8605,7 +8607,7 @@ fn classify_issue_candidates(
             seen.insert(fingerprint, candidate.id.clone());
             if issue_candidate_renders(issues, &candidate) {
                 IssueAction {
-                    schema: "ub-review.issue_action.v1".to_owned(),
+                    schema: ISSUE_ACTION_SCHEMA.to_owned(),
                     candidate_id: candidate.id.clone(),
                     action: "suggested".to_owned(),
                     reason: if issues.mode == "open-high-confidence" {
@@ -8622,7 +8624,7 @@ fn classify_issue_candidates(
                 }
             } else {
                 IssueAction {
-                    schema: "ub-review.issue_action.v1".to_owned(),
+                    schema: ISSUE_ACTION_SCHEMA.to_owned(),
                     candidate_id: candidate.id.clone(),
                     action: "artifact-only".to_owned(),
                     reason: "below the rendering bar or rendering disabled; preserved \
@@ -8828,7 +8830,7 @@ fn build_issue_broker_plan(
             )
         };
         plan.push(IssueBrokerPlanEntry {
-            schema: "ub-review.issue_broker_plan.v1".to_owned(),
+            schema: ISSUE_BROKER_PLAN_SCHEMA.to_owned(),
             candidate_id: candidate.id.clone(),
             fingerprint: fingerprint.clone(),
             target_repo: candidate.target_repo.clone(),
@@ -8943,7 +8945,7 @@ fn resolved_candidate_record(
     let (resolved_status, resolved_disposition, resolution_source, reason, evidence) =
         resolve_candidate_from_follow_ups(candidate, follow_up_outputs);
     ResolvedCandidateRecord {
-        schema: "ub-review.resolved_candidate.v1".to_owned(),
+        schema: RESOLVED_CANDIDATE_SCHEMA.to_owned(),
         candidate_id: candidate.id.clone(),
         lane: candidate.lane.clone(),
         source: candidate.source.clone(),
@@ -9196,7 +9198,7 @@ fn model_stage_records(
 fn model_lane_stage_record(receipt: &ModelLaneReceipt) -> ModelStageRecord {
     let (source, stage, stage_reason) = model_lane_stage_metadata(&receipt.lane);
     ModelStageRecord {
-        schema: "ub-review.model_stage.v1".to_owned(),
+        schema: MODEL_STAGE_SCHEMA.to_owned(),
         lane: receipt.lane.clone(),
         source: source.to_owned(),
         stage: stage.to_owned(),
@@ -9238,7 +9240,7 @@ fn model_lane_stage_metadata(lane: &str) -> (&'static str, &'static str, &'stati
 
 fn follow_up_stage_record(result: &FollowUpResult, spec: &ProviderSpec) -> ModelStageRecord {
     ModelStageRecord {
-        schema: "ub-review.model_stage.v1".to_owned(),
+        schema: MODEL_STAGE_SCHEMA.to_owned(),
         lane: result.model_lane.clone(),
         source: "orchestrator-follow-up".to_owned(),
         stage: result.stage.clone(),
@@ -9270,7 +9272,7 @@ fn follow_up_evidence_from_outputs(outputs: &[FollowUpOutputRecord]) -> FollowUp
         proof_requests.extend(output.proof_requests.iter().cloned());
     }
     FollowUpEvidenceArtifact {
-        schema: "ub-review.follow_up_evidence.v1".to_owned(),
+        schema: FOLLOW_UP_EVIDENCE_SCHEMA.to_owned(),
         follow_up_outputs: outputs.len(),
         inline_comments,
         summary_only_findings,
@@ -9358,7 +9360,7 @@ fn follow_up_question_packet<'a>(
     routed_excerpts: &BTreeMap<String, String>,
 ) -> FollowUpQuestionPacket<'a> {
     FollowUpQuestionPacket {
-        schema: "ub-review.follow_up_question_packet.v1",
+        schema: FOLLOW_UP_QUESTION_PACKET_SCHEMA,
         id: task.id.as_str(),
         task_id: task.id.as_str(),
         group_id: task.group_id.as_str(),
@@ -9512,7 +9514,7 @@ fn follow_up_task_for_group(
     let fingerprint = sha256_hex(format!("{group_id}\n{evidence_need}").as_bytes());
     let stage = follow_up_stage(disposition, evidence_need, routed_evidence);
     Some(FollowUpQuestionTask {
-        schema: "ub-review.follow_up_question.v1".to_owned(),
+        schema: FOLLOW_UP_QUESTION_SCHEMA.to_owned(),
         id: format!("follow-up-{}", &fingerprint[..12]),
         group_id: group_id.to_owned(),
         stage: stage.to_owned(),
@@ -9542,7 +9544,7 @@ fn follow_up_task_for_observation_group(
     let fingerprint = sha256_hex(format!("{}\n{}", group.id, group.evidence_need).as_bytes());
     let stage = follow_up_stage("observation", &group.evidence_need, routed_evidence);
     Some(FollowUpQuestionTask {
-        schema: "ub-review.follow_up_question.v1".to_owned(),
+        schema: FOLLOW_UP_QUESTION_SCHEMA.to_owned(),
         id: format!("follow-up-{}", &fingerprint[..12]),
         group_id: group.id.clone(),
         stage: stage.to_owned(),
@@ -9720,7 +9722,7 @@ fn proof_receipt_routes_to_lanes(receipt: &ProofReceipt, lanes: &[String]) -> bo
 
 fn proof_receipt_routed_evidence(receipt: &ProofReceipt) -> OrchestratorRoutedEvidence {
     OrchestratorRoutedEvidence {
-        schema: "ub-review.orchestrator_routed_evidence.v1".to_owned(),
+        schema: ORCHESTRATOR_ROUTED_EVIDENCE_SCHEMA.to_owned(),
         id: receipt.id.clone(),
         kind: "proof-receipt".to_owned(),
         artifact: "review/proof_receipts.json".to_owned(),
@@ -9732,7 +9734,7 @@ fn proof_receipt_routed_evidence(receipt: &ProofReceipt) -> OrchestratorRoutedEv
 
 fn resource_lease_routed_evidence(lease: &ResourceLease) -> OrchestratorRoutedEvidence {
     OrchestratorRoutedEvidence {
-        schema: "ub-review.orchestrator_routed_evidence.v1".to_owned(),
+        schema: ORCHESTRATOR_ROUTED_EVIDENCE_SCHEMA.to_owned(),
         id: lease.id.clone(),
         kind: "resource-lease".to_owned(),
         artifact: "review/resource_leases.json".to_owned(),
@@ -9838,7 +9840,7 @@ fn witness_record(input: WitnessRecordInput<'_>) -> WitnessRecord {
         .as_bytes(),
     );
     WitnessRecord {
-        schema: "ub-review.witness.v1".to_owned(),
+        schema: WITNESS_SCHEMA.to_owned(),
         id: format!("witness-{}", &fingerprint[..12]),
         status: input.status.to_owned(),
         kind: input.kind.to_owned(),
@@ -9938,7 +9940,7 @@ fn witness_registry_artifact(witnesses: &[WitnessRecord]) -> WitnessRegistryArti
     }
 
     WitnessRegistryArtifact {
-        schema: "ub-review.witness_registry.v1".to_owned(),
+        schema: WITNESS_REGISTRY_SCHEMA.to_owned(),
         total: witnesses.len(),
         status_counts,
         kind_counts,
@@ -9980,7 +9982,7 @@ fn build_proof_planner_input<'a>(
 ) -> Result<ProofPlannerInput<'a>> {
     let budget = proof_budget(profile)?;
     Ok(ProofPlannerInput {
-        schema: "ub-review.proof_planner_input.v1",
+        schema: PROOF_PLANNER_INPUT_SCHEMA,
         diff_class: diff.diff_class.key(),
         changed_files: &diff.changed_files,
         pr_thread_context_status: &pr_thread_context.status,
@@ -10016,7 +10018,7 @@ fn build_proof_planner_output(
         .collect::<Vec<_>>();
     let skip = proof_planner_skips(diff);
     Ok(ProofPlannerOutput {
-        schema: "ub-review.proof_planner_output.v1",
+        schema: PROOF_PLANNER_OUTPUT_SCHEMA,
         lane: "proof-planner",
         proof_tasks,
         skip,
@@ -10072,7 +10074,7 @@ fn proof_task_artifact(
         .saturating_mul(plan.mode.command_count())
         .min(budget.max_total_seconds);
     ProofTaskArtifact {
-        schema: "ub-review.proof_task.v1",
+        schema: PROOF_TASK_SCHEMA,
         id: plan.id,
         kind: "focused-test".to_owned(),
         source: "proof-planner".to_owned(),
@@ -10115,7 +10117,7 @@ fn focused_build_task_artifact(
 ) -> ProofTaskArtifact {
     let timeout_sec = plan.timeout_sec.min(budget.max_total_seconds);
     ProofTaskArtifact {
-        schema: "ub-review.proof_task.v1",
+        schema: PROOF_TASK_SCHEMA,
         id: plan.id,
         kind: "focused-build".to_owned(),
         source: "proof-planner".to_owned(),
@@ -10159,7 +10161,7 @@ fn write_work_queue_artifacts(
         .collect::<Vec<_>>();
     tasks.extend(proof_tasks.iter().map(work_queue_task_from_proof_task));
     let queue = WorkQueueArtifact {
-        schema: "ub-review.work_queue.v1",
+        schema: WORK_QUEUE_SCHEMA,
         initial_packet_deadline_sec: DEFAULT_INITIAL_PACKET_DEADLINE_SEC,
         follow_up_deadline_sec: DEFAULT_FOLLOW_UP_PACKET_DEADLINE_SEC,
         tasks: &tasks,
@@ -10172,7 +10174,7 @@ fn write_work_queue_artifacts(
     let mut ndjson = String::new();
     for task in &tasks {
         let event = WorkEventArtifact {
-            schema: "ub-review.work_event.v1",
+            schema: WORK_EVENT_SCHEMA,
             kind: "task_planned",
             task_id: task.id.clone(),
             task_kind: task.kind.clone(),
@@ -10198,7 +10200,7 @@ fn work_queue_task_from_sensor(out: &Path, sensor: &SensorPlan) -> WorkQueueTask
     let status = if sensor.run { "planned" } else { "skipped" }.to_owned();
     let receipt_ready = out.join(&receipt_path).is_file();
     WorkQueueTaskArtifact {
-        schema: "ub-review.work_queue_task.v1",
+        schema: WORK_QUEUE_TASK_SCHEMA,
         id: format!("sensor-{}", sensor.id),
         kind: "sensor".to_owned(),
         source: "tool-registry".to_owned(),
@@ -10223,7 +10225,7 @@ fn work_queue_task_from_sensor(out: &Path, sensor: &SensorPlan) -> WorkQueueTask
 fn work_queue_task_from_proof_task(task: &ProofTaskArtifact) -> WorkQueueTaskArtifact {
     let receipt_ready = false;
     WorkQueueTaskArtifact {
-        schema: "ub-review.work_queue_task.v1",
+        schema: WORK_QUEUE_TASK_SCHEMA,
         id: task.id.clone(),
         kind: task.kind.clone(),
         source: task.source.clone(),
@@ -10558,7 +10560,7 @@ fn receipt_route_artifacts(
                 source_artifacts.push("review/resource_leases.json".to_owned());
             }
             ReceiptRouteArtifact {
-                schema: "ub-review.receipt_route.v1",
+                schema: RECEIPT_ROUTE_SCHEMA,
                 id: format!("receipt-route-{}", receipt.id),
                 receipt_id: receipt.id.clone(),
                 phase: receipt_route_phase(receipt).to_owned(),
@@ -10628,7 +10630,7 @@ fn write_receipt_route_artifacts(out: &Path, routes: &[ReceiptRouteArtifact]) ->
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     let artifact = ReceiptRoutesArtifact {
-        schema: "ub-review.receipt_routes.v1",
+        schema: RECEIPT_ROUTES_SCHEMA,
         source_artifacts: vec!["review/proof_receipts.json", "review/resource_leases.json"],
         routes,
     };
@@ -10710,7 +10712,7 @@ fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<ProofRequestGrou
             .as_bytes(),
         );
         let group = groups.entry(key).or_insert_with(|| ProofRequestGroup {
-            schema: "ub-review.proof_request_group.v1".to_owned(),
+            schema: PROOF_REQUEST_GROUP_SCHEMA.to_owned(),
             id: format!("proof-group-{}", &fingerprint[..12]),
             command: request.command.clone(),
             cost: request.cost.clone(),
@@ -11817,7 +11819,7 @@ fn focused_build_receipt(
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
-        schema: "ub-review.proof_receipt.v1".to_owned(),
+        schema: PROOF_RECEIPT_SCHEMA.to_owned(),
         id: task.id.clone(),
         kind: "focused-build".to_owned(),
         base: diff.base.clone(),
@@ -11839,7 +11841,7 @@ fn focused_head_receipt(
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
-        schema: "ub-review.proof_receipt.v1".to_owned(),
+        schema: PROOF_RECEIPT_SCHEMA.to_owned(),
         id: task.id.clone(),
         kind: "focused-head".to_owned(),
         base: diff.base.clone(),
@@ -11861,7 +11863,7 @@ fn focused_red_green_receipt(
     reason: String,
 ) -> ProofReceipt {
     ProofReceipt {
-        schema: "ub-review.proof_receipt.v1".to_owned(),
+        schema: PROOF_RECEIPT_SCHEMA.to_owned(),
         id: task.id.clone(),
         kind: "focused-red-green".to_owned(),
         base: diff.base.clone(),
@@ -12329,7 +12331,7 @@ fn focused_test_resource_lease(
     reason: &str,
 ) -> ResourceLease {
     ResourceLease {
-        schema: "ub-review.resource_lease.v1".to_owned(),
+        schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("lease-{}", task.id),
         kind: "focused-test".to_owned(),
         consumer: task.id.clone(),
@@ -12369,7 +12371,7 @@ fn focused_build_resource_lease(
     reason: &str,
 ) -> ResourceLease {
     ResourceLease {
-        schema: "ub-review.resource_lease.v1".to_owned(),
+        schema: RESOURCE_LEASE_SCHEMA.to_owned(),
         id: format!("lease-{}", task.id),
         kind: "focused-build".to_owned(),
         consumer: task.id.clone(),
@@ -13099,7 +13101,7 @@ fn observation_summary_artifacts(observations: &[Observation]) -> ObservationSum
             let group_id = observation_group_id(groups.len(), &key);
             indexes.insert(key.clone(), groups.len());
             groups.push(ObservationGroup {
-                schema: "ub-review.observation_group.v1".to_owned(),
+                schema: OBSERVATION_GROUP_SCHEMA.to_owned(),
                 id: group_id,
                 dedupe_key: key,
                 claim: observation.claim.clone(),
@@ -13121,7 +13123,7 @@ fn observation_summary_artifacts(observations: &[Observation]) -> ObservationSum
         .iter()
         .filter(|group| group.observation_ids.len() > 1)
         .map(|group| MergedObservationRecord {
-            schema: "ub-review.merged_observation.v1".to_owned(),
+            schema: MERGED_OBSERVATION_SCHEMA.to_owned(),
             group_id: group.id.clone(),
             dedupe_key: group.dedupe_key.clone(),
             kept_observation_id: group.observation_ids[0].clone(),
@@ -13142,7 +13144,7 @@ fn observation_summary_artifacts(observations: &[Observation]) -> ObservationSum
                 .iter()
                 .skip(1)
                 .map(|observation_id| DroppedObservationRecord {
-                    schema: "ub-review.dropped_observation.v1".to_owned(),
+                    schema: DROPPED_OBSERVATION_SCHEMA.to_owned(),
                     observation_id: observation_id.clone(),
                     group_id: group.id.clone(),
                     dedupe_key: group.dedupe_key.clone(),
@@ -13640,7 +13642,7 @@ fn write_shared_context_cache_artifacts(
         args,
     );
     let manifest = SharedContextCacheManifest {
-        schema: "ub-review.cache_manifest.v1",
+        schema: CACHE_MANIFEST_SCHEMA,
         shared_context_hash: shared_context_hash.clone(),
         shared_context_bytes: shared_context.len(),
         cache_block_path: "review/shared_context_cache_block.md",
@@ -13658,7 +13660,7 @@ fn write_shared_context_cache_artifacts(
 
     let mut events = Vec::new();
     events.push(SharedContextCacheEvent {
-        schema: "ub-review.cache_event.v1",
+        schema: CACHE_EVENT_SCHEMA,
         kind: "shared_context_prepared".to_owned(),
         shared_context_hash: shared_context_hash.clone(),
         lane: None,
@@ -13673,7 +13675,7 @@ fn write_shared_context_cache_artifacts(
         .filter(|receipt| model_call_attempted_status(&receipt.status))
     {
         events.push(SharedContextCacheEvent {
-            schema: "ub-review.cache_event.v1",
+            schema: CACHE_EVENT_SCHEMA,
             kind: "provider_preflight_cache_usage".to_owned(),
             shared_context_hash: shared_context_hash.clone(),
             lane: Some("provider-preflight".to_owned()),
@@ -13689,7 +13691,7 @@ fn write_shared_context_cache_artifacts(
         .filter(|receipt| model_call_attempted_status(&receipt.status))
     {
         events.push(SharedContextCacheEvent {
-            schema: "ub-review.cache_event.v1",
+            schema: CACHE_EVENT_SCHEMA,
             kind: "model_lane_cache_usage".to_owned(),
             shared_context_hash: shared_context_hash.clone(),
             lane: Some(receipt.lane.clone()),
@@ -13706,7 +13708,7 @@ fn write_shared_context_cache_artifacts(
         .filter(|result| model_call_attempted_status(&result.status))
     {
         events.push(SharedContextCacheEvent {
-            schema: "ub-review.cache_event.v1",
+            schema: CACHE_EVENT_SCHEMA,
             kind: "follow_up_cache_usage".to_owned(),
             shared_context_hash: shared_context_hash.clone(),
             lane: Some(result.model_lane.clone()),
@@ -13808,7 +13810,7 @@ fn model_cache_mode(provider: &str, endpoint_kind: &str) -> &'static str {
 
 fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadContext> {
     let mut context = PrThreadContext {
-        schema: "ub-review.pr_thread_context.v1".to_owned(),
+        schema: PR_THREAD_CONTEXT_SCHEMA.to_owned(),
         status: "absent".to_owned(),
         max_bytes: args.pr_thread_context_max_bytes,
         sources: Vec::new(),
@@ -15760,7 +15762,7 @@ fn read_follow_up_packet(
 ) -> Result<FollowUpQuestionPacketArtifact> {
     let path = out.join(follow_up_packet_artifact_path(task));
     let packet: FollowUpQuestionPacketArtifact = serde_json::from_slice(&fs::read(&path)?)?;
-    if packet.schema != "ub-review.follow_up_question_packet.v1"
+    if packet.schema != FOLLOW_UP_QUESTION_PACKET_SCHEMA
         || packet.task_id != task.id
         || packet.group_id != task.group_id
         || packet.id != task.id
@@ -15866,7 +15868,7 @@ fn follow_up_output_record(
         },
     );
     FollowUpOutputRecord {
-        schema: "ub-review.follow_up_output.v1".to_owned(),
+        schema: FOLLOW_UP_OUTPUT_SCHEMA.to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
         stage: task.stage.clone(),
@@ -15890,7 +15892,7 @@ fn empty_follow_up_output_record(
     result: &FollowUpResult,
 ) -> FollowUpOutputRecord {
     FollowUpOutputRecord {
-        schema: "ub-review.follow_up_output.v1".to_owned(),
+        schema: FOLLOW_UP_OUTPUT_SCHEMA.to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
         stage: task.stage.clone(),
@@ -15933,7 +15935,7 @@ fn follow_up_result(
     output_counts: FollowUpOutputCounts,
 ) -> FollowUpResult {
     FollowUpResult {
-        schema: "ub-review.follow_up_result.v1".to_owned(),
+        schema: FOLLOW_UP_RESULT_SCHEMA.to_owned(),
         task_id: task.id.clone(),
         group_id: task.group_id.clone(),
         stage: task.stage.clone(),
@@ -17417,7 +17419,7 @@ fn build_proof_request(
     );
     let short = &fingerprint[..12];
     ProofRequest {
-        schema: "ub-review.proof_request.v1".to_owned(),
+        schema: PROOF_REQUEST_SCHEMA.to_owned(),
         id: format!("proof-{index:04}-{short}"),
         lane: lane.to_owned(),
         requested_by,
@@ -22718,7 +22720,7 @@ fn build_ci_audit_artifacts(
     }
     let runs_fetched = fetch.map(|fetch| fetch.runs.len()).unwrap_or(0);
     let inventory = CiInventoryArtifact {
-        schema: "ub-review.ci_inventory.v1".to_owned(),
+        schema: CI_INVENTORY_SCHEMA.to_owned(),
         generated_at,
         repo: repo.to_owned(),
         window_days,
@@ -22726,7 +22728,7 @@ fn build_ci_audit_artifacts(
         evidence_gaps: inventory_gaps,
     };
     let history = CiHistoryArtifact {
-        schema: "ub-review.ci_history.v1".to_owned(),
+        schema: CI_HISTORY_SCHEMA.to_owned(),
         repo: repo.to_owned(),
         window_days,
         runs_fetched,
@@ -22738,14 +22740,14 @@ fn build_ci_audit_artifacts(
         evidence_gaps: history_gaps,
     };
     let costs = CiCostsArtifact {
-        schema: "ub-review.ci_costs.v1".to_owned(),
+        schema: CI_COSTS_SCHEMA.to_owned(),
         repo: repo.to_owned(),
         window_days,
         jobs: costs_jobs,
         evidence_gaps: shared_degradation_gaps.clone(),
     };
     let correlation = CiCorrelationArtifact {
-        schema: "ub-review.ci_correlation.v1".to_owned(),
+        schema: CI_CORRELATION_SCHEMA.to_owned(),
         repo: repo.to_owned(),
         window_days,
         independent_failure_rule: CI_AUDIT_INDEPENDENT_FAILURE_RULE.to_owned(),
@@ -22753,7 +22755,7 @@ fn build_ci_audit_artifacts(
         evidence_gaps: shared_degradation_gaps,
     };
     let recommendations = CiRecommendationsArtifact {
-        schema: "ub-review.ci_recommendations.v1".to_owned(),
+        schema: CI_RECOMMENDATIONS_SCHEMA.to_owned(),
         repo: repo.to_owned(),
         window_days,
         jobs: recommendations,
@@ -23470,7 +23472,7 @@ fn execute_setup_ci_open_pr(
         .unwrap_or_default()
         .to_owned();
     Ok(SetupPrResult {
-        schema: "ub-review.setup_pr_result.v1".to_owned(),
+        schema: SETUP_PR_RESULT_SCHEMA.to_owned(),
         repo: repo.to_owned(),
         base,
         branch: args.branch.clone(),
@@ -23489,16 +23491,13 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
     }
     let dir = args.out.join("ci-audit");
     let inventory: CiInventoryArtifact =
-        load_ci_audit_receipt(&dir, "inventory.json", "ub-review.ci_inventory.v1")?;
-    let recommendations: CiRecommendationsArtifact = load_ci_audit_receipt(
-        &dir,
-        "recommendations.json",
-        "ub-review.ci_recommendations.v1",
-    )?;
+        load_ci_audit_receipt(&dir, "inventory.json", CI_INVENTORY_SCHEMA)?;
+    let recommendations: CiRecommendationsArtifact =
+        load_ci_audit_receipt(&dir, "recommendations.json", CI_RECOMMENDATIONS_SCHEMA)?;
     for (name, expected_schema) in [
-        ("history.json", "ub-review.ci_history.v1"),
-        ("costs.json", "ub-review.ci_costs.v1"),
-        ("correlation.json", "ub-review.ci_correlation.v1"),
+        ("history.json", CI_HISTORY_SCHEMA),
+        ("costs.json", CI_COSTS_SCHEMA),
+        ("correlation.json", CI_CORRELATION_SCHEMA),
     ] {
         let _: serde_json::Value = load_ci_audit_receipt(&dir, name, expected_schema)?;
     }
@@ -23573,7 +23572,7 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
                 fs::write(
                     &error_path,
                     serde_json::to_vec_pretty(&serde_json::json!({
-                        "schema": "ub-review.setup_pr_error.v1",
+                        "schema": SETUP_PR_ERROR_SCHEMA,
                         "status": "failed",
                         "reason": format!("{err:#}"),
                     }))?,
