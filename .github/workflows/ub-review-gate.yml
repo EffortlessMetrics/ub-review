@@ -48,6 +48,18 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      - name: Memory telemetry (temporary OOM probe)
+        # TEMPORARY: seven runner-shutdown kills on this branch's runs with
+        # githubstatus all-green points at the runner OOM-killing itself.
+        # Log free RAM every 15s in the background; the last flushed lines
+        # before a kill are the receipt. Remove with the allow-heavy revert.
+        run: |
+          ( while true; do
+              echo "memprobe $(date -u +%H:%M:%S) $(free -m | awk '/^Mem:/{print $3"/"$2" MB used, avail "$7}')"
+              sleep 15
+            done ) &
+          echo $! > /tmp/memprobe.pid
+
       - name: Run ub-review gate
         uses: ./
         with:
