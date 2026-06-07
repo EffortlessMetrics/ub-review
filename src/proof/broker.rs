@@ -2361,6 +2361,112 @@ index 3333333..4444444 100644
     }
 
     #[test]
+    fn base_patch_failed_surfaces_the_patch_error_to_the_requesting_lane() -> Result<()> {
+        // #312 item 2: a lane that requested the red/green proof learns the
+        // base patch could not even apply - the receipt reason carries the
+        // actual patch error, routed evidence copies it, and the follow-up
+        // prompt renders it. The skipped base-plus-tests command has no
+        // stdout/stderr to excerpt, so the reason is the only detail channel.
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let task = super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        );
+        let mut runner = |_root: &Path,
+                          _argv: &[String],
+                          _env: &BTreeMap<String, String>,
+                          _timeout: u64,
+                          stdout: &Path,
+                          stderr: &Path|
+         -> Result<CommandStatus> {
+            fs::write(stdout, b"head ok\n")?;
+            fs::write(stderr, b"")?;
+            Ok(CommandStatus {
+                exit_code: Some(0),
+                timed_out: false,
+                success: true,
+                reason: "completed".to_owned(),
+                duration_ms: 7,
+            })
+        };
+        let mut prepare = |_root: &Path, _out: &Path, _diff: &DiffContext| -> Result<PathBuf> {
+            Err(anyhow::anyhow!("patch hunk #1 rejected for tests/cli.rs"))
+        };
+
+        let mut receipt = super::run_focused_red_green_proof_task(
+            temp.path(),
+            &out,
+            &diff,
+            &task,
+            300,
+            &mut runner,
+            &mut prepare,
+        )?;
+        receipt.requested_by = vec!["tests-oracle".to_owned()];
+
+        assert_eq!(receipt.result, "base_patch_failed");
+        // Exact oracle: the receipt-level reason is the constant prefix plus
+        // the verbatim patch error, nothing else.
+        assert_eq!(
+            receipt.reason,
+            "base+tests patch failed: patch hunk #1 rejected for tests/cli.rs"
+        );
+
+        let routed = crate::routed_evidence_for_group(
+            "proof-confirmation",
+            &["tests-oracle".to_owned()],
+            std::slice::from_ref(&receipt),
+            &[],
+        );
+        assert_eq!(routed.len(), 1, "receipt routes to the requesting lane");
+        assert_eq!(routed[0].result, "base_patch_failed");
+        assert_eq!(routed[0].status, "missing-evidence");
+        // Routed evidence copies the receipt reason verbatim.
+        assert_eq!(routed[0].reason, receipt.reason);
+
+        // A lane the receipt was not requested by gets nothing.
+        let unrouted = crate::routed_evidence_for_group(
+            "proof-confirmation",
+            &["arch".to_owned()],
+            std::slice::from_ref(&receipt),
+            &[],
+        );
+        assert!(
+            unrouted.is_empty(),
+            "other lanes are not routed: {unrouted:?}"
+        );
+
+        let follow_up = FollowUpQuestionTask {
+            schema: "test".to_owned(),
+            id: "fu-001".to_owned(),
+            group_id: "group-001".to_owned(),
+            stage: "secondary".to_owned(),
+            stage_reason: "routed proof".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            disposition: "summary-only".to_owned(),
+            candidate_ids: Vec::new(),
+            observation_group_ids: Vec::new(),
+            routed_evidence: routed,
+            question: "Confirm whether routed proof evidence resolves this observation.".to_owned(),
+            status: "pending".to_owned(),
+            reason: "test".to_owned(),
+        };
+        let prompt = crate::render_follow_up_question_prompt(&follow_up, &BTreeMap::new());
+        assert!(
+            prompt.contains("base_patch_failed"),
+            "prompt names the result: {prompt}"
+        );
+        assert!(
+            prompt.contains("patch hunk #1 rejected for tests/cli.rs"),
+            "prompt carries the patch error: {prompt}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn proof_broker_v0_does_not_execute_without_focused_test_lease() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");

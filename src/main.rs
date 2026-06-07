@@ -8967,12 +8967,17 @@ where
                 "skipped",
                 format!("base+tests patch failed: {error:#}"),
             )?);
+            // #312: the receipt-level reason carries the actual patch error.
+            // Routed evidence copies this reason into the requesting lane's
+            // follow-up prompt, and the skipped command receipt has no
+            // stdout/stderr to excerpt - a bare constant here would leave
+            // the lane knowing the proof is missing but not why.
             return Ok(focused_red_green_receipt(
                 diff,
                 task,
                 commands,
                 "base_patch_failed".to_owned(),
-                "base+tests patch failed".to_owned(),
+                format!("base+tests patch failed: {error:#}"),
             ));
         }
     };

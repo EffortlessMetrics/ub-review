@@ -1876,3 +1876,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_tools.rs:665:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2407:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path on the new base_patch_failed surfacing test's own ? operator; the harness observes a test's Err directly. The production change (receipt reason carries the patch error) is pinned by an exact-equality oracle in the same test. Line-keyed id; re-verify after edits."
