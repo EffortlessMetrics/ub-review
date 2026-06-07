@@ -33,6 +33,6 @@ reason = "Probe fired on #[cfg(test)] code (ripr-swarm#1055): error_path of a to
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_config.rs:1363:error_path"
+finding_id = "probe:src_config.rs:1362:error_path"
 owner = "ub-review/core"
-reason = "Twin of the test-code error_path above (ripr-swarm#1055): toml::from_str(...)? inside the test issues_section_parses_exact_field_defaults. Line-keyed id; re-verify after any edit to config.rs."
+reason = "Twin of the test-code error_path above (ripr-swarm#1055): toml::from_str(...)? inside the test issues_section_parses_exact_field_defaults. Line-keyed id; re-verify after any edit to config.rs. Rot instance 5 (ripr-swarm#1053): the id was written pre-rustfmt at line 1363 and the formatter moved it - ripr must be the last local check, after fmt."
