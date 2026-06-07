@@ -156,3 +156,1723 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:5459:predicate"
 owner = "ub-review/core"
 reason = "CI-side key of the clip-predicate finding suppressed above as probe:src_main.rs:5252:predicate - identical code, different line key because probe ids derive from diff-hunk numbering and CI's merge-ref diff shapes hunks differently than a local branch diff (rot instance 6, ripr-swarm#1053 comment). The boundary is exactly pinned by ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape; ripr itself reports a strong oracle on this probe (ripr-swarm#1054)."
+
+# Step-6 extraction (tools.rs + sensors/) - motion probes on moved code
+# (no move detection upstream; ripr-swarm#1054/#1053). Identical code
+# probed clean in src/main.rs before the move. Remove on move detection.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:13:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:19:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:20:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:27:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:28:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:29:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:34:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:37:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:38:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:44:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:45:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:54:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:58:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:64:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:64:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:26:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:27:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:30:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:32:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:33:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:47:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:47:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:50:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:50:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:50:match_arm"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): match_arm probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:50:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:50:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:51:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:51:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:51:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:51:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:53:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:53:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:53:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:53:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:54:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:54:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:54:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:54:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:57:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:57:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:57:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:57:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:59:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:59:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:59:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:59:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:60:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:60:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:60:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:60:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:61:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:61:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:61:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:61:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:62:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:62:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:62:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:63:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:63:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:63:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:70:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:72:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:74:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:74:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:78:predicate"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): predicate probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:109:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:113:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:119:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:168:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:176:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:191:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:195:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:206:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:209:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:214:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:223:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:223:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:226:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:228:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:232:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:236:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:238:match_arm"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): match_arm probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:239:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:240:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:242:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:245:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:246:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:247:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:249:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:255:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:255:predicate"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): predicate probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:255:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:262:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:263:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:264:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:265:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:267:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:272:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:272:predicate"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): predicate probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:272:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:273:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:276:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:278:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:283:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:285:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:285:predicate"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): predicate probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:287:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:289:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:308:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:311:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:314:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:314:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:316:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:316:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:317:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:317:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:318:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:319:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:322:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:323:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:324:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:325:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:327:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:328:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:328:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:332:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:332:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:333:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:333:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:335:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:335:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:338:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:338:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:339:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:339:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:546:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:547:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:549:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:552:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:553:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:555:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:561:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:562:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:564:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:566:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:567:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:569:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:576:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:578:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:581:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:581:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:593:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:593:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:595:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:596:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:602:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:603:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:611:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:612:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:619:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:625:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:627:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:630:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:634:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:637:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:642:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:642:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:689:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:689:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:750:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:750:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:752:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:752:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:753:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:753:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:754:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:754:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:755:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:755:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:19:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:19:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:28:predicate"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): predicate probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:115:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:120:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:120:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:120:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:121:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:123:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:123:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:123:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:124:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:124:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:124:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:125:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:125:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:125:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:126:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:126:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:126:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:127:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:127:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:127:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:129:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:129:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:129:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:131:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:131:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:131:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:132:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:133:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:133:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:133:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:135:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:135:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:135:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:137:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:137:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:137:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:138:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:138:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:138:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:143:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:143:error_path"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): error_path probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:143:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:149:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:150:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:152:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:153:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:154:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:155:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:157:match_arm"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): match_arm probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:24:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:59:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:61:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:61:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:63:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:63:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:65:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:65:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:67:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:67:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:79:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:105:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:109:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:109:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:19:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:26:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:26:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:282:side_effect"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): side_effect probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:311:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:311:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:312:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:314:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:315:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:320:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:324:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:325:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:326:return_value"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): return_value probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:352:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:353:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:353:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:361:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:366:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:367:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:367:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:370:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:393:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:401:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:401:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:406:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:407:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:409:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:410:field_construction"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): field_construction probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:416:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:418:call_deletion"
+owner = "ub-review/core"
+reason = "Motion probe on moved-not-modified code (PR step-6 extraction of tools.rs + sensors/; ripr has no move detection, ripr-swarm#1054, and probe ids re-key per diff shape, ripr-swarm#1053 instance 6): call_deletion probe on code that probed clean in src/main.rs before the move, still covered by the same tests via crate re-exports. Remove when upstream lands move detection. NOTE: CI merge-ref diff may re-key these lines; expect a follow-up commit with CI-side ids."
+
+# Step-6 extraction (tools.rs + sensors/): residual motion/test-code probes
+# after colocating 23 tests (raw motion gaps went 276 -> this block; the
+# detail_unavailable failure path got a real new test instead of a
+# suppression). ripr-swarm#1054/#1055; remove on upstream move detection
+# or cfg(test) skipping.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:132:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:119:predicate"
+owner = "ub-review/core"
+reason = "Reach/discriminate false-negative on step-6 moved code (ripr-swarm#1054): predicate probe on code covered by tests (colocated or via crate re-exports); identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:196:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:212:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:279:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:528:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:597:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:661:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:665:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside the step-6 extraction's colocated test mod; a test's own ? operator / fixture is oracle plumbing. Line-keyed id; re-verify after edits."
