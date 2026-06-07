@@ -3840,6 +3840,144 @@ struct RiprBadgeCounts {
     unsuppressed_exposure_gaps: u64,
 }
 
+/// unsafe-review `first-pr --out <dir>` top-level artifact
+/// (`unsafe-review-gate.json`, schema `unsafe-review-gate/v1`).
+///
+/// Shape verified against real `unsafe-review 0.3.4 first-pr --out` output:
+/// movement counts are NESTED under `summary`, `status` is the advisory word
+/// (`"advisory"`), and the `artifacts` map keys are snake_case
+/// (`comment_plan`, `repair_queue`, ...) while their values are the hyphenated
+/// filenames.
+///
+/// Only the fields consumed by ub-review are bound; unknown fields are
+/// silently ignored so forward-compatible additions in unsafe-review ≥0.3.5
+/// do not break ingestion. The schema_version is validated before use: only
+/// `"unsafe-review-gate/v1"` is understood; anything else degrades to the
+/// status-only fallback rather than crashing.
+#[derive(Clone, Debug, Deserialize)]
+struct UnsafeReviewGate {
+    schema_version: String,
+    /// Dialect marker on the real manifest (e.g. `"unsafe-review"`). Context
+    /// only; surfaced if present, never a gate input.
+    #[serde(default)]
+    dialect: Option<String>,
+    /// Advisory status word from unsafe-review. In 0.3.x this is `"advisory"`.
+    /// Never used as a gate input; surfaced as context only.
+    status: String,
+    /// Movement summary relative to base, nested under `summary` on the real
+    /// manifest. `#[serde(default)]` so a manifest without it reads zeroes
+    /// rather than failing to parse.
+    #[serde(default)]
+    summary: UnsafeReviewSummary,
+    /// Advisory boundary declared by the tool; must be preserved and surfaced.
+    /// In 0.3.x this is the sentence "static unsafe-review coverage evidence;
+    /// not proof, not a merge verdict".
+    #[serde(default)]
+    trust_boundary: Option<String>,
+    /// Tool name on the real manifest (e.g. `"unsafe-review"`). Context only.
+    #[serde(default)]
+    tool: Option<String>,
+    /// Tool version on the real manifest (e.g. `"0.3.4"`). Context only.
+    #[serde(default)]
+    tool_version: Option<String>,
+    /// Relative artifact pointers within the output directory. Keys are
+    /// snake_case (`cards`, `comment_plan`, `repair_queue`, `receipt_audit`,
+    /// `review_kit`, `pr_summary`, `sarif`, `lsp`, `policy_report`); values are
+    /// the hyphenated filenames.
+    #[serde(default)]
+    artifacts: std::collections::BTreeMap<String, String>,
+}
+
+/// Movement summary block nested under `summary` in `unsafe-review-gate/v1`.
+#[derive(Clone, Debug, Default, Deserialize)]
+struct UnsafeReviewSummary {
+    #[serde(default)]
+    new_gaps: u32,
+    #[serde(default)]
+    worsened_gaps: u32,
+    #[serde(default)]
+    resolved_gaps: u32,
+    #[serde(default)]
+    inherited_gaps: u32,
+}
+
+/// One entry from `comment-plan.json` produced by unsafe-review 0.3.4.
+///
+/// Field names verified against real output: each entry carries `card_id`,
+/// `path`, `line`, `changed_line`, `coverage_gap`, `selection_reason`,
+/// `selection_reason_code`, `confirmation_state`, and `trust_boundary`. Only
+/// the fields ub-review uses are bound here; unknown fields are tolerated so
+/// the plan stays loadable as unsafe-review extends it. Structured for #360 to
+/// consume directly; no further parsing is done here.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct UnsafeReviewCommentPlanEntry {
+    #[serde(default)]
+    card_id: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    line: Option<u32>,
+    /// Whether the anchored line is a changed line in this diff.
+    #[serde(default)]
+    changed_line: Option<bool>,
+    #[serde(default)]
+    coverage_gap: Option<String>,
+    #[serde(default)]
+    selection_reason: Option<String>,
+    /// Stable machine code for the selection reason (for #360 routing).
+    #[serde(default)]
+    selection_reason_code: Option<String>,
+    /// e.g. "unconfirmed" — the confirmation lifecycle state.
+    #[serde(default)]
+    confirmation_state: Option<String>,
+    /// Advisory boundary propagated per-entry to consumers.
+    #[serde(default)]
+    trust_boundary: Option<String>,
+}
+
+/// Parsed unsafe-review artifacts loaded from `--out <dir>`.
+struct UnsafeReviewArtifacts {
+    /// Validated gate receipt (schema_version == "unsafe-review-gate/v1").
+    gate: UnsafeReviewGate,
+    /// comment-plan entries (bounded, ready for #360). Empty when absent.
+    comment_plan: Vec<UnsafeReviewCommentPlanEntry>,
+}
+
+const UNSAFE_REVIEW_GATE_SCHEMA: &str = "unsafe-review-gate/v1";
+const UNSAFE_REVIEW_OUTPUT_SUBDIR: &str = "unsafe-review-output";
+
+/// Parse the structured artifacts written by `unsafe-review first-pr --out`.
+///
+/// Returns `None` when the gate file is absent (sensor did not run or failed),
+/// or when `schema_version` is not `"unsafe-review-gate/v1"` (unknown schema —
+/// degrade gracefully, fall back to status-only rendering in callers).
+fn read_unsafe_review_artifacts(sensor_dir: &Path) -> Option<UnsafeReviewArtifacts> {
+    let out_dir = sensor_dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR);
+    let gate_path = out_dir.join("unsafe-review-gate.json");
+    let text = fs::read_to_string(&gate_path).ok()?;
+    let gate: UnsafeReviewGate = serde_json::from_str(&text).ok()?;
+    if gate.schema_version != UNSAFE_REVIEW_GATE_SCHEMA {
+        // Unknown schema — caller degrades to status-only; log nothing here
+        // so the degradation is legible in lane packets rather than silent.
+        return None;
+    }
+    // Follow the artifacts pointer for comment-plan.json (if present).
+    // Key is snake_case `comment_plan` in unsafe-review-gate/v1 (the value is the
+    // hyphenated filename); routing by the wrong key silently drops the plan.
+    let comment_plan = gate
+        .artifacts
+        .get("comment_plan")
+        .and_then(|rel| {
+            let cp_path = out_dir.join(rel);
+            fs::read_to_string(&cp_path).ok()
+        })
+        .and_then(|cp_text| {
+            serde_json::from_str::<Vec<UnsafeReviewCommentPlanEntry>>(&cp_text).ok()
+        })
+        .unwrap_or_default();
+    Some(UnsafeReviewArtifacts { gate, comment_plan })
+}
+
 enum ToolGateDecisionState {
     Missing,
     Malformed(String),
@@ -5294,6 +5432,8 @@ fn build_sensor_argv(root: &Path, dir: &Path, sensor: &SensorPlan, plan: &Plan) 
             root.display().to_string(),
             "--base".to_owned(),
             plan.base.clone(),
+            "--out".to_owned(),
+            dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR).display().to_string(),
         ],
         "cargo-allow" => {
             let mut argv = vec!["cargo-allow".to_owned(), "check".to_owned()];
@@ -5828,6 +5968,23 @@ fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
         // The badge-json receipt copied verbatim from sensor stdout; the
         // [tools.ripr.gate] threshold evaluates against it (#316).
         "ripr" => outputs.push("gate-decision.json".to_owned()),
+        // unsafe-review 0.3.4 structured output bundle (#359). Filenames match
+        // the REAL `first-pr --out` manifest's `artifacts` map (note
+        // `receipt-audit.md` and `pr-summary.md` are Markdown, not JSON). The
+        // gate file and the artifact files it points to are all written under
+        // the UNSAFE_REVIEW_OUTPUT_SUBDIR subdirectory of the sensor dir.
+        "unsafe-review" => outputs.extend([
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/unsafe-review-gate.json"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/cards.json"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/comment-plan.json"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/repair-queue.json"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/receipt-audit.md"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/review-kit.json"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/pr-summary.md"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/cards.sarif"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/lsp.json"),
+            format!("{UNSAFE_REVIEW_OUTPUT_SUBDIR}/policy-report.json"),
+        ]),
         "ast-grep" | "semgrep" | "gitleaks" => outputs.push("report.json".to_owned()),
         "coverage" => outputs.extend([
             "status.json".to_owned(),
@@ -5880,14 +6037,15 @@ fn write_lane_packets(
         }
         text.push_str("\n## Routed sensor evidence\n\n");
         for sensor_id in &lane.receives {
-            let status_path = out
-                .join("sensors")
-                .join(sensor_id)
-                .join("ub-review-sensor-status.json");
+            let sensor_dir = out.join("sensors").join(sensor_id);
+            let status_path = sensor_dir.join("ub-review-sensor-status.json");
             let status = read_sensor_receipt(&status_path)
                 .map(|receipt| receipt.status)
                 .unwrap_or_else(|| "receipt-absent".to_owned());
             text.push_str(&format!("- `{sensor_id}`: `{status}`\n"));
+            if sensor_id == "unsafe-review" {
+                text.push_str(&render_unsafe_review_lane_evidence(&sensor_dir, &status));
+            }
         }
         text.push_str("\n## Review posture\n\n");
         text.push_str(review_posture_for_diff_class(diff.diff_class));
@@ -5900,6 +6058,80 @@ fn write_lane_packets(
         event_log.append("lane_packet_written", serde_json::json!({"lane": lane.id}))?;
     }
     Ok(())
+}
+
+/// Build the structured evidence block for an unsafe-review sensor entry in a
+/// lane packet.
+///
+/// When `unsafe-review-gate.json` is present and its schema_version matches
+/// `UNSAFE_REVIEW_GATE_SCHEMA`, returns a Markdown block with the movement
+/// summary and comment-plan entries (capped at 3, matching unsafe-review's own
+/// bounded output). When the file is absent, the sensor failed, or the schema
+/// is unrecognised, returns a note explaining the degradation so model lanes
+/// never infer safety from silence.
+///
+/// Trust boundary is always surfaced: unsafe-review output is advisory only.
+/// The deterministic floor (required-sensor gap logic) still gates; this
+/// structured block is supplementary review context.
+fn render_unsafe_review_lane_evidence(sensor_dir: &Path, status: &str) -> String {
+    if status != "ok" {
+        // Sensor did not succeed: no artifacts to read; nothing to add beyond
+        // the status line already written by the caller.
+        return String::new();
+    }
+    match read_unsafe_review_artifacts(sensor_dir) {
+        None => {
+            // The gate file is absent or has an unrecognised schema_version.
+            let gate_path = sensor_dir
+                .join(UNSAFE_REVIEW_OUTPUT_SUBDIR)
+                .join("unsafe-review-gate.json");
+            let reason = if gate_path.exists() {
+                "unsafe-review-gate.json present but schema_version not recognised; \
+                 structured evidence unavailable (schema routing degraded)"
+            } else {
+                "unsafe-review-gate.json absent; structured evidence unavailable"
+            };
+            format!("  - unsafe-review structured evidence: {reason}\n")
+        }
+        Some(artifacts) => {
+            let gate = &artifacts.gate;
+            let trust = gate.trust_boundary.as_deref().unwrap_or("advisory");
+            let summary = &gate.summary;
+            let mut block = String::new();
+            block.push_str(&format!(
+                "  - unsafe-review movement (trust_boundary: `{trust}`, advisory only): \
+                 new_gaps={}, worsened={}, resolved={}, inherited={}\n",
+                summary.new_gaps,
+                summary.worsened_gaps,
+                summary.resolved_gaps,
+                summary.inherited_gaps
+            ));
+            if artifacts.comment_plan.is_empty() {
+                block.push_str(
+                    "  - unsafe-review comment-plan: absent or empty \
+                     (no comment candidates for this diff)\n",
+                );
+            } else {
+                block.push_str(&format!(
+                    "  - unsafe-review comment-plan ({} candidate(s), advisory):\n",
+                    artifacts.comment_plan.len()
+                ));
+                for entry in &artifacts.comment_plan {
+                    let path = entry.path.as_deref().unwrap_or("(unknown path)");
+                    let line = entry
+                        .line
+                        .map(|l| l.to_string())
+                        .unwrap_or_else(|| "?".to_owned());
+                    let gap = entry
+                        .coverage_gap
+                        .as_deref()
+                        .unwrap_or("(no gap description)");
+                    block.push_str(&format!("    - `{path}:{line}` — {gap}\n"));
+                }
+            }
+            block
+        }
+    }
 }
 
 fn render_pr_packet(diff: &DiffContext) -> String {
@@ -13584,6 +13816,72 @@ fn render_shared_context(
             escape_md(reason)
         ));
     }
+    // unsafe-review structured evidence block (#359). Included when the sensor
+    // was planned and its `unsafe-review-gate.json` is present with the
+    // recognised schema. Falls back to a note when absent or schema is unknown.
+    // Trust boundary is always advisory; this section supplements the
+    // deterministic floor, never overrides it.
+    if plan.sensors.iter().any(|s| s.id == "unsafe-review") {
+        text.push_str("\n## unsafe-review Coverage Evidence\n\n");
+        let sensor_dir = out.join("sensors").join("unsafe-review");
+        let status_path = sensor_dir.join("ub-review-sensor-status.json");
+        let sensor_status = read_sensor_receipt(&status_path)
+            .map(|r| r.status)
+            .unwrap_or_else(|| "receipt-absent".to_owned());
+        text.push_str(&format!("- Sensor status: `{sensor_status}`\n"));
+        if sensor_status == "ok" {
+            match read_unsafe_review_artifacts(&sensor_dir) {
+                None => {
+                    let gate_path = sensor_dir
+                        .join(UNSAFE_REVIEW_OUTPUT_SUBDIR)
+                        .join("unsafe-review-gate.json");
+                    if gate_path.exists() {
+                        text.push_str("- Structured evidence: schema_version not recognised; falling back to status-only\n");
+                    } else {
+                        text.push_str("- Structured evidence: unsafe-review-gate.json not found; falling back to status-only\n");
+                    }
+                }
+                Some(artifacts) => {
+                    let gate = &artifacts.gate;
+                    let trust = gate.trust_boundary.as_deref().unwrap_or("advisory");
+                    let summary = &gate.summary;
+                    // Provenance from the real manifest: which tool/version/dialect
+                    // produced this evidence. Context only, never a gate input.
+                    let tool = gate.tool.as_deref().unwrap_or("unsafe-review");
+                    let tool_version = gate.tool_version.as_deref().unwrap_or("unknown");
+                    let dialect = gate.dialect.as_deref().unwrap_or("unsafe-review");
+                    text.push_str(&format!(
+                        "- Source: `{tool}` `{tool_version}` (dialect: `{dialect}`)\n"
+                    ));
+                    text.push_str(&format!(
+                        "- Advisory status (trust_boundary: `{trust}`): `{}`\n",
+                        gate.status
+                    ));
+                    text.push_str(&format!(
+                        "- Movement: new_gaps={}, worsened={}, resolved={}, inherited={}\n",
+                        summary.new_gaps,
+                        summary.worsened_gaps,
+                        summary.resolved_gaps,
+                        summary.inherited_gaps
+                    ));
+                    text.push_str(&format!(
+                        "- Comment-plan candidates: {}\n",
+                        artifacts.comment_plan.len()
+                    ));
+                    if !artifacts.comment_plan.is_empty() {
+                        text.push_str(
+                            "\n### Comment-plan entries (advisory, for #360 inline posting)\n\n",
+                        );
+                        text.push_str("```json\n");
+                        let cp_json = serde_json::to_string_pretty(&artifacts.comment_plan)
+                            .unwrap_or_else(|_| "[]".to_owned());
+                        text.push_str(&cp_json);
+                        text.push_str("\n```\n");
+                    }
+                }
+            }
+        }
+    }
     text.push_str("\n## Initial Work Queue\n\n");
     text.push_str(&render_initial_work_queue_context(
         out,
@@ -21190,7 +21488,7 @@ const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
 // dogfooded local ripr 0.5.0 lacked the subcommand the image's newer ripr
 // accepted). Pins move together with scripts/install-gh-runner-tools.sh.
 const STANDARD_IMAGE_RIPR_VERSION: &str = "0.8.0";
-const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.3";
+const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.4";
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)
@@ -40364,5 +40662,296 @@ jobs:
             Some("acme/widgets")
         );
         assert_eq!(super::ci_repo_slug_from_remote_url("not-a-url"), None);
+    }
+
+    // --- unsafe-review artifact ingestion (#359) ---
+
+    #[test]
+    fn unsafe_review_sensor_argv_includes_out_flag() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let out = root.join("out");
+        let plan = test_plan(vec![sensor_plan("unsafe-review", "unsafe-review", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("unsafe-review sensor missing"))?;
+        let dir = out.join("sensors/unsafe-review");
+        let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
+        assert_eq!(argv[0], "unsafe-review");
+        assert_eq!(argv[1], "first-pr");
+        // --out must be present and point at the expected subdir
+        let out_idx = argv
+            .iter()
+            .position(|arg| arg == "--out")
+            .ok_or_else(|| anyhow::anyhow!("--out flag missing from unsafe-review argv"))?;
+        assert_eq!(
+            argv[out_idx + 1],
+            dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR)
+                .display()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_sensor_outputs_includes_gate_and_artifact_files() -> Result<()> {
+        let plan = test_plan(vec![sensor_plan("unsafe-review", "unsafe-review", true)]);
+        let sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("unsafe-review sensor missing"))?;
+        let outputs = super::sensor_outputs(sensor);
+        let sub = super::UNSAFE_REVIEW_OUTPUT_SUBDIR;
+        assert!(
+            outputs
+                .iter()
+                .any(|o| o == &format!("{sub}/unsafe-review-gate.json")),
+            "gate file missing from sensor_outputs"
+        );
+        assert!(
+            outputs
+                .iter()
+                .any(|o| o == &format!("{sub}/comment-plan.json")),
+            "comment-plan missing from sensor_outputs"
+        );
+        assert!(
+            outputs
+                .iter()
+                .any(|o| o == &format!("{sub}/repair-queue.json")),
+            "repair-queue missing from sensor_outputs"
+        );
+        // receipt-audit is Markdown on the real manifest, not JSON.
+        assert!(
+            outputs
+                .iter()
+                .any(|o| o == &format!("{sub}/receipt-audit.md")),
+            "receipt-audit.md missing from sensor_outputs"
+        );
+        assert!(
+            outputs.iter().any(|o| o == &format!("{sub}/cards.json")),
+            "cards.json missing from sensor_outputs"
+        );
+        assert!(
+            outputs.iter().any(|o| o == &format!("{sub}/cards.sarif")),
+            "cards.sarif missing from sensor_outputs"
+        );
+        // Standard receipts must still be present
+        assert!(outputs.contains(&"stdout.txt".to_owned()));
+        assert!(outputs.contains(&"stderr.txt".to_owned()));
+        Ok(())
+    }
+
+    /// v1 gate.json present with a comment-plan: ingestion succeeds, movement
+    /// values come through the NESTED `summary` block, and the comment-plan
+    /// loads via the snake_case `comment_plan` artifacts key. Fixture matches
+    /// the REAL `unsafe-review 0.3.4 first-pr --out` manifest shape.
+    #[test]
+    fn unsafe_review_artifacts_v1_gate_ingested() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+
+        // Real-shape v1 gate manifest: movement NESTED under `summary`, status
+        // word `"advisory"`, snake_case `artifacts` keys, the real
+        // `trust_boundary` sentence, plus `dialect`/`tool`/`tool_version`.
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "dialect": "unsafe-review",
+                "status": "advisory",
+                "summary": {
+                    "new_gaps": 2,
+                    "worsened_gaps": 0,
+                    "resolved_gaps": 1,
+                    "inherited_gaps": 3
+                },
+                "artifacts": {
+                    "cards": "cards.json",
+                    "comment_plan": "comment-plan.json",
+                    "repair_queue": "repair-queue.json",
+                    "receipt_audit": "receipt-audit.md",
+                    "review_kit": "review-kit.json",
+                    "pr_summary": "pr-summary.md",
+                    "sarif": "cards.sarif",
+                    "lsp": "lsp.json",
+                    "policy_report": "policy-report.json"
+                },
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict",
+                "tool": "unsafe-review",
+                "tool_version": "0.3.4"
+            }"#,
+        )?;
+        // Real-shape comment-plan entry: every field unsafe-review actually
+        // emits is present, including the ones #360 will route on.
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"[{
+                "card_id": "card-001",
+                "path": "src/lib.rs",
+                "line": 42,
+                "changed_line": true,
+                "coverage_gap": "raw pointer dereference without lifetime guard",
+                "selection_reason": "changed line in unsafe block",
+                "selection_reason_code": "changed-line-unsafe",
+                "confirmation_state": "unconfirmed",
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+            }]"#,
+        )?;
+
+        let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
+            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts), got None"))?;
+        assert_eq!(
+            artifacts.gate.schema_version,
+            super::UNSAFE_REVIEW_GATE_SCHEMA
+        );
+        assert_eq!(artifacts.gate.status, "advisory");
+        assert_eq!(artifacts.gate.dialect.as_deref(), Some("unsafe-review"));
+        assert_eq!(artifacts.gate.tool.as_deref(), Some("unsafe-review"));
+        assert_eq!(artifacts.gate.tool_version.as_deref(), Some("0.3.4"));
+        // Movement must come through the NESTED summary, not flat top-level.
+        assert_eq!(artifacts.gate.summary.new_gaps, 2);
+        assert_eq!(artifacts.gate.summary.worsened_gaps, 0);
+        assert_eq!(artifacts.gate.summary.resolved_gaps, 1);
+        assert_eq!(artifacts.gate.summary.inherited_gaps, 3);
+        assert_eq!(
+            artifacts.gate.trust_boundary.as_deref(),
+            Some("static unsafe-review coverage evidence; not proof, not a merge verdict")
+        );
+        // comment-plan loaded via the snake_case `comment_plan` artifacts key.
+        assert_eq!(artifacts.comment_plan.len(), 1);
+        let entry = &artifacts.comment_plan[0];
+        assert_eq!(entry.card_id.as_deref(), Some("card-001"));
+        assert_eq!(entry.path.as_deref(), Some("src/lib.rs"));
+        assert_eq!(entry.line, Some(42));
+        assert_eq!(entry.changed_line, Some(true));
+        assert_eq!(
+            entry.selection_reason_code.as_deref(),
+            Some("changed-line-unsafe")
+        );
+        assert_eq!(entry.confirmation_state.as_deref(), Some("unconfirmed"));
+        assert_eq!(
+            entry.trust_boundary.as_deref(),
+            Some("static unsafe-review coverage evidence; not proof, not a merge verdict")
+        );
+        Ok(())
+    }
+
+    /// Unknown schema_version: read_unsafe_review_artifacts must return None
+    /// (graceful degrade) rather than panicking or returning partial data.
+    #[test]
+    fn unsafe_review_artifacts_unknown_schema_degrades_gracefully() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        // Real-shape manifest but a future schema_version: nested summary,
+        // advisory status, snake_case artifacts. Routing must still degrade.
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v2-future",
+                "dialect": "unsafe-review",
+                "status": "advisory",
+                "summary": {
+                    "new_gaps": 0,
+                    "worsened_gaps": 0,
+                    "resolved_gaps": 0,
+                    "inherited_gaps": 0
+                },
+                "artifacts": {"comment_plan": "comment-plan.json"},
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict",
+                "tool": "unsafe-review",
+                "tool_version": "0.4.0"
+            }"#,
+        )?;
+        // Must return None, not panic or error
+        let result = super::read_unsafe_review_artifacts(&sensor_dir);
+        assert!(
+            result.is_none(),
+            "expected None for unknown schema_version, got Some"
+        );
+        Ok(())
+    }
+
+    /// Absent gate file: returns None cleanly.
+    #[test]
+    fn unsafe_review_artifacts_absent_gate_returns_none() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        // Don't create any files — the output dir does not exist
+        let result = super::read_unsafe_review_artifacts(&sensor_dir);
+        assert!(result.is_none(), "expected None when gate file absent");
+        Ok(())
+    }
+
+    /// Sensor status ok + v1 gate: lane evidence block includes movement and
+    /// comment-plan candidates.
+    #[test]
+    fn render_unsafe_review_lane_evidence_includes_movement_and_candidates() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        // Real-shape manifest: movement nested under `summary`, snake_case
+        // `comment_plan` artifacts key. new_gaps=1 lives in the nested block,
+        // so a regression to flat top-level reads would render new_gaps=0 here.
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "dialect": "unsafe-review",
+                "status": "advisory",
+                "summary": {
+                    "new_gaps": 1,
+                    "worsened_gaps": 0,
+                    "resolved_gaps": 0,
+                    "inherited_gaps": 0
+                },
+                "artifacts": {"comment_plan": "comment-plan.json"},
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict",
+                "tool": "unsafe-review",
+                "tool_version": "0.3.4"
+            }"#,
+        )?;
+        fs::write(
+            out_dir.join("comment-plan.json"),
+            r#"[{"card_id": "c1", "path": "src/ffi.rs", "line": 99, "changed_line": true, "coverage_gap": "transmute without invariant check", "confirmation_state": "unconfirmed"}]"#,
+        )?;
+        let block = super::render_unsafe_review_lane_evidence(&sensor_dir, "ok");
+        assert!(block.contains("advisory"), "trust boundary must appear");
+        assert!(
+            block.contains("new_gaps=1"),
+            "movement must come through nested summary: {block}"
+        );
+        assert!(
+            block.contains("src/ffi.rs:99"),
+            "candidate path:line must appear"
+        );
+        assert!(block.contains("transmute"), "coverage_gap must appear");
+        Ok(())
+    }
+
+    /// Unknown schema: lane evidence block explains degradation, does not crash.
+    #[test]
+    fn render_unsafe_review_lane_evidence_degrades_on_unknown_schema() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version": "unsafe-review-gate/v99", "status": "advisory"}"#,
+        )?;
+        let block = super::render_unsafe_review_lane_evidence(&sensor_dir, "ok");
+        assert!(
+            block.contains("schema_version not recognised"),
+            "degradation note must appear: {block}"
+        );
+        Ok(())
     }
 }
