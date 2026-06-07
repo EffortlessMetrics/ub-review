@@ -32,14 +32,19 @@ pub(crate) struct Config {
 /// Follow-up issue-capture posture (`[issues]`). `mode = "off"` keeps every
 /// candidate artifact-only; `mode = "suggest"` (the default) lets valid
 /// high-confidence do-not-block candidates render as a suggested follow-up
-/// in the PR body. `open-high-confidence` is reserved for the issue broker
-/// (release lane step 6); until the broker exists it behaves as `suggest`
-/// and the action ledger says so.
+/// in the PR body. `mode = "open-high-confidence"` additionally lets the
+/// issue broker open GitHub issues at `post` time for suggested candidates
+/// whose target repo appears in `open_in` (explicit `owner/repo` slugs, no
+/// wildcards), after a remote fingerprint duplicate search, capped at
+/// `open_cap` opens per post; every decision lands in the broker plan and
+/// results artifacts. `run` never opens issues.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct IssuesConfig {
     pub(crate) enabled: bool,
     pub(crate) mode: String,
+    pub(crate) open_in: Vec<String>,
+    pub(crate) open_cap: u32,
 }
 
 impl Default for IssuesConfig {
@@ -47,6 +52,8 @@ impl Default for IssuesConfig {
         Self {
             enabled: true,
             mode: "suggest".to_owned(),
+            open_in: Vec::new(),
+            open_cap: 3,
         }
     }
 }

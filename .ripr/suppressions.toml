@@ -3,15 +3,21 @@ schema_version = 1
 # Durable RIPR suppressions. Suppressed findings stay visible as suppressed;
 # every entry carries owner + reason per the suppression-health contract.
 #
-# 2026-06-07: removed the probe:src_config.rs:40:call_deletion entry written
-# for the RepoLane struct (#342). RepoLane moved off line 40 and its gap is
-# healed by repo_lane_toml_parse_pins_exact_field_defaults; the line-keyed
-# finding id had silently transferred the suppression to the unrelated
-# IssuesConfig struct that now occupies the line (PR #346 gate run
-# 27080588485). Id instability filed upstream on ripr-swarm.
+# Ledger history (line-keyed ids rot when src/config.rs moves, ripr-swarm#1053):
+# - 2026-06-07: removed the probe:src_config.rs:40:call_deletion entry twice.
+#   First written for RepoLane (#342, matcher defect ripr-swarm#1052), it
+#   silently transferred to IssuesConfig when that struct landed on line 40
+#   (PR #346), then went dead entirely when IssuesConfig grew and moved off
+#   the line. Three id-instability instances from one file in one day.
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_config.rs:40:call_deletion"
+finding_id = "probe:src_config.rs:47:call_deletion"
 owner = "ub-review/core"
-reason = "Same matcher defect as ripr-swarm#1052, second instance: RIPR's related-test matcher associates the IssuesConfig struct declaration with unrelated body-rendering tests (pr_review_body_drops_structurally_answered_red_green_question) and misses the adjacent exact-value oracle (issues_toml_parse_pins_exact_field_defaults pins every field of the [issues] parse contract). Remove when the matcher connects owner-adjacent oracles. NOTE: this id is line-keyed and currently points at IssuesConfig at src/config.rs:40; if the struct moves, re-verify the target before trusting this entry."
+reason = "RIPR reach false-negative (ripr-swarm#1054): no_static_path reported for IssuesConfig.open_cap although issues_toml_parse_pins_exact_field_defaults asserts it on both parse paths and issue_broker_plan_gates_on_mode_allowlist_and_cap pins the cap behavior; the sibling field open_in, asserted by the same test, reaches fine. Line-keyed id currently points at src/config.rs:47 (open_cap); re-verify the target after any edit to config.rs. Remove when the reach analyzer connects sibling fields consistently."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:47:field_construction"
+owner = "ub-review/core"
+reason = "Same reach false-negative as the call_deletion twin above (ripr-swarm#1054): field_construction probe on IssuesConfig.open_cap, exactly asserted by issues_toml_parse_pins_exact_field_defaults and constructed explicitly in issue_broker_plan_gates_on_mode_allowlist_and_cap. Line-keyed id; re-verify the target after any edit to config.rs."
