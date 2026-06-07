@@ -9,7 +9,7 @@ originally named closed together in #335 (#316): the ripr threshold
 production-evaluates (`sensors/ripr/gate-decision.json` from badge-json
 stdout, first evaluation run 27077206713, real blocks on PR #342/#346), and
 the install script + doctor pin ripr 0.8.0 / unsafe-review 0.3.3. Named
-remaining gaps: the gate-decision receipt is counts-only (#347), and ripr
+remaining gaps: ripr
 has known matcher/reach false-negatives plus line-keyed suppression-id
 instability upstream (ripr-swarm#1052/#1053/#1054) - the governance loop
 (strengthen the genuine half, file upstream, suppress with an owned
@@ -313,8 +313,8 @@ new_unsuppressed=2), each answered by strengthening the genuine half,
 filing the tool half upstream, and carrying an owned suppression. A
 configured required gate that cannot evaluate raises a loud
 unevaluated-gate alarm in the running summary. Remaining honesty notes:
-the receipt is counts-only so a block does not name its findings in
-artifacts (#347), and ripr's matcher/reach false-negatives plus line-keyed
+per-finding detail ships in sensors/ripr/exposure-gaps.json (#347), and
+ripr's matcher/reach false-negatives plus line-keyed
 suppression ids (ripr-swarm#1052/#1053/#1054) make the suppression ledger
 require active stewardship.
 
@@ -449,9 +449,9 @@ and reason; a missing or failed sensor is recorded as an evidence gap, never
 as clean evidence; tool metadata is mirrored and verifier-enforced across
 `resolved-tools.json` and `tool-status.json`; the ripr tool-gate threshold
 is production-proven (#335; blocks on PR #342/#346). Not claimable: that a
-tool-gate red names its findings in artifacts (counts-only receipt, #347),
-that cargo-allow version drift is detected, or that coverage proves
-anything beyond execution surface.
+sensor version drift beyond the three pinned tools (cargo-allow,
+ast-grep stay unpinned) is detected, or that coverage proves anything
+beyond execution surface.
 
 ## The six reliance questions
 

@@ -2,3 +2,4 @@
 /.ub-review-runs/
 .DS_Store
 *.log
+.wt/

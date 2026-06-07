@@ -18,7 +18,7 @@ slice                                          spec    issue   proof obligation
    emits gate-decision.json from badge-json            (+ripr- evaluated: true; production
    stdout, parser reads                                swarm   blocks on PR #342 / #346;
    counts.unsuppressed_exposure_gaps,                  #1038)  follow-up: receipt depth
-   doctor pins ripr 0.8.0 /                                    stops at counts (#347)
+   doctor pins ripr 0.8.0 /                                    stops at counts (#347 - CLOSED)
    unsafe-review 0.3.3, unevaluated-
    required-gate alarm in running summary
 2  end-to-end loop-closure verifier test:      0004    #314    negative self-test proves a

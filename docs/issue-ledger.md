@@ -44,9 +44,9 @@ must leave receipts; missing/degraded evidence must be distinguishable from
 skipped-by-policy.
 
 ```text
-#347  keep  ripr receipts stop at counts; implement
-            sensors/ripr/exposure-gaps.json + verifier parity (both
-            production blocks needed local re-runs to diagnose)
+#347  closed  sensors/ripr/exposure-gaps.json ships per-finding gap
+            detail with verifier reconciliation against badge counts
+            (train step 4)
 #312  keep  proof-broker edges; split into 4 slices: lease `absent` branch
             (two-line fix + test), base_patch_failed lane surfacing,
             manual-cost allowlist test, shell-token e2e

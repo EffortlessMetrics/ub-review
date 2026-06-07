@@ -475,8 +475,8 @@ Honest current-state limits a consumer must know:
   `sensors/<tool>/gate-decision.json`, which the ripr sensor produces in
   production since #335 (#316 closed): verbatim badge-json stdout, threshold
   on `counts.unsuppressed_exposure_gaps`, two real blocks (PR #342, #346).
-  Known depth limit: the receipt carries counts only, so a tool-gate red is
-  not diagnosable to specific findings from the artifact tree (#347).
+  Per-finding detail ships next to it in `sensors/ripr/exposure-gaps.json`
+  (verifier-reconciled against the badge counts; #347 closed).
 - Proof receipt and resource lease edge statuses (lease `absent`,
   `base_patch_failed` routing, manual-cost allowlist path) have named test
   gaps (#312); treat rare status values in `proof_receipts.json` /
@@ -562,6 +562,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/suggested_issues.md | experimental | none (rendered issue drafts) | humans (PR body links here since #346) | required (require_issue_capture_artifacts, existence) |
 | review/issue_broker_plan.json + issue_broker_plan.ndjson (root twin) | experimental | issue_broker_plan.v1 records | the broker (run decides and renders; post reads the plan) | conditional (require_issue_broker_artifacts; written only when [issues] mode=open-high-confidence, #348) |
 | review/issue_broker_results.json + issue_broker_results.ndjson (root twin) | experimental | issue_broker_result.v1 records | humans; downstream automation (the broker's receipts) | conditional (require_issue_broker_artifacts; post-side, checked when present; results without a plan fail) |
+| sensors/ripr/exposure-gaps.json | experimental | ripr_exposure_gaps.v1 | humans; downstream automation (tool-gate red diagnosis) | conditional (require_ripr_exposure_gap_details; required whenever gate-decision.json exists, ok totals reconciled against badge counts, detail_unavailable needs an error) |
 | sensors/coverage/status.json (+ coverage-summary.json, changed-lines.json, upload.json, lcov.info) | experimental | coverage_status.v1, coverage_summary.v1 | gate-check (coverage tool gate); downstream automation | conditional (require_coverage_status_artifact; runs when tool-status carries the coverage tool) |
 | ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci (spec 0008, planned); humans; contract deferred to spec 0007 | none (tests only - ci_audit_artifacts_carry_schema_fields_and_receipts, src/main.rs) |
 | ci-audit/audit-report.md | experimental | none (tier-ordered report) | humans | none (tests only - ci_audit_report_lines_carry_receipts_without_boilerplate, src/main.rs) |
@@ -596,8 +597,8 @@ This spec is docs-only. Open contract-surface work it routes:
 ```text
 #316   DONE (#335): sensors/ripr/gate-decision.json produced in production;
        the tool-gate receipt route no longer dangles
-#347   deepen the gate-decision receipt past counts: per-finding
-       exposure-gap detail so a tool-gate red is diagnosable from artifacts
+#347   DONE: per-finding exposure-gap detail in
+       sensors/ripr/exposure-gaps.json, verifier-reconciled
 #306   wire or delete [gate].synchronize_mode; either way, update
        require_gate_config and this spec in the same PR
 #312   close the proof-broker edge-status test gaps so rare receipt/lease

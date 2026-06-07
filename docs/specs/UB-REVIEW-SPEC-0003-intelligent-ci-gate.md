@@ -6,9 +6,9 @@ Maturity: production on this repository — `ub-review/gate` is the sole
 required PR check on `EffortlessMetrics/ub-review` (roadmap item 26), with
 live red/green receipts. The configured ripr threshold production-evaluates
 since #335 (closing #316) and has blocked two real PRs (#342, #346). Named
-gaps: `[gate].synchronize_mode` is inert (#306), and tool-gate receipts stop
-at counts — blocking findings are not identifiable from downloaded artifacts
-alone (#347). Neither gap is papered over below.
+gap: `[gate].synchronize_mode` is inert (#306). Tool-gate reds are
+diagnosable from artifacts: per-finding gap detail ships in
+`sensors/ripr/exposure-gaps.json` next to the badge receipt (#347 closed).
 
 ## Purpose
 
@@ -100,9 +100,10 @@ this repository's own file is the production example):
   each answered with an exact-oracle test, an upstream ripr-swarm issue,
   and an owned suppression in `.ripr/suppressions.toml`. A configured but
   never-evaluated required tool gate raises a loud unevaluated-gate alarm
-  in the running summary. Known receipt-depth gap: badge-json carries
-  counts only, so identifying *which* findings blocked requires a local
-  ripr re-run (#347).
+  in the running summary. Per-finding gap detail (id, classification, probe
+  location/expression, reach/discriminate summaries) ships in
+  `sensors/ripr/exposure-gaps.json`, verifier-reconciled against the badge
+  counts (#347).
 - `[gate]` — `required_check`, `target_minutes`, `hard_timeout_minutes`,
   `post_review_on` (default `["opened", "ready_for_review"]`),
   `synchronize_mode` (declared, defaulted to `gate-only`, read by no
@@ -325,10 +326,11 @@ the proofs and thresholds the repo configured — nothing more.
 
 Honest current-state limits a consumer must know:
 
-- `[tools.ripr.gate]` enforces in production (#335), but its receipt depth
-  is counts-only: `gate-decision.json` is badge-json, so a tool-gate red
-  names the count, not the findings — diagnosis requires a local
-  `ripr check` re-run until #347 lands per-finding detail in the artifacts.
+- `[tools.ripr.gate]` enforces in production (#335) and a red is
+  diagnosable from artifacts: `gate-decision.json` stays the verbatim
+  badge-json the threshold evaluates, and `exposure-gaps.json` carries the
+  per-finding detail (#347). A failed detail pass writes a receipted
+  `detail_unavailable` artifact rather than nothing.
 - ripr suppressions are line-keyed upstream (ripr-swarm#1053): an entry in
   `.ripr/suppressions.toml` can go dead or silently transfer to unrelated
   code when edits move declarations across lines. Re-verify suppression
@@ -380,9 +382,8 @@ This spec is docs-only. Open gate-surface work it routes:
 #316   DONE (#335): gate-decision.json from ripr badge-json stdout, parser
        on counts.unsuppressed_exposure_gaps, ripr/unsafe-review version
        pins in install script + doctor, unevaluated-required-gate alarm
-#347   tool-gate receipts stop at counts: persist per-finding exposure-gap
-       detail in sensor artifacts so a block is diagnosable from the
-       artifact tree alone
+#347   DONE: sensors/ripr/exposure-gaps.json carries per-finding gap
+       detail, verifier-reconciled against the badge counts
 #306   wire [gate].synchronize_mode to real routing semantics or delete it
 item 27  rust-test-proof profile; one required check per onboarded repo,
          model-mode off as a supported tier
@@ -401,8 +402,7 @@ Concretely claimable: `ub-review/gate` is the only required PR check on
 proof runs inside it; a deliberately broken required proof turned the check
 red with a receipted reason and the revert turned it green; the configured
 ripr threshold has blocked two real PRs (#342, #346) with tool-gate reasons
-and receipt chains. Not claimable: that a tool-gate red names the blocking
-findings in artifacts (counts only, #347), or that the gate proves code
+and receipt chains. Not claimable: that the gate proves code
 correct.
 
 ## The six reliance questions
