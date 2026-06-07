@@ -31,6 +31,9 @@ pub(crate) enum Command {
     Post(PostArgs),
     /// Write a read-only CI right-sizing report under `<out>/ci-audit/`.
     AuditCi(AuditCiArgs),
+    /// Render the CI migration PR contents from a prior audit-ci run.
+    /// v0 is --print-pr only: no repo writes, no network, no GitHub calls.
+    SetupCi(SetupCiArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
     GateCheck(GateCheckArgs),
@@ -642,4 +645,27 @@ pub(crate) struct AuditCiArgs {
     /// History window in days.
     #[arg(long = "window-days", default_value_t = 90)]
     pub(crate) window_days: u32,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct SetupCiArgs {
+    /// Run directory containing a prior audit-ci run's `ci-audit/` receipts.
+    #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
+    pub(crate) out: PathBuf,
+    /// Render the full migration PR contents (file blocks + PR body) to
+    /// stdout and `<out>/ci-audit/migration-plan.md`. Required in v0: PR
+    /// opening is a later slice and bare `setup-ci` says so instead of
+    /// guessing.
+    #[arg(long = "print-pr")]
+    pub(crate) print_pr: bool,
+    /// Accept an audited job into the generated gate policy, as
+    /// `<job>=<command>`. Repeatable. The audit receipts record triggers and
+    /// timings, never the runnable command, so the maintainer supplies it -
+    /// the generator must not invent one. Only `adaptive`-tier
+    /// recommendations are acceptable.
+    #[arg(long = "accept")]
+    pub(crate) accept: Vec<String>,
+    /// Existing repo config, consulted only for [gate].required_check.
+    #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
+    pub(crate) config: PathBuf,
 }

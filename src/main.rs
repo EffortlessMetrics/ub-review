@@ -52,6 +52,7 @@ fn main() -> Result<()> {
         Command::Summary(args) => cmd_summary(args),
         Command::Post(args) => cmd_post(args),
         Command::AuditCi(args) => cmd_audit_ci(args),
+        Command::SetupCi(args) => cmd_setup_ci(args),
         Command::GateCheck(args) => cmd_gate_check(args),
     }
 }
@@ -21526,7 +21527,7 @@ struct CiJobStats {
     rerun_then_pass: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CiInventoryJob {
     workflow: String,
     job: String,
@@ -21541,7 +21542,7 @@ struct CiInventoryJob {
     required_check_source: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CiInventoryArtifact {
     schema: String,
     generated_at: DateTime<Utc>,
@@ -21618,7 +21619,7 @@ struct CiCorrelationArtifact {
     evidence_gaps: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CiRecommendation {
     job: String,
     workflow: String,
@@ -21635,7 +21636,7 @@ struct CiRecommendation {
     report_note: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Deserialize, Serialize)]
 struct CiRecommendationsArtifact {
     schema: String,
     repo: String,
@@ -23030,6 +23031,329 @@ fn write_ci_audit_artifacts(dir: &Path, artifacts: &CiAuditArtifacts) -> Result<
     let report_path = dir.join("audit-report.md");
     fs::write(&report_path, &artifacts.report)
         .with_context(|| format!("write {}", report_path.display()))?;
+    Ok(())
+}
+
+/// One `--accept <job>=<command>` pair. The audit receipts record triggers,
+/// timings, and correlation - never the runnable command - so the
+/// maintainer supplies it and the generator never invents one.
+#[derive(Clone, Debug)]
+struct SetupCiAccept {
+    job: String,
+    command: String,
+}
+
+fn parse_setup_ci_accepts(raw: &[String]) -> Result<Vec<SetupCiAccept>> {
+    let mut accepts = Vec::new();
+    for entry in raw {
+        let Some((job, command)) = entry.split_once('=') else {
+            bail!(
+                "--accept needs `<job>=<command>` (the audit receipts do not record the \
+                 runnable command; supply it explicitly): got `{entry}`"
+            );
+        };
+        let job = job.trim();
+        let command = command.trim();
+        if job.is_empty() || command.is_empty() {
+            bail!("--accept `<job>=<command>` needs both halves non-empty: got `{entry}`");
+        }
+        accepts.push(SetupCiAccept {
+            job: job.to_owned(),
+            command: command.to_owned(),
+        });
+    }
+    Ok(accepts)
+}
+
+fn load_ci_audit_receipt<T: serde::de::DeserializeOwned>(
+    dir: &Path,
+    name: &str,
+    expected_schema: &str,
+) -> Result<T> {
+    let path = dir.join(name);
+    let bytes = fs::read(&path).with_context(|| {
+        format!(
+            "missing audit receipt {}; run `ub-review audit-ci` first",
+            path.display()
+        )
+    })?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))?;
+    let schema = value.get("schema").and_then(serde_json::Value::as_str);
+    if schema != Some(expected_schema) {
+        bail!(
+            "{} has schema {:?}; expected {expected_schema}",
+            path.display(),
+            schema
+        );
+    }
+    serde_json::from_value(value).with_context(|| format!("decode {}", path.display()))
+}
+
+/// Sanitize an audited job id into a `[[proof.required]]` id: lowercase
+/// alphanumerics and dashes, collapsing every other byte to a dash.
+fn setup_ci_proof_id(job: &str) -> String {
+    let mut id = String::with_capacity(job.len());
+    for ch in job.chars() {
+        if ch.is_ascii_alphanumeric() {
+            id.push(ch.to_ascii_lowercase());
+        } else if !id.ends_with('-') {
+            id.push('-');
+        }
+    }
+    let id = id.trim_matches('-').to_owned();
+    if id.is_empty() { "job".to_owned() } else { id }
+}
+
+fn toml_basic_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len() + 2);
+    escaped.push('"');
+    for ch in value.chars() {
+        match ch {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\t' => escaped.push_str("\\t"),
+            '\r' => escaped.push_str("\\r"),
+            _ => escaped.push(ch),
+        }
+    }
+    escaped.push('"');
+    escaped
+}
+
+/// Render the generated `.ub-review.toml` additions for the accepted jobs.
+/// Emits nothing but `[gate].required_check` and one `[[proof.required]]`
+/// entry per accepted adaptive job - no `[providers]`, no
+/// `synchronize_mode`, no `[tools.*.gate]` thresholds (spec 0008: never
+/// ship decorative policy into a consumer repo).
+fn render_setup_ci_gate_config(
+    accepts: &[SetupCiAccept],
+    recommendations: &[CiRecommendation],
+    inventory: &CiInventoryArtifact,
+    required_check: &str,
+) -> String {
+    let mut text = String::from("[gate]\n");
+    text.push_str(&format!(
+        "required_check = {}\n",
+        toml_basic_string(required_check)
+    ));
+    for accept in accepts {
+        let recommendation = recommendations.iter().find(|entry| entry.job == accept.job);
+        let receipt = recommendation
+            .and_then(|entry| entry.receipts.first().cloned())
+            .unwrap_or_else(|| format!("ci-audit/recommendations.json#{}", accept.job));
+        let timeout_sec = inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == accept.job)
+            .and_then(|job| job.timeout_minutes)
+            .map(|minutes| minutes.saturating_mul(60))
+            .filter(|seconds| *seconds > 0)
+            .unwrap_or(600);
+        text.push_str(&format!(
+            "\n[[proof.required]]\nid = {id}\nlanguages = [\"all\"]\ndiff_classes = [\"all\"]\ncommand = {command}\nreason = {reason}\ntimeout_sec = {timeout_sec}\nrequired = false\nenabled = true\n",
+            id = toml_basic_string(&setup_ci_proof_id(&accept.job)),
+            command = toml_basic_string(&accept.command),
+            reason = toml_basic_string(&format!(
+                "right-sized to adaptive proof from audited job `{}`; receipt {receipt}",
+                accept.job
+            )),
+        ));
+    }
+    text
+}
+
+fn setup_ci_section_bullets(recommendations: &[CiRecommendation], tier: &str) -> String {
+    let entries: Vec<&CiRecommendation> = recommendations
+        .iter()
+        .filter(|entry| entry.tier == tier)
+        .collect();
+    if entries.is_empty() {
+        return "- none recommended by this audit\n".to_owned();
+    }
+    let mut text = String::new();
+    for entry in entries {
+        text.push_str(&format!(
+            "- `{}` ({}) - {}. receipts: {}\n",
+            entry.job,
+            entry.workflow,
+            entry.reason,
+            entry.receipts.join(", ")
+        ));
+    }
+    text
+}
+
+fn render_setup_ci_migration_plan(
+    inventory: &CiInventoryArtifact,
+    recommendations: &CiRecommendationsArtifact,
+    accepts: &[SetupCiAccept],
+    required_check: &str,
+) -> String {
+    let jobs = &recommendations.jobs;
+    let mut plan = format!(
+        "# CI migration plan\n\nRepo: {} (window: {} days). Rendered by `ub-review setup-ci \
+         --print-pr` from the ci-audit receipts; nothing below was applied.\n\n",
+        recommendations.repo, recommendations.window_days
+    );
+    plan.push_str("## Decision\n\n");
+    if accepts.is_empty() {
+        plan.push_str(&format!(
+            "No jobs accepted into the generated gate policy, so there is no migration PR \
+             to open. The audit covered {} job(s); pass `--accept <job>=<command>` for each \
+             adaptive-tier job to fold into `{required_check}`.\n\n",
+            jobs.len()
+        ));
+    } else {
+        plan.push_str(&format!(
+            "Fold {} accepted job(s) into one required check `{required_check}` as adaptive \
+             proof; every other job keeps its current posture per the tiers below.\n\n",
+            accepts.len()
+        ));
+    }
+    plan.push_str("## Keep required\n\n");
+    plan.push_str(&setup_ci_section_bullets(jobs, "keep-required"));
+    plan.push_str("\n## Move into ub-review/gate\n\n");
+    plan.push_str(&setup_ci_section_bullets(
+        jobs,
+        "move-to-ub-review-required",
+    ));
+    plan.push_str("\n## Right-size to adaptive\n\n");
+    let adaptive: Vec<&CiRecommendation> = jobs
+        .iter()
+        .filter(|entry| entry.tier == "adaptive")
+        .collect();
+    if adaptive.is_empty() {
+        plan.push_str("- none recommended by this audit\n");
+    } else {
+        for entry in &adaptive {
+            let accepted = accepts.iter().find(|accept| accept.job == entry.job);
+            let status = match accepted {
+                Some(accept) => format!("accepted; command `{}`", accept.command),
+                None => "not accepted; no policy generated".to_owned(),
+            };
+            plan.push_str(&format!(
+                "- `{}` ({}) - {}. {status}. receipts: {}\n",
+                entry.job,
+                entry.workflow,
+                entry.reason,
+                entry.receipts.join(", ")
+            ));
+        }
+    }
+    plan.push_str("\n## Label-gated / nightly / release\n\n");
+    plan.push_str(&setup_ci_section_bullets(jobs, "label-gated"));
+    plan.push_str("\n## Human review required\n\n");
+    plan.push_str(&setup_ci_section_bullets(jobs, "flag-for-human"));
+    plan.push_str("\n## Proposed branch protection change\n\n");
+    plan.push_str(&format!(
+        "- add required check: `{required_check}`\n- old required checks unknown: the \
+         branch-protection query is not implemented (audit-ci prerequisite A; \
+         inventory records `required_check_source: \"{}\"`), so this plan refuses to \
+         invent the remove list. Review the repository's required checks by hand before \
+         removing anything.\n",
+        inventory
+            .jobs
+            .first()
+            .map(|job| job.required_check_source.as_str())
+            .unwrap_or("unknown")
+    ));
+    plan.push_str("\n## Rollback\n\n");
+    plan.push_str(
+        "- revert the migration PR; nothing else changed. Branch protection is never \
+         mutated by setup-ci, so the only manual step is removing the required check if \
+         it was added by hand.\n",
+    );
+    if !accepts.is_empty() {
+        plan.push_str("\n## Generated .ub-review.toml additions\n\n```toml\n");
+        plan.push_str(&render_setup_ci_gate_config(
+            accepts,
+            jobs,
+            inventory,
+            required_check,
+        ));
+        plan.push_str("```\n");
+    }
+    plan
+}
+
+fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
+    if !args.print_pr {
+        bail!(
+            "setup-ci opens nothing yet: the PR generator is a later slice (spec 0008). \
+             Pass --print-pr to render the migration PR contents from a prior audit-ci run."
+        );
+    }
+    let dir = args.out.join("ci-audit");
+    let inventory: CiInventoryArtifact =
+        load_ci_audit_receipt(&dir, "inventory.json", "ub-review.ci_inventory.v1")?;
+    let recommendations: CiRecommendationsArtifact = load_ci_audit_receipt(
+        &dir,
+        "recommendations.json",
+        "ub-review.ci_recommendations.v1",
+    )?;
+    for (name, expected_schema) in [
+        ("history.json", "ub-review.ci_history.v1"),
+        ("costs.json", "ub-review.ci_costs.v1"),
+        ("correlation.json", "ub-review.ci_correlation.v1"),
+    ] {
+        let _: serde_json::Value = load_ci_audit_receipt(&dir, name, expected_schema)?;
+    }
+    let accepts = parse_setup_ci_accepts(&args.accept)?;
+    for accept in &accepts {
+        let Some(recommendation) = recommendations
+            .jobs
+            .iter()
+            .find(|entry| entry.job == accept.job)
+        else {
+            bail!(
+                "--accept `{}` does not match any job in ci-audit/recommendations.json",
+                accept.job
+            );
+        };
+        match recommendation.tier.as_str() {
+            "adaptive" => {}
+            "flag-for-human" => bail!(
+                "--accept `{}` refused: flag-for-human recommendations never become \
+                 generated edits; a human reviews that job directly",
+                accept.job
+            ),
+            tier => bail!(
+                "--accept `{}` refused: tier `{tier}` proposes no generated edit; only \
+                 adaptive-tier jobs are acceptable",
+                accept.job
+            ),
+        }
+    }
+    let required_check = Config::load_or_default(&args.config, None)
+        .map(|config| config.gate.required_check)
+        .unwrap_or_else(|_| "ub-review/gate".to_owned());
+    let plan =
+        render_setup_ci_migration_plan(&inventory, &recommendations, &accepts, &required_check);
+    if !accepts.is_empty() {
+        // The round-trip oracle, enforced at runtime too: a generated config
+        // the loader strips keys from is a generator failure, abort.
+        let generated = render_setup_ci_gate_config(
+            &accepts,
+            &recommendations.jobs,
+            &inventory,
+            &required_check,
+        );
+        let reloaded = Config::from_toml_with_policy_receipts(&generated)
+            .with_context(|| "generated config failed to parse; generator failure")?;
+        if !reloaded.policy_errors.is_empty() {
+            bail!(
+                "generator failure: generated config reloads with policy receipts: {:?}",
+                reloaded.policy_errors
+            );
+        }
+    }
+    fs::create_dir_all(&dir).with_context(|| format!("create {}", dir.display()))?;
+    let plan_path = dir.join("migration-plan.md");
+    fs::write(&plan_path, &plan).with_context(|| format!("write {}", plan_path.display()))?;
+    print!("{plan}");
+    eprintln!("wrote {}", plan_path.display());
     Ok(())
 }
 
@@ -38898,6 +39222,227 @@ jobs:
         let decision = super::classify_ci_job_tier(&evidence, false);
         assert_eq!(decision.tier, "flag-for-human");
         assert!(decision.reason.contains("tokenless"));
+    }
+
+    fn write_setup_ci_fixture(dir: &Path) -> Result<()> {
+        fs::create_dir_all(dir)?;
+        let job = |name: &str| {
+            serde_json::json!({
+                "workflow": ".github/workflows/ci.yml",
+                "job": name,
+                "name": name,
+                "triggers": ["pull_request"],
+                "path_filters": [],
+                "matrix_size": 1,
+                "timeout_minutes": 30,
+                "permissions": null,
+                "uses_secrets": [],
+                "required_check": null,
+                "required_check_source": "unknown",
+            })
+        };
+        fs::write(
+            dir.join("inventory.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.ci_inventory.v1",
+                "generated_at": "2026-06-07T00:00:00Z",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [job("integration"), job("fmt"), job("deploy")],
+                "evidence_gaps": [],
+            }))?,
+        )?;
+        let recommendation = |name: &str, tier: &str| {
+            serde_json::json!({
+                "job": name,
+                "workflow": ".github/workflows/ci.yml",
+                "tier": tier,
+                "positioned_to_catch": "regressions in its scope",
+                "has_caught": "2 independent failures in the window",
+                "receipts": [format!("ci-audit/correlation.json#{name}")],
+                "proposed_policy": "per tier",
+                "confidence": "medium",
+                "judgment": "deterministic",
+                "reason": "expensive and quiet on unrelated diffs",
+                "report_note": "",
+            })
+        };
+        fs::write(
+            dir.join("recommendations.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.ci_recommendations.v1",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [
+                    recommendation("integration", "adaptive"),
+                    recommendation("fmt", "keep-required"),
+                    recommendation("deploy", "flag-for-human"),
+                ],
+                "evidence_gaps": [],
+            }))?,
+        )?;
+        for (name, schema) in [
+            ("history.json", "ub-review.ci_history.v1"),
+            ("costs.json", "ub-review.ci_costs.v1"),
+            ("correlation.json", "ub-review.ci_correlation.v1"),
+        ] {
+            fs::write(
+                dir.join(name),
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "schema": schema,
+                    "repo": "acme/widgets",
+                    "window_days": 90,
+                    "jobs": [],
+                    "evidence_gaps": [],
+                }))?,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn setup_ci_args(out: &Path, accept: Vec<String>) -> super::SetupCiArgs {
+        super::SetupCiArgs {
+            out: out.to_path_buf(),
+            print_pr: true,
+            accept,
+            config: out.join("no-such-config.toml"),
+        }
+    }
+
+    #[test]
+    fn setup_ci_print_pr_renders_sections_policy_and_round_trips() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("run");
+        write_setup_ci_fixture(&out.join("ci-audit"))?;
+        super::cmd_setup_ci(setup_ci_args(
+            &out,
+            vec!["integration=cargo test --workspace --locked".to_owned()],
+        ))?;
+        let plan = fs::read_to_string(out.join("ci-audit/migration-plan.md"))?;
+        // The eight PR-body sections in spec 0008 order.
+        let headings = [
+            "## Decision",
+            "## Keep required",
+            "## Move into ub-review/gate",
+            "## Right-size to adaptive",
+            "## Label-gated / nightly / release",
+            "## Human review required",
+            "## Proposed branch protection change",
+            "## Rollback",
+        ];
+        let mut last = 0;
+        for heading in headings {
+            let position = plan
+                .find(heading)
+                .with_context(|| format!("missing {heading}"))?;
+            assert!(position > last, "{heading} out of spec order");
+            last = position;
+        }
+        // Receipts on rendered bullets; refusal instead of an invented
+        // branch-protection remove list; accepted command rendered.
+        assert!(plan.contains("ci-audit/correlation.json#integration"));
+        assert!(plan.contains("refuses to invent the remove list"));
+        assert!(plan.contains("accepted; command `cargo test --workspace --locked`"));
+        assert!(plan.contains("- none recommended by this audit"));
+        // Generated config block: round-trips with zero policy receipts and
+        // never carries reserved or inert keys.
+        let toml_block = plan
+            .split("```toml\n")
+            .nth(1)
+            .and_then(|rest| rest.split("```").next())
+            .context("generated toml block")?;
+        assert!(toml_block.contains("[[proof.required]]"));
+        assert!(toml_block.contains("required = false"));
+        assert!(!toml_block.contains("[providers]"));
+        assert!(!toml_block.contains("synchronize_mode"));
+        assert!(!toml_block.contains("[tools."));
+        let reloaded = Config::from_toml_with_policy_receipts(toml_block)?;
+        assert!(
+            reloaded.policy_errors.is_empty(),
+            "generated config must reload clean: {:?}",
+            reloaded.policy_errors
+        );
+        assert_eq!(reloaded.gate.required_check, "ub-review/gate");
+        assert_eq!(reloaded.proof.required.len(), 1);
+        assert_eq!(reloaded.proof.required[0].id, "integration");
+        assert_eq!(
+            reloaded.proof.required[0].command,
+            "cargo test --workspace --locked"
+        );
+        assert_eq!(reloaded.proof.required[0].timeout_sec, 30 * 60);
+        assert!(!reloaded.proof.required[0].required);
+        // Determinism: same receipts, byte-identical plan; no timestamps.
+        super::cmd_setup_ci(setup_ci_args(
+            &out,
+            vec!["integration=cargo test --workspace --locked".to_owned()],
+        ))?;
+        assert_eq!(
+            plan,
+            fs::read_to_string(out.join("ci-audit/migration-plan.md"))?
+        );
+        Ok(())
+    }
+
+    fn setup_ci_err(args: super::SetupCiArgs) -> Result<anyhow::Error> {
+        match super::cmd_setup_ci(args) {
+            Err(err) => Ok(err),
+            Ok(()) => bail!("expected setup-ci to fail"),
+        }
+    }
+
+    #[test]
+    fn setup_ci_fails_closed_on_missing_receipts_and_bad_accepts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("run");
+
+        // Bare setup-ci names the unimplemented slice instead of guessing.
+        let mut bare = setup_ci_args(&out, Vec::new());
+        bare.print_pr = false;
+        let err = setup_ci_err(bare)?;
+        assert!(format!("{err:#}").contains("--print-pr"), "{err:#}");
+
+        // Missing receipts name the artifact and the prerequisite command.
+        let err = setup_ci_err(setup_ci_args(&out, Vec::new()))?;
+        let text = format!("{err:#}");
+        assert!(
+            text.contains("inventory.json") && text.contains("audit-ci"),
+            "{text}"
+        );
+
+        write_setup_ci_fixture(&out.join("ci-audit"))?;
+
+        // Schema mismatch is named, not tolerated.
+        let inventory_path = out.join("ci-audit/inventory.json");
+        let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&inventory_path)?)?;
+        value["schema"] = serde_json::Value::String("ub-review.ci_inventory.v2".to_owned());
+        fs::write(&inventory_path, serde_json::to_vec_pretty(&value)?)?;
+        let err = setup_ci_err(setup_ci_args(&out, Vec::new()))?;
+        assert!(
+            format!("{err:#}").contains("expected ub-review.ci_inventory.v1"),
+            "{err:#}"
+        );
+        write_setup_ci_fixture(&out.join("ci-audit"))?;
+
+        // Accept validation: malformed pair, unknown job, refused tiers.
+        for (accept, expected) in [
+            ("integration", "--accept needs"),
+            ("ghost=cargo test", "does not match any job"),
+            ("deploy=./deploy.sh", "flag-for-human"),
+            ("fmt=cargo fmt", "tier `keep-required`"),
+        ] {
+            let err = setup_ci_err(setup_ci_args(&out, vec![accept.to_owned()]))?;
+            assert!(
+                format!("{err:#}").contains(expected),
+                "accept `{accept}`: {err:#}"
+            );
+        }
+
+        // Empty accept list renders the no-PR explanation and exits ok.
+        super::cmd_setup_ci(setup_ci_args(&out, Vec::new()))?;
+        let plan = fs::read_to_string(out.join("ci-audit/migration-plan.md"))?;
+        assert!(plan.contains("no migration PR"));
+        assert!(!plan.contains("```toml"));
+        Ok(())
     }
 
     #[test]
