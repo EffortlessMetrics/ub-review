@@ -23255,6 +23255,65 @@ mod tests {
     }
 
     #[test]
+    fn repo_lane_toml_parse_pins_exact_field_defaults() -> Result<()> {
+        // Exact-value oracle for the RepoLane authoring contract: a minimal
+        // [[lanes]] entry deserializes with every optional field at its
+        // documented default (empty until plan-time defaulting), and a full
+        // entry round-trips field-for-field. Pins the serde surface the
+        // doctrine documents (UB-REVIEW-SPEC-0011).
+        let config: Config = toml::from_str(
+            r#"
+[[lanes]]
+id = "contract-mirror"
+role = "Cross-language mirror parity review"
+focus = "Check both sides of mirrored contracts moved together."
+"#,
+        )?;
+        let lane = &config.lanes[0];
+        assert_eq!(lane.id, "contract-mirror");
+        assert_eq!(lane.role, "Cross-language mirror parity review");
+        assert_eq!(
+            lane.focus,
+            "Check both sides of mirrored contracts moved together."
+        );
+        assert_eq!(lane.receives, Vec::<String>::new());
+        assert_eq!(lane.model, "");
+        assert_eq!(lane.diff_classes, Vec::<String>::new());
+
+        let full: Config = toml::from_str(
+            r#"
+[[lanes]]
+id = "x"
+role = "r"
+focus = "f"
+receives = ["tokmd"]
+model = "custom:m"
+diff_classes = ["docs-only"]
+"#,
+        )?;
+        let lane = &full.lanes[0];
+        assert_eq!(
+            (
+                lane.id.as_str(),
+                lane.role.as_str(),
+                lane.focus.as_str(),
+                lane.receives.clone(),
+                lane.model.as_str(),
+                lane.diff_classes.clone(),
+            ),
+            (
+                "x",
+                "r",
+                "f",
+                vec!["tokmd".to_owned()],
+                "custom:m",
+                vec!["docs-only".to_owned()],
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
     fn repo_lanes_merge_with_defaults_replacement_and_diff_class_gating() -> Result<()> {
         let mut config: Config = toml::from_str(
             r#"

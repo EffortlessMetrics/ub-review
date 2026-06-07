@@ -1,0 +1,10 @@
+schema_version = 1
+
+# Durable RIPR suppressions. Suppressed findings stay visible as suppressed;
+# every entry carries owner + reason per the suppression-health contract.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:40:call_deletion"
+owner = "ub-review/core"
+reason = "RIPR's related-test matcher associates the RepoLane struct declaration with unrelated body-rendering tests and misses the adjacent exact-value oracle (repo_lane_toml_parse_pins_exact_field_defaults pins every field of the parse contract). Matcher defect filed upstream in ripr-swarm; remove this entry when the matcher connects owner-adjacent oracles."
