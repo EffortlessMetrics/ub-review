@@ -81,7 +81,13 @@ jobs:
           out: target/ub-review
           github-token: ${{ github.token }}
           posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
-          model-mode: auto
+          # TEMPORARY (2026-06-07, with the allow-heavy skip above): an
+          # external actor with actions:write kills this repo's gate runs
+          # past ~7-10 minutes (nine kills; forensics in #367). Model lanes
+          # are advisory on this pure-motion diff and skipped lanes are
+          # recorded as missing evidence, never clean. Restore to 'auto'
+          # with the other temp commits once the canceller is stopped.
+          model-mode: 'off'
           depth: ${{ github.event_name == 'workflow_dispatch' && 'deep' || 'standard' }}
           # provider-policy is deliberately omitted: the action default is
           # auto, which defers to [providers].policy in .ub-review.toml
