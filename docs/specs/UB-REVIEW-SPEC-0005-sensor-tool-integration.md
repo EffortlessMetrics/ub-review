@@ -2,12 +2,18 @@
 
 Status: authored 2026-06-06 (release surface spec wave, docs-only).
 Umbrella: [UB-REVIEW-SPEC-0001](UB-REVIEW-SPEC-0001-release-surface.md).
-Maturity: partial. The tool registry, trigger scoping, sensor receipts, and
-packet routing are production - they run on every gate pass of this repository
-and behind the Bun pin. Two gaps are named, not papered over: the
-`[tools.*.gate]` threshold mechanism is implemented and unit-tested but has
-evaluated on zero production runs (#316), and the standard-image version pin
-covers only tokmd - ripr and unsafe-review drift undetected (part of #316).
+Maturity: production. The tool registry, trigger scoping, sensor receipts,
+packet routing, and `[tools.*.gate]` thresholds all run on every gate pass
+of this repository and behind the Bun pin. The two gaps this spec
+originally named closed together in #335 (#316): the ripr threshold
+production-evaluates (`sensors/ripr/gate-decision.json` from badge-json
+stdout, first evaluation run 27077206713, real blocks on PR #342/#346), and
+the install script + doctor pin ripr 0.8.0 / unsafe-review 0.3.3. Named
+remaining gaps: the gate-decision receipt is counts-only (#347), and ripr
+has known matcher/reach false-negatives plus line-keyed suppression-id
+instability upstream (ripr-swarm#1052/#1053/#1054) - the governance loop
+(strengthen the genuine half, file upstream, suppress with an owned
+receipt) is the supported answer, never loosening the threshold.
 
 ## Purpose
 
@@ -146,15 +152,16 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
 
 - `doctor --require-core-tools` (or `UB_REVIEW_STANDARD_IMAGE`): doctor
   bails when a core tool is missing or a pinned version mismatches
-  (src/main.rs `cmd_doctor`). The pin table is honest and thin:
-  `expected_standard_image_tool_version` returns `1.12.0` for tokmd and
-  `None` for everything else (src/main.rs `STANDARD_IMAGE_TOKMD_VERSION`).
-  ripr and unsafe-review version drift is currently undetectable by doctor -
-  named as part of #316.
-- The action's sensor install step (scripts/install-gh-runner-tools.sh) pins
-  tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`) and actionlint
-  (v1.7.12, `UB_REVIEW_ACTIONLINT_VERSION`) but installs cargo-allow, ripr,
-  and unsafe-review unpinned - the install-time half of the same drift gap.
+  (src/main.rs `cmd_doctor`). Since #335 the pin table covers tokmd
+  (`1.12.0`), ripr (`0.8.0`), and unsafe-review (`0.3.3`)
+  (src/main.rs `expected_standard_image_tool_version`); cargo-allow remains
+  unpinned.
+- The action's sensor install step (scripts/install-gh-runner-tools.sh)
+  pins tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`), actionlint
+  (v1.7.12, `UB_REVIEW_ACTIONLINT_VERSION`), ripr (0.8.0,
+  `UB_REVIEW_RIPR_VERSION`), and unsafe-review (0.3.3,
+  `UB_REVIEW_UNSAFE_REVIEW_VERSION`); cargo-allow installs unpinned - the
+  remaining install-time drift gap.
 - `--allow-heavy` (plan/run flag; `allow-heavy` action input) leases the
   heavy classes. This repository's gate workflow sets `allow-heavy: 'true'`
   and installs `cargo-llvm-cov` so the coverage sensor runs on every PR
@@ -253,8 +260,10 @@ tool id, configured policy, `planned_run`, `sensor_status`/`sensor_reason`,
 
 `sensors/<tool>/gate-decision.json` is the threshold input the sensor side
 must produce; the evaluator reads a `new_unsuppressed` count from it
-(src/main.rs `ToolGateDecision`, `evaluate_tool_gate_threshold`). No core
-sensor produces this receipt today - see #316.
+(src/main.rs `ToolGateDecision`, `evaluate_tool_gate_threshold`). The ripr
+sensor produces it in production since #335: the verbatim badge-json stdout
+of `ripr check --diff --mode ready --format badge-json`, with
+`counts.unsuppressed_exposure_gaps` mapped to `new_unsuppressed`.
 
 Coverage's own receipts state their epistemics in-band:
 `changed-lines.json` ships `status: "not_collected"` ("changed-line
@@ -296,15 +305,18 @@ coverage case: on PR #305's red run the coverage sensor failed transiently
 `required = false` here), recovering on the next run without intervention
 (#313).
 
-Known gap #316, stated plainly: `[tools.ripr.gate] max_new_unsuppressed = 0`
-is configured on this repository, but the threshold has evaluated on zero
-production runs. The ripr invocation emits start-here advisory text, nothing
-writes `sensors/ripr/gate-decision.json`, every run lands on
-`missing_evidence`, and with the blocking opt-in defaulting to false the gap
-stays advisory. The threshold mechanism is unit-tested; the ripr receipt
-chain is not yet real. The gate is silently weaker than its policy text says
-until #316 lands - and even the receipt ripr 0.5.0 can emit today would not
-parse (no `new_unsuppressed` field).
+Production status, stated plainly (#316 closed by #335):
+`[tools.ripr.gate] max_new_unsuppressed = 0` enforces on this repository.
+First evaluation run 27077206713; first real blocks PR #342 (run
+27078623035, new_unsuppressed=1) and PR #346 (run 27080588485,
+new_unsuppressed=2), each answered by strengthening the genuine half,
+filing the tool half upstream, and carrying an owned suppression. A
+configured required gate that cannot evaluate raises a loud
+unevaluated-gate alarm in the running summary. Remaining honesty notes:
+the receipt is counts-only so a block does not name its findings in
+artifacts (#347), and ripr's matcher/reach false-negatives plus line-keyed
+suppression ids (ripr-swarm#1052/#1053/#1054) make the suppression ledger
+require active stewardship.
 
 PR-visible: nothing, by default. Sensor tables post only `on_failure` under
 this repository's `[review_body]` policy and lane rosters never post
@@ -391,10 +403,10 @@ python scripts/verify-bun-review-artifacts.py target/ub-review \
 This spec is docs-only. Open sensor-surface work it routes:
 
 ```text
-#316     make the ripr receipt chain real: a machine-readable
-         gate-decision receipt, a parser matching what ripr actually
-         ships, doctor version pins for ripr/unsafe-review, and loud
-         visibility for a configured-but-never-evaluated required gate
+#316     DONE (#335): gate-decision receipt, badge-json parser, doctor
+         pins for ripr/unsafe-review, unevaluated-required-gate alarm
+#347     per-finding exposure-gap detail in sensor artifacts so a
+         tool-gate block is diagnosable without a local ripr re-run
 #312     proof broker lease edge cases: lease "absent" status,
          base_patch_failed lane routing, manual-cost allowlist path,
          shell-token test gap - the lease half of this surface
@@ -422,10 +434,11 @@ Concretely claimable for this surface: six core sensors run trigger-scoped
 on every pass with status receipts that record the exact command, duration,
 and reason; a missing or failed sensor is recorded as an evidence gap, never
 as clean evidence; tool metadata is mirrored and verifier-enforced across
-`resolved-tools.json` and `tool-status.json`. Not claimable: that
-`[tools.*.gate]` thresholds are production-proven (#316), that sensor
-version drift beyond tokmd is detected, or that coverage proves anything
-beyond execution surface.
+`resolved-tools.json` and `tool-status.json`; the ripr tool-gate threshold
+is production-proven (#335; blocks on PR #342/#346). Not claimable: that a
+tool-gate red names its findings in artifacts (counts-only receipt, #347),
+that cargo-allow version drift is detected, or that coverage proves
+anything beyond execution surface.
 
 ## The six reliance questions
 
@@ -443,8 +456,9 @@ What can break the gate?
 A required sensor's evidence gap when its trigger matched (intelligent-ci
 mode only); an evaluated `[tools.*.gate]` threshold that failed; a policy
 parse error in a `[tools.*]` section the repo wrote; plus the
-`tool_gate_missing_evidence` opt-in on required tools. Today no production
-run has ever blocked on a tool-gate threshold (#316).
+`tool_gate_missing_evidence` opt-in on required tools. Production tool-gate
+blocks have happened twice: PR #342 and PR #346, both on the ripr
+threshold, both with receipt chains.
 
 What is only advisory?
 Every non-required sensor outcome (including this repository's coverage and

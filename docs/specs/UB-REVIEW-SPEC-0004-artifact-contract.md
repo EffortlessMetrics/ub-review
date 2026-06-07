@@ -471,11 +471,11 @@ Honest current-state limits a consumer must know:
   the field (#306). The artifact contract currently pins an inert knob;
   resolving #306 must update the verifier and this spec together.
 - `tool-gate-outcomes.json` entries route receipts through
-  `sensors/<tool>/gate-decision.json`, but no sensor produces that file
-  today - the configured ripr threshold has evaluated on zero production
-  runs and every run lands on `missing_evidence` (#316). The outcome
-  artifact shape is contract; the gate-decision receipt chain is not yet
-  real.
+  `sensors/<tool>/gate-decision.json`, which the ripr sensor produces in
+  production since #335 (#316 closed): verbatim badge-json stdout, threshold
+  on `counts.unsuppressed_exposure_gaps`, two real blocks (PR #342, #346).
+  Known depth limit: the receipt carries counts only, so a tool-gate red is
+  not diagnosable to specific findings from the artifact tree (#347).
 - Proof receipt and resource lease edge statuses (lease `absent`,
   `base_patch_failed` routing, manual-cost allowlist path) have named test
   gaps (#312); treat rare status values in `proof_receipts.json` /
@@ -513,8 +513,10 @@ ub-review gate-check \
 This spec is docs-only. Open contract-surface work it routes:
 
 ```text
-#316   produce sensors/<tool>/gate-decision.json for real so the tool-gate
-       receipt route stops dangling
+#316   DONE (#335): sensors/ripr/gate-decision.json produced in production;
+       the tool-gate receipt route no longer dangles
+#347   deepen the gate-decision receipt past counts: per-finding
+       exposure-gap detail so a tool-gate red is diagnosable from artifacts
 #306   wire or delete [gate].synchronize_mode; either way, update
        require_gate_config and this spec in the same PR
 #312   close the proof-broker edge-status test gaps so rare receipt/lease

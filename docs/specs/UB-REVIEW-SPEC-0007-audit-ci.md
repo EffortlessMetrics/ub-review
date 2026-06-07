@@ -280,10 +280,10 @@ Honest v0 limits, stated as limits:
   contract's survivorship rule is implemented only in its conservative
   direction (sibling-signal check caps adaptive confidence).
 
-None of the open release issues (#306, #310, #312, #313, #314, #316-#321)
-touch this surface; the audit-ci v0 gaps are recorded inside the artifacts as
-evidence_gaps strings and in this spec, and route through the spec-wave
-implementation plan (spec 0001).
+None of the open release issues (#306, #310, #312, #313, #317-#321, #347;
+#314 and #316 are closed) touch this surface; the audit-ci v0 gaps are
+recorded inside the artifacts as evidence_gaps strings and in this spec,
+and route through the spec-wave implementation plan (spec 0001).
 
 The six reliance questions:
 

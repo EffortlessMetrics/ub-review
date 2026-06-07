@@ -14,12 +14,13 @@ Ordered by leverage; one slice per PR.
 ```text
 slice                                          spec    issue   proof obligation
 ------------------------------------------------------------------------------
-1  ripr receipt chain: sensor produces a       0005    #316    a real Rust-diff run shows
-   machine-readable gate-decision receipt,             (+ripr- tool_gate_outcomes evaluated:
-   parser matches what ripr ships, doctor              swarm   true with passed/failed;
-   pins ripr/unsafe-review versions,                   #1038)  doctor fails on sensor drift
-   loud visibility for configured-but-
-   never-evaluated required tool gates
+1  DONE #335: ripr receipt chain — sensor      0005    #316    proven: run 27077206713 shows
+   emits gate-decision.json from badge-json            (+ripr- evaluated: true; production
+   stdout, parser reads                                swarm   blocks on PR #342 / #346;
+   counts.unsuppressed_exposure_gaps,                  #1038)  follow-up: receipt depth
+   doctor pins ripr 0.8.0 /                                    stops at counts (#347)
+   unsafe-review 0.3.3, unevaluated-
+   required-gate alarm in running summary
 2  end-to-end loop-closure verifier test:      0004    #314    negative self-test proves a
    leaked refuted surface fails                        leaked refuted candidate
    require_final_compiler_input                        surface reds the verifier
