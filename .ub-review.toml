@@ -164,13 +164,7 @@ class = "static"
 default = "rust-behavior-or-tests-changed"
 required = true
 weight = 3
-# 600s: 240s was sized for routine PR diffs and is the binding constraint
-# (profile cap is 1800s). The modularization-train diffs timed the sensor
-# out on CI - run 27094075649 (required sensor gap "timed out after 240s")
-# and the #373 run's detail pass ("detail pass timed out: timed out after
-# 240s" in exposure-gaps.json). A timed-out required sensor blocks the
-# gate with no exposure receipt at all; 600s buys the receipt.
-timeout_sec = 600
+timeout_sec = 240
 artifact_budget_mb = 128
 requires_lease = false
 
