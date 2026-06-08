@@ -322,3 +322,35 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_ripr.rs:143:error_path"
 owner = "ub-review/core"
 reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+# Slice 4 of relanding PR #383 (extract sensors/unsafe_review.rs + coverage.rs,
+# pure code motion) - 4 test-side entries: ripr re-probes the moved tests' own ?
+# operators as new findings (no move detection, ripr-swarm#1053/#1054) and the
+# probes fire on #[cfg(test)] code (ripr-swarm#1055). All four are fixture
+# fs::write(...)? setup inside the moved tests; the identical code probed clean
+# in src/main.rs before the move. Remove this block when upstream lands move
+# detection or cfg(test) skipping.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_coverage.rs:132:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the fs::write(dir.join(\"lcov.info\"), malformed-lcov)? fixture setup inside the moved test coverage_summary_receipt_records_absent_and_malformed_lcov. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-4 (#383 reland) pure-code-motion; re-verify after any edit to sensors/coverage.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:196:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the fs::write(out_dir.join(\"unsafe-review-gate.json\"), v1-manifest)? fixture setup inside the moved test unsafe_review_artifacts_v1_gate_ingested. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-4 (#383 reland) pure-code-motion; re-verify after any edit to sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:212:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the fs::write(out_dir.join(\"comment-plan.json\"), entry)? fixture setup inside the moved test unsafe_review_artifacts_v1_gate_ingested. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-4 (#383 reland) pure-code-motion; re-verify after any edit to sensors/unsafe_review.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_unsafe_review.rs:279:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the fs::write(out_dir.join(\"unsafe-review-gate.json\"), future-schema-manifest)? fixture setup inside the moved test unsafe_review_artifacts_unknown_schema_degrades_gracefully. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-4 (#383 reland) pure-code-motion; re-verify after any edit to sensors/unsafe_review.rs."
