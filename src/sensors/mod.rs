@@ -2,9 +2,13 @@
 //! receipts, and per-sensor artifact enumeration (cleanup train step 6,
 //! pure code motion). Plan-time trigger resolution stays in main.
 
+pub(crate) mod coverage;
 pub(crate) mod ripr;
+pub(crate) mod unsafe_review;
 
+pub(crate) use coverage::*;
 pub(crate) use ripr::*;
+pub(crate) use unsafe_review::*;
 
 use std::collections::BTreeMap;
 use std::fs;
