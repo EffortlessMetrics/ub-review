@@ -209,3 +209,116 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:4768:predicate"
 owner = "ub-review/core"
 reason = "Deletion-side key of the same moved sensor_job_count predicate suppressed above as probe:src_sensors_mod.rs:70:predicate - identical code, different line key because probe ids derive from diff-hunk numbering and the slice-2 move emits both a removal hunk in main.rs and an addition hunk in sensors/mod.rs (ripr-swarm#1053 rot, ripr-swarm#1054 no-move-detection). The ==0 boundary is exactly pinned by zero_sensor_runtime_limit_is_rejected; the predicate probed clean in src/main.rs before the move."
+
+# Slice 3 of relanding PR #383 (extract sensors/ripr.rs, pure code motion) -
+# 17 entries for the moved-not-modified ripr exposure-gap detail pass. The
+# clip closure of ripr_exposure_gap_details_from_value and the whole detail
+# closure of write_ripr_exposure_gap_details moved byte-identical from
+# src/main.rs to src/sensors/ripr.rs; with no move detection (ripr-swarm#1054)
+# ripr re-probes every addition-side line as a new finding. The identical code
+# probed clean in src/main.rs before the move (the clip predicate was carried
+# under the now-rotted main.rs keys 5252/5459, ripr-swarm#1053). Both functions
+# are exercised by colocated tests in sensors/ripr.rs (per-entry pins below).
+# Remove this block when upstream lands move detection.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:28:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): predicate probe on the clip-closure boundary `if text.len() <= max` in ripr_exposure_gap_details_from_value. The boundary is exactly pinned by ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape (a 200-byte input is kept verbatim, a 201-byte input is clipped; a <= to < mutation fails). Identical code, carried before the move as the now-rotted probe:src_main.rs:5252:predicate / :5459:predicate. Line-keyed id; re-verify after any edit to ripr.rs near the clip helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:119:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): predicate probe on the `let detail = (|| -> Result<serde_json::Value> { ... })()` closure in write_ripr_exposure_gap_details. Both arms are pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable, which drives the closure to its error arm (a nonexistent diff path) and asserts the detail_unavailable artifact. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:120:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:121:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:123:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:124:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:125:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:126:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:127:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:129:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:131:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:132:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:133:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:135:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:137:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:138:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_ripr.rs:143:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-3 motion): error_path probe on the detail-pass closure body of write_ripr_exposure_gap_details (the run_command_to_files call / timeout|failure bail! / `})()` boundary). The closure's failure path is exactly pinned by ripr_exposure_gap_detail_pass_failure_writes_detail_unavailable: a nonexistent diff path forces the error arm and the test asserts status=='detail_unavailable', a non-empty error, total_gap_findings==0, and that no exposure-gaps.stdout.tmp / .stderr.tmp capture files are left behind. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to ripr.rs."
