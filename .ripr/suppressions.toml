@@ -472,3 +472,369 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_planner.rs:1199:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the serde_json::from_slice(&fs::read(proof_request_groups.json)?)? fixture read inside the test proof_request_artifacts_write_focused_planner_without_execution. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."
+
+# Proof slice C (extract proof/broker.rs, pure code motion) - 59 entries
+# for moved-not-modified code. The whole run_*_proof_broker_v0 family,
+# focused red/green + build execution, command receipts, the base+tests
+# worktree, and routed receipt evidence moved byte-identical from
+# src/main.rs into src/proof/broker.rs (only pub(crate)/#[expect] visibility
+# adornments changed). With no move-detection, ripr re-probes every moved
+# line as a fresh diff hunk and weakly-exposes 59: 49 production lines
+# (ripr-swarm#1054 discriminate false-negative) and 10 colocated-test `?`
+# operators (ripr-swarm#1055). Line-keyed ids rot on any reflow
+# (ripr-swarm#1053): ripr is the LAST local check, after fmt. Re-verify
+# each target after any edit to broker.rs.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:53:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:53 (`while start < bytes.len() && (bytes[start] & 0xC0) == 0x80 {`) in routed_proof_receipt_excerpt; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near routed_proof_receipt_excerpt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:68:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:68 (`excerpt.push('\\\\n');`) in routed_proof_receipt_excerpt; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near routed_proof_receipt_excerpt."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:124:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:124 (`if budget.max_focused_tests > 0 && budget.per_command_timeout_sec == 0 {`) in proof_budget; ripr's reach stage links colocated tests [build_unsafe_review_inline_comments_respects_budget_cap, deep_depth_expands_to_wide_lane_budget, focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:125:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:125 (`bail!(`) in proof_budget; ripr's reach stage links colocated tests [focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:130:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:130 (`if budget.max_focused_tests > 0 && budget.max_total_seconds == 0 {`) in proof_budget; ripr's reach stage links colocated tests [build_unsafe_review_inline_comments_respects_budget_cap, deep_depth_expands_to_wide_lane_budget, focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:131:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:131 (`bail!(`) in proof_budget; ripr's reach stage links colocated tests [focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:147:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:147 (`if profile.limits.tests > 0 && profile.budgets.proof_max_focused_tests > 0 {`) in proof_lease_budget; ripr's reach stage links colocated tests [base_plus_tests_patch_files_excludes_source_fix_files, builtin_gh_runner_profile_matches_default_test_lease, builtin_runtime_profiles_encode_trusted_repo_gate_defaults] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:148:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:148 (`if budget.cpu == 0 {`) in proof_lease_budget; ripr's reach stage links colocated tests [build_unsafe_review_inline_comments_respects_budget_cap, deep_depth_expands_to_wide_lane_budget, focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:149:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:149 (`bail!(`) in proof_lease_budget; ripr's reach stage links colocated tests [focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:154:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:154 (`if budget.memory_mb == 0 {`) in proof_lease_budget; ripr's reach stage links colocated tests [build_unsafe_review_inline_comments_respects_budget_cap, deep_depth_expands_to_wide_lane_budget, focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:155:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:155 (`bail!(`) in proof_lease_budget; ripr's reach stage links colocated tests [focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:160:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): predicate probe at proof/broker.rs:160 (`if budget.disk_mb == 0 {`) in proof_lease_budget; ripr's reach stage links colocated tests [build_unsafe_review_inline_comments_respects_budget_cap, deep_depth_expands_to_wide_lane_budget, focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:161:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:161 (`bail!(`) in proof_lease_budget; ripr's reach stage links colocated tests [focused_proof_tasks_detect_changed_test_names_and_merge_lane_requests, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near proof_lease_budget."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:214:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:214 (`phases.push(finish_run_loop_phase(`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:215:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:215 (`event_log,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:216:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:216 (`run_started,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:217:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:217 (`initial_proof_loop,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:218:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:218 (`initial_status,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:219:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:219 (`)?);`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:229:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:229 (`)?;`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:245:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:245 (`phases.push(finish_run_loop_phase(`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:246:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:246 (`event_log,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:247:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:247 (`run_started,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:248:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:248 (`seeded_request_loop,`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:250:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:250 (`)?);`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:251:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:251 (`let request_result = request_result?;`) in run_seeded_proof_stream_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_seeded_proof_stream_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:293:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:293 (`)?;`) in run_request_proof_broker_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_request_proof_broker_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:313:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:313 (`)?;`) in run_request_proof_broker_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_request_proof_broker_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:349:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:349 (`)?;`) in run_follow_up_proof_broker_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_follow_up_proof_broker_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:371:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:371 (`)?;`) in run_follow_up_proof_broker_v0; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_follow_up_proof_broker_v0."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:564:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:564 (`));`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:571:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:571 (`)?);`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:581:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:581 (`));`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:588:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:588 (`)?);`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:606:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:606 (`));`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:613:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:613 (`)?);`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:623:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:623 (`));`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:636:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:636 (`)?,`) in run_focused_red_green_proof_tasks_with_runner; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:687:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:687 (`));`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:694:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:694 (`)?);`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:704:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:704 (`));`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:711:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:711 (`)?);`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:726:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:726 (`));`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:733:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:733 (`)?);`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:742:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:742 (`));`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:744:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:744 (`root,`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [affected_packages_include_all_packages_for_root_manifest_and_lockfile, focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:748:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:748 (`task_timeout_sec,`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:750:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): side_effect probe at proof/broker.rs:750 (`)?);`) in run_focused_build_proof_tasks_with_runner; ripr's reach stage links colocated tests [focused_build_request_skips_when_profile_disables_build_leases, follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near run_focused_build_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:994:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C motion): error_path probe at proof/broker.rs:994 (`})?;`) in prepare_base_plus_tests_worktree; ripr's reach stage links colocated tests [follow_up_proof_broker_executes_request_only_focused_proof, follow_up_proof_broker_uses_remaining_focused_proof_budget, invalid_enabled_proof_budget_is_rejected] yet its discriminate stage weakly-exposes the moved line. The identical code probed clean in src/main.rs before the move. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs near prepare_base_plus_tests_worktree."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:1659:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test proof_broker_v0_runs_budgeted_focused_red_green_targets_and_writes_receipts. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:1850:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test follow_up_proof_broker_uses_remaining_focused_proof_budget. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2125:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2178:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test proof_broker_v0_skips_base_plus_tests_when_head_fails. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2226:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test proof_broker_v0_records_base_patch_failed_as_missing_proof. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2270:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test proof_broker_v0_does_not_execute_without_focused_test_lease. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2314:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test proof_broker_v0_does_not_execute_when_focused_test_budget_is_zero. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2334:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test prepare_base_plus_tests_worktree_allows_source_only_request_without_test_patch. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2339:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test prepare_base_plus_tests_worktree_allows_source_only_request_without_test_patch. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:2345:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C motion): error_path of a `?` operator in fixture setup inside the moved colocated test prepare_base_plus_tests_worktree_allows_source_only_request_without_test_patch. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id (ripr-swarm#1053); re-verify after any edit to proof/broker.rs."
