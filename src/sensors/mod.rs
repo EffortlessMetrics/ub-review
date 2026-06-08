@@ -2,6 +2,10 @@
 //! receipts, and per-sensor artifact enumeration (cleanup train step 6,
 //! pure code motion). Plan-time trigger resolution stays in main.
 
+pub(crate) mod ripr;
+
+pub(crate) use ripr::*;
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
