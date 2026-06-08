@@ -30,6 +30,8 @@ mod gate;
 use gate::*;
 mod artifacts;
 use artifacts::*;
+mod proof;
+pub(crate) use proof::*;
 mod tools;
 pub(crate) use tools::*;
 mod sensors;
@@ -671,86 +673,6 @@ struct QuestionObservationArtifact<'a> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-struct ProofRequest {
-    schema: String,
-    id: String,
-    lane: String,
-    requested_by: Vec<String>,
-    command: String,
-    reason: String,
-    cost: String,
-    timeout_sec: u64,
-    required: bool,
-    status: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ProofRequestGroup {
-    schema: String,
-    id: String,
-    command: String,
-    cost: String,
-    timeout_sec: u64,
-    required: bool,
-    status: String,
-    requested_by: Vec<String>,
-    request_ids: Vec<String>,
-    reasons: Vec<String>,
-    duplicate_count: usize,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ProofReceipt {
-    schema: String,
-    id: String,
-    kind: String,
-    base: String,
-    head: String,
-    test_patch_mode: String,
-    requested_by: Vec<String>,
-    request_ids: Vec<String>,
-    commands: Vec<ProofCommandReceipt>,
-    result: String,
-    reason: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ProofCommandReceipt {
-    side: String,
-    command: String,
-    #[serde(default)]
-    env: BTreeMap<String, String>,
-    status: String,
-    exit_code: Option<i32>,
-    timed_out: bool,
-    timeout_sec: u64,
-    duration_ms: u128,
-    stdout: String,
-    stderr: String,
-    reason: String,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct ResourceLease {
-    schema: String,
-    id: String,
-    kind: String,
-    consumer: String,
-    status: String,
-    reason: String,
-    cpu: u32,
-    memory_mb: u64,
-    disk_mb: u64,
-    timeout_sec: u64,
-    network: bool,
-    scratch: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    worktree: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    command: Option<String>,
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
 struct WitnessRecord {
     schema: String,
     id: String,
@@ -862,67 +784,12 @@ struct FocusedBuildPlan {
 }
 
 #[derive(Clone, Debug, Serialize)]
-struct ProofPlannerInput<'a> {
-    schema: &'static str,
-    diff_class: &'static str,
-    changed_files: &'a [String],
-    pr_thread_context_status: &'a str,
-    proof_requests: &'a [ProofRequest],
-    runtime_budget: ProofPlannerRuntimeBudget,
-    box_shape: &'a BoxState,
-}
-
-#[derive(Clone, Debug, Serialize)]
 struct ProofPlannerRuntimeBudget {
     target_timeout_sec: u64,
     hard_timeout_sec: u64,
     max_focused_tests: usize,
     per_command_timeout_sec: u64,
     total_proof_timeout_sec: u64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct ProofPlannerOutput {
-    schema: &'static str,
-    lane: &'static str,
-    proof_tasks: Vec<ProofTaskArtifact>,
-    skip: Vec<ProofPlannerSkip>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct ProofTaskArtifact {
-    schema: &'static str,
-    id: String,
-    kind: String,
-    source: String,
-    priority: String,
-    packet_policy: String,
-    deadline_sec: u64,
-    gate_policy: String,
-    status: String,
-    command: String,
-    head_command: String,
-    base_plus_tests_command: Option<String>,
-    purpose: String,
-    consumers: Vec<String>,
-    value: String,
-    cost: String,
-    timeout_sec: u64,
-    lease: ProofTaskLease,
-    test_file: String,
-    test_name: Option<String>,
-    mode: String,
-    requested_by: Vec<String>,
-    request_ids: Vec<String>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-struct ProofTaskLease {
-    cpu: u32,
-    memory_mb: u64,
-    disk_mb: u64,
-    network: bool,
-    timeout_sec: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -996,23 +863,6 @@ struct ReceiptRouteArtifact {
 struct ProofPlannerSkip {
     kind: String,
     reason: String,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ProofBudget {
-    max_focused_test_files: usize,
-    max_focused_tests: usize,
-    per_command_timeout_sec: u64,
-    max_total_seconds: u64,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ProofLeaseBudget {
-    cpu: u32,
-    memory_mb: u64,
-    disk_mb: u64,
-    network: bool,
-    scratch: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -3579,61 +3429,6 @@ fn resolved_plan_artifact(
         "sensors": &plan.sensors,
         "lanes": &plan.lanes,
         "notes": &plan.notes,
-    })
-}
-
-fn resolved_proof_policy_artifact(
-    config: &Config,
-    diff: &DiffContext,
-    language_mix: &LanguageMix,
-) -> serde_json::Value {
-    let matched_required = config
-        .proof
-        .required
-        .iter()
-        .filter(|policy| required_proof_policy_matches_diff(policy, diff, language_mix))
-        .collect::<Vec<_>>();
-    serde_json::json!({
-        "schema": PROOF_POLICY_RESOLUTION_SCHEMA,
-        "required": &config.proof.required,
-        "matched_required": matched_required,
-    })
-}
-
-fn required_proof_policy_matches_diff(
-    policy: &RequiredProofPolicy,
-    diff: &DiffContext,
-    language_mix: &LanguageMix,
-) -> bool {
-    policy.enabled
-        && proof_policy_language_matches(&policy.languages, language_mix)
-        && proof_policy_diff_class_matches(&policy.diff_classes, diff.diff_class.key())
-}
-
-fn proof_policy_language_matches(languages: &[String], language_mix: &LanguageMix) -> bool {
-    if languages.is_empty() {
-        return true;
-    }
-    languages.iter().any(|language| {
-        let language = normalize_policy_selector(language);
-        matches!(language.as_str(), "*" | "any" | "all")
-            || (language == "mixed" && language_mix.mixed_language)
-            || language_mix
-                .languages
-                .iter()
-                .any(|candidate| candidate == &language)
-            || language_mix.primary_language.as_deref() == Some(language.as_str())
-    })
-}
-
-fn proof_policy_diff_class_matches(diff_classes: &[String], diff_class: &str) -> bool {
-    if diff_classes.is_empty() {
-        return true;
-    }
-    let diff_class = normalize_policy_selector(diff_class);
-    diff_classes.iter().any(|candidate| {
-        let candidate = normalize_policy_selector(candidate);
-        matches!(candidate.as_str(), "*" | "any" | "all") || candidate == diff_class
     })
 }
 
