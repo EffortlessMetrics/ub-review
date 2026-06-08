@@ -188,3 +188,24 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:5459:predicate"
 owner = "ub-review/core"
 reason = "CI-side key of the clip-predicate finding suppressed above as probe:src_main.rs:5252:predicate - identical code, different line key because probe ids derive from diff-hunk numbering and CI's merge-ref diff shapes hunks differently than a local branch diff (rot instance 6, ripr-swarm#1053 comment). The boundary is exactly pinned by ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape; ripr itself reports a strong oracle on this probe (ripr-swarm#1054)."
+
+# Slice 2 of relanding PR #383 (extract sensors/mod.rs, pure code motion) - 2
+# entries for ONE moved-not-modified production predicate. The sensor_job_count
+# guard `if profile.limits.sensor_jobs == 0` moved verbatim from main.rs to
+# sensors/mod.rs; with no move detection (ripr-swarm#1053/#1054) ripr probes
+# both the deletion-side hunk (keyed src_main.rs:4768) and the addition-side
+# hunk (keyed src_sensors_mod.rs:70) of the same line as new findings. The
+# identical predicate probed clean in src/main.rs before the move. Remove this
+# block when upstream lands move detection.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_sensors_mod.rs:70:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #383 slice-2 motion): predicate probe on the sensor_job_count guard `if profile.limits.sensor_jobs == 0`. The ==0 boundary is exactly pinned by zero_sensor_runtime_limit_is_rejected (asserts the verbatim 'runtime profile broken has sensor_jobs=0' error) and the non-zero arm by sensor_jobs_use_runtime_profile_limit / sensor_jobs_cap_to_runnable_sensors; ripr's related-test linker misses zero_sensor_runtime_limit_is_rejected because it sets sensor_jobs via struct literal, not a call argument. The identical predicate probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to sensors/mod.rs near sensor_job_count."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:4768:predicate"
+owner = "ub-review/core"
+reason = "Deletion-side key of the same moved sensor_job_count predicate suppressed above as probe:src_sensors_mod.rs:70:predicate - identical code, different line key because probe ids derive from diff-hunk numbering and the slice-2 move emits both a removal hunk in main.rs and an addition hunk in sensors/mod.rs (ripr-swarm#1053 rot, ripr-swarm#1054 no-move-detection). The ==0 boundary is exactly pinned by zero_sensor_runtime_limit_is_rejected; the predicate probed clean in src/main.rs before the move."
