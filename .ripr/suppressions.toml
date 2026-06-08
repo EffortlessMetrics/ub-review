@@ -145,6 +145,38 @@ finding_id = "probe:src_gate.rs:1213:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path inside gate.rs's moved test mod (fixture initializers / a test's own ? operator are oracle plumbing). Line-keyed id from the PR #362 pure-code-motion; re-verify after any edit to gate.rs."
 
+# Slice 1 of relanding PR #383 (extract tools.rs, pure code motion) - 4
+# test-side entries: ripr re-probes moved lines as new (no move detection,
+# ripr-swarm#1053/#1054 context) and the probes fire on #[cfg(test)] code
+# (ripr-swarm#1055). All four are the moved tests' own ? operators
+# (write_sensor_status(...)? / fs::write(...)? fixture setup); the identical
+# code probed clean in src/main.rs before the move. Remove this block when
+# upstream lands move detection or cfg(test) skipping.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:528:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of write_sensor_status(...)? fixture setup inside the test tool_gate_outcome_passes_with_gate_decision_receipt. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-1 (#383 reland) pure-code-motion; re-verify after any edit to tools.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:597:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of write_sensor_status(...)? fixture setup inside the test tool_gate_outcome_evaluates_ripr_badge_json_receipt. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-1 (#383 reland) pure-code-motion; re-verify after any edit to tools.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:661:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of write_sensor_status(...)? fixture setup inside the test tool_gate_outcome_records_malformed_gate_decision_receipt. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-1 (#383 reland) pure-code-motion; re-verify after any edit to tools.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_tools.rs:665:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the fs::write(malformed gate-decision)? fixture setup inside the test tool_gate_outcome_records_malformed_gate_decision_receipt. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-1 (#383 reland) pure-code-motion; re-verify after any edit to tools.rs."
+
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_main.rs:5252:predicate"
