@@ -354,3 +354,121 @@ kind = "exposure_gap"
 finding_id = "probe:src_sensors_unsafe_review.rs:279:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the fs::write(out_dir.join(\"unsafe-review-gate.json\"), future-schema-manifest)? fixture setup inside the moved test unsafe_review_artifacts_unknown_schema_degrades_gracefully. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the slice-4 (#383 reland) pure-code-motion; re-verify after any edit to sensors/unsafe_review.rs."
+
+# Proof slice B (extract proof/planner.rs, pure code motion) - 18 entries for
+# moved-not-modified code. The request grouping / proof-request + planner
+# artifact writers / receipt routing functions and their colocated tests moved
+# byte-identical from src/main.rs to src/proof/planner.rs; with no move
+# detection (ripr-swarm#1054) ripr re-probes every addition-side line as new,
+# and 5 of them fire on #[cfg(test)] code (ripr-swarm#1055). The identical code
+# probed clean in src/main.rs before the move. Local keys may not match CI's
+# merge-ref hunk numbering (ripr-swarm#1053). Remove this block when upstream
+# lands move detection or cfg(test) skipping.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:135:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the closing of the miri skip.push(ProofPlannerSkip { kind, reason }) in proof_planner_skips. The skip set is pinned by the colocated proof_planner_skips_actionlint_when_workflows_are_unchanged / proof_planner_keeps_actionlint_relevant_for_workflow_changes, which assert the emitted skip kind+reason exactly. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near proof_planner_skips."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:141:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the closing of the actionlint skip.push(ProofPlannerSkip { kind, reason }) in proof_planner_skips, pinned by proof_planner_skips_actionlint_when_workflows_are_unchanged (asserts kind==\"actionlint\" with the exact reason) and its negative twin. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near proof_planner_skips."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:294:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the proof_receipts.iter().map(...).collect() route construction in receipt_route_artifacts. Every produced route is pinned field-by-field by the colocated receipt_routes_capture_initial_model_and_follow_up_consumers (asserts routes[0..2].phase / consumers / lease_ids / status exactly). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:295:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe in the receipt_route_artifacts mapping pipeline, pinned field-by-field by receipt_routes_capture_initial_model_and_follow_up_consumers (routes[0..2].phase / consumers / lease_ids / status). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:298:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the resource_leases.iter() lease_ids gather inside receipt_route_artifacts, pinned by receipt_routes_capture_initial_model_and_follow_up_consumers (asserts routes[0].lease_ids==[\"lease-proof-initial\"]). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:301:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the lease_ids .collect::<Vec<_>>() inside receipt_route_artifacts, pinned by receipt_routes_capture_initial_model_and_follow_up_consumers (asserts routes[0].lease_ids exactly). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:305:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the source_artifacts push branch (resource_leases.json) inside receipt_route_artifacts, pinned by receipt_routes_capture_initial_model_and_follow_up_consumers (the lease-bearing route carries the resource_leases.json source). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:306:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the ReceiptRouteArtifact { ... } literal construction in receipt_route_artifacts, pinned field-by-field by receipt_routes_capture_initial_model_and_follow_up_consumers (routes[0..2].phase / consumers / status / lease_ids). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:318:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the source_artifacts field of the ReceiptRouteArtifact literal in receipt_route_artifacts, pinned by receipt_routes_capture_initial_model_and_follow_up_consumers (route source artifacts + lease_ids asserted exactly). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:320:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the closing of the ReceiptRouteArtifact literal in receipt_route_artifacts, pinned field-by-field by receipt_routes_capture_initial_model_and_follow_up_consumers. The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:321:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the .map(...) closure close in receipt_route_artifacts, pinned by receipt_routes_capture_initial_model_and_follow_up_consumers (routes.len()==3 with each route's fields asserted). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:322:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): side_effect probe on the terminal .collect() of receipt_route_artifacts, pinned by receipt_routes_capture_initial_model_and_follow_up_consumers (asserts routes.len()==3 and every route's phase/consumers/status/lease_ids). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near receipt_route_artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:546:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice B motion): predicate probe on `if command == \"<missing command>\"` in proof_request_status. The boundary is exactly pinned by proof_request_status_enforces_v0_focused_allowlist (the empty-command request[11] asserts status==\"invalid\" and command==\"<missing command>\", while populated commands assert requested/unsupported). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to proof/planner.rs near proof_request_status."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:617:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the write_proof_request_artifacts(...)? driver call inside the test proof_request_artifacts_group_duplicate_commands_once. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:623:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the serde_json::from_slice(&fs::read(proof_request_groups.json)?)? fixture read inside the test proof_request_artifacts_group_duplicate_commands_once. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:1123:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the .ok_or_else(...)? assertion-plumbing inside the test proof_request_status_enforces_v0_focused_allowlist (locating the safe cargo-test focused task). A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:1194:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the write_proof_request_artifacts(...)? driver call inside the test proof_request_artifacts_write_focused_planner_without_execution. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:1199:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the serde_json::from_slice(&fs::read(proof_request_groups.json)?)? fixture read inside the test proof_request_artifacts_write_focused_planner_without_execution. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."

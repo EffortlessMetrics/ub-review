@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
+pub(crate) mod planner;
+pub(crate) use planner::*;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofRequest {
     pub(crate) schema: String,
