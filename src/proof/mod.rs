@@ -20,6 +20,9 @@ pub(crate) use planner::*;
 pub(crate) mod red_green;
 pub(crate) use red_green::*;
 
+pub(crate) mod worktree;
+pub(crate) use worktree::*;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofRequest {
     pub(crate) schema: String,
