@@ -472,3 +472,139 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_planner.rs:1199:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055): error_path of the serde_json::from_slice(&fs::read(proof_request_groups.json)?)? fixture read inside the test proof_request_artifacts_write_focused_planner_without_execution. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from the proof slice B pure-code-motion; re-verify after any edit to proof/planner.rs."
+
+# Proof slice C1 (extract proof/red_green.rs, pure code motion) - 21
+# entries for moved-not-modified focused proof execution. The focused
+# HEAD/base+tests runner and task execution functions moved byte-identical
+# from src/main.rs to src/proof/red_green.rs; with no move detection
+# (ripr-swarm#1054), ripr re-probes the addition-side lines as new. The
+# runner behavior is pinned by proof_broker_v0_* focused proof tests that
+# assert receipts, leases, command status, budget exhaustion, base patch
+# failure, head failure, and non-discriminating base+tests pass paths. Remove
+# this block when upstream lands move detection.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:52:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): dry-run lease receipt path in run_focused_red_green_proof_tasks_with_runner. Existing proof_broker_v0 focused tests assert receipt/resource_lease status and command fields for skipped and executed tasks. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:59:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): dry-run skipped proof receipt path in run_focused_red_green_proof_tasks_with_runner. Existing proof_broker_v0 focused tests assert receipt/resource_lease status and command fields for skipped and executed tasks. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:69:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): zero-test-lease resource path in run_focused_red_green_proof_tasks_with_runner. proof_broker_v0_does_not_execute_without_focused_test_lease asserts skipped_profile receipt and lease reason exactly. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:76:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): zero-test-lease skipped receipt path in run_focused_red_green_proof_tasks_with_runner. proof_broker_v0_does_not_execute_without_focused_test_lease asserts skipped_profile receipt and lease reason exactly. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:94:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): exhausted-budget lease path in run_focused_red_green_proof_tasks_with_runner. proof_broker_v0_exhausts_focused_tests_after_runtime_budget and proof_broker_v0_does_not_execute_when_focused_test_budget_is_zero assert exhausted lease status and reason. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:101:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): exhausted-budget skipped receipt path in run_focused_red_green_proof_tasks_with_runner. proof_broker_v0_exhausts_focused_tests_after_runtime_budget and proof_broker_v0_does_not_execute_when_focused_test_budget_is_zero assert skipped_budget receipt status. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:111:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): granted focused-test lease path in run_focused_red_green_proof_tasks_with_runner. proof_broker_v0_runs_budgeted_focused_red_green_targets_and_writes_receipts asserts granted leases and consumers match receipts. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:124:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C1 motion): propagated task execution error from the focused proof runner. Existing proof_broker_v0 tests drive both HEAD-only and base+tests runner branches through injected runners and assert the emitted receipts. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:142:field_construction"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified helper signature (ripr-swarm#1054, proof slice C1 motion): run_focused_head_proof_task timeout parameter moved from main.rs unchanged. The public runner is exercised by proof_broker_v0 tests, and timed-out proof rendering is pinned by pr_review_body_collapses_timed_out_proof_to_missing_evidence. Identical code probed clean before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:146:field_construction"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified helper signature (ripr-swarm#1054, proof slice C1 motion): run_focused_head_proof_task runner bound moved from main.rs unchanged. The public runner is exercised by proof_broker_v0 tests, and timed-out proof rendering is pinned by pr_review_body_collapses_timed_out_proof_to_missing_evidence. Identical code probed clean before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:160:match_arm"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified head-proof result mapping (ripr-swarm#1054, proof slice C1 motion): timed_out arm in run_focused_head_proof_task. Timed-out proof classification is pinned by pr_review_body_collapses_timed_out_proof_to_missing_evidence and focused proof receipt tests. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:161:match_arm"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified head-proof fallback arm (ripr-swarm#1054, proof slice C1 motion). The helper is only reached through the public proof runner; proof_broker_v0 tests assert emitted receipt statuses for passed, failed, timed_out, skipped_profile, and skipped_budget paths. Identical code probed clean before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:164:call_deletion"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified focused_head_receipt construction (ripr-swarm#1054, proof slice C1 motion). Head-only receipts are consumed through the same proof runner and the receipt fields are asserted by focused proof and PR-body receipt tests. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:164:return_value"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified focused_head_receipt return (ripr-swarm#1054, proof slice C1 motion). Head-only receipts are consumed through the same proof runner and the receipt fields are asserted by focused proof and PR-body receipt tests. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:168:call_deletion"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified head-proof result forwarding (ripr-swarm#1054, proof slice C1 motion). Focused proof receipt tests assert the resulting status/reason fields through the public runner. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:168:return_value"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified head-proof result return (ripr-swarm#1054, proof slice C1 motion). Focused proof receipt tests assert the resulting status/reason fields through the public runner. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:170:call_deletion"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified focused_head_receipt close (ripr-swarm#1054, proof slice C1 motion). The receipt object is asserted through the public focused proof runner and PR-body proof receipt tests. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:170:return_value"
+owner = "ub-review/core"
+reason = "No-static-path false-negative on moved-not-modified focused_head_receipt return close (ripr-swarm#1054, proof slice C1 motion). The receipt object is asserted through the public focused proof runner and PR-body proof receipt tests. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:221:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified base_patch_failed skipped command receipt (ripr-swarm#1054, proof slice C1 motion). proof_broker_v0_records_base_patch_failed_as_missing_proof asserts result==base_patch_failed, base-plus-tests skipped status, and missing-evidence classification. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:224:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified base_patch_failed skipped command push (ripr-swarm#1054, proof slice C1 motion). proof_broker_v0_records_base_patch_failed_as_missing_proof asserts result==base_patch_failed, base-plus-tests skipped status, and missing-evidence classification. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:243:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on moved-not-modified base+tests command execution error path (ripr-swarm#1054, proof slice C1 motion). proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating, proof_broker_v0_skips_base_plus_tests_when_head_fails, and proof_broker_v0_records_base_patch_failed_as_missing_proof assert the red/green command receipt outcomes. Identical code probed clean before the move. Line-keyed id; re-verify after any edit to red_green.rs."
