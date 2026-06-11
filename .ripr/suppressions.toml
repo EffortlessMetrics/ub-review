@@ -756,3 +756,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_build.rs:299:error_path"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path at the focused_build_request_skips_when_profile_disables_build_leases driver call boundary. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from CI merge-ref; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:195:error_path"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C3 motion): skipped_focused_build_receipt propagates the same skipped command receipt construction error path formerly in main.rs. focused_build_request_skips_when_profile_disables_build_leases asserts the skipped focused-build receipt and command status. Line-keyed id from CI merge-ref; re-verify after any edit to command.rs."
