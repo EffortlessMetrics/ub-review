@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
+pub(crate) mod command;
+pub(crate) use command::*;
+
 pub(crate) mod build;
 pub(crate) use build::*;
 
