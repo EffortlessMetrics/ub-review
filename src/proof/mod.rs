@@ -11,6 +11,9 @@ use crate::*;
 pub(crate) mod planner;
 pub(crate) use planner::*;
 
+pub(crate) mod red_green;
+pub(crate) use red_green::*;
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofRequest {
     pub(crate) schema: String,
