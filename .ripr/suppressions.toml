@@ -608,3 +608,151 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_red_green.rs:243:error_path"
 owner = "ub-review/core"
 reason = "Reachable-unrevealed false-negative on moved-not-modified base+tests command execution error path (ripr-swarm#1054, proof slice C1 motion). proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating, proof_broker_v0_skips_base_plus_tests_when_head_fails, and proof_broker_v0_records_base_patch_failed_as_missing_proof assert the red/green command receipt outcomes. Identical code probed clean before the move. Line-keyed id; re-verify after any edit to red_green.rs."
+
+# Proof slice C2 (extract proof/build.rs, pure code motion) - 22
+# entries for moved-not-modified focused build proof execution and its
+# colocated focused-build runner tests. The build runner moved out of
+# src/main.rs without behavior changes; with no move detection
+# (ripr-swarm#1054), ripr re-probes the addition-side lines as new. The
+# behavior is pinned by proof_broker_v0_executes_allowlisted_focused_build_request
+# and focused_build_request_skips_when_profile_disables_build_leases, which
+# assert command execution, skipped-profile no-execute behavior, receipts, and
+# leases. Remove this block when upstream lands move detection.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:48:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): dry-run build lease receipt path in run_focused_build_proof_tasks_with_runner. Focused-build tests assert receipt/resource_lease status and command fields for skipped and executed build tasks. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:55:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): dry-run skipped build receipt path in run_focused_build_proof_tasks_with_runner. Focused-build tests assert receipt/resource_lease status and command fields for skipped and executed build tasks. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:65:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): zero-build-lease resource path in run_focused_build_proof_tasks_with_runner. focused_build_request_skips_when_profile_disables_build_leases asserts skipped_profile receipt and lease reason exactly. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:72:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): zero-build-lease skipped receipt path in run_focused_build_proof_tasks_with_runner. focused_build_request_skips_when_profile_disables_build_leases asserts skipped_profile receipt and lease reason exactly. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:85:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): exhausted-budget lease path in run_focused_build_proof_tasks_with_runner. The focused-build runner tests pin the no-command skipped profile path and the granted build execution path; budget exhaustion is identical moved code from main.rs. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:87:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): exhausted-budget lease reason in run_focused_build_proof_tasks_with_runner. Focused-build tests assert receipt/resource_lease fields for skipped and executed build tasks; identical code probed clean before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:92:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): exhausted-budget skipped receipt status in run_focused_build_proof_tasks_with_runner. Focused-build tests assert receipt/resource_lease fields for skipped and executed build tasks; identical code probed clean before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:94:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): exhausted-budget skipped receipt reason in run_focused_build_proof_tasks_with_runner. Focused-build tests assert receipt/resource_lease fields for skipped and executed build tasks; identical code probed clean before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:103:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): granted focused-build lease path in run_focused_build_proof_tasks_with_runner. proof_broker_v0_executes_allowlisted_focused_build_request asserts the granted lease kind/status/timeout/command exactly. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:105:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): focused build task execution call in run_focused_build_proof_tasks_with_runner. proof_broker_v0_executes_allowlisted_focused_build_request asserts the exact command, timeout, receipt, and stdout artifact. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:109:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): focused build task timeout forwarding in run_focused_build_proof_tasks_with_runner. proof_broker_v0_executes_allowlisted_focused_build_request asserts timeout==90 for the executed command. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:111:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C2 motion): focused build receipt push in run_focused_build_proof_tasks_with_runner. proof_broker_v0_executes_allowlisted_focused_build_request asserts the emitted focused-build receipt fields and resource lease. Identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to build.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:285:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases driver call. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:288:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases driver call. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:289:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases ProofBudget literal. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:290:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases ProofBudget literal. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:291:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases ProofBudget literal. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:292:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases ProofBudget literal. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:293:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases ProofBudget literal. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:294:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases ProofBudget literal. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:296:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases injected no-execute runner. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:298:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path within the focused_build_request_skips_when_profile_disables_build_leases injected no-execute runner. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id; re-verify after any edit to build.rs tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:299:error_path"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] code (ripr-swarm#1055, proof slice C2 motion): error_path at the focused_build_request_skips_when_profile_disables_build_leases driver call boundary. A test's own ? operator firing IS the test failing; no further oracle can discriminate it. Line-keyed id from CI merge-ref; re-verify after any edit to build.rs tests."
