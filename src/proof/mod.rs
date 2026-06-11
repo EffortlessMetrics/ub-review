@@ -8,6 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
+pub(crate) mod budget;
+pub(crate) use budget::*;
+
 pub(crate) mod command;
 pub(crate) use command::*;
 

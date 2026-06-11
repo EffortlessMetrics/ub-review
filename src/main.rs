@@ -8978,59 +8978,6 @@ fn canonical_proof_request_group_command(command: &str, cost: &str) -> String {
     )
 }
 
-fn proof_budget(profile: &Profile) -> Result<ProofBudget> {
-    let budget = ProofBudget {
-        max_focused_test_files: profile.budgets.proof_max_focused_test_files,
-        max_focused_tests: profile.budgets.proof_max_focused_tests,
-        per_command_timeout_sec: profile.budgets.proof_command_timeout_sec,
-        max_total_seconds: profile.budgets.proof_total_timeout_sec,
-    };
-    if budget.max_focused_tests > 0 && budget.per_command_timeout_sec == 0 {
-        bail!(
-            "runtime profile {} has proof_command_timeout_sec=0 with focused proof enabled",
-            profile.name
-        );
-    }
-    if budget.max_focused_tests > 0 && budget.max_total_seconds == 0 {
-        bail!(
-            "runtime profile {} has proof_total_timeout_sec=0 with focused proof enabled",
-            profile.name
-        );
-    }
-    Ok(budget)
-}
-
-fn proof_lease_budget(profile: &Profile) -> Result<ProofLeaseBudget> {
-    let budget = ProofLeaseBudget {
-        cpu: profile.budgets.proof_cpu,
-        memory_mb: profile.budgets.proof_memory_mb,
-        disk_mb: profile.budgets.proof_disk_mb,
-        network: profile.budgets.proof_network,
-        scratch: profile.budgets.proof_scratch,
-    };
-    if profile.limits.tests > 0 && profile.budgets.proof_max_focused_tests > 0 {
-        if budget.cpu == 0 {
-            bail!(
-                "runtime profile {} has proof_cpu=0 with focused proof enabled",
-                profile.name
-            );
-        }
-        if budget.memory_mb == 0 {
-            bail!(
-                "runtime profile {} has proof_memory_mb=0 with focused proof enabled",
-                profile.name
-            );
-        }
-        if budget.disk_mb == 0 {
-            bail!(
-                "runtime profile {} has proof_disk_mb=0 with focused proof enabled",
-                profile.name
-            );
-        }
-    }
-    Ok(budget)
-}
-
 fn focused_proof_plans_from_diff(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
@@ -20831,9 +20778,9 @@ mod tests {
     use anyhow::{Context as _, Result, bail};
 
     use super::{
-        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, Budgets, CandidateRecord,
-        CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog,
-        FailOnGate, FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
+        BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
+        Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
+        FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
         GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
         LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCacheUsage, ModelCallOutcome,
         ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
@@ -20863,8 +20810,8 @@ mod tests {
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
         model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
         model_request_payload, model_response_shape, normalize_run_args,
-        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence, proof_budget,
-        proof_lease_budget, provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
         read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
         resolved_candidate_records, resolved_provider_policy, review_lanes_for_args,
@@ -23499,102 +23446,6 @@ index 1111111..2222222 100644
         assert_eq!(lease.status, "granted");
         assert_eq!(lease.timeout_sec, 600);
         assert_eq!(lease.worktree, Some("base-plus-tests".to_owned()));
-        Ok(())
-    }
-
-    #[test]
-    fn proof_budget_comes_from_runtime_profile_budgets() -> Result<()> {
-        let profiles = builtin_profiles();
-        let gh_runner = profiles
-            .iter()
-            .find(|profile| profile.name == "gh-runner")
-            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
-        let cx23 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx23")
-            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
-        let cx43 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx43")
-            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
-
-        assert_eq!(proof_budget(gh_runner)?.max_focused_tests, 1);
-        assert_eq!(proof_budget(cx23)?.max_focused_tests, 2);
-        assert_eq!(proof_budget(cx43)?.max_focused_tests, 6);
-        assert_eq!(proof_budget(cx43)?.per_command_timeout_sec, 600);
-        assert_eq!(proof_budget(cx43)?.max_total_seconds, 1_800);
-        Ok(())
-    }
-
-    #[test]
-    fn invalid_enabled_proof_budget_is_rejected() -> Result<()> {
-        let profile = Profile {
-            name: "broken".to_owned(),
-            budgets: Budgets {
-                proof_max_focused_tests: 1,
-                proof_command_timeout_sec: 0,
-                ..Budgets::default()
-            },
-            ..Profile::default()
-        };
-
-        let err = proof_budget(&profile)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("invalid proof budget unexpectedly passed"))?;
-
-        assert!(
-            err.to_string()
-                .contains("runtime profile broken has proof_command_timeout_sec=0")
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn proof_lease_budget_comes_from_runtime_profile_budgets() -> Result<()> {
-        let profiles = builtin_profiles();
-        let gh_runner = profiles
-            .iter()
-            .find(|profile| profile.name == "gh-runner")
-            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
-        let cx23 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx23")
-            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
-        let cx43 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx43")
-            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
-
-        assert_eq!(proof_lease_budget(gh_runner)?.cpu, 2);
-        assert_eq!(proof_lease_budget(gh_runner)?.memory_mb, 2_048);
-        assert_eq!(proof_lease_budget(gh_runner)?.disk_mb, 1_024);
-        assert_eq!(proof_lease_budget(cx23)?.cpu, 1);
-        assert_eq!(proof_lease_budget(cx23)?.memory_mb, 1_024);
-        assert_eq!(proof_lease_budget(cx43)?.cpu, 4);
-        assert_eq!(proof_lease_budget(cx43)?.disk_mb, 2_048);
-        Ok(())
-    }
-
-    #[test]
-    fn invalid_enabled_proof_lease_budget_is_rejected() -> Result<()> {
-        let profile = Profile {
-            name: "broken".to_owned(),
-            budgets: Budgets {
-                proof_max_focused_tests: 1,
-                proof_cpu: 0,
-                ..Budgets::default()
-            },
-            ..Profile::default()
-        };
-
-        let err = proof_lease_budget(&profile)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("invalid proof lease budget unexpectedly passed"))?;
-
-        assert!(
-            err.to_string()
-                .contains("runtime profile broken has proof_cpu=0")
-        );
         Ok(())
     }
 
