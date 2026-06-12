@@ -281,9 +281,8 @@ pub(crate) fn tool_gate_outcome_entry(
     if !matches!(gate_decision_state, ToolGateDecisionState::Missing) {
         source_artifacts.push(gate_decision_path);
     }
-    let exposure_gap_details_path = format!("sensors/{}/exposure-gaps.json", tool.id);
-    if tool.id == "ripr" && out.join(&exposure_gap_details_path).is_file() {
-        source_artifacts.push(exposure_gap_details_path);
+    if tool.id == "ripr" && !matches!(gate_decision_state, ToolGateDecisionState::Missing) {
+        source_artifacts.push("sensors/ripr/exposure-gaps.json".to_owned());
     }
     ToolGateOutcomeEntry {
         schema: TOOL_GATE_OUTCOME_SCHEMA,
@@ -603,10 +602,6 @@ mod tests {
                 r#"{{"schema_version":"0.5","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"{gaps}","status":"pass","color":"brightgreen","counts":{{"unsuppressed_exposure_gaps":{gaps},"unsuppressed_test_efficiency_findings":0,"analyzed_findings":246}},"policy":{{"include_unknowns":false,"fail_on_nonzero":false}},"warnings":[]}}"#
             );
             fs::write(temp.path().join("sensors/ripr/gate-decision.json"), badge)?;
-            fs::write(
-                temp.path().join("sensors/ripr/exposure-gaps.json"),
-                r#"{"schema":"ub-review.ripr_exposure_gaps.v1","status":"ok","total_gap_findings":0,"truncated":false,"entries":[]}"#,
-            )?;
             let tool_status = super::tool_status_artifact(
                 temp.path(),
                 &config,
