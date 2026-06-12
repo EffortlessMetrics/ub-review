@@ -84,6 +84,25 @@ pub(crate) fn sensor_job_count(profile: &Profile, runnable_len: usize) -> Result
     Ok(profile.limits.sensor_jobs.min(runnable_len))
 }
 
+fn classify_sensor_command_result(
+    sensor_id: &str,
+    result: &CommandStatus,
+) -> (&'static str, String) {
+    if result.timed_out {
+        return ("timed_out", result.reason.clone());
+    }
+    if result.success {
+        return ("ok", result.reason.clone());
+    }
+    if sensor_id == "unsafe-review" && result.exit_code == Some(1) {
+        return (
+            "ok",
+            "unsafe-review completed with policy findings (exit 1)".to_owned(),
+        );
+    }
+    ("failed", result.reason.clone())
+}
+
 pub(crate) fn run_sensor(
     root: &Path,
     out: &Path,
@@ -132,13 +151,7 @@ pub(crate) fn run_sensor(
     );
     match result {
         Ok(result) => {
-            let status = if result.timed_out {
-                "timed_out"
-            } else if result.success {
-                "ok"
-            } else {
-                "failed"
-            };
+            let (status, reason) = classify_sensor_command_result(&sensor.id, &result);
             // ripr emits its badge-json receipt on stdout; the verbatim bytes
             // become the gate-decision receipt so the threshold evaluates
             // against exactly what the tool shipped (#316). Copy only on ok:
@@ -161,18 +174,18 @@ pub(crate) fn run_sensor(
                     status,
                     argv: &argv,
                     duration_ms: result.duration_ms,
-                    reason: &result.reason,
+                    reason: &reason,
                     exit_code: result.exit_code,
                     timed_out: result.timed_out,
                 },
             )?;
             event_log.append(
-                if result.success {
+                if status == "ok" {
                     "sensor_completed"
                 } else {
                     "sensor_failed"
                 },
-                serde_json::json!({"sensor": sensor.id, "exit_code": result.exit_code, "timed_out": result.timed_out, "reason": result.reason}),
+                serde_json::json!({"sensor": sensor.id, "exit_code": result.exit_code, "timed_out": result.timed_out, "reason": reason}),
             )?;
         }
         Err(err) => {
@@ -1578,6 +1591,39 @@ fn main() {{
     }
 
     #[test]
+    fn unsafe_review_exit_one_is_completed_policy_signal() {
+        let result = command_status(Some(1), false, false, "exit code Some(1)");
+
+        let (status, reason) = super::classify_sensor_command_result("unsafe-review", &result);
+
+        assert_eq!(status, "ok");
+        assert_eq!(
+            reason,
+            "unsafe-review completed with policy findings (exit 1)"
+        );
+    }
+
+    #[test]
+    fn unsafe_review_exit_two_remains_tool_failure() {
+        let result = command_status(Some(2), false, false, "exit code Some(2)");
+
+        let (status, reason) = super::classify_sensor_command_result("unsafe-review", &result);
+
+        assert_eq!(status, "failed");
+        assert_eq!(reason, "exit code Some(2)");
+    }
+
+    #[test]
+    fn non_unsafe_review_exit_one_stays_failed() {
+        let result = command_status(Some(1), false, false, "exit code Some(1)");
+
+        let (status, reason) = super::classify_sensor_command_result("ripr", &result);
+
+        assert_eq!(status, "failed");
+        assert_eq!(reason, "exit code Some(1)");
+    }
+
+    #[test]
     fn unsafe_review_sensor_argv_uses_first_pr_out_dir_flag() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path();
@@ -1659,5 +1705,20 @@ fn main() {{
         assert!(outputs.contains(&"stdout.txt".to_owned()));
         assert!(outputs.contains(&"stderr.txt".to_owned()));
         Ok(())
+    }
+
+    fn command_status(
+        exit_code: Option<i32>,
+        timed_out: bool,
+        success: bool,
+        reason: &str,
+    ) -> CommandStatus {
+        CommandStatus {
+            exit_code,
+            timed_out,
+            success,
+            reason: reason.to_owned(),
+            duration_ms: 1,
+        }
     }
 }

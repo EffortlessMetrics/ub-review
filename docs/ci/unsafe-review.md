@@ -106,6 +106,21 @@ under `summary`** (not flat top-level), and the `artifacts` map keys are
 **snake_case** (`comment_plan`, `repair_queue`, …) while their values are the
 hyphenated filenames.
 
+Exit-code handling is part of the sensor contract (#396):
+
+```text
+0  completed: clean or advisory findings
+1  completed: --policy no-new-debt found new/worsened coverage gaps
+2  did not complete a review: usage, input, I/O, or internal error
+```
+
+`ub-review` records exit 0 and exit 1 as completed sensor runs (`status: ok`)
+and preserves the numeric `exit_code` in
+`sensors/unsafe-review/ub-review-sensor-status.json`. Exit 1 is therefore
+reviewability evidence from unsafe-review, not a missing-evidence bucket. Exit
+2 and other tool failures remain sensor failures; required unsafe-review sensors
+block through the normal required-sensor receipt chain.
+
 ub-review routes by `schema_version` before binding the typed shape: only
 `unsafe-review-gate/v1` is parsed. Absent, unreadable, malformed, or unknown
 gate artifacts become typed evidence gaps naming the failure; an unknown

@@ -162,6 +162,11 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
   `UB_REVIEW_RIPR_VERSION`), and unsafe-review (0.3.3,
   `UB_REVIEW_UNSAFE_REVIEW_VERSION`); cargo-allow installs unpinned - the
   remaining install-time drift gap.
+- unsafe-review exit codes are classified by contract (#396): 0 and 1 both
+  mean the tool completed and emitted reviewability evidence (`status: ok`,
+  with `exit_code` preserved); 1 means policy findings under
+  `--policy no-new-debt`. Exit 2/tool errors remain sensor failures and
+  required unsafe-review sensors block through the required-sensor receipt.
 - `--allow-heavy` (plan/run flag; `allow-heavy` action input) leases the
   heavy classes. This repository's gate workflow sets `allow-heavy: 'true'`
   and installs `cargo-llvm-cov` so the coverage sensor runs on every PR
