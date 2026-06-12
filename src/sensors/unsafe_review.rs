@@ -345,6 +345,45 @@ mod tests {
         Ok(())
     }
 
+    /// Missing schema_version: valid JSON still cannot be trusted as a routed
+    /// unsafe-review gate artifact.
+    #[test]
+    fn unsafe_review_artifacts_missing_schema_version_is_malformed_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&out_dir)?;
+        fs::write(
+            out_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "dialect": "unsafe-review",
+                "status": "advisory",
+                "summary": {
+                    "new_gaps": 0,
+                    "worsened_gaps": 0,
+                    "resolved_gaps": 0,
+                    "inherited_gaps": 0
+                },
+                "artifacts": {},
+                "tool": "unsafe-review",
+                "tool_version": "0.3.4"
+            }"#,
+        )?;
+        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+            Err(gap) => gap,
+            Ok(_) => anyhow::bail!("expected Malformed gap, got parsed artifacts"),
+        };
+        assert_eq!(
+            gap,
+            super::UnsafeReviewIngestGap::Malformed("schema_version field missing".to_owned())
+        );
+        assert_eq!(
+            gap.reason(),
+            "unsafe-review-gate.json malformed: schema_version field missing"
+        );
+        Ok(())
+    }
+
     /// Malformed JSON: a typed gap carries the parse detail.
     #[test]
     fn unsafe_review_artifacts_malformed_json_is_gap_with_reason() -> Result<()> {
@@ -352,10 +391,14 @@ mod tests {
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
         fs::create_dir_all(&out_dir)?;
-        fs::write(
+        let fixture_write = fs::write(
             out_dir.join("unsafe-review-gate.json"),
             r#"{"schema_version": "unsafe-review-gate/v1", "status":"#,
-        )?;
+        );
+        assert!(
+            fixture_write.is_ok(),
+            "write malformed unsafe-review gate fixture: {fixture_write:?}"
+        );
         let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
             Err(gap) => gap,
             Ok(_) => anyhow::bail!("expected Malformed gap, got parsed artifacts"),
