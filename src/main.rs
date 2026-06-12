@@ -20879,6 +20879,12 @@ mod tests {
             "run-pass must stay auto so synchronize/reopened resolve to first-class passes that the [gate].post_review_on policy can admit"
         );
         assert!(
+            workflow.contains(
+                "base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}"
+            ),
+            "self gate must diff against the PR's declared base branch so stacked PRs measure only their layer"
+        );
+        assert!(
             workflow.contains("cancel-in-progress: true"),
             "synchronize passes must collapse push storms via concurrency"
         );
