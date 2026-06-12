@@ -21306,6 +21306,24 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
+    fn action_release_download_verifies_sha256_receipt() {
+        let action = include_str!("../action.yml");
+        assert!(
+            action.contains("checksum_url=\"$url.sha256\"")
+                && action.contains(
+                    "curl -fL --retry 3 --retry-delay 2 -o \"$checksum\" \"$checksum_url\""
+                )
+                && action
+                    .contains("expected_sha=\"$(awk 'NF >= 1 {print $1; exit}' \"$checksum\")\"")
+                && action.contains("[[ ! \"$expected_sha\" =~ ^[A-Fa-f0-9]{64}$ ]]")
+                && action.contains("actual_sha=\"$(sha256sum \"$archive\" | awk '{print $1}')\"")
+                && action.contains("[[ \"$actual_sha\" != \"$expected_sha\" ]]")
+                && action.contains("release binary checksum mismatch; using source fallback"),
+            "release download must verify the .sha256 receipt before accepting the binary"
+        );
+    }
+
+    #[test]
     fn bun_config_loads_with_default_lanes_enabled() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../profiles/bun-ub-v0.toml"))?;
         config.merge_defaults();

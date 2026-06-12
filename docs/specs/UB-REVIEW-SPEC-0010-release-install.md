@@ -79,7 +79,7 @@ ub-review runner"):
   release download; a non-tag ref (the commit-SHA pin) gets a notice and
   goes straight to the source build;
 - `release` tries the download first and falls back to the source build on
-  any download/extraction failure, with a workflow warning; the one
+  any download/checksum/extraction failure, with a workflow warning; the one
   hard-error path is a malformed `release-version` or `release-asset`
   input, which fails the job in `validate_release_request` before any URL
   is constructed;
@@ -95,8 +95,10 @@ dot, underscore, or dash; `release-asset` (default
 `ub-review-x86_64-unknown-linux-gnu.tar.gz`) must be a bare file name - no
 path separators, no `..` - in the same charset. The download is attempted
 only on Linux x86_64 runners (`uname` check); `.tar.gz`/`.tgz` assets are
-extracted and must contain an executable named `ub-review`, any other asset
-name is treated as the raw binary. Every failure branch returns to the
+downloaded with a sibling `<asset>.sha256` receipt, whose first field must be a
+64-hex SHA-256 digest matching the archive before extraction. They are then
+extracted and must contain an executable named `ub-review`, while any other
+asset name is treated as the raw binary. Every failure branch returns to the
 source build.
 
 Rust toolchain setup (action.yml "Select Rust toolchain"): when
@@ -244,7 +246,7 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
 ## Fail-closed behavior
 
 - Release download failures fail closed into the source build, never into
-  "no binary": every download and extraction error branch of
+  "no binary": every download, checksum, and extraction error branch of
   `download_release_binary` returns to `build_from_source` - the
   input-validation branches inside it (`validate_release_request`)
   hard-fail the job instead, by design - and the extracted candidate must
@@ -267,11 +269,6 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
     against a foreign-dialect ledger and red-fails on schema), #319 (tokmd
     below the pinned version should be surfaced as the failure reason when
     `--preset bun-ub` is rejected).
-  - the published `.sha256` receipt is not verified by the action's
-    download path - it downloads the asset only (action.yml
-    `download_release_binary`). The receipt exists for humans and external
-    automation; the action currently trusts GitHub release storage at the
-    tag.
   - on the dev-side install surface, `cargo xtask precommit` records
     missing sensors as `success: true` skipped receipts with exit 0,
     indistinguishable from relevance skips (#320), and the receipts do not
@@ -281,8 +278,8 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
 
 ```text
 the install surface delivers a binary; it proves nothing about the repo
-release assets are integrity-receipted (.sha256) but not signature-verified,
-  and the action does not check the receipt on download
+release assets are integrity-receipted (.sha256) and checked by the action
+  before use, but not signature-verified
 pinning by commit SHA pins the source you build; pinning by tag trusts
   GitHub release storage for the prebuilt asset
 missing sensors after install are missing evidence, never clean evidence
@@ -361,9 +358,8 @@ This spec is docs-only; it routes open work:
    `install-mode: release` and tagged `auto` end to end on a consumer run.
    Until this lands, the release path is implemented-but-unexercised and
    release notes must not claim a prebuilt install. No issue yet.
-2. Verify the `.sha256` receipt in the action's download path before
-   accepting the asset. Small, closes the integrity gap named above. No
-   issue yet.
+2. DONE: Verify the `.sha256` receipt in the action's download path before
+   accepting the asset.
 3. DONE: unknown `tool-bundle` values fail the install step with an error
    naming the accepted values, matching the strict `install-mode`
    validation.
