@@ -897,3 +897,41 @@ kind = "exposure_gap"
 finding_id = "probe:tests_cli.rs:4565:error_path"
 owner = "ub-review/core"
 reason = "Probe on integration-test JSON lookup plumbing (ripr-swarm#1055): tool_gate_outcome locates the named gate outcome before field assertions. Missing entries fail the test, while #318 behavior is pinned by exact artifact parity and cargo-allow field assertions. Line-keyed id; re-verify after edits near tool_gate_outcome."
+
+# PR #427 (#306 config-contract removal): CI ripr 0.8.0 reports medium
+# oracles for the dedicated synchronize_mode deprecation receipt and the
+# test's cfg(test) fixture construction, but still classifies the probes as
+# weakly_exposed. The behavior is pinned by
+# synchronize_mode_records_deprecation_receipt_and_keeps_gate_siblings: exact
+# section/detail receipt, explicit legacy-key removal from the raw gate table,
+# valid sibling preservation, and final Config post_review_on round-trip.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1008:side_effect"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on the dedicated synchronize_mode deprecation PolicyError push (ripr-swarm#1054): synchronize_mode_records_deprecation_receipt_and_keeps_gate_siblings asserts exactly one receipt, exact section gate.synchronize_mode, exact deprecation detail, raw key removal, and valid sibling preservation. Line-keyed CI ripr 0.8.0 id; re-verify after edits near sanitize_gate_section."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1358:side_effect"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] fixture setup (ripr-swarm#1055): required_check insertion for the legacy synchronize_mode sanitizer test. Mutating it is caught by the final Config assertion required_check == ub-review/gate; the production behavior is the sanitizer receipt/removal path. Line-keyed CI ripr 0.8.0 id; re-verify after edits near the test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1364:side_effect"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] fixture setup (ripr-swarm#1055): post_review_on array construction for the legacy synchronize_mode sanitizer test. Mutating it is caught by the final Config post_review_on equality assertion; the production behavior is the sanitizer receipt/removal path. Line-keyed CI ripr 0.8.0 id; re-verify after edits near the test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1365:side_effect"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] fixture setup (ripr-swarm#1055): post_review_on insertion for the legacy synchronize_mode sanitizer test. Mutating it is caught by raw-table sibling preservation plus final Config post_review_on equality. Line-keyed CI ripr 0.8.0 id; re-verify after edits near the test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:1369:side_effect"
+owner = "ub-review/core"
+reason = "Probe on #[cfg(test)] activation fixture setup (ripr-swarm#1055): synchronize_mode insertion is required to exercise the deprecated-key branch. Mutating it is caught by exact receipt assertions and raw-table key removal. Line-keyed CI ripr 0.8.0 id; re-verify after edits near the test."
