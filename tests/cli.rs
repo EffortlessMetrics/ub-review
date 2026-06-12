@@ -978,6 +978,84 @@ fn active_len_tracks_view_after_resize() {
 }
 
 #[test]
+fn declared_pr_base_measures_only_stack_layer() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    fs::create_dir_all(repo.join("docs"))?;
+    let manifest = r#"[package]
+name = "stack-diff-mini"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#;
+    write_file(&repo.join("Cargo.toml"), manifest)?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 1 }\n")?;
+
+    run(&repo, "git", &["init"])?;
+    let git_email = ["config", "user.email", "ub-review@example.invalid"];
+    run(&repo, "git", &git_email)?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+    run(&repo, "git", &["switch", "-c", "stack-base"])?;
+    write_file(&repo.join("docs/ancestor.md"), "ancestor-only\n")?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "ancestor layer"])?;
+    run(&repo, "git", &["switch", "-c", "stack-head"])?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 2 }\n")?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "head layer"])?;
+
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "stack-base",
+            "--head",
+            "stack-head",
+            "--out",
+            path_str(&out)?,
+            "--run-pass",
+            "opened",
+            "--no-github-summary",
+        ],
+    )?;
+
+    let diff_context: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("input/diff-context.json"))?)?;
+    let changed_files = diff_context["changed_files"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("changed_files missing"))?;
+    let changed_files: Vec<&str> = changed_files
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    assert!(
+        changed_files.contains(&"src/lib.rs"),
+        "head-layer source change missing: {changed_files:?}"
+    );
+    assert!(
+        !changed_files.contains(&"docs/ancestor.md"),
+        "declared PR base should exclude ancestor-only stack files: {changed_files:?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

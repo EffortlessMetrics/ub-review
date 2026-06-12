@@ -59,6 +59,7 @@ jobs:
           # Lease the heavy witness classes so the enabled coverage sensor runs.
           allow-heavy: 'true'
           root: .
+          base: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.event.pull_request.base.ref) || 'origin/main' }}
           out: target/ub-review
           github-token: ${{ github.token }}
           posting: ${{ github.event_name == 'pull_request' && 'review' || 'artifact-only' }}
