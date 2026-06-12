@@ -22156,6 +22156,132 @@ mod tests {
     }
 
     #[test]
+    fn unsafe_review_swarm_recommended_config_loads_advisory_floor() -> Result<()> {
+        let mut config = Config::from_toml_with_policy_receipts(include_str!(
+            "../configs/unsafe-review-swarm.ub-review.toml"
+        ))?;
+        config.merge_defaults();
+
+        assert!(
+            config.policy_errors.is_empty(),
+            "recommended config should not rely on stripped or deprecated keys: {:?}",
+            config.policy_errors
+        );
+        assert_eq!(config.review_profile, "bun-ub-v0");
+        assert_eq!(config.profile, "gh-runner-full");
+        assert_eq!(config.repo.kind, "rust");
+        assert_eq!(config.repo.ledger, "docs/dogfood");
+        assert_eq!(
+            config.review_body.summary_only_body,
+            SummaryOnlyBodyPolicy::PostSubstantive
+        );
+        assert_eq!(config.gate.required_check, "ub-review/gate");
+        assert_eq!(
+            config.gate.post_review_on,
+            vec!["opened".to_owned(), "ready_for_review".to_owned()]
+        );
+        assert!(config.gate.blocking.required_proof_unproven);
+        assert!(!config.gate.blocking.tool_gate_missing_evidence);
+        assert_eq!(config.providers.policy, "primary-with-fallback");
+
+        let expected_proofs = [(
+            "check-pr",
+            "cargo run --locked -p xtask -- check-pr",
+            "focused-build",
+            300_u64,
+        )];
+        assert_eq!(config.proof.required.len(), expected_proofs.len());
+        for (id, command, cost, timeout_sec) in expected_proofs {
+            let policy = config
+                .proof
+                .required
+                .iter()
+                .find(|policy| policy.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing required proof {id}"))?;
+            assert!(policy.enabled);
+            assert!(policy.required);
+            assert_eq!(policy.command, command);
+            assert_eq!(policy.cost.as_deref(), Some(cost));
+            assert_eq!(policy.timeout_sec, timeout_sec);
+            assert_eq!(
+                super::proof_request_status(&policy.command, cost),
+                "requested",
+                "unsafe-review-swarm required proof {id} must be brokerable"
+            );
+        }
+
+        for id in ["cargo-fmt", "cargo-check", "cargo-test", "cargo-clippy"] {
+            let tool = config
+                .tools
+                .get(id)
+                .ok_or_else(|| anyhow::anyhow!("missing required cargo tool {id}"))?;
+            assert!(tool.enabled, "{id} should be enabled");
+            assert!(tool.required, "{id} should be required");
+            assert_eq!(tool.default, super::Trigger::Always);
+        }
+        let unsafe_review = config
+            .tools
+            .get("unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("missing unsafe-review tool"))?;
+        assert!(unsafe_review.enabled);
+        assert!(unsafe_review.required);
+        let ripr = config
+            .tools
+            .get("ripr")
+            .ok_or_else(|| anyhow::anyhow!("missing ripr tool"))?;
+        assert!(ripr.enabled);
+        assert!(!ripr.required);
+        let cargo_allow = config
+            .tools
+            .get("cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("missing cargo-allow tool"))?;
+        assert!(cargo_allow.enabled);
+        assert!(!cargo_allow.required);
+
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            false,
+        );
+        let unsafe_review_sensor = plan
+            .sensors
+            .iter()
+            .find(|sensor| sensor.id == "unsafe-review")
+            .ok_or_else(|| anyhow::anyhow!("missing planned unsafe-review sensor"))?;
+        assert!(
+            unsafe_review_sensor.required,
+            "unsafe-review remains required when its trigger matches"
+        );
+        for id in ["cargo-fmt", "cargo-check", "cargo-test", "cargo-clippy"] {
+            let sensor = plan
+                .sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .ok_or_else(|| anyhow::anyhow!("missing planned cargo sensor {id}"))?;
+            assert!(sensor.run, "{id} should run in every advisory swarm pass");
+            assert!(sensor.required, "{id} should stay in the required floor");
+        }
+        let resolved_profile =
+            super::resolved_profile_artifact(&config, config.selected_profile()?);
+        assert_eq!(
+            resolved_profile["proof"]["required"]
+                .as_array()
+                .map(Vec::len),
+            Some(expected_proofs.len())
+        );
+        Ok(())
+    }
+
+    #[test]
     fn work_queue_includes_baseline_sensor_packet_policies() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();

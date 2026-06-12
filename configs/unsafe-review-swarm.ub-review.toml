@@ -1,0 +1,166 @@
+# Recommended advisory ub-review config for EffortlessMetrics/unsafe-review-swarm.
+#
+# The existing unsafe-review-swarm CI remains the blocking merge gate. This
+# config lets ub-review collect the same deterministic floor as receipts and
+# add advisory review judgment without silently changing branch protection.
+
+review_profile = "bun-ub-v0"
+profile = "gh-runner-full"
+
+[repo]
+kind = "rust"
+ledger = "docs/dogfood"
+base = "origin/main"
+head = "HEAD"
+
+[review]
+posting_engine = "artifact"
+custom_poster = false
+ban_standalone_approval = true
+require_zero_finding_audit = true
+enable_default_lanes = true
+
+[review_body]
+include_successful_lane_table = false
+include_provider_table = "on_failure"
+include_sensor_table = "on_failure"
+include_execution_summary = "none"
+summary_only_body = "post_substantive"
+
+[gate]
+required_check = "ub-review/gate"
+target_minutes = 30
+hard_timeout_minutes = 60
+post_review_on = ["opened", "ready_for_review"]
+
+[gate.blocking]
+required_proof_unproven = true
+tool_gate_missing_evidence = false
+
+[providers]
+policy = "primary-with-fallback"
+
+[[proof.required]]
+id = "check-pr"
+languages = ["rust"]
+diff_classes = ["all"]
+command = "cargo run --locked -p xtask -- check-pr"
+reason = "xtask check-pr already required by unsafe-review-swarm ci.yml."
+cost = "focused-build"
+timeout_sec = 300
+required = true
+enabled = true
+
+[tools.cargo-fmt]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 1
+timeout_sec = 120
+artifact_budget_mb = 32
+requires_lease = false
+
+[tools.cargo-check]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 4
+timeout_sec = 600
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.cargo-test]
+enabled = true
+class = "test"
+default = "always"
+required = true
+weight = 8
+timeout_sec = 900
+artifact_budget_mb = 256
+requires_lease = false
+
+[tools.cargo-clippy]
+enabled = true
+class = "build"
+default = "always"
+required = true
+weight = 6
+timeout_sec = 600
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.unsafe-review]
+enabled = true
+class = "static"
+default = "unsafe-or-native-risk-changed"
+required = true
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.ripr]
+enabled = true
+class = "static"
+default = "rust-behavior-or-tests-changed"
+required = false
+weight = 3
+timeout_sec = 240
+artifact_budget_mb = 128
+requires_lease = false
+
+[tools.cargo-allow]
+enabled = true
+class = "static"
+default = "source-exception-changed"
+required = false
+weight = 2
+timeout_sec = 120
+artifact_budget_mb = 64
+requires_lease = false
+
+[tools.tokmd]
+enabled = true
+class = "packet"
+default = "always"
+required = false
+weight = 2
+timeout_sec = 300
+artifact_budget_mb = 192
+requires_lease = false
+
+[tools.actionlint]
+enabled = true
+class = "workflow"
+default = "workflow-changed"
+required = false
+weight = 1
+timeout_sec = 60
+artifact_budget_mb = 32
+requires_lease = false
+
+[tools.semgrep]
+enabled = false
+
+[tools.osv-scanner]
+enabled = false
+
+[tools.cargo-audit]
+enabled = false
+
+[tools.cargo-deny]
+enabled = false
+
+[tools.shellcheck]
+enabled = false
+
+[tools.cppcheck]
+enabled = false
+
+[tools.zizmor]
+enabled = false
+
+[tools.gitleaks]
+enabled = false
