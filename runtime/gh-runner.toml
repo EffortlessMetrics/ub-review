@@ -46,3 +46,6 @@ proof_lanes = [
   "actionlint",
   "scoped-source-route-checks",
 ]
+
+[tool_timeouts]
+ripr = 720

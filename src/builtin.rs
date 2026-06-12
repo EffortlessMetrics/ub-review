@@ -330,7 +330,7 @@ pub(crate) fn tool(
         requires_lease,
         enabled,
         gate: None,
-        provided: ToolPolicyProvided::all(),
+        provided: ToolPolicyProvided::default(),
     }
 }
 

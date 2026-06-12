@@ -48,3 +48,6 @@ proof_lanes = [
   "targeted-mutation-when-leased",
   "sanitizer-when-leased",
 ]
+
+[tool_timeouts]
+ripr = 720
