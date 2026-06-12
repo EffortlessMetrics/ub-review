@@ -5181,7 +5181,7 @@ fn write_review_artifacts(
         suggested_issues: &suggested_issues,
         final_follow_up_tasks: final_orchestrator_plan.follow_up_tasks.len(),
     })?;
-    let review_payload_status = final_surface.review_payload_status;
+    let mut review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
     let summary_only_policy_posted = final_surface.summary_only_policy_posted;
     let mut github_review = final_surface.github_review;
@@ -5238,6 +5238,21 @@ fn write_review_artifacts(
         final_compiler_loop,
         "completed",
     )?;
+    let gate_outcome = build_gate_outcome(GateOutcomeInput {
+        args,
+        config,
+        plan,
+        terminal_state: &review.terminal_state,
+        proof_requests: &review.proof_requests,
+        proof_receipts: &review.proof_receipts,
+        tool_gate_outcomes,
+        missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
+        missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
+    });
+    if gate_outcome.conclusion == "fail" && review_payload_status == "skipped_empty_smoke" {
+        review_payload_status = "skipped_gate_failure_artifact_only";
+        review.terminal_state.review_payload_status = review_payload_status.to_owned();
+    }
     event_log.append(
         "terminal_state",
         serde_json::json!({
@@ -5277,17 +5292,6 @@ fn write_review_artifacts(
         review_dir.join("terminal_state.json"),
         serde_json::to_vec_pretty(&review.terminal_state)?,
     )?;
-    let gate_outcome = build_gate_outcome(GateOutcomeInput {
-        args,
-        config,
-        plan,
-        terminal_state: &review.terminal_state,
-        proof_requests: &review.proof_requests,
-        proof_receipts: &review.proof_receipts,
-        tool_gate_outcomes,
-        missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
-        missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
-    });
     fs::write(
         review_dir.join("gate_outcome.json"),
         serde_json::to_vec_pretty(&gate_outcome)?,
@@ -9769,6 +9773,9 @@ fn build_github_review_skip_receipt(
             review.terminal_state.summary_only_findings,
             review.terminal_state.substantive_summary_only_findings
         )
+    } else if review.terminal_state.review_payload_status == "skipped_gate_failure_artifact_only" {
+        "the gate concluded `fail` and no reviewer-postable content was prepared; blocking reasons are receipted in review/gate_outcome.json."
+            .to_owned()
     } else {
         review.terminal_state.reason.clone()
     };
@@ -29263,6 +29270,74 @@ index 1111111..2222222 100644
             summary.contains("Review payload: `skipped_empty_smoke`; post: `not_attempted_by_run`")
         );
         assert!(!has_standalone_approval_line(&artifact_body));
+        Ok(())
+    }
+
+    #[test]
+    fn failed_gate_without_post_reports_gate_failure_not_empty_smoke() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let config = Config::default();
+        let mut required_ripr = sensor_plan("ripr", "ripr", true);
+        required_ripr.required = true;
+        let plan = test_plan(vec![required_ripr]);
+        let diff = test_diff();
+        let mut args = test_run_args(out.clone());
+        args.run_pass = super::RunPass::Manual;
+        args.model_mode = ModelMode::Off;
+        args.mode = RunMode::IntelligentCi;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let run_started = Instant::now();
+        let mut run_loop_tracker = super::RunLoopTracker::new();
+
+        let gate_outcome = write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &test_box_state(),
+            &plan,
+            &[],
+            "running summary",
+            &args,
+            &event_log,
+            &run_started,
+            &mut run_loop_tracker,
+            std::time::Duration::from_secs(5),
+        )?;
+
+        assert_eq!(gate_outcome.conclusion, "fail");
+        assert!(!out.join("review/github-review.json").exists());
+        let skip: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/github-review-skip.json"))?)?;
+        let metrics: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+        let terminal: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/terminal_state.json"))?)?;
+        for (label, value) in [
+            ("skip receipt", &skip["review_payload_status"]),
+            ("metrics", &metrics["review_payload_status"]),
+            ("terminal state", &terminal["review_payload_status"]),
+        ] {
+            assert_eq!(
+                value, "skipped_gate_failure_artifact_only",
+                "{label} must name the gate failure"
+            );
+        }
+        let reason = skip["reason"].as_str().unwrap_or_default();
+        assert!(
+            reason.contains("gate concluded `fail`") && reason.contains("review/gate_outcome.json"),
+            "skip reason must name the gate failure and receipt: {reason}"
+        );
+        let summary = render_summary(&out, &plan, &diff)?;
+        assert!(
+            summary.contains(
+                "Review payload: `skipped_gate_failure_artifact_only`; \
+                 post: `not_attempted_by_run`"
+            ),
+            "running summary must carry the gate-failure status"
+        );
+        assert!(summary.contains("Gate: `fail`"));
         Ok(())
     }
 
