@@ -506,8 +506,10 @@ With `install-mode=auto`, tagged action refs first try the Linux x64 release
 archive and fall back to a source build when the asset is unavailable. Commit
 SHA refs use the source build path. This keeps first adoption token-free and
 mechanically simple while leaving the faster release-binary path available for
-tagged rollouts. The consuming workflow can cache Cargo registry
-and target directories if needed.
+tagged rollouts. Explicit `install-mode=release` is strict: missing archives,
+missing checksum receipts, checksum mismatches, and unsupported runners fail
+instead of rebuilding from source. Use `auto` when fallback is acceptable. The
+consuming workflow can cache Cargo registry and target directories if needed.
 
 ## Codex lane notes
 
