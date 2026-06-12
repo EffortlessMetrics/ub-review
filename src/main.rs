@@ -2129,10 +2129,15 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
     let require_core_tools = args.require_core_tools || env_flag("UB_REVIEW_STANDARD_IMAGE");
     let mut missing_required = Vec::new();
     let mut version_mismatches = Vec::new();
+    let mut fixes = Vec::new();
     println!("Profile: {}", profile.name);
     println!("Box: {}", box_state.summary_line());
     println!("Limits: {}", profile.limits.summary_line());
     println!("Cache root: {}", cache_root.display());
+    match std::env::current_exe() {
+        Ok(path) => println!("Binary path: {}", path.display()),
+        Err(err) => println!("Binary path: unknown ({err})"),
+    }
     println!("Profile hash: {}", profile_hash);
     if let Some(base) = args.base.as_deref() {
         match git_tree_sha(&args.root, base) {
@@ -2152,7 +2157,8 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
     println!();
     println!("Tools:");
     for tool in config.tools.values() {
-        let found = command_on_path(&tool.command);
+        let command_path = command_path(&tool.command);
+        let found = command_path.is_some();
         let status = if found { "found" } else { "missing" };
         let version = if found {
             command_version(&tool.command)
@@ -2160,31 +2166,55 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
             None
         };
         let version_text = version.as_deref().unwrap_or("-");
+        let path_text = command_path
+            .as_ref()
+            .map(|path| path.display().to_string())
+            .unwrap_or_else(|| "-".to_owned());
         let rule_hit = cache_root
             .join("rules")
             .join(&tool.id)
             .join("manifest.json")
             .exists();
         println!(
-            "  {:<16} {:<8} {:<24} version={} rule-cache={}",
+            "  {:<16} {:<8} {:<24} path={} version={} rule-cache={}",
             tool.id,
             status,
             tool.command,
+            path_text,
             version_text,
             if rule_hit { "hit" } else { "miss" }
         );
         if require_core_tools && is_core_review_tool(&tool.id) {
             if !found {
                 missing_required.push(tool.id.clone());
+                fixes.push(format!(
+                    "{} missing: {}",
+                    tool.id,
+                    doctor_tool_install_hint(&tool.id)
+                ));
             } else if let Some(expected) = expected_standard_image_tool_version(&tool.id) {
                 match version.as_deref() {
                     Some(actual) if command_version_matches(actual, expected) => {}
-                    Some(actual) => version_mismatches
-                        .push(format!("{} expected {}, got {}", tool.id, expected, actual)),
-                    None => version_mismatches.push(format!(
-                        "{} expected {}, got no --version output",
-                        tool.id, expected
-                    )),
+                    Some(actual) => {
+                        version_mismatches
+                            .push(format!("{} expected {}, got {}", tool.id, expected, actual));
+                        fixes.push(format!(
+                            "{} version drift: {}",
+                            tool.id,
+                            doctor_tool_version_fix(&tool.id, expected)
+                        ));
+                    }
+                    None => {
+                        version_mismatches.push(format!(
+                            "{} expected {}, got no --version output",
+                            tool.id, expected
+                        ));
+                        fixes.push(format!(
+                            "{} version unknown: {}",
+                            tool.id,
+                            doctor_tool_version_fix(&tool.id, expected)
+                        ));
+                    }
                 }
             }
         }
@@ -2200,15 +2230,22 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
         };
         println!("  {:<16} {:<8} env={}", provider.key(), status, env_name);
     }
+    if !fixes.is_empty() {
+        println!();
+        println!("Fixes:");
+        for fix in &fixes {
+            println!("  - {fix}");
+        }
+    }
     if !missing_required.is_empty() {
         bail!(
-            "required core review tools missing from standard image: {}",
+            "required core review tools missing from standard image: {}; see Fixes above",
             missing_required.join(", ")
         );
     }
     if !version_mismatches.is_empty() {
         bail!(
-            "required core review tool versions drifted from standard image pins: {}",
+            "required core review tool versions drifted from standard image pins: {}; see Fixes above",
             version_mismatches.join(", ")
         );
     }
@@ -17343,6 +17380,38 @@ fn expected_standard_image_tool_version(tool_id: &str) -> Option<&'static str> {
     }
 }
 
+fn doctor_tool_install_hint(tool_id: &str) -> String {
+    match tool_id {
+        "tokmd" => format!(
+            "cargo install tokmd --locked --version {} --force",
+            STANDARD_IMAGE_TOKMD_VERSION
+        ),
+        "cargo-allow" => "cargo install cargo-allow --locked".to_owned(),
+        "ripr" => format!(
+            "cargo install ripr --locked --version {} --force",
+            STANDARD_IMAGE_RIPR_VERSION
+        ),
+        "unsafe-review" => format!(
+            "cargo install unsafe-review --locked --version {} --force",
+            STANDARD_IMAGE_UNSAFE_REVIEW_VERSION
+        ),
+        "ast-grep" => "npm install -g @ast-grep/cli".to_owned(),
+        "actionlint" => "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH".to_owned(),
+        _ => format!("install `{tool_id}` and make it available on PATH"),
+    }
+}
+
+fn doctor_tool_version_fix(tool_id: &str, expected: &str) -> String {
+    match tool_id {
+        "tokmd" => format!("cargo install tokmd --locked --version {expected} --force"),
+        "ripr" => format!("cargo install ripr --locked --version {expected} --force"),
+        "unsafe-review" => {
+            format!("cargo install unsafe-review --locked --version {expected} --force")
+        }
+        _ => doctor_tool_install_hint(tool_id),
+    }
+}
+
 fn command_version_matches(actual: &str, expected: &str) -> bool {
     actual
         .split(|ch: char| ch.is_whitespace() || matches!(ch, ',' | ';' | '(' | ')'))
@@ -17418,16 +17487,19 @@ fn command_version(command: &str) -> Option<String> {
 }
 
 fn command_on_path(command: &str) -> bool {
+    command_path(command).is_some()
+}
+
+fn command_path(command: &str) -> Option<PathBuf> {
     if command.contains('/') || command.contains('\\') {
-        return Path::new(command).exists();
+        let path = PathBuf::from(command);
+        return path.exists().then_some(path);
     }
-    let Some(path) = std::env::var_os("PATH") else {
-        return false;
-    };
-    std::env::split_paths(&path).any(|dir| {
+    let path = std::env::var_os("PATH")?;
+    std::env::split_paths(&path).find_map(|dir| {
         let candidate = dir.join(command);
         if candidate.is_file() {
-            return true;
+            return Some(candidate);
         }
         #[cfg(windows)]
         {
@@ -17440,13 +17512,14 @@ fn command_on_path(command: &str) -> bool {
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_else(|| vec![".EXE".to_owned(), ".CMD".to_owned(), ".BAT".to_owned()]);
-            pathext
-                .iter()
-                .any(|ext| dir.join(format!("{command}{ext}")).is_file())
+            pathext.iter().find_map(|ext| {
+                let candidate = dir.join(format!("{command}{ext}"));
+                candidate.is_file().then_some(candidate)
+            })
         }
         #[cfg(not(windows))]
         {
-            false
+            None
         }
     })
 }
@@ -19898,6 +19971,44 @@ mod tests {
         write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
         write_witness_artifacts,
     };
+
+    #[test]
+    fn doctor_tool_install_hints_name_exact_core_tool_fixes() {
+        assert_eq!(
+            super::doctor_tool_install_hint("tokmd"),
+            "cargo install tokmd --locked --version 1.12.0 --force"
+        );
+        assert_eq!(
+            super::doctor_tool_install_hint("ripr"),
+            "cargo install ripr --locked --version 0.8.0 --force"
+        );
+        assert_eq!(
+            super::doctor_tool_install_hint("unsafe-review"),
+            "cargo install unsafe-review --locked --version 0.3.4 --force"
+        );
+        assert_eq!(
+            super::doctor_tool_install_hint("actionlint"),
+            "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
+        );
+    }
+
+    #[test]
+    fn doctor_version_fix_reinstalls_pinned_standard_image_tools() {
+        assert_eq!(
+            super::doctor_tool_version_fix("tokmd", "1.12.0"),
+            "cargo install tokmd --locked --version 1.12.0 --force"
+        );
+        assert_eq!(
+            super::doctor_tool_version_fix("unsafe-review", "0.3.4"),
+            "cargo install unsafe-review --locked --version 0.3.4 --force"
+        );
+        assert!(super::command_version_matches("ripr 0.8.0", "0.8.0"));
+        assert!(super::command_version_matches(
+            "actionlint version v1.7.12",
+            "1.7.12"
+        ));
+        assert!(!super::command_version_matches("ripr 0.7.9", "0.8.0"));
+    }
 
     #[test]
     fn docs_only_diff_is_detected() {

@@ -29,6 +29,8 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
     )?;
     assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.8.0"));
+    assert!(script.contains("UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4"));
     assert!(script.contains("prefix=\"${UB_REVIEW_TOOL_DIR:-/opt/ub-review}\""));
     assert!(script.contains("export PATH=\"$prefix/bin:\\$PATH\""));
     assert!(script.contains("export UB_REVIEW_TOOL_DIR=\"$prefix\""));
@@ -1252,6 +1254,11 @@ command = "ub-review-test-missing-tokmd"
     )?;
     assert!(output.contains("required core review tools missing from standard image"));
     assert!(output.contains("tokmd"));
+    assert!(output.contains("Fixes:"));
+    assert!(
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+    );
+    assert!(output.contains("see Fixes above"));
     Ok(())
 }
 
@@ -1273,6 +1280,8 @@ fn doctor_reports_provider_key_env_status_without_values() -> Result<()> {
     )?;
 
     assert!(output.contains("Providers:"));
+    assert!(output.contains("Binary path:"));
+    assert!(output.contains("path="));
     assert!(output.contains("minimax"));
     assert!(output.contains("present"));
     assert!(output.contains("env=UB_REVIEW_MINIMAX_API_KEY"));
@@ -1305,6 +1314,11 @@ command = "ub-review-test-missing-tokmd"
     )?;
     assert!(output.contains("required core review tools missing from standard image"));
     assert!(output.contains("tokmd"));
+    assert!(output.contains("Fixes:"));
+    assert!(
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+    );
+    assert!(output.contains("see Fixes above"));
     Ok(())
 }
 
@@ -1333,6 +1347,12 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
     assert!(output.contains("required core review tool versions drifted"));
     assert!(output.contains("tokmd expected 1.12.0"));
     assert!(output.contains("tokmd 1.10.0"));
+    assert!(output.contains("Fixes:"));
+    assert!(
+        output
+            .contains("tokmd version drift: cargo install tokmd --locked --version 1.12.0 --force")
+    );
+    assert!(output.contains("see Fixes above"));
     Ok(())
 }
 
