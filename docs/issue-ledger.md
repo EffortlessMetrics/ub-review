@@ -58,6 +58,8 @@ skipped-by-policy.
               CLI artifact test pins resolved/tool-status/gate parity
 #319  closed  tokmd version preflight fails before preset-bearing commands
               and names installed vs pinned version in the sensor receipt
+#396  closed  unsafe-review exit 1 is completed policy-finding evidence;
+              exit 2/tool errors remain sensor failures
 #320  keep  xtask missing tools = success:true skipped; add distinct
             `missing` status mirroring the main binary (pair with #321)
 #321  keep  missing-tool receipts lack install guidance; one shared hint
