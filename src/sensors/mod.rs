@@ -984,7 +984,23 @@ mod tests {
 
         diff.flags.workflow_changed = true;
         fs::create_dir_all(temp.path().join("policy"))?;
-        fs::write(temp.path().join("policy/allow.toml"), "schema = 1\n")?;
+        fs::write(
+            temp.path().join("policy/allow.toml"),
+            "schema_version = \"1\"\ntool = \"cargo-allow\"\n",
+        )?;
+        let foreign = super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
+
+        assert!(!foreign.run);
+        assert_eq!(
+            foreign.reason,
+            "policy/allow.toml is not a cargo-allow-dialect ledger; add \
+             policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)"
+        );
+
+        fs::write(
+            temp.path().join(super::CARGO_ALLOW_NATIVE_LEDGER),
+            "schema_version = \"0.1\"\npolicy = \"cargo-allow\"\n",
+        )?;
         let planned = super::plan_tool(&tool, &Profile::default(), &diff, temp.path(), true, false);
 
         assert!(planned.run);
