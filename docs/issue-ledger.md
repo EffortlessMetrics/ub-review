@@ -56,8 +56,8 @@ skipped-by-policy.
             head+tail budget + stdout_truncated marker
 #318  keep  foreign-dialect policy/allow.toml still counts as config and
             red-fails unpinned; plan-time dialect sniff + skip-with-reason
-#319  keep  tokmd version mismatch not surfaced as the failure reason at
-            run time; reuse doctor pin check as run preflight
+#319  closed  tokmd version preflight fails before preset-bearing commands
+              and names installed vs pinned version in the sensor receipt
 #320  keep  xtask missing tools = success:true skipped; add distinct
             `missing` status mirroring the main binary (pair with #321)
 #321  keep  missing-tool receipts lack install guidance; one shared hint
