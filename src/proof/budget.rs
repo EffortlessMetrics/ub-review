@@ -57,9 +57,74 @@ pub(crate) fn proof_lease_budget(profile: &Profile) -> Result<ProofLeaseBudget> 
     Ok(budget)
 }
 
+pub(crate) fn remaining_focused_proof_budget(
+    mut budget: ProofBudget,
+    existing_leases: &[ResourceLease],
+) -> ProofBudget {
+    let focused_leases = existing_leases
+        .iter()
+        .filter(|lease| focused_proof_lease_counts_budget(&lease.kind))
+        .collect::<Vec<_>>();
+    if focused_leases
+        .iter()
+        .any(|lease| lease.status == "exhausted")
+    {
+        budget.max_focused_test_files = 0;
+        budget.max_focused_tests = 0;
+        budget.max_total_seconds = 0;
+        return budget;
+    }
+
+    let granted = focused_leases
+        .iter()
+        .filter(|lease| lease.status == "granted")
+        .count();
+    let granted_seconds = focused_leases
+        .iter()
+        .filter(|lease| lease.status == "granted")
+        .map(|lease| lease.timeout_sec)
+        .sum::<u64>();
+    budget.max_focused_tests = budget.max_focused_tests.saturating_sub(granted);
+    budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted);
+    budget.max_total_seconds = budget.max_total_seconds.saturating_sub(granted_seconds);
+    budget
+}
+
+fn focused_proof_lease_counts_budget(kind: &str) -> bool {
+    matches!(kind, "focused-test" | "focused-build")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_budget() -> ProofBudget {
+        ProofBudget {
+            max_focused_test_files: 3,
+            max_focused_tests: 4,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        }
+    }
+
+    fn test_lease(kind: &str, status: &str, timeout_sec: u64) -> ResourceLease {
+        ResourceLease {
+            schema: "ub-review.resource_lease.v1".to_owned(),
+            id: format!("lease-{kind}-{status}-{timeout_sec}"),
+            kind: kind.to_owned(),
+            consumer: "proof-test".to_owned(),
+            status: status.to_owned(),
+            reason: "test lease".to_owned(),
+            cpu: 1,
+            memory_mb: 1,
+            disk_mb: 1,
+            timeout_sec,
+            network: false,
+            scratch: true,
+            worktree: None,
+            command: None,
+        }
+    }
 
     #[test]
     fn proof_budget_comes_from_runtime_profile_budgets() -> Result<()> {
@@ -276,5 +341,59 @@ mod tests {
             "runtime profile broken has proof_disk_mb=0 with focused proof enabled"
         );
         Ok(())
+    }
+
+    #[test]
+    fn focused_proof_lease_kinds_count_against_remaining_budget() {
+        assert!(focused_proof_lease_counts_budget("focused-test"));
+        assert!(focused_proof_lease_counts_budget("focused-build"));
+        assert!(!focused_proof_lease_counts_budget("cargo-test"));
+        assert!(!focused_proof_lease_counts_budget("sensor"));
+    }
+
+    #[test]
+    fn remaining_focused_proof_budget_subtracts_granted_focused_leases() {
+        let remaining = remaining_focused_proof_budget(
+            test_budget(),
+            &[
+                test_lease("focused-test", "granted", 120),
+                test_lease("focused-build", "granted", 60),
+                test_lease("cargo-test", "granted", 999),
+            ],
+        );
+
+        assert_eq!(remaining.max_focused_tests, 2);
+        assert_eq!(remaining.max_focused_test_files, 1);
+        assert_eq!(remaining.max_total_seconds, 420);
+        assert_eq!(remaining.per_command_timeout_sec, 300);
+    }
+
+    #[test]
+    fn remaining_focused_proof_budget_zeroes_after_exhausted_focused_lease() {
+        let remaining = remaining_focused_proof_budget(
+            test_budget(),
+            &[test_lease("focused-test", "exhausted", 120)],
+        );
+
+        assert_eq!(remaining.max_focused_tests, 0);
+        assert_eq!(remaining.max_focused_test_files, 0);
+        assert_eq!(remaining.max_total_seconds, 0);
+        assert_eq!(remaining.per_command_timeout_sec, 300);
+    }
+
+    #[test]
+    fn remaining_focused_proof_budget_ignores_unrelated_leases() {
+        let remaining = remaining_focused_proof_budget(
+            test_budget(),
+            &[
+                test_lease("cargo-test", "granted", 120),
+                test_lease("sensor", "exhausted", 60),
+            ],
+        );
+
+        assert_eq!(remaining.max_focused_tests, 4);
+        assert_eq!(remaining.max_focused_test_files, 3);
+        assert_eq!(remaining.max_total_seconds, 600);
+        assert_eq!(remaining.per_command_timeout_sec, 300);
     }
 }
