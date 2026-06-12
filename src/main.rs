@@ -24143,10 +24143,10 @@ index 3333333..4444444 100644
             })
         };
         let mut prepare = |_root: &Path, _out: &Path, _diff: &DiffContext| -> Result<PathBuf> {
-            Err(anyhow::anyhow!("patch did not apply"))
+            Err(anyhow::anyhow!("patch hunk #1 rejected for tests/cli.rs"))
         };
 
-        let receipt = super::run_focused_red_green_proof_task(
+        let mut receipt = super::run_focused_red_green_proof_task(
             temp.path(),
             &out,
             &diff,
@@ -24157,11 +24157,47 @@ index 3333333..4444444 100644
         )?;
 
         assert_eq!(receipt.result, "base_patch_failed");
+        assert_eq!(
+            receipt.reason,
+            "base+tests patch failed: patch hunk #1 rejected for tests/cli.rs"
+        );
         assert_eq!(receipt.commands.len(), 2);
         assert_eq!(receipt.commands[0].status, "passed");
         assert_eq!(receipt.commands[1].side, "base-plus-tests");
         assert_eq!(receipt.commands[1].status, "skipped");
+        assert_eq!(receipt.commands[1].reason, receipt.reason);
         assert!(super::proof_receipt_is_missing_evidence(&receipt));
+
+        receipt.requested_by = vec!["tests-oracle".to_owned()];
+        let routed = super::routed_evidence_for_group(
+            "proof-confirmation",
+            &["tests-oracle".to_owned()],
+            std::slice::from_ref(&receipt),
+            &[],
+        );
+        assert_eq!(routed.len(), 1);
+        assert_eq!(routed[0].result, "base_patch_failed");
+        assert_eq!(routed[0].status, "missing-evidence");
+        assert_eq!(routed[0].reason, receipt.reason);
+
+        let follow_up = FollowUpQuestionTask {
+            schema: "test".to_owned(),
+            id: "fu-base-patch-failed".to_owned(),
+            group_id: "group-base-patch-failed".to_owned(),
+            stage: "tertiary".to_owned(),
+            stage_reason: "routed proof".to_owned(),
+            evidence_need: "proof-confirmation".to_owned(),
+            disposition: "summary-only".to_owned(),
+            candidate_ids: Vec::new(),
+            observation_group_ids: Vec::new(),
+            routed_evidence: routed,
+            question: "Confirm whether routed proof evidence resolves this observation.".to_owned(),
+            status: "pending".to_owned(),
+            reason: "test".to_owned(),
+        };
+        let prompt = super::render_follow_up_question_prompt(&follow_up, &BTreeMap::new());
+        assert!(prompt.contains("base_patch_failed"));
+        assert!(prompt.contains("patch hunk #1 rejected for tests/cli.rs"));
         Ok(())
     }
 
