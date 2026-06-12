@@ -4047,6 +4047,18 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                 "skipped_empty_smoke; a blocked artifact-only run must report "
                 "skipped_gate_failure_artifact_only"
             )
+    if conclusion == "pass" and skip_path.is_file():
+        skip = load_json(skip_path)
+        if (
+            isinstance(skip, dict)
+            and skip.get("review_payload_status")
+            == "skipped_gate_failure_artifact_only"
+        ):
+            fail(
+                "gate concluded pass but github-review-skip.json claims "
+                "skipped_gate_failure_artifact_only; only failed artifact-only "
+                "gates may use that status"
+            )
     # Cross-check: every failed tool-gate outcome must carry a matching
     # blocking reason, and every tool-gate reason must point at a failed
     # outcome - the verdict and the per-tool ledger may not disagree. The
@@ -6460,8 +6472,8 @@ def self_test_gate_outcome_contract() -> None:
         lambda root=write_root(outcome(reasons=[timeout_reason()])): require_gate_outcome(root),
     )
 
-    def write_skip_root(payload_status: str) -> "pathlib.Path":
-        root = write_root(outcome())
+    def write_skip_root(payload_status: str, gate_outcome: dict) -> "pathlib.Path":
+        root = write_root(gate_outcome)
         (root / "review/github-review-skip.json").write_text(
             json.dumps(
                 {
@@ -6477,9 +6489,21 @@ def self_test_gate_outcome_contract() -> None:
     expect_self_test_failure(
         "gate-outcome failed gate with empty-smoke skip receipt",
         "must report skipped_gate_failure_artifact_only",
-        lambda root=write_skip_root("skipped_empty_smoke"): require_gate_outcome(root),
+        lambda root=write_skip_root("skipped_empty_smoke", outcome()): require_gate_outcome(root),
     )
-    require_gate_outcome(write_skip_root("skipped_gate_failure_artifact_only"))
+    require_gate_outcome(write_skip_root("skipped_gate_failure_artifact_only", outcome()))
+    passing_outcome = outcome(
+        conclusion="pass",
+        reasons=[],
+        required_proof={"matched": 1, "passed": 1, "failed": 0, "skipped": 0},
+    )
+    expect_self_test_failure(
+        "gate-outcome passing gate with gate-failure skip receipt",
+        "only failed artifact-only gates may use that status",
+        lambda root=write_skip_root(
+            "skipped_gate_failure_artifact_only", passing_outcome
+        ): require_gate_outcome(root),
+    )
 
     # Cross-check: a failed tool-gate outcome without a matching tool-gate
     # reason is a verdict/ledger disagreement.

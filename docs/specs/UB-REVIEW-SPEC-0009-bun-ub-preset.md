@@ -285,7 +285,7 @@ packet (defaults already aimed at this preset:
 - `github-review.json` XOR `github-review-skip.json`, with skip status in the
   known set (`skipped_empty_smoke`, `skipped_artifact_only_body`,
   `skipped_pass_policy`, `skipped_gate_failure_artifact_only`; the last status
-  is required when a failed gate has no posted review);
+  is allowed only when a failed gate has no posted review);
 - no standalone approval lines (profile sets
   `ban_standalone_approval = true`);
 - metrics parity (proof receipts, proof requests, observations, resource

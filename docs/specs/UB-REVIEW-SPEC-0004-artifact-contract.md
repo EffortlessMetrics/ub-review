@@ -144,8 +144,9 @@ github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_empty_smoke |
                                skipped_artifact_only_body |
                                skipped_pass_policy |
-                               skipped_gate_failure_artifact_only; failed
-                               artifact-only gates never use
+                               skipped_gate_failure_artifact_only; only failed
+                               artifact-only gates may use the last status,
+                               and those gates never use
                                skipped_empty_smoke)
 provider-preflight-status.json provider/endpoint/status/cache_usage receipts
 shared_context.md              the shared model context

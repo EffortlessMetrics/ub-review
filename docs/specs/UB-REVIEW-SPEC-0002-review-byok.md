@@ -153,7 +153,7 @@ review/github-review-skip.json   XOR with github-review.json; status one of
                                  skipped_pass_policy |
                                  skipped_gate_failure_artifact_only
                                  (src/main.rs; failed artifact-only gates
-                                 never use skipped_empty_smoke)
+                                 use this status, never skipped_empty_smoke)
 review/gate_outcome.json         schema ub-review.gate_outcome.v1;
                                  conclusion "pass" | "fail"; reasons carry
                                  receipt pointers
