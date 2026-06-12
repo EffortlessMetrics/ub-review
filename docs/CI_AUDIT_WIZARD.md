@@ -46,6 +46,8 @@ it is a separate command invocation, never a default.
   costs.json             runtime percentiles, runner-minutes, matrix expansion
   correlation.json       co-failure structure between jobs
   recommendations.json   tiered recommendations with receipts
+  runner-cancellations.json
+                         cancellation classification receipts
   audit-report.md        the human-readable report
 ```
 
@@ -170,6 +172,36 @@ Rules:
 - with `model-mode: off`, all recommendations are deterministic and
   conservative: nothing right-sizes below `adaptive`, and ambiguity resolves
   to `flag-for-human`.
+
+### runner-cancellations.json (`ub-review.ci_runner_cancellations.v1`)
+
+This artifact keeps hosted-runner cancellation diagnosis out of the gate
+verdict and out of PR prose. Each entry is artifact-only unless it changes the
+current merge decision:
+
+```json
+{
+  "classification": "runner_eviction_suspected",
+  "workflow": ".github/workflows/ub-review-gate.yml",
+  "workflow_name": "ub-review gate",
+  "job": "ub-review/gate",
+  "runs": 16,
+  "cancellations": 16,
+  "cancellation_rate": 1.0,
+  "audit_cancel_events": 0,
+  "runner_shutdown_signal": true,
+  "github_hosted": true,
+  "runner_labels": ["ubuntu-latest"],
+  "suggested_action": "rerun on self-hosted or cx profile",
+  "receipts": ["ci-audit/history.json#ub-review/gate"],
+  "evidence": ["runs-on matches GitHub-hosted runner labels"],
+  "evidence_gaps": []
+}
+```
+
+`audit_cancel_events` is supplied with `--audit-cancel-events <count>` after a
+separate read-only audit-log check. If that count is not supplied, audit-ci
+records the gap and avoids claiming audit-log proof.
 
 ## setup-ci migration PR contract
 

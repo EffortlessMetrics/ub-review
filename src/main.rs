@@ -17905,6 +17905,7 @@ struct CiWorkflowScan {
     triggers: Vec<String>,
     path_filters: Vec<String>,
     path_ignore_filters: Vec<String>,
+    cancel_in_progress: bool,
     yaml_jobs: Vec<CiWorkflowYamlJob>,
 }
 
@@ -17912,6 +17913,7 @@ struct CiWorkflowScan {
 struct CiWorkflowYamlJob {
     id: String,
     name: Option<String>,
+    runs_on: Vec<String>,
     timeout_minutes: Option<u64>,
     uses: Vec<String>,
 }
@@ -17976,6 +17978,7 @@ struct CiJobStats {
     runs: usize,
     failures: usize,
     cancellations: usize,
+    cancelled_started_without_completion: usize,
     duration_p50_sec: Option<u64>,
     duration_p90_sec: Option<u64>,
     duration_p99_sec: Option<u64>,
@@ -18104,6 +18107,34 @@ struct CiRecommendationsArtifact {
     evidence_gaps: Vec<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct CiRunnerCancellation {
+    classification: String,
+    workflow: String,
+    workflow_name: String,
+    job: String,
+    runs: usize,
+    cancellations: usize,
+    cancellation_rate: f64,
+    audit_cancel_events: Option<usize>,
+    runner_shutdown_signal: bool,
+    github_hosted: bool,
+    runner_labels: Vec<String>,
+    suggested_action: String,
+    receipts: Vec<String>,
+    evidence: Vec<String>,
+    evidence_gaps: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct CiRunnerCancellationsArtifact {
+    schema: String,
+    repo: String,
+    window_days: u32,
+    classifications: Vec<CiRunnerCancellation>,
+    evidence_gaps: Vec<String>,
+}
+
 #[derive(Debug)]
 struct CiAuditArtifacts {
     inventory: CiInventoryArtifact,
@@ -18111,6 +18142,7 @@ struct CiAuditArtifacts {
     costs: CiCostsArtifact,
     correlation: CiCorrelationArtifact,
     recommendations: CiRecommendationsArtifact,
+    runner_cancellations: CiRunnerCancellationsArtifact,
     report: String,
 }
 
@@ -18127,8 +18159,14 @@ fn cmd_audit_ci(args: AuditCiArgs) -> Result<()> {
         Some(token) => Some(fetch_ci_audit_history(&args, &repo, &token, &out_dir)?),
         None => None,
     };
-    let artifacts =
-        build_ci_audit_artifacts(&repo, args.window_days, &scans, fetch.as_ref(), Utc::now());
+    let artifacts = build_ci_audit_artifacts(
+        &repo,
+        args.window_days,
+        &scans,
+        fetch.as_ref(),
+        args.audit_cancel_events,
+        Utc::now(),
+    );
     write_ci_audit_artifacts(&out_dir, &artifacts)?;
     println!(
         "audit-ci: wrote {} ({} jobs, {} mode)",
@@ -18296,8 +18334,9 @@ fn ci_yaml_list_at(
 
 /// Targeted line-scan of a workflow file. This is intentionally not a YAML
 /// parser: it extracts only `on:` triggers (with branch refinement), workflow
-/// level `paths`/`paths-ignore`, and per-job `timeout-minutes`, `name`, and
-/// `uses` references. Everything else is an explicit evidence gap.
+/// level `paths`/`paths-ignore`, workflow cancellation concurrency, and per-job
+/// `runs-on`, `timeout-minutes`, `name`, and `uses` references. Everything else
+/// is an explicit evidence gap.
 fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
     let lines: Vec<(usize, String)> = text
         .lines()
@@ -18314,6 +18353,11 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
     let mut triggers = Vec::new();
     let mut path_filters = Vec::new();
     let mut path_ignore_filters = Vec::new();
+    let cancel_in_progress = lines.iter().any(|(_, content)| {
+        content
+            .strip_prefix("cancel-in-progress:")
+            .is_some_and(|rest| ci_yaml_unquote(rest).eq_ignore_ascii_case("true"))
+    });
     let mut yaml_jobs = Vec::new();
     let mut index = 0;
     while index < lines.len() {
@@ -18402,13 +18446,19 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                 }
                 let id = ci_yaml_unquote(line_content.trim_end_matches(':'));
                 let mut name = None;
+                let mut runs_on = Vec::new();
                 let mut timeout_minutes = None;
                 let mut uses = Vec::new();
                 let mut cursor = index + 1;
                 while cursor < lines.len() && lines[cursor].0 > expected {
                     let body = lines[cursor].1.as_str();
                     let body = body.strip_prefix("- ").unwrap_or(body);
-                    if let Some(rest) = body.strip_prefix("timeout-minutes:") {
+                    if let Some(rest) = body.strip_prefix("runs-on:") {
+                        let (items, next) = ci_yaml_list_at(&lines, cursor, lines[cursor].0, rest);
+                        runs_on.extend(items);
+                        cursor = next;
+                        continue;
+                    } else if let Some(rest) = body.strip_prefix("timeout-minutes:") {
                         timeout_minutes = rest.trim().parse::<u64>().ok().or(timeout_minutes);
                     } else if let Some(rest) = body.strip_prefix("uses:") {
                         let reference = ci_yaml_unquote(rest);
@@ -18429,6 +18479,7 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                 yaml_jobs.push(CiWorkflowYamlJob {
                     id,
                     name,
+                    runs_on,
                     timeout_minutes,
                     uses,
                 });
@@ -18443,6 +18494,7 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
         triggers,
         path_filters,
         path_ignore_filters,
+        cancel_in_progress,
         yaml_jobs,
     }
 }
@@ -18707,6 +18759,7 @@ fn compute_ci_job_stats(workflows: &[CiApiWorkflow], runs: &[CiRunWithJobs]) -> 
     let mut run_counts: BTreeMap<(u64, String), usize> = BTreeMap::new();
     let mut failure_counts: BTreeMap<(u64, String), usize> = BTreeMap::new();
     let mut cancel_counts: BTreeMap<(u64, String), usize> = BTreeMap::new();
+    let mut cancelled_without_completion_counts: BTreeMap<(u64, String), usize> = BTreeMap::new();
     for entry in runs {
         if entry.run.event != "pull_request" {
             continue;
@@ -18716,7 +18769,14 @@ fn compute_ci_job_stats(workflows: &[CiApiWorkflow], runs: &[CiRunWithJobs]) -> 
             *run_counts.entry(key.clone()).or_default() += 1;
             match job.conclusion.as_deref() {
                 Some("failure") => *failure_counts.entry(key.clone()).or_default() += 1,
-                Some("cancelled") => *cancel_counts.entry(key.clone()).or_default() += 1,
+                Some("cancelled") => {
+                    *cancel_counts.entry(key.clone()).or_default() += 1;
+                    if job.started_at.is_some() && job.completed_at.is_none() {
+                        *cancelled_without_completion_counts
+                            .entry(key.clone())
+                            .or_default() += 1;
+                    }
+                }
                 _ => {}
             }
             if let (Some(started), Some(completed)) = (job.started_at, job.completed_at) {
@@ -18804,6 +18864,10 @@ fn compute_ci_job_stats(workflows: &[CiApiWorkflow], runs: &[CiRunWithJobs]) -> 
             runs: *runs_count,
             failures: failure_counts.get(key).copied().unwrap_or(0),
             cancellations: cancel_counts.get(key).copied().unwrap_or(0),
+            cancelled_started_without_completion: cancelled_without_completion_counts
+                .get(key)
+                .copied()
+                .unwrap_or(0),
             duration_p50_sec: ci_percentile(&sorted, 50.0),
             duration_p90_sec: ci_percentile(&sorted, 90.0),
             duration_p99_sec: ci_percentile(&sorted, 99.0),
@@ -19024,11 +19088,111 @@ fn ci_match_yaml_job<'a>(
     })
 }
 
+fn ci_job_github_hosted(labels: &[String]) -> bool {
+    let labels: Vec<String> = labels
+        .iter()
+        .map(|label| label.to_ascii_lowercase())
+        .collect();
+    if labels.iter().any(|label| label == "self-hosted") {
+        return false;
+    }
+    labels.iter().any(|label| {
+        label == "ubuntu-latest"
+            || label == "windows-latest"
+            || label == "macos-latest"
+            || label.starts_with("ubuntu-")
+            || label.starts_with("windows-")
+            || label.starts_with("macos-")
+    })
+}
+
+fn ci_runner_cancellation_for_job(
+    stat: &CiJobStats,
+    scan: Option<&CiWorkflowScan>,
+    yaml: Option<&CiWorkflowYamlJob>,
+    audit_cancel_events: Option<usize>,
+) -> Option<CiRunnerCancellation> {
+    if stat.cancellations == 0 {
+        return None;
+    }
+    let github_hosted = yaml
+        .map(|yaml| ci_job_github_hosted(&yaml.runs_on))
+        .unwrap_or(false);
+    let runner_shutdown_signal = stat.cancelled_started_without_completion > 0;
+    let cancel_in_progress = scan.is_some_and(|scan| scan.cancel_in_progress);
+    let classification = if cancel_in_progress {
+        "cancelled_superseded"
+    } else if audit_cancel_events == Some(0) && github_hosted && runner_shutdown_signal {
+        "runner_eviction_suspected"
+    } else if github_hosted && stat.cancellations >= 3 {
+        "unavailable_repeated"
+    } else {
+        "unknown"
+    };
+    let suggested_action = match classification {
+        "cancelled_superseded" => {
+            "inspect the newer run for the same PR/head; do not treat this cancellation as code evidence"
+        }
+        "runner_eviction_suspected" => "rerun on self-hosted or cx profile",
+        "unavailable_repeated" => {
+            "check audit-log cancellation events and runner shutdown markers, then rerun on self-hosted or cx profile if infrastructure cancellation repeats"
+        }
+        _ => {
+            "inspect Actions run metadata, audit-log cancellation events, and runner shutdown markers before treating this as code evidence"
+        }
+    };
+    let mut evidence = Vec::new();
+    if cancel_in_progress {
+        evidence.push("workflow has cancel-in-progress: true".to_owned());
+    }
+    if runner_shutdown_signal {
+        evidence.push(format!(
+            "{} cancelled job(s) started without a completed_at timestamp",
+            stat.cancelled_started_without_completion
+        ));
+    }
+    if github_hosted {
+        evidence.push("runs-on matches GitHub-hosted runner labels".to_owned());
+    }
+    let mut evidence_gaps = Vec::new();
+    if audit_cancel_events.is_none() {
+        evidence_gaps.push(
+            "audit-log cancellation event count not supplied; pass --audit-cancel-events after a read-only audit-log check"
+                .to_owned(),
+        );
+    }
+    if yaml.is_none() {
+        evidence_gaps
+            .push("workflow YAML job not matched to API job; runner labels unknown".to_owned());
+    }
+    if !runner_shutdown_signal {
+        evidence_gaps.push("runner shutdown signal not observed in job timestamps".to_owned());
+    }
+    Some(CiRunnerCancellation {
+        classification: classification.to_owned(),
+        workflow: stat.workflow_path.clone(),
+        workflow_name: stat.workflow_name.clone(),
+        job: stat.job.clone(),
+        runs: stat.runs,
+        cancellations: stat.cancellations,
+        cancellation_rate: ci_round_rate(stat.cancellations, stat.runs),
+        audit_cancel_events,
+        runner_shutdown_signal,
+        github_hosted,
+        runner_labels: yaml.map(|yaml| yaml.runs_on.clone()).unwrap_or_default(),
+        suggested_action: suggested_action.to_owned(),
+        receipts: vec![format!("ci-audit/history.json#{}", stat.job)],
+        evidence,
+        evidence_gaps,
+    })
+}
+
 fn build_ci_audit_artifacts(
     repo: &str,
     window_days: u32,
     scans: &[CiWorkflowScan],
     fetch: Option<&CiAuditFetch>,
+    audit_cancel_events: Option<usize>,
     generated_at: DateTime<Utc>,
 ) -> CiAuditArtifacts {
     let scan_by_path: BTreeMap<&str, &CiWorkflowScan> = scans
@@ -19039,7 +19203,7 @@ fn build_ci_audit_artifacts(
         .map(|fetch| compute_ci_job_stats(&fetch.workflows, &fetch.runs))
         .unwrap_or_default();
     let mut inventory_gaps: Vec<String> = vec![
-        "permissions, secrets, and matrix structure not extracted from workflow YAML (v0 line-scan covers triggers, paths, timeout-minutes, uses)"
+        "permissions, secrets, and matrix structure not extracted from workflow YAML (v0 line-scan covers triggers, paths, runs-on, timeout-minutes, uses)"
             .to_owned(),
         "required-check status unknown: branch protection and rulesets not queried in v0"
             .to_owned(),
@@ -19138,6 +19302,7 @@ fn build_ci_audit_artifacts(
     let mut costs_jobs = Vec::new();
     let mut correlation_jobs = Vec::new();
     let mut recommendations = Vec::new();
+    let mut runner_cancellations = Vec::new();
     let workflow_has_independent_signal: BTreeSet<&str> = stats
         .iter()
         .filter(|stat| stat.independent_failures > 0)
@@ -19212,6 +19377,11 @@ fn build_ci_audit_artifacts(
                 cheaper_jobs_compared: stat.cheaper_jobs_compared.clone(),
                 window_days,
             });
+            if let Some(cancellation) =
+                ci_runner_cancellation_for_job(stat, scan, seed.yaml, audit_cancel_events)
+            {
+                runner_cancellations.push(cancellation);
+            }
         }
         let evidence = CiTierEvidence {
             job: seed.job.clone(),
@@ -19309,6 +19479,23 @@ fn build_ci_audit_artifacts(
         jobs: recommendations,
         evidence_gaps: Vec::new(),
     };
+    let mut runner_cancellation_gaps = Vec::new();
+    if !history_available {
+        runner_cancellation_gaps.push(CI_NO_TOKEN_GAP.to_owned());
+    }
+    if audit_cancel_events.is_none() {
+        runner_cancellation_gaps.push(
+            "audit-log cancellation event count not supplied; runner-eviction classification stays conservative"
+                .to_owned(),
+        );
+    }
+    let runner_cancellations = CiRunnerCancellationsArtifact {
+        schema: CI_RUNNER_CANCELLATIONS_SCHEMA.to_owned(),
+        repo: repo.to_owned(),
+        window_days,
+        classifications: runner_cancellations,
+        evidence_gaps: runner_cancellation_gaps,
+    };
     let report = render_ci_audit_report(
         repo,
         window_days,
@@ -19324,6 +19511,7 @@ fn build_ci_audit_artifacts(
         costs,
         correlation,
         recommendations,
+        runner_cancellations,
         report,
     }
 }
@@ -19487,6 +19675,11 @@ fn write_ci_audit_artifacts(dir: &Path, artifacts: &CiAuditArtifacts) -> Result<
     write_ci_audit_json(dir, "costs.json", &artifacts.costs)?;
     write_ci_audit_json(dir, "correlation.json", &artifacts.correlation)?;
     write_ci_audit_json(dir, "recommendations.json", &artifacts.recommendations)?;
+    write_ci_audit_json(
+        dir,
+        "runner-cancellations.json",
+        &artifacts.runner_cancellations,
+    )?;
     let report_path = dir.join("audit-report.md");
     fs::write(&report_path, &artifacts.report)
         .with_context(|| format!("write {}", report_path.display()))?;
@@ -20048,6 +20241,13 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
         ("correlation.json", CI_CORRELATION_SCHEMA),
     ] {
         let _: serde_json::Value = load_ci_audit_receipt(&dir, name, expected_schema)?;
+    }
+    if dir.join("runner-cancellations.json").exists() {
+        let _: serde_json::Value = load_ci_audit_receipt(
+            &dir,
+            "runner-cancellations.json",
+            CI_RUNNER_CANCELLATIONS_SCHEMA,
+        )?;
     }
     let accepts = parse_setup_ci_accepts(&args.accept)?;
     for accept in &accepts {
@@ -33268,6 +33468,15 @@ jobs:
         })
     }
 
+    fn ci_api_job_value_without_completion(name: &str, conclusion: &str) -> serde_json::Value {
+        serde_json::json!({
+            "name": name,
+            "conclusion": conclusion,
+            "started_at": "2026-01-01T00:00:00Z",
+            "completed_at": null,
+        })
+    }
+
     fn ci_fixture_workflows() -> Vec<super::CiApiWorkflow> {
         let value = serde_json::json!({
             "workflows": [
@@ -33279,6 +33488,27 @@ jobs:
 
     /// Canned run spec: (run id, [(job name, conclusion, duration seconds)]).
     type CiRunSpec<'a> = (u64, Vec<(&'a str, &'a str, u64)>);
+
+    fn ci_fixture_run_with_jobs(
+        id: u64,
+        jobs: Vec<serde_json::Value>,
+    ) -> Result<super::CiRunWithJobs> {
+        let run_value = serde_json::json!({
+            "id": id,
+            "workflow_id": 1,
+            "run_attempt": 1,
+            "conclusion": "cancelled",
+            "event": "pull_request",
+        });
+        let jobs_value = serde_json::json!({
+            "total_count": jobs.len(),
+            "jobs": jobs,
+        });
+        Ok(super::CiRunWithJobs {
+            run: serde_json::from_value(run_value).context("parse canned run json")?,
+            jobs: super::parse_ci_api_array(&jobs_value, "jobs").0,
+        })
+    }
 
     fn ci_fixture_runs(specs: &[CiRunSpec<'_>]) -> Result<Vec<super::CiRunWithJobs>> {
         let mut runs = Vec::new();
@@ -33373,9 +33603,11 @@ jobs:
             vec!["src/**".to_owned(), "Cargo.toml".to_owned()]
         );
         assert_eq!(scan.path_ignore_filters, vec!["docs/**".to_owned()]);
+        assert!(!scan.cancel_in_progress);
         let ids: Vec<&str> = scan.yaml_jobs.iter().map(|job| job.id.as_str()).collect();
         assert_eq!(ids, vec!["fmt", "test", "e2e"]);
         let fmt = scan.yaml_jobs.first().context("fmt yaml job present")?;
+        assert_eq!(fmt.runs_on, vec!["ubuntu-latest".to_owned()]);
         assert_eq!(fmt.timeout_minutes, Some(10));
         assert!(fmt.uses.contains(&"actions/checkout@v4".to_owned()));
         let e2e = scan.yaml_jobs.last().context("e2e yaml job present")?;
@@ -33999,6 +34231,7 @@ jobs:
             90,
             &scans,
             Some(&fetch),
+            None,
             super::Utc::now(),
         );
         assert_eq!(artifacts.inventory.schema, "ub-review.ci_inventory.v1");
@@ -34008,6 +34241,10 @@ jobs:
         assert_eq!(
             artifacts.recommendations.schema,
             "ub-review.ci_recommendations.v1"
+        );
+        assert_eq!(
+            artifacts.runner_cancellations.schema,
+            "ub-review.ci_runner_cancellations.v1"
         );
         let temp = tempfile::tempdir()?;
         super::write_ci_audit_artifacts(temp.path(), &artifacts)?;
@@ -34033,6 +34270,25 @@ jobs:
                 "{name} missing evidence_gaps"
             );
         }
+        let runner_cancellations: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("runner-cancellations.json"))?)?;
+        assert_eq!(
+            runner_cancellations
+                .get("schema")
+                .and_then(serde_json::Value::as_str),
+            Some("ub-review.ci_runner_cancellations.v1")
+        );
+        assert!(
+            runner_cancellations
+                .get("classifications")
+                .and_then(serde_json::Value::as_array)
+                .is_some(),
+            "runner-cancellations missing classifications"
+        );
+        assert!(
+            runner_cancellations.get("evidence_gaps").is_some(),
+            "runner-cancellations missing evidence_gaps"
+        );
         let inventory: serde_json::Value =
             serde_json::from_slice(&fs::read(temp.path().join("inventory.json"))?)?;
         let first_job = inventory
@@ -34140,23 +34396,117 @@ jobs:
     }
 
     #[test]
+    fn ci_audit_runner_cancellation_receipts_separate_superseded_from_eviction() -> Result<()> {
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/ci.yml",
+            CI_FIXTURE_WORKFLOW,
+        )];
+        let fetch = super::CiAuditFetch {
+            workflows: ci_fixture_workflows(),
+            runs: vec![ci_fixture_run_with_jobs(
+                501,
+                vec![ci_api_job_value_without_completion("fmt", "cancelled")],
+            )?],
+            pages_fetched: 1,
+            truncated: false,
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            Some(0),
+            super::Utc::now(),
+        );
+        let eviction = artifacts
+            .runner_cancellations
+            .classifications
+            .iter()
+            .find(|entry| entry.job == "fmt")
+            .context("fmt cancellation receipt")?;
+        assert_eq!(eviction.classification, "runner_eviction_suspected");
+        assert_eq!(eviction.audit_cancel_events, Some(0));
+        assert!(eviction.runner_shutdown_signal);
+        assert!(eviction.github_hosted);
+        assert!(
+            eviction
+                .suggested_action
+                .contains("self-hosted or cx profile")
+        );
+        assert!(
+            eviction
+                .receipts
+                .contains(&"ci-audit/history.json#fmt".to_owned())
+        );
+
+        let superseded_workflow = format!(
+            "concurrency:\n  group: ci-main\n  cancel-in-progress: true\n\n{CI_FIXTURE_WORKFLOW}"
+        );
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/ci.yml",
+            &superseded_workflow,
+        )];
+        let fetch = super::CiAuditFetch {
+            workflows: ci_fixture_workflows(),
+            runs: vec![ci_fixture_run_with_jobs(
+                502,
+                vec![ci_api_job_value_without_completion("fmt", "cancelled")],
+            )?],
+            pages_fetched: 1,
+            truncated: false,
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            Some(0),
+            super::Utc::now(),
+        );
+        let superseded = artifacts
+            .runner_cancellations
+            .classifications
+            .iter()
+            .find(|entry| entry.job == "fmt")
+            .context("fmt superseded cancellation receipt")?;
+        assert_eq!(superseded.classification, "cancelled_superseded");
+        assert_ne!(superseded.classification, "runner_eviction_suspected");
+        assert!(
+            superseded
+                .suggested_action
+                .contains("do not treat this cancellation as code evidence")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn ci_audit_tokenless_degrades_to_inventory_only() -> Result<()> {
         let scans = vec![super::scan_workflow_text(
             ".github/workflows/ci.yml",
             CI_FIXTURE_WORKFLOW,
         )];
-        let artifacts =
-            super::build_ci_audit_artifacts("acme/widgets", 90, &scans, None, super::Utc::now());
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            None,
+            None,
+            super::Utc::now(),
+        );
         assert_eq!(artifacts.inventory.jobs.len(), 3);
         assert!(artifacts.history.jobs.is_empty());
         assert!(artifacts.costs.jobs.is_empty());
         assert!(artifacts.correlation.jobs.is_empty());
+        assert!(artifacts.runner_cancellations.classifications.is_empty());
         // Every degraded artifact carries the no-token gap standalone.
         for gaps in [
             &artifacts.inventory.evidence_gaps,
             &artifacts.history.evidence_gaps,
             &artifacts.costs.evidence_gaps,
             &artifacts.correlation.evidence_gaps,
+            &artifacts.runner_cancellations.evidence_gaps,
         ] {
             assert!(
                 gaps.iter().any(|gap| gap.contains("no GitHub token")),
@@ -34223,6 +34573,7 @@ jobs:
             90,
             &scans,
             Some(&fetch),
+            None,
             super::Utc::now(),
         );
         let report = &artifacts.report;
@@ -34293,6 +34644,7 @@ jobs:
             github_token: None,
             github_api_url: "https://api.github.com".to_owned(),
             window_days: 90,
+            audit_cancel_events: None,
         };
         // Set-but-empty GITHUB_REPOSITORY (clap env fallback) must fall back
         // to the git origin remote, like the empty-token path.

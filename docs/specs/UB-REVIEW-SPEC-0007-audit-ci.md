@@ -92,6 +92,9 @@ costs.json             ub-review.ci_costs.v1           duration percentiles,
 correlation.json       ub-review.ci_correlation.v1     independent-failure
                                                        structure
 recommendations.json   ub-review.ci_recommendations.v1 tiered, receipted
+runner-cancellations.json
+                       ub-review.ci_runner_cancellations.v1
+                                                       cancellation diagnosis
 audit-report.md        the human-readable report
 ```
 
@@ -134,6 +137,11 @@ recommendations.json
                   job, workflow, tier, positioned_to_catch, has_caught,
                   receipts[], proposed_policy, confidence, judgment, reason,
                   report_note
+runner-cancellations.json
+                  classification, workflow, workflow_name, job, runs,
+                  cancellations, cancellation_rate, audit_cancel_events,
+                  runner_shutdown_signal, github_hosted, runner_labels,
+                  suggested_action, receipts, evidence, evidence_gaps
 ```
 
 The independent-failure rule (src/main.rs CI_AUDIT_INDEPENDENT_FAILURE_RULE):
