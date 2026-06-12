@@ -302,7 +302,7 @@ mod tests {
         // A future manifest whose `status` is no longer a string: if routing
         // ever parsed before checking the version, this would surface as a
         // misleading shape error instead of the unknown-version gap.
-        fs::write(
+        let fixture_write = fs::write(
             out_dir.join("unsafe-review-gate.json"),
             r#"{
                 "schema_version": "unsafe-review-gate/v2-future",
@@ -311,7 +311,11 @@ mod tests {
                 "tool": "unsafe-review",
                 "tool_version": "0.4.0"
             }"#,
-        )?;
+        );
+        assert!(
+            fixture_write.is_ok(),
+            "write unknown-schema unsafe-review gate fixture: {fixture_write:?}"
+        );
         let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
             Err(gap) => gap,
             Ok(_) => anyhow::bail!("expected UnknownSchema gap, got parsed artifacts"),
@@ -348,12 +352,12 @@ mod tests {
     /// Missing schema_version: valid JSON still cannot be trusted as a routed
     /// unsafe-review gate artifact.
     #[test]
-    fn unsafe_review_artifacts_missing_schema_version_is_malformed_gap() -> Result<()> {
+    fn read_unsafe_review_artifacts_missing_schema_version_returns_malformed_gap() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let sensor_dir = temp.path().join("sensors/unsafe-review");
         let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
         fs::create_dir_all(&out_dir)?;
-        fs::write(
+        let fixture_write = fs::write(
             out_dir.join("unsafe-review-gate.json"),
             r#"{
                 "dialect": "unsafe-review",
@@ -368,8 +372,18 @@ mod tests {
                 "tool": "unsafe-review",
                 "tool_version": "0.3.4"
             }"#,
-        )?;
-        let gap = match super::read_unsafe_review_artifacts(&sensor_dir) {
+        );
+        assert!(
+            fixture_write.is_ok(),
+            "write missing-schema unsafe-review gate fixture: {fixture_write:?}"
+        );
+        let parsed = super::read_unsafe_review_artifacts(&sensor_dir);
+        assert!(matches!(
+            &parsed,
+            Err(super::UnsafeReviewIngestGap::Malformed(detail))
+                if detail == "schema_version field missing"
+        ));
+        let gap = match parsed {
             Err(gap) => gap,
             Ok(_) => anyhow::bail!("expected Malformed gap, got parsed artifacts"),
         };
