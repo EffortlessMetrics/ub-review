@@ -67,7 +67,7 @@ pub(crate) fn remaining_focused_proof_budget(
         .collect::<Vec<_>>();
     if focused_leases
         .iter()
-        .any(|lease| lease.status == "exhausted")
+        .any(|lease| focused_proof_lease_blocks_budget(&lease.status))
     {
         budget.max_focused_test_files = 0;
         budget.max_focused_tests = 0;
@@ -92,6 +92,10 @@ pub(crate) fn remaining_focused_proof_budget(
 
 fn focused_proof_lease_counts_budget(kind: &str) -> bool {
     matches!(kind, "focused-test" | "focused-build")
+}
+
+fn focused_proof_lease_blocks_budget(status: &str) -> bool {
+    matches!(status, "exhausted" | "absent")
 }
 
 #[cfg(test)]
@@ -352,6 +356,14 @@ mod tests {
     }
 
     #[test]
+    fn focused_proof_lease_statuses_block_budget_when_no_command_may_run() {
+        assert!(focused_proof_lease_blocks_budget("exhausted"));
+        assert!(focused_proof_lease_blocks_budget("absent"));
+        assert!(!focused_proof_lease_blocks_budget("granted"));
+        assert!(!focused_proof_lease_blocks_budget("skipped_profile"));
+    }
+
+    #[test]
     fn remaining_focused_proof_budget_subtracts_granted_focused_leases() {
         let remaining = remaining_focused_proof_budget(
             test_budget(),
@@ -373,6 +385,19 @@ mod tests {
         let remaining = remaining_focused_proof_budget(
             test_budget(),
             &[test_lease("focused-test", "exhausted", 120)],
+        );
+
+        assert_eq!(remaining.max_focused_tests, 0);
+        assert_eq!(remaining.max_focused_test_files, 0);
+        assert_eq!(remaining.max_total_seconds, 0);
+        assert_eq!(remaining.per_command_timeout_sec, 300);
+    }
+
+    #[test]
+    fn remaining_focused_proof_budget_zeroes_after_absent_focused_lease() {
+        let remaining = remaining_focused_proof_budget(
+            test_budget(),
+            &[test_lease("focused-build", "absent", 120)],
         );
 
         assert_eq!(remaining.max_focused_tests, 0);
