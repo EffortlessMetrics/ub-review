@@ -9262,43 +9262,6 @@ where
     )
 }
 
-fn remaining_focused_proof_budget(
-    mut budget: ProofBudget,
-    existing_leases: &[ResourceLease],
-) -> ProofBudget {
-    let focused_leases = existing_leases
-        .iter()
-        .filter(|lease| focused_proof_lease_counts_budget(&lease.kind))
-        .collect::<Vec<_>>();
-    if focused_leases
-        .iter()
-        .any(|lease| lease.status == "exhausted")
-    {
-        budget.max_focused_test_files = 0;
-        budget.max_focused_tests = 0;
-        budget.max_total_seconds = 0;
-        return budget;
-    }
-
-    let granted = focused_leases
-        .iter()
-        .filter(|lease| lease.status == "granted")
-        .count();
-    let granted_seconds = focused_leases
-        .iter()
-        .filter(|lease| lease.status == "granted")
-        .map(|lease| lease.timeout_sec)
-        .sum::<u64>();
-    budget.max_focused_tests = budget.max_focused_tests.saturating_sub(granted);
-    budget.max_focused_test_files = budget.max_focused_test_files.saturating_sub(granted);
-    budget.max_total_seconds = budget.max_total_seconds.saturating_sub(granted_seconds);
-    budget
-}
-
-fn focused_proof_lease_counts_budget(kind: &str) -> bool {
-    matches!(kind, "focused-test" | "focused-build")
-}
-
 fn attach_request_metadata_to_focused_receipts(
     diff: &DiffContext,
     proof_requests: &[ProofRequest],
