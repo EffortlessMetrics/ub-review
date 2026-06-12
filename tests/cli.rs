@@ -9,6 +9,9 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
 
+const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
+     policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
+
 #[test]
 fn gh_runner_tool_installer_pins_tokmd_for_bun_ub_sensor() -> Result<()> {
     let script = fs::read_to_string(
@@ -431,14 +434,12 @@ fn active_len_tracks_view_after_resize() {
             .iter()
             .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
     );
-    let cargo_allow_foreign_reason = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
-         policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
     match (
         cargo_allow["planned_run"].as_bool(),
         cargo_allow["plan_reason"].as_str(),
     ) {
         (Some(false), Some("cargo-allow policy config not found")) => {}
-        (Some(false), Some(reason)) if reason == cargo_allow_foreign_reason => {}
+        (Some(false), Some(CARGO_ALLOW_FOREIGN_REASON)) => {}
         (Some(true), Some("source-tree exception surface changed")) => {}
         _ => bail!("unexpected cargo-allow plan state: {cargo_allow}"),
     }
@@ -485,7 +486,7 @@ fn active_len_tracks_view_after_resize() {
         cargo_allow_status["reason"].as_str(),
     ) {
         (Some(false), Some("skipped"), Some("cargo-allow policy config not found")) => {}
-        (Some(false), Some("skipped"), Some(reason)) if reason == cargo_allow_foreign_reason => {}
+        (Some(false), Some("skipped"), Some(CARGO_ALLOW_FOREIGN_REASON)) => {}
         (Some(true), Some("skipped"), Some("dry-run; sensor not executed")) => {}
         _ => bail!("unexpected cargo-allow tool status: {cargo_allow_status}"),
     }
@@ -974,6 +975,102 @@ fn active_len_tracks_view_after_resize() {
         );
     }
     Ok(())
+}
+
+#[test]
+fn cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "foreign-policy-mini"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 1 }\n")?;
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    fs::create_dir_all(repo.join("policy"))?;
+    write_file(
+        &repo.join("policy/allow.toml"),
+        "schema_version = \"1\"\ntool = \"xtask-policy\"\n",
+    )?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 2 }\n")?;
+    run(&repo, "git", &["add", "."])?;
+    run(
+        &repo,
+        "git",
+        &["commit", "-m", "touch source with foreign policy ledger"],
+    )?;
+
+    let config = temp.path().join("ub-review.toml");
+    write_file(
+        &config,
+        r#"review_profile = "bun-ub-v0"
+profile = "gh-runner"
+
+[repo]
+kind = "rust"
+ledger = ""
+base = "HEAD~1"
+head = "HEAD"
+
+[tools.cargo-allow]
+enabled = true
+class = "static"
+default = "source-exception-changed"
+required = true
+weight = 2
+timeout_sec = 120
+artifact_budget_mb = 64
+requires_lease = false
+
+[tools.cargo-allow.gate]
+scope = "on-diff"
+max_new_unsuppressed = 0
+"#,
+    )?;
+
+    let out = temp.path().join("packet");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--run-pass",
+            "opened",
+            "--no-github-summary",
+        ],
+    )?;
+
+    assert_cargo_allow_foreign_skip_artifacts(&out)
 }
 
 #[test]
@@ -4447,6 +4544,68 @@ fn json_str_field<'a>(value: &'a serde_json::Value, field: &str) -> Result<&'a s
         .get(field)
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| anyhow::anyhow!("JSON field `{field}` is not a string"))
+}
+
+fn read_json(path: &Path) -> Result<serde_json::Value> {
+    Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+
+fn tool_entry<'a>(artifact: &'a serde_json::Value, tool_id: &str) -> Result<&'a serde_json::Value> {
+    json_array_field(artifact, "tools")?
+        .iter()
+        .find(|tool| tool["id"] == tool_id)
+        .ok_or_else(|| anyhow::anyhow!("{tool_id} tool entry missing"))
+}
+
+fn tool_gate_outcome<'a>(
+    artifact: &'a serde_json::Value,
+    tool_id: &str,
+) -> Result<&'a serde_json::Value> {
+    json_array_field(artifact, "outcomes")?
+        .iter()
+        .find(|outcome| outcome["tool"] == tool_id)
+        .ok_or_else(|| anyhow::anyhow!("{tool_id} tool gate outcome missing"))
+}
+
+fn assert_cargo_allow_foreign_skip_artifacts(out: &Path) -> Result<()> {
+    let resolved_tools = read_json(&out.join("resolved-tools.json"))?;
+    let review_resolved_tools = read_json(&out.join("review/resolved-tools.json"))?;
+    assert_eq!(resolved_tools, review_resolved_tools);
+    let cargo_allow = tool_entry(&resolved_tools, "cargo-allow")?;
+    assert_eq!(cargo_allow["planned_run"], serde_json::json!(false));
+    assert_eq!(cargo_allow["plan_reason"], CARGO_ALLOW_FOREIGN_REASON);
+
+    let sensor_status = read_json(&out.join("sensors/cargo-allow/ub-review-sensor-status.json"))?;
+    assert_eq!(sensor_status["sensor"], "cargo-allow");
+    assert_eq!(sensor_status["status"], "skipped");
+    assert_eq!(sensor_status["reason"], CARGO_ALLOW_FOREIGN_REASON);
+
+    let tool_status = read_json(&out.join("tool-status.json"))?;
+    let review_tool_status = read_json(&out.join("review/tool-status.json"))?;
+    assert_eq!(tool_status, review_tool_status);
+    let cargo_allow_status = tool_entry(&tool_status, "cargo-allow")?;
+    assert_eq!(cargo_allow_status["planned_run"], serde_json::json!(false));
+    assert_eq!(cargo_allow_status["status"], "skipped");
+    assert_eq!(cargo_allow_status["reason"], CARGO_ALLOW_FOREIGN_REASON);
+
+    let tool_gate_outcomes = read_json(&out.join("tool-gate-outcomes.json"))?;
+    let review_tool_gate_outcomes = read_json(&out.join("review/tool-gate-outcomes.json"))?;
+    assert_eq!(tool_gate_outcomes, review_tool_gate_outcomes);
+    let cargo_allow_outcome = tool_gate_outcome(&tool_gate_outcomes, "cargo-allow")?;
+    assert_eq!(cargo_allow_outcome["planned_run"], serde_json::json!(false));
+    assert_eq!(cargo_allow_outcome["sensor_status"], "skipped");
+    assert_eq!(
+        cargo_allow_outcome["sensor_reason"],
+        CARGO_ALLOW_FOREIGN_REASON
+    );
+    assert_eq!(cargo_allow_outcome["outcome"], "not_evaluated");
+    assert!(
+        cargo_allow_outcome["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains(CARGO_ALLOW_FOREIGN_REASON)),
+        "tool gate reason should preserve linked cargo-allow skip reason: {cargo_allow_outcome}"
+    );
+    Ok(())
 }
 
 fn event_kinds(path: &Path) -> Result<Vec<String>> {

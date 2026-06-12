@@ -39,10 +39,9 @@ slice                                          spec    issue   proof obligation
    shell-token end-to-end rejection test
 6  DONE: tokmd below-pin failure reason        0005    #319    sensor receipt names the
    surfaced before --preset commands run               version gap, not a bare failure
-7  cargo-allow foreign-dialect ledger          0005    #318    unpinned native ledger run
-   handling (skip-with-link, not schema red)           (+cargo- skips with a linked reason
-                                                       allow
-                                                       #1470)
+7  DONE: cargo-allow foreign-dialect          0005    #318    resolved-tools, sensor status,
+   ledger skips with linked reason                    tool-status, and tool-gate
+                                                      preserve the same reason
 8  synchronize_mode: wire semantics or         0003    #306    either the knob routes
    delete with PolicyError deprecation                 behavior with tests, or setting
                                                        it yields a deprecation receipt

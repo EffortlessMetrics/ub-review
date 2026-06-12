@@ -846,3 +846,54 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_tasks.rs:266:predicate"
 owner = "ub-review/core"
 reason = "Discriminate false-negative on moved-not-modified focused build parser code (PR #413, ripr-swarm#1054): the required --locked guard is pinned by focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check, which accepts cargo check --workspace --locked and rejects cargo check --workspace. Line-keyed id; re-verify after edits near focused_build_command_spec."
+
+# PR #425 (#318 artifact-parity proof): CI ripr 0.8.0 probes integration-test
+# fixture setup and JSON lookup plumbing in tests/cli.rs. The behavior under
+# review is not those fallible setup calls; it is the emitted artifact chain for
+# a foreign policy/allow.toml. cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason
+# drives a real dry-run and assert_cargo_allow_foreign_skip_artifacts checks
+# root/review parity plus resolved-tools, sensor-status, tool-status, and
+# tool-gate-outcomes fields. Remove these when ripr skips integration-test
+# harness plumbing (ripr-swarm#1055) or when the test is rewritten.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:996:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of writing Cargo.toml in cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason. A failed fixture write fails the test; #318 behavior is pinned by assert_cargo_allow_foreign_skip_artifacts. Line-keyed id; re-verify after edits near the cargo-allow foreign-ledger CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:1003:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of configuring the temporary git repo in cargo_allow_foreign_policy_ledger_skips_with_linked_artifact_reason. A failed git setup command fails the test; #318 behavior is pinned by assert_cargo_allow_foreign_skip_artifacts. Line-keyed id; re-verify after edits near the cargo-allow foreign-ledger CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:1012:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of writing the foreign policy/allow.toml fixture. A failed fixture write fails the test; #318 behavior is pinned by assert_cargo_allow_foreign_skip_artifacts. Line-keyed id; re-verify after edits near the cargo-allow foreign-ledger CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:1019:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of committing the source change that triggers cargo-allow planning. A failed git command fails the test; #318 behavior is pinned by assert_cargo_allow_foreign_skip_artifacts. Line-keyed id; re-verify after edits near the cargo-allow foreign-ledger CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:1047:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of writing the temporary ub-review config. A failed config write fails the test; #318 behavior is pinned by assert_cargo_allow_foreign_skip_artifacts. Line-keyed id; re-verify after edits near the cargo-allow foreign-ledger CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:4555:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test JSON lookup plumbing (ripr-swarm#1055): tool_entry locates the named tool before field assertions. Missing entries fail the test, while #318 behavior is pinned by exact artifact parity and cargo-allow field assertions. Line-keyed id; re-verify after edits near tool_entry."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:4565:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test JSON lookup plumbing (ripr-swarm#1055): tool_gate_outcome locates the named gate outcome before field assertions. Missing entries fail the test, while #318 behavior is pinned by exact artifact parity and cargo-allow field assertions. Line-keyed id; re-verify after edits near tool_gate_outcome."
