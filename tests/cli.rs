@@ -431,12 +431,15 @@ fn active_len_tracks_view_after_resize() {
             .iter()
             .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
     );
+    let cargo_allow_foreign_reason = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
+         policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
     match (
         cargo_allow["planned_run"].as_bool(),
         cargo_allow["plan_reason"].as_str(),
     ) {
-        (Some(false), Some("cargo-allow policy config not found"))
-        | (Some(true), Some("source-tree exception surface changed")) => {}
+        (Some(false), Some("cargo-allow policy config not found")) => {}
+        (Some(false), Some(reason)) if reason == cargo_allow_foreign_reason => {}
+        (Some(true), Some("source-tree exception surface changed")) => {}
         _ => bail!("unexpected cargo-allow plan state: {cargo_allow}"),
     }
     assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
@@ -472,14 +475,20 @@ fn active_len_tracks_view_after_resize() {
                 && tool["reason"] == "dry-run; sensor not executed"
         })
     }));
-    assert!(tool_status["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| {
-            tool["id"] == "cargo-allow"
-                && tool["planned_run"] == false
-                && tool["status"] == "skipped"
-                && tool["reason"] == "cargo-allow policy config not found"
-        })
-    }));
+    let cargo_allow_status = tool_status["tools"]
+        .as_array()
+        .and_then(|tools| tools.iter().find(|tool| tool["id"] == "cargo-allow"))
+        .ok_or_else(|| anyhow::anyhow!("cargo-allow tool status missing"))?;
+    match (
+        cargo_allow_status["planned_run"].as_bool(),
+        cargo_allow_status["status"].as_str(),
+        cargo_allow_status["reason"].as_str(),
+    ) {
+        (Some(false), Some("skipped"), Some("cargo-allow policy config not found")) => {}
+        (Some(false), Some("skipped"), Some(reason)) if reason == cargo_allow_foreign_reason => {}
+        (Some(true), Some("skipped"), Some("dry-run; sensor not executed")) => {}
+        _ => bail!("unexpected cargo-allow tool status: {cargo_allow_status}"),
+    }
     assert!(tool_status["tools"].as_array().is_some_and(|tools| {
         tools.iter().any(|tool| {
             tool["id"] == "coverage"

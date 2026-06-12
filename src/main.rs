@@ -4115,8 +4115,24 @@ fn plan_tool(
     }
     match trigger_match(tool.default, &diff.flags) {
         Some(reason) => {
-            if tool.id == "cargo-allow" && !cargo_allow_policy_config_exists(root) {
-                return skipped(tool, "cargo-allow policy config not found", required);
+            if tool.id == "cargo-allow" {
+                match cargo_allow_policy_config_state(root) {
+                    CargoAllowConfigState::Native => {}
+                    CargoAllowConfigState::Absent => {
+                        return skipped(tool, "cargo-allow policy config not found", required);
+                    }
+                    CargoAllowConfigState::ForeignDialect(path) => {
+                        return skipped(
+                            tool,
+                            &format!(
+                                "{path} is not a cargo-allow-dialect ledger; add \
+                                 policy/cargo-allow.toml (see \
+                                 EffortlessMetrics/cargo-allow#1465)"
+                            ),
+                            required,
+                        );
+                    }
+                }
             }
             SensorPlan {
                 id: tool.id.clone(),
@@ -4144,15 +4160,51 @@ fn tool_required_for_diff(tool: &ToolPolicy, diff: &DiffContext) -> bool {
 /// config discovery (`policy/allow.toml`, `.cargo/allow.toml`, `allow.toml`).
 const CARGO_ALLOW_NATIVE_LEDGER: &str = "policy/cargo-allow.toml";
 
-fn cargo_allow_policy_config_exists(root: &Path) -> bool {
-    [
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum CargoAllowConfigState {
+    Native,
+    ForeignDialect(String),
+    Absent,
+}
+
+fn cargo_allow_policy_config_state(root: &Path) -> CargoAllowConfigState {
+    let mut foreign = None;
+    for path in [
         CARGO_ALLOW_NATIVE_LEDGER,
         "policy/allow.toml",
         ".cargo/allow.toml",
         "allow.toml",
-    ]
-    .iter()
-    .any(|path| root.join(path).is_file())
+    ] {
+        let candidate = root.join(path);
+        if !candidate.is_file() {
+            continue;
+        }
+        if cargo_allow_dialect_matches(&candidate) {
+            return CargoAllowConfigState::Native;
+        }
+        foreign.get_or_insert_with(|| path.to_owned());
+    }
+    match foreign {
+        Some(path) => CargoAllowConfigState::ForeignDialect(path),
+        None => CargoAllowConfigState::Absent,
+    }
+}
+
+fn cargo_allow_dialect_matches(path: &Path) -> bool {
+    let Ok(text) = fs::read_to_string(path) else {
+        return false;
+    };
+    let Ok(value) = toml::from_str::<toml::Value>(&text) else {
+        return false;
+    };
+    value
+        .get("policy")
+        .and_then(toml::Value::as_str)
+        .is_some_and(|policy| policy == "cargo-allow")
+        || value
+            .get("schema_version")
+            .and_then(toml::Value::as_str)
+            .is_some_and(|schema_version| schema_version == "0.1")
 }
 
 fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> SensorPlan {
