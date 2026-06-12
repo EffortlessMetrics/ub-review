@@ -3913,7 +3913,6 @@ fn synchronize_pass_honors_profile_post_review_on_policy() -> Result<()> {
         &every_pass_config,
         r#"[gate]
 post_review_on = ["opened", "reopened", "ready_for_review", "synchronize"]
-synchronize_mode = "review"
 "#,
     )?;
     run(

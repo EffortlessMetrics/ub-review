@@ -228,10 +228,11 @@ The generated `.ub-review.toml` must:
   carrying the proposed_policy text from recommendations.json;
 - round-trip through the config loader with zero `PolicyError` receipts -
   a generator that emits keys the loader strips has failed;
-- never emit reserved or inert keys: no `[providers]` section (reserved,
-  unwired - src/config.rs), no `[gate].synchronize_mode` (declared but
-  consumed by no functional code, #306). Generating documentation-only
-  knobs into a consumer repo would launder intent as behavior;
+- never emit reserved or deprecated keys: no `[providers]` section
+  (reserved, unwired - src/config.rs), no legacy
+  `[gate].synchronize_mode` (stripped with a deprecation `PolicyError`,
+  #306). Generating documentation-only knobs into a consumer repo would
+  launder intent as behavior;
 - only propose `[tools.<id>.gate]` thresholds whose receipt chain is real:
   the ripr threshold qualifies since #335 (#316 closed) — the sensor
   produces `sensors/ripr/gate-decision.json` and the threshold has blocked
@@ -322,8 +323,7 @@ human review are the mitigations, not a proof. The framing is right-sizing,
 not downgrading (docs/CI_AUDIT_WIZARD.md), and the PR must read that way.
 
 The gate it migrates repos onto has its own honest limits a maintainer
-inherits: `[gate].synchronize_mode` is inert (#306),
-the proof broker has known edge cases around lease absence and base-patch
+inherits: the proof broker has known edge cases around lease absence and base-patch
 failure routing (#312), and sensors can fail transiently and recover (the
 coverage exit-101 case, #313, stayed advisory by policy). Spec 0003 (gate
 surface) carries those in full; the migration plan doc should link them
@@ -392,7 +392,7 @@ slice 2   .ub-review.toml generation. Accepted move-to-ub-review-required
           adaptive recommendations become trigger policy; required tools
           carried over. Round-trip test: reload emits zero PolicyError
           receipts; assert the generated file contains no [providers] and
-          no synchronize_mode (#306) and proposes no threshold whose
+          no legacy synchronize_mode (#306) and proposes no threshold whose
           sensor emits no gate-decision receipt (the ripr chain is proven,
           #335; every other tool's is not).
 slice 3   gate workflow + docs generation: ub-review-gate.yml pinned by

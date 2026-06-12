@@ -42,7 +42,6 @@ hard_timeout_minutes = 60
 # whose passes may post the grouped PR review when posting=review; every other
 # pass stays artifact-only and writes a github-review-skip.json receipt.
 post_review_on = ["opened", "ready_for_review"]
-synchronize_mode = "gate-only"
 
 # Deterministic blocking markers (repo policy receipts, never model output).
 # Both default to false; flipping one promotes an already-deterministic

@@ -50,8 +50,8 @@ argument.
 - `review-direct` is a legacy alias of review-byok and never enforces.
 - Model and provider failures never redden the gate; missing evidence is
   recorded as missing evidence, never as clean evidence.
-- Posting policy is `[gate].post_review_on` alone; `synchronize_mode` is
-  inert (#306).
+- Posting policy is `[gate].post_review_on` alone; legacy
+  `synchronize_mode` is stripped with a deprecation `PolicyError` (#306).
 
 ## Known noise classes (do not emit)
 

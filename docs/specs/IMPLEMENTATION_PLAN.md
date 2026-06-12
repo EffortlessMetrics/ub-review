@@ -42,9 +42,9 @@ slice                                          spec    issue   proof obligation
 7  DONE: cargo-allow foreign-dialect          0005    #318    resolved-tools, sensor status,
    ledger skips with linked reason                    tool-status, and tool-gate
                                                       preserve the same reason
-8  synchronize_mode: wire semantics or         0003    #306    either the knob routes
-   delete with PolicyError deprecation                 behavior with tests, or setting
-                                                       it yields a deprecation receipt
+8  DONE: synchronize_mode deleted with        0003    #306    setting it yields a
+   PolicyError deprecation                             deprecation receipt; post_review_on
+                                                       remains the posting policy
 9  setup-ci v1 per the 0008 contract           0008    item28  --print-pr emits the
                                                        migration PR content; never
                                                        mutates branch protection

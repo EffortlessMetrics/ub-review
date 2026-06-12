@@ -129,7 +129,6 @@ pub(crate) struct GateConfig {
     pub(crate) target_minutes: u64,
     pub(crate) hard_timeout_minutes: u64,
     pub(crate) post_review_on: Vec<String>,
-    pub(crate) synchronize_mode: String,
     pub(crate) blocking: GateBlockingPolicy,
 }
 
@@ -555,7 +554,6 @@ impl Default for GateConfig {
             target_minutes: 30,
             hard_timeout_minutes: 60,
             post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
-            synchronize_mode: "gate-only".to_owned(),
             blocking: GateBlockingPolicy::default(),
         }
     }
@@ -1001,6 +999,14 @@ fn sanitize_gate_section(table: &mut toml::value::Table, errors: &mut Vec<Policy
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect::<Vec<_>>();
     for (key, entry) in entries {
+        if key == "synchronize_mode" {
+            errors.push(PolicyError {
+                section: "gate.synchronize_mode".to_owned(),
+                detail: "`[gate].synchronize_mode` was removed because it never controlled review posting; use `[gate].post_review_on` to list the pull_request passes that may post reviews (#306)".to_owned(),
+            });
+            gate_table.remove(&key);
+            continue;
+        }
         let mut probe = toml::value::Table::new();
         probe.insert(key.clone(), entry);
         if let Err(err) = toml::Value::Table(probe).try_into::<GateConfig>() {
@@ -1337,6 +1343,28 @@ mod tests {
         assert!(sanitize_policy_sections(&mut valid).is_empty());
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn synchronize_mode_records_deprecation_receipt_and_keeps_gate_siblings() -> anyhow::Result<()>
+    {
+        let mut value: toml::Value = toml::from_str(
+            "[gate]\nrequired_check = \"ub-review/gate\"\npost_review_on = [\"opened\", \"synchronize\"]\nsynchronize_mode = \"review\"\n",
+        )?;
+        let errors = sanitize_policy_sections(&mut value);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].section, "gate.synchronize_mode");
+        assert!(errors[0].detail.contains("removed"));
+        assert!(errors[0].detail.contains("post_review_on"));
+        assert!(errors[0].detail.contains("#306"));
+
+        let sanitized: Config = value.try_into()?;
+        assert_eq!(sanitized.gate.required_check, "ub-review/gate");
+        assert_eq!(
+            sanitized.gate.post_review_on,
+            vec!["opened".to_owned(), "synchronize".to_owned()]
+        );
         Ok(())
     }
 
