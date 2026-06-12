@@ -616,6 +616,33 @@ struct FillLedgerEntry {
     source_artifacts: Vec<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct QualityReceipt {
+    schema: &'static str,
+    run_id: String,
+    source_artifacts: Vec<String>,
+    review_payload_status: String,
+    comments_prepared: usize,
+    comments_posted: Option<usize>,
+    comments_accepted: Option<usize>,
+    comments_resolved: Option<usize>,
+    comments_off_diff_rejected: usize,
+    fills_with_signal: usize,
+    fills_total: usize,
+    llm_unavailable_events: usize,
+    fallback_used_lanes: usize,
+    reviewer_overrides: Option<usize>,
+    adopted_generated_tests: Option<usize>,
+    missing: Vec<QualityMissingInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct QualityMissingInput {
+    field: String,
+    reason: String,
+    source_artifact: String,
+}
+
 struct FillLedgerInput<'a> {
     out: &'a Path,
     diff: &'a DiffContext,
@@ -5531,7 +5558,7 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&metrics)?,
     )?;
     write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
-    write_fill_ledger_artifact(FillLedgerInput {
+    let fill_ledger = write_fill_ledger_artifact(FillLedgerInput {
         out,
         diff,
         profile,
@@ -5541,6 +5568,7 @@ fn write_review_artifacts(
         review: &review,
         metrics: &metrics,
     })?;
+    write_quality_receipt_artifact(out, &metrics, &review, &fill_ledger)?;
     write_scheduler_artifact(&review_dir, &metrics.run)?;
     fs::write(
         review_dir.join("terminal_state.json"),
@@ -6476,14 +6504,14 @@ fn build_cost_receipt(
     }
 }
 
-fn write_fill_ledger_artifact(input: FillLedgerInput<'_>) -> Result<()> {
+fn write_fill_ledger_artifact(input: FillLedgerInput<'_>) -> Result<FillLedger> {
     let out = input.out;
     let ledger = build_fill_ledger(input)?;
     fs::write(
         out.join("review").join("fill-ledger.json"),
         serde_json::to_vec_pretty(&ledger)?,
     )?;
-    Ok(())
+    Ok(ledger)
 }
 
 fn build_fill_ledger(input: FillLedgerInput<'_>) -> Result<FillLedger> {
@@ -6542,6 +6570,138 @@ fn build_fill_ledger(input: FillLedgerInput<'_>) -> Result<FillLedger> {
         ],
         entries,
     })
+}
+
+fn write_quality_receipt_artifact(
+    out: &Path,
+    metrics: &ReviewMetrics,
+    review: &ReviewArtifacts,
+    fill_ledger: &FillLedger,
+) -> Result<()> {
+    let receipt = build_quality_receipt(metrics, review, fill_ledger);
+    fs::write(
+        out.join("review").join("quality-receipt.json"),
+        serde_json::to_vec_pretty(&receipt)?,
+    )?;
+    Ok(())
+}
+
+fn build_quality_receipt(
+    metrics: &ReviewMetrics,
+    review: &ReviewArtifacts,
+    fill_ledger: &FillLedger,
+) -> QualityReceipt {
+    let fills_total = fill_ledger
+        .entries
+        .iter()
+        .filter(|entry| entry.selected)
+        .count();
+    let fills_with_signal = fill_ledger
+        .entries
+        .iter()
+        .filter(|entry| {
+            entry.selected
+                && entry
+                    .actual_signal
+                    .as_deref()
+                    .is_some_and(|signal| !signal.trim().is_empty())
+        })
+        .count();
+    let missing = vec![
+        quality_missing(
+            "comments_posted",
+            "`run` prepares review payloads; `post` owns post-result.json after GitHub submission",
+            "post-result.json",
+        ),
+        quality_missing(
+            "comments_accepted",
+            "review comment acceptance requires GitHub thread state after reviewer action",
+            "github-api-review-threads",
+        ),
+        quality_missing(
+            "comments_resolved",
+            "review comment resolution requires GitHub thread state after reviewer action",
+            "github-api-review-threads",
+        ),
+        quality_missing(
+            "reviewer_overrides",
+            "reviewer override classification requires post-merge or reviewer-action backfill",
+            "github-api-review-threads",
+        ),
+        quality_missing(
+            "adopted_generated_tests",
+            "adopted generated-test counts are not emitted by run artifacts in v1",
+            "github-api-commits",
+        ),
+    ];
+
+    QualityReceipt {
+        schema: QUALITY_RECEIPT_SCHEMA,
+        run_id: cost_run_id(metrics),
+        source_artifacts: vec![
+            "review/metrics.json".to_owned(),
+            "review/fill-ledger.json".to_owned(),
+            "review/provider-preflight-status.json".to_owned(),
+            "review/review.json".to_owned(),
+            quality_review_payload_source(metrics),
+        ],
+        review_payload_status: metrics.review_payload_status.clone(),
+        comments_prepared: metrics.github_review_comments,
+        comments_posted: None,
+        comments_accepted: None,
+        comments_resolved: None,
+        comments_off_diff_rejected: metrics.off_diff_candidates_rejected,
+        fills_with_signal,
+        fills_total,
+        llm_unavailable_events: quality_llm_unavailable_events(review),
+        fallback_used_lanes: metrics.models.model_fallbacks_used,
+        reviewer_overrides: None,
+        adopted_generated_tests: None,
+        missing,
+    }
+}
+
+fn quality_review_payload_source(metrics: &ReviewMetrics) -> String {
+    let source = if metrics.github_review_body_bytes > 0 || metrics.github_review_comments > 0 {
+        "review/github-review.json"
+    } else {
+        "review/github-review-skip.json"
+    };
+    source.to_owned()
+}
+
+fn quality_llm_unavailable_events(review: &ReviewArtifacts) -> usize {
+    let provider_events = review
+        .provider_preflights
+        .iter()
+        .filter(|receipt| quality_llm_unavailable_status(&receipt.status, receipt.http_status))
+        .count();
+    let lane_events = review
+        .model_lanes
+        .iter()
+        .filter(|receipt| quality_llm_unavailable_status(&receipt.status, receipt.http_status))
+        .count();
+    let fallback_events = review
+        .model_lanes
+        .iter()
+        .filter(|receipt| receipt.fallback_from.is_some())
+        .count();
+    provider_events + lane_events + fallback_events
+}
+
+fn quality_llm_unavailable_status(status: &str, http_status: Option<u16>) -> bool {
+    matches!(
+        status,
+        "missing_key" | "preflight_failed" | "auth_failed" | "rate_limited" | "timed_out"
+    ) || matches!(http_status, Some(500..=599))
+}
+
+fn quality_missing(field: &str, reason: &str, source_artifact: &str) -> QualityMissingInput {
+    QualityMissingInput {
+        field: field.to_owned(),
+        reason: reason.to_owned(),
+        source_artifact: source_artifact.to_owned(),
+    }
 }
 
 fn fill_sensor_entry(
@@ -30994,6 +31154,116 @@ index 1111111..2222222 100644
         let serialized = serde_json::to_value(&receipt)?;
         assert!(serialized.get("suggested_fill_seconds").is_none());
         Ok(())
+    }
+
+    #[test]
+    fn quality_receipt_records_run_completion_inputs_without_reviewer_overclaim() {
+        let mut review = test_review_artifacts();
+        review.provider_preflights = vec![super::ProviderPreflightReceipt {
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "missing_key".to_owned(),
+            reason: "provider unavailable".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            cache_usage: super::ModelCacheUsage::default(),
+        }];
+        let mut fallback_lane = model_lane_receipt("tests-oracle", "ok");
+        fallback_lane.fallback_from = Some("minimax/MiniMax-M3".to_owned());
+        review.model_lanes = vec![fallback_lane];
+        review.summary_only_findings = vec![SummaryOnlyFinding {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "inline guard rejected src/lib.rs:99; severity_allowed=true confidence_allowed=true line_valid=false concise=true body_present=true evidence_present=true repo_relative=true".to_owned(),
+            evidence: "line map receipt".to_owned(),
+        }];
+        let github_review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Findings\n\n- Focused finding.".to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 12,
+                side: "RIGHT".to_owned(),
+                body: "Focused finding.".to_owned(),
+                suggestion: None,
+            }],
+        };
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: Path::new("target/ub-review-test"),
+            diff: &test_diff(),
+            plan: &test_plan(Vec::new()),
+            review: &review,
+            github_review: Some(&github_review),
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &[],
+            final_follow_up_tasks: 0,
+            run: test_run_loop_metrics(),
+            elapsed: std::time::Duration::from_secs(1),
+        });
+        let fill_ledger = super::FillLedger {
+            schema: super::FILL_LEDGER_SCHEMA,
+            run_id: super::cost_run_id(&metrics),
+            catalog_scope: "executed_work_queue_v1",
+            source_artifacts: Vec::new(),
+            entries: vec![
+                super::FillLedgerEntry {
+                    check_id: "ripr".to_owned(),
+                    kind: "sensor".to_owned(),
+                    selected: true,
+                    selection_reason: "Rust behavior changed".to_owned(),
+                    expected_signal: Some("static mutation-exposure signal".to_owned()),
+                    actual_signal: Some("ok: ripr completed".to_owned()),
+                    time_spent_sec: 0.1,
+                    artifact_path: Some("sensors/ripr/ub-review-sensor-status.json".to_owned()),
+                    affected_merge: Some(false),
+                    source_artifacts: Vec::new(),
+                },
+                super::FillLedgerEntry {
+                    check_id: "miri".to_owned(),
+                    kind: "proof-skip".to_owned(),
+                    selected: false,
+                    selection_reason: "No unsafe/native risk.".to_owned(),
+                    expected_signal: None,
+                    actual_signal: None,
+                    time_spent_sec: 0.0,
+                    artifact_path: None,
+                    affected_merge: None,
+                    source_artifacts: Vec::new(),
+                },
+            ],
+        };
+
+        let receipt = super::build_quality_receipt(&metrics, &review, &fill_ledger);
+
+        assert_eq!(receipt.schema, super::QUALITY_RECEIPT_SCHEMA);
+        assert_eq!(receipt.run_id, fill_ledger.run_id);
+        assert_eq!(receipt.review_payload_status, "prepared");
+        assert_eq!(receipt.comments_prepared, 1);
+        assert_eq!(receipt.comments_posted, None);
+        assert_eq!(receipt.comments_accepted, None);
+        assert_eq!(receipt.comments_resolved, None);
+        assert_eq!(receipt.reviewer_overrides, None);
+        assert_eq!(receipt.adopted_generated_tests, None);
+        assert_eq!(receipt.comments_off_diff_rejected, 1);
+        assert_eq!(receipt.fills_total, 1);
+        assert_eq!(receipt.fills_with_signal, 1);
+        assert_eq!(receipt.llm_unavailable_events, 2);
+        assert_eq!(receipt.fallback_used_lanes, 1);
+        assert!(
+            receipt
+                .missing
+                .iter()
+                .any(|missing| missing.field == "comments_posted")
+        );
+        assert!(
+            receipt
+                .source_artifacts
+                .contains(&"review/github-review.json".to_owned())
+        );
     }
 
     #[test]

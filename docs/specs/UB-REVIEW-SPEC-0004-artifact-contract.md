@@ -133,6 +133,12 @@ fill-ledger.json               ub-review.fill_ledger.v1; advisory
                                optional-fill ledger derived from
                                work_queue/proof planner/sensor/proof
                                receipts; catalog_scope states v1 scope
+quality-receipt.json           ub-review.quality_receipt.v1; per-run
+                               usefulness counters derived from metrics,
+                               fill-ledger, provider/model receipts, and
+                               the prepared/skipped review payload; reviewer
+                               outcome fields stay null with missing[]
+                               receipts until a GitHub-backed backfill exists
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,
@@ -556,6 +562,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
 | review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1 | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
+| review/quality-receipt.json | stable | quality_receipt.v1; run-completion telemetry with reviewer outcome fields null in v1 | downstream automation (quality/usefulness telemetry) | required (require_quality_receipt, #339) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
 | review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |
 | review/review.md | stable | seven required headings | humans | required (require_review) |
@@ -680,7 +687,8 @@ design (docs/REVIEW_BODY_CONTRACT.md).
 
 What is artifact-only?
 The tree itself: plan, tool, sensor, cache, observation, candidate,
-follow-up, witness, proof, lease, scheduler, metrics, and cost artifacts, plus
+follow-up, witness, proof, lease, scheduler, metrics, cost, fill, and quality
+artifacts, plus
 gate_outcome.json and the skip receipt on quiet passes. The PR thread never
 carries status tables; the artifacts carry everything.
 
