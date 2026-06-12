@@ -37,8 +37,8 @@ slice                                          spec    issue   proof obligation
    base_patch_failed surfaced to requesting            base_patch_failed visible to
    lanes, manual-cost allowlist test,                  the lane that asked
    shell-token end-to-end rejection test
-6  tokmd below-pin failure reason surfaced     0005    #319    sensor receipt names the
-   when --preset is rejected                           version gap, not a bare failure
+6  DONE: tokmd below-pin failure reason        0005    #319    sensor receipt names the
+   surfaced before --preset commands run               version gap, not a bare failure
 7  cargo-allow foreign-dialect ledger          0005    #318    unpinned native ledger run
    handling (skip-with-link, not schema red)           (+cargo- skips with a linked reason
                                                        allow

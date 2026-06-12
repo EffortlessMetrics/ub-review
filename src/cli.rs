@@ -665,7 +665,7 @@ pub(crate) struct SetupCiArgs {
     /// recommendations are acceptable.
     #[arg(long = "accept")]
     pub(crate) accept: Vec<String>,
-    /// Existing repo config, consulted only for [gate].required_check.
+    /// Existing repo config, consulted only for \[gate].required_check.
     #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
     pub(crate) config: PathBuf,
     /// Open the migration PR on GitHub: create a branch, add the generated

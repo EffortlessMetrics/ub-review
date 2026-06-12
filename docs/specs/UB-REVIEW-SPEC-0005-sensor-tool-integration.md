@@ -385,8 +385,9 @@ cargo-allow#1467-#1470, and tokmd-swarm#219-#221 - with the local
 glue-visibility issues tracked here as #317 (xtask precommit buffers
 unbounded sensor stdout into receipt markdown; 450 MB ripr.md on a 26 KB
 diff), #318 (cargo-allow red-fails on a foreign-dialect ledger instead of
-skipping with a linked reason), #319 (tokmd below-pin rejection should name
-the version mismatch), #320 (precommit records missing tools as
+skipping with a linked reason), #319 (DONE locally: tokmd run preflight names
+the installed vs pinned version before preset-bearing commands run), #320
+(precommit records missing tools as
 `success: true` skips, indistinguishable from relevance skips), and #321
 (missing-tool receipts should say how to install the tool). Local
 workarounds must link the upstream issue (docs/ARCHITECTURE.md sensor-defect
@@ -426,9 +427,9 @@ This spec is docs-only. Open sensor-surface work it routes:
 #313     coverage sensor transient-failure tracking (exit 101 on the
          PR #305 red run; stayed advisory by policy)
 #317-321 xtask precommit and sensor-glue honesty: bounded receipt
-         stdout (#317), foreign-ledger skip semantics (#318), pinned-
-         version failure reasons (#319), missing-tool receipts that are
-         distinguishable (#320) and actionable (#321)
+         stdout (#317), foreign-ledger skip semantics (#318), DONE
+         pinned-version preflight reason (#319), missing-tool receipts that
+         are distinguishable (#320) and actionable (#321)
 upstream ripr-swarm#1035-1038, unsafe-review-swarm#1516-1518,
          cargo-allow#1467-1470, tokmd-swarm#219-221 - tracked to
          resolution; local glue changes must link them

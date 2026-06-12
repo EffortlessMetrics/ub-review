@@ -207,7 +207,8 @@ pub(crate) fn run_tokmd_sensor(
     plan: &Plan,
     aggregate_argv: &[String],
 ) -> Result<()> {
-    let commands = build_tokmd_sensor_commands(root, dir, plan);
+    let mut commands = vec![build_tokmd_version_preflight_command(dir, sensor)];
+    commands.extend(build_tokmd_sensor_commands(root, dir, plan));
     fs::write(
         dir.join("commands.json"),
         serde_json::to_vec_pretty(&commands_json(&commands))?,
@@ -221,7 +222,108 @@ pub(crate) fn run_tokmd_sensor(
     let mut failures = Vec::new();
     let mut timed_out = false;
     let mut exit_code = Some(0);
-    for command in &commands {
+    let preflight = commands
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("tokmd version preflight command missing"))?;
+    event_log.append(
+        "sensor_subcommand_started",
+        serde_json::json!({"sensor": sensor.id, "label": preflight.label, "argv": preflight.argv}),
+    )?;
+    match run_command_to_files(
+        root,
+        &preflight.argv,
+        &BTreeMap::new(),
+        sensor.timeout_sec,
+        &preflight.stdout_path,
+        &preflight.stderr_path,
+    ) {
+        Ok(result) => {
+            append_tokmd_subcommand_receipts(
+                &aggregate_stdout_path,
+                &aggregate_stderr_path,
+                preflight,
+                &result,
+            )?;
+            event_log.append(
+                if result.success {
+                    "sensor_subcommand_completed"
+                } else {
+                    "sensor_subcommand_failed"
+                },
+                serde_json::json!({"sensor": sensor.id, "label": preflight.label, "exit_code": result.exit_code, "timed_out": result.timed_out, "reason": result.reason}),
+            )?;
+            if let Some(reason) = tokmd_version_preflight_failure_reason(
+                &result,
+                &preflight.stdout_path,
+                &preflight.stderr_path,
+            ) {
+                write_sensor_status(
+                    out,
+                    sensor,
+                    SensorStatusWrite {
+                        status: if result.timed_out {
+                            "timed_out"
+                        } else {
+                            "failed"
+                        },
+                        argv: aggregate_argv,
+                        duration_ms: started.elapsed().as_millis(),
+                        reason: &reason,
+                        exit_code: result.exit_code,
+                        timed_out: result.timed_out,
+                    },
+                )?;
+                event_log.append(
+                    "sensor_failed",
+                    serde_json::json!({"sensor": sensor.id, "reason": reason}),
+                )?;
+                return Ok(());
+            }
+        }
+        Err(err) => {
+            let reason = format!(
+                "tokmd version preflight failed: {err:#}; pin requires {} ({} preset); fix: {}",
+                expected_standard_image_tool_version("tokmd")
+                    .unwrap_or(STANDARD_IMAGE_TOKMD_VERSION),
+                TOKMD_ANALYZE_PRESET,
+                doctor_tool_version_fix(
+                    "tokmd",
+                    expected_standard_image_tool_version("tokmd")
+                        .unwrap_or(STANDARD_IMAGE_TOKMD_VERSION)
+                )
+            );
+            append_file(
+                &aggregate_stdout_path,
+                &format!(
+                    "$ {}\nstatus=failed duration_ms=0\n\n",
+                    display_command(&preflight.argv)
+                ),
+            )?;
+            write_sensor_status(
+                out,
+                sensor,
+                SensorStatusWrite {
+                    status: "failed",
+                    argv: aggregate_argv,
+                    duration_ms: started.elapsed().as_millis(),
+                    reason: &reason,
+                    exit_code: None,
+                    timed_out: false,
+                },
+            )?;
+            event_log.append(
+                "sensor_subcommand_failed",
+                serde_json::json!({"sensor": sensor.id, "label": preflight.label, "reason": reason}),
+            )?;
+            event_log.append(
+                "sensor_failed",
+                serde_json::json!({"sensor": sensor.id, "reason": reason}),
+            )?;
+            return Ok(());
+        }
+    }
+
+    for command in commands.iter().skip(1) {
         event_log.append(
             "sensor_subcommand_started",
             serde_json::json!({"sensor": sensor.id, "label": command.label, "argv": command.argv}),
@@ -236,18 +338,12 @@ pub(crate) fn run_tokmd_sensor(
         );
         match result {
             Ok(result) => {
-                append_file(
+                append_tokmd_subcommand_receipts(
                     &aggregate_stdout_path,
-                    &format!(
-                        "$ {}\nstatus={} duration_ms={}\n\n",
-                        display_command(&command.argv),
-                        result.reason,
-                        result.duration_ms
-                    ),
+                    &aggregate_stderr_path,
+                    command,
+                    &result,
                 )?;
-                append_existing_file(&aggregate_stdout_path, &command.stdout_path)?;
-                append_file(&aggregate_stdout_path, "\n")?;
-                append_existing_file(&aggregate_stderr_path, &command.stderr_path)?;
                 if result.timed_out {
                     timed_out = true;
                 }
@@ -326,6 +422,73 @@ pub(crate) fn run_tokmd_sensor(
         serde_json::json!({"sensor": sensor.id, "reason": reason}),
     )?;
     Ok(())
+}
+
+fn build_tokmd_version_preflight_command(dir: &Path, sensor: &SensorPlan) -> SensorSubcommand {
+    SensorSubcommand {
+        label: "version-preflight".to_owned(),
+        argv: vec![sensor.command.clone(), "--version".to_owned()],
+        stdout_path: dir.join("version.stdout.txt"),
+        stderr_path: dir.join("version.stderr.txt"),
+    }
+}
+
+fn append_tokmd_subcommand_receipts(
+    aggregate_stdout_path: &Path,
+    aggregate_stderr_path: &Path,
+    command: &SensorSubcommand,
+    result: &CommandStatus,
+) -> Result<()> {
+    append_file(
+        aggregate_stdout_path,
+        &format!(
+            "$ {}\nstatus={} duration_ms={}\n\n",
+            display_command(&command.argv),
+            result.reason,
+            result.duration_ms
+        ),
+    )?;
+    append_existing_file(aggregate_stdout_path, &command.stdout_path)?;
+    append_file(aggregate_stdout_path, "\n")?;
+    append_existing_file(aggregate_stderr_path, &command.stderr_path)?;
+    Ok(())
+}
+
+fn tokmd_version_preflight_failure_reason(
+    result: &CommandStatus,
+    stdout_path: &Path,
+    stderr_path: &Path,
+) -> Option<String> {
+    let expected = expected_standard_image_tool_version("tokmd")?;
+    let fix = doctor_tool_version_fix("tokmd", expected);
+    if !result.success {
+        return Some(format!(
+            "tokmd version preflight failed: {}; pin requires {} ({} preset); fix: {}",
+            result.reason, expected, TOKMD_ANALYZE_PRESET, fix
+        ));
+    }
+    let actual = first_non_empty_line_from_file(stdout_path)
+        .or_else(|| first_non_empty_line_from_file(stderr_path));
+    match actual {
+        Some(actual) if command_version_matches(&actual, expected) => None,
+        Some(actual) => Some(format!(
+            "tokmd version drift: {} installed, pin requires {} ({} preset); fix: {}",
+            actual, expected, TOKMD_ANALYZE_PRESET, fix
+        )),
+        None => Some(format!(
+            "tokmd version preflight produced no --version output; pin requires {} ({} preset); fix: {}",
+            expected, TOKMD_ANALYZE_PRESET, fix
+        )),
+    }
+}
+
+fn first_non_empty_line_from_file(path: &Path) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()?
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| line.chars().take(160).collect())
 }
 
 pub(crate) fn sensor_run_input_path(sensor_dir: &Path, name: &str) -> String {
@@ -697,6 +860,8 @@ pub(crate) fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
     match sensor.id.as_str() {
         "tokmd" => outputs.extend([
             "commands.json".to_owned(),
+            "version.stdout.txt".to_owned(),
+            "version.stderr.txt".to_owned(),
             "analyze.md".to_owned(),
             "analyze.json".to_owned(),
             "cockpit.md".to_owned(),
@@ -760,7 +925,7 @@ pub(crate) fn display_command(argv: &[String]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use anyhow::Result;
 
@@ -1143,6 +1308,103 @@ mod tests {
                 .any(|command| command.argv.iter().any(|arg| arg.ends_with("context.md")))
         );
         Ok(())
+    }
+
+    #[test]
+    fn tokmd_sensor_fails_fast_on_stale_installed_version() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        fs::create_dir_all(&root)?;
+        let fake_tokmd = write_fake_tokmd_command(&fake_bin, "1.11.1")?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("tokmd", &fake_tokmd.display().to_string(), true);
+        sensor.timeout_sec = 5;
+        let plan = test_plan(vec![sensor.clone()]);
+
+        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+
+        let sensor_dir = out.join("sensors/tokmd");
+        let status: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("ub-review-sensor-status.json"))?)?;
+        assert_eq!(status["status"], "failed");
+        let reason = status["reason"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("status reason missing"))?;
+        assert!(reason.contains("tokmd version drift"));
+        assert!(reason.contains("tokmd 1.11.1 installed"));
+        assert!(reason.contains("pin requires 1.12.0 (bun-ub preset)"));
+        assert!(reason.contains("cargo install tokmd --locked --version 1.12.0 --force"));
+        let commands: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("commands.json"))?)?;
+        let commands = commands
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("tokmd commands.json is not an array"))?;
+        assert_eq!(
+            commands.first().and_then(|value| value["label"].as_str()),
+            Some("version-preflight")
+        );
+        assert!(sensor_dir.join("version.stdout.txt").is_file());
+        assert!(
+            !sensor_dir.join("analyze.md").exists(),
+            "stale tokmd must fail before preset-bearing analyze commands run"
+        );
+        let aggregate_stdout = fs::read_to_string(sensor_dir.join("stdout.txt"))?;
+        assert!(aggregate_stdout.contains("--version"));
+        assert!(aggregate_stdout.contains("tokmd 1.11.1"));
+        Ok(())
+    }
+
+    fn write_fake_tokmd_command(dir: &Path, version: &str) -> Result<PathBuf> {
+        fs::create_dir_all(dir)?;
+        #[cfg(windows)]
+        {
+            let source = dir.join("fake_tokmd.rs");
+            fs::write(
+                &source,
+                format!(
+                    r#"use std::env;
+
+const VERSION: &str = {version:?};
+
+fn main() {{
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    if args == ["--version"] {{
+        println!("tokmd {{VERSION}}");
+        return;
+    }}
+    eprintln!("unexpected tokmd subcommand: {{}}", args.join(" "));
+    std::process::exit(42);
+}}
+"#
+                ),
+            )?;
+            let exe = dir.join("fake_tokmd.exe");
+            let source_arg = source.display().to_string();
+            let exe_arg = exe.display().to_string();
+            run_test_command(dir, "rustc", &[source_arg.as_str(), "-o", exe_arg.as_str()])?;
+            Ok(exe)
+        }
+        #[cfg(not(windows))]
+        {
+            let script = dir.join("fake_tokmd");
+            fs::write(
+                &script,
+                format!(
+                    "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"tokmd {version}\"; exit 0; fi\necho \"unexpected tokmd subcommand: $*\" >&2\nexit 42\n"
+                ),
+            )?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let mut permissions = fs::metadata(&script)?.permissions();
+                permissions.set_mode(0o755);
+                fs::set_permissions(&script, permissions)?;
+            }
+            Ok(script)
+        }
     }
 
     #[test]
