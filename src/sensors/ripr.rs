@@ -20,7 +20,8 @@ pub(crate) const RIPR_GAP_DETAIL_CAP: usize = 200;
 
 /// Project ripr's full `--format json` output into the bounded per-finding
 /// detail artifact (#347): gap-class findings only, capped, each entry
-/// carrying the id, classification, probe location/expression, and the
+/// carrying the id, classification, probe location/expression, suppression
+/// state, threshold contribution, an artifact pointer, and the
 /// reach/discriminate summaries a block diagnosis needs. Pure, so the
 /// projection is testable without the ripr binary.
 pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) -> serde_json::Value {
@@ -52,8 +53,9 @@ pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) ->
     let total = gaps.len();
     let entries: Vec<serde_json::Value> = gaps
         .iter()
+        .enumerate()
         .take(RIPR_GAP_DETAIL_CAP)
-        .map(|finding| {
+        .map(|(index, finding)| {
             let probe = finding.get("probe");
             let field = |outer: Option<&serde_json::Value>, key: &str| -> String {
                 outer
@@ -73,15 +75,28 @@ pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) ->
                     300,
                 )
             };
+            let line = probe
+                .and_then(|value| value.get("line"))
+                .and_then(serde_json::Value::as_u64);
+            let suppression_state = ripr_suppression_state(finding);
+            let threshold_contribution = ripr_threshold_contribution(suppression_state);
+            let file = field(probe, "file");
             serde_json::json!({
                 "id": field(Some(finding), "id"),
                 "classification": field(Some(finding), "classification"),
+                "exposure_gap_class": field(Some(finding), "classification"),
                 "family": field(probe, "family"),
-                "file": field(probe, "file"),
-                "line": probe
-                    .and_then(|value| value.get("line"))
-                    .and_then(serde_json::Value::as_u64),
+                "file": file,
+                "path": file,
+                "line": line,
+                "range": {
+                    "start_line": line,
+                    "end_line": line,
+                },
                 "expression": clip(&field(probe, "expression"), 200),
+                "suppression_state": suppression_state,
+                "threshold_contribution": threshold_contribution,
+                "artifact_pointer": format!("sensors/ripr/exposure-gaps.json#/entries/{index}"),
                 "reach": stage("reach"),
                 "discriminate": stage("discriminate"),
             })
@@ -94,6 +109,42 @@ pub(crate) fn ripr_exposure_gap_details_from_value(value: &serde_json::Value) ->
         "truncated": total > RIPR_GAP_DETAIL_CAP,
         "entries": entries,
     })
+}
+
+fn ripr_suppression_state(finding: &serde_json::Value) -> &'static str {
+    if finding
+        .get("suppressed")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        return "suppressed";
+    }
+    for key in ["suppression_state", "suppressionState"] {
+        if finding
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|value| value == "suppressed")
+        {
+            return "suppressed";
+        }
+    }
+    if finding
+        .get("suppression")
+        .and_then(|value| value.get("state").or_else(|| value.get("status")))
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| value == "suppressed")
+    {
+        return "suppressed";
+    }
+    "unsuppressed"
+}
+
+fn ripr_threshold_contribution(suppression_state: &str) -> u64 {
+    if suppression_state == "suppressed" {
+        0
+    } else {
+        1
+    }
 }
 
 /// Run the second, detail-producing ripr pass and persist
@@ -198,8 +249,11 @@ mod tests {
 
     #[test]
     fn ripr_exposure_gap_details_project_filter_cap_and_unavailable_shape() -> Result<()> {
+        assert_eq!(super::ripr_threshold_contribution("unsuppressed"), 1);
+        assert_eq!(super::ripr_threshold_contribution("suppressed"), 0);
+
         let finding = |id: &str, class: &str| {
-            serde_json::json!({
+            let mut value = serde_json::json!({
                 "id": id,
                 "classification": class,
                 "probe": {
@@ -212,14 +266,18 @@ mod tests {
                     "reach": {"summary": "Related tests appear to reach changed owner"},
                     "discriminate": {"summary": "Only relational oracle found"},
                 },
-            })
+            });
+            if id.contains("suppressed") {
+                value["suppressed"] = serde_json::Value::Bool(true);
+            }
+            value
         };
         let value = serde_json::json!({
             "findings": [
                 finding("probe:a:1:call_deletion", "weakly_exposed"),
                 finding("probe:b:2:side_effect", "exposed"),
                 finding("probe:c:3:field_construction", "no_static_path"),
-                finding("probe:d:4:error_path", "reachable_unrevealed"),
+                finding("probe:suppressed:4:error_path", "reachable_unrevealed"),
             ],
         });
         let detail = super::ripr_exposure_gap_details_from_value(&value);
@@ -232,10 +290,26 @@ mod tests {
         assert_eq!(entries.len(), 3);
         assert_eq!(entries[0]["id"], "probe:a:1:call_deletion");
         assert_eq!(entries[0]["classification"], "weakly_exposed");
+        assert_eq!(entries[0]["exposure_gap_class"], "weakly_exposed");
         assert_eq!(entries[0]["family"], "call_deletion");
         assert_eq!(entries[0]["file"], "./src/config.rs");
+        assert_eq!(entries[0]["path"], "./src/config.rs");
         assert_eq!(entries[0]["line"], 40);
+        assert_eq!(entries[0]["range"]["start_line"], 40);
+        assert_eq!(entries[0]["range"]["end_line"], 40);
         assert_eq!(entries[0]["expression"], "pub(crate) struct IssuesConfig {");
+        assert_eq!(entries[0]["suppression_state"], "unsuppressed");
+        assert_eq!(entries[0]["threshold_contribution"], 1);
+        assert_eq!(
+            entries[0]["artifact_pointer"],
+            "sensors/ripr/exposure-gaps.json#/entries/0"
+        );
+        assert_eq!(entries[2]["suppression_state"], "suppressed");
+        assert_eq!(entries[2]["threshold_contribution"], 0);
+        assert_eq!(
+            entries[2]["artifact_pointer"],
+            "sensors/ripr/exposure-gaps.json#/entries/2"
+        );
         assert!(
             entries[0]["reach"]
                 .as_str()

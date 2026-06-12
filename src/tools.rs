@@ -281,6 +281,9 @@ pub(crate) fn tool_gate_outcome_entry(
     if !matches!(gate_decision_state, ToolGateDecisionState::Missing) {
         source_artifacts.push(gate_decision_path);
     }
+    if tool.id == "ripr" && !matches!(gate_decision_state, ToolGateDecisionState::Missing) {
+        source_artifacts.push("sensors/ripr/exposure-gaps.json".to_owned());
+    }
     ToolGateOutcomeEntry {
         schema: TOOL_GATE_OUTCOME_SCHEMA,
         tool: tool.id.clone(),
@@ -619,6 +622,13 @@ mod tests {
             assert_eq!(ripr_outcome.outcome, expected_outcome, "gaps={gaps}");
             assert_eq!(ripr_outcome.evaluated, expected_evaluated, "gaps={gaps}");
             assert_eq!(ripr_outcome.metrics.new_unsuppressed, Some(gaps));
+            assert!(
+                ripr_outcome
+                    .source_artifacts
+                    .iter()
+                    .any(|artifact| artifact == "sensors/ripr/exposure-gaps.json"),
+                "ripr tool-gate outcome should point to exposure-gap detail when present"
+            );
         }
         Ok(())
     }
