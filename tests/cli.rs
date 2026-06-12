@@ -405,24 +405,40 @@ fn active_len_tracks_view_after_resize() {
                 })
         })
     }));
-    assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| {
-            tool["id"] == "cargo-allow"
-                && tool["class"] == "static"
-                && tool["required_if"] == "source-exception-changed"
-                && tool["required_reason"] == "source-tree exception surface changed"
-                && tool["planned_run"] == false
-                && tool["plan_reason"] == "cargo-allow policy config not found"
-                && tool["artifact_paths"].as_array().is_some_and(|paths| {
-                    paths
-                        .iter()
-                        .any(|path| path == "sensors/cargo-allow/cargo-allow.receipt.json")
-                        && paths
-                            .iter()
-                            .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
-                })
-        })
-    }));
+    let tools = resolved_tools["tools"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("resolved tools must be an array"))?;
+    let cargo_allow = tools
+        .iter()
+        .find(|tool| tool["id"] == "cargo-allow")
+        .ok_or_else(|| anyhow::anyhow!("cargo-allow resolved tool missing"))?;
+    assert_eq!(cargo_allow["class"], "static");
+    assert_eq!(cargo_allow["required_if"], "source-exception-changed");
+    assert_eq!(
+        cargo_allow["required_reason"],
+        "source-tree exception surface changed"
+    );
+    let cargo_allow_paths = cargo_allow["artifact_paths"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("cargo-allow artifact_paths must be an array"))?;
+    assert!(
+        cargo_allow_paths
+            .iter()
+            .any(|path| path == "sensors/cargo-allow/cargo-allow.receipt.json")
+    );
+    assert!(
+        cargo_allow_paths
+            .iter()
+            .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
+    );
+    match (
+        cargo_allow["planned_run"].as_bool(),
+        cargo_allow["plan_reason"].as_str(),
+    ) {
+        (Some(false), Some("cargo-allow policy config not found"))
+        | (Some(true), Some("source-tree exception surface changed")) => {}
+        _ => bail!("unexpected cargo-allow plan state: {cargo_allow}"),
+    }
     assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
         tools.iter().any(|tool| {
             tool["id"] == "coverage"
