@@ -384,7 +384,10 @@ pub(crate) fn build_sensor_argv(
             root.display().to_string(),
             "--base".to_owned(),
             plan.base.clone(),
-            "--out".to_owned(),
+            // `first-pr` writes its bundle with `--out-dir`; `--out` is for
+            // other unsafe-review subcommands and does not place receipts in
+            // this sensor directory.
+            "--out-dir".to_owned(),
             dir.join(UNSAFE_REVIEW_OUTPUT_SUBDIR).display().to_string(),
         ],
         "cargo-allow" => {
@@ -713,7 +716,7 @@ pub(crate) fn sensor_outputs(sensor: &SensorPlan) -> Vec<String> {
             "exposure-gaps.json".to_owned(),
         ]),
         // unsafe-review 0.3.4 structured output bundle (#359). Filenames match
-        // the REAL `first-pr --out` manifest's `artifacts` map (note
+        // the REAL `first-pr --out-dir` manifest's `artifacts` map (note
         // `receipt-audit.md` and `pr-summary.md` are Markdown, not JSON). The
         // gate file and the artifact files it points to are all written under
         // the UNSAFE_REVIEW_OUTPUT_SUBDIR subdirectory of the sensor dir.
@@ -1297,7 +1300,7 @@ mod tests {
     }
 
     #[test]
-    fn unsafe_review_sensor_argv_includes_out_flag() -> Result<()> {
+    fn unsafe_review_sensor_argv_uses_first_pr_out_dir_flag() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let root = temp.path();
         let out = root.join("out");
@@ -1309,18 +1312,24 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("unsafe-review sensor missing"))?;
         let dir = out.join("sensors/unsafe-review");
         let argv = super::build_sensor_argv(root, &dir, sensor, &plan);
-        assert_eq!(argv[0], "unsafe-review");
-        assert_eq!(argv[1], "first-pr");
-        // --out must be present and point at the expected subdir
-        let out_idx = argv
-            .iter()
-            .position(|arg| arg == "--out")
-            .ok_or_else(|| anyhow::anyhow!("--out flag missing from unsafe-review argv"))?;
         assert_eq!(
-            argv[out_idx + 1],
-            dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR)
-                .display()
-                .to_string()
+            argv,
+            vec![
+                "unsafe-review".to_owned(),
+                "first-pr".to_owned(),
+                "--root".to_owned(),
+                root.display().to_string(),
+                "--base".to_owned(),
+                plan.base.clone(),
+                "--out-dir".to_owned(),
+                dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR)
+                    .display()
+                    .to_string(),
+            ]
+        );
+        assert!(
+            !argv.iter().any(|arg| arg == "--out"),
+            "--out must not be used for unsafe-review first-pr: {argv:?}"
         );
         Ok(())
     }
