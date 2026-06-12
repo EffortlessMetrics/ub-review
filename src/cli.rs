@@ -645,6 +645,12 @@ pub(crate) struct AuditCiArgs {
     /// History window in days.
     #[arg(long = "window-days", default_value_t = 90)]
     pub(crate) window_days: u32,
+    /// Count of matching audit-log cancellation events from an external
+    /// read-only audit-log check. When supplied, audit-ci can separate
+    /// user/API cancellation from suspected runner eviction without querying
+    /// audit logs itself.
+    #[arg(long = "audit-cancel-events")]
+    pub(crate) audit_cancel_events: Option<usize>,
 }
 
 #[derive(Debug, Args)]

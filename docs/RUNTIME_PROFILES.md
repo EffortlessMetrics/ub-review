@@ -14,6 +14,14 @@ how much local work ub-review may centrally schedule while preparing evidence
 for a PR review. `gh-runner` is the zero-config compatibility alias for
 `gh-runner-standard`.
 
+Runner profile is part of the product surface. GitHub-hosted runners are the
+boring adoption default and are suitable for quick, normal, and advisory runs.
+Merge-critical stacks, long proof, and heavy optional fills should use a `cx*`
+or other self-hosted profile once hosted-runner cancellation or eviction starts
+to obscure the code signal. A cancelled hosted run is infrastructure evidence,
+not a code failure; audit-ci records that diagnosis in
+`ci-audit/runner-cancellations.json`.
+
 ## Shared trusted-repository defaults
 
 Trusted repositories use two passes per PR by default:

@@ -106,6 +106,8 @@ history.json           ub-review.ci_history.v1
 costs.json             ub-review.ci_costs.v1
 correlation.json       ub-review.ci_correlation.v1
 recommendations.json   ub-review.ci_recommendations.v1
+runner-cancellations.json
+                       ub-review.ci_runner_cancellations.v1
 audit-report.md        the human-readable report
 ```
 

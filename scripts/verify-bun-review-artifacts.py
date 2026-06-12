@@ -25,6 +25,12 @@ RUN_PASS_VALUES = {
     "pull_request_other",
     "manual",
 }
+CI_RUNNER_CANCELLATION_CLASSIFICATIONS = {
+    "cancelled_superseded",
+    "runner_eviction_suspected",
+    "unavailable_repeated",
+    "unknown",
+}
 SKIPPED_REVIEW_PAYLOAD_STATUSES = {
     "skipped_empty_smoke",
     "skipped_artifact_only_body",
@@ -204,6 +210,112 @@ def require_file(path: pathlib.Path) -> pathlib.Path:
     if not path.is_file():
         fail(f"missing file {path}")
     return path
+
+
+def ci_audit_runner_cancellations_path(root: pathlib.Path) -> pathlib.Path:
+    nested = root / "ci-audit/runner-cancellations.json"
+    if nested.exists() or root.name != "ci-audit":
+        return nested
+    return root / "runner-cancellations.json"
+
+
+def require_string(container: dict, label: str, field: str, *, nonempty: bool = False) -> str:
+    value = container.get(field)
+    if not isinstance(value, str):
+        fail(f"{label}.{field} is not a string: {value!r}")
+    if nonempty and not value.strip():
+        fail(f"{label}.{field} is empty")
+    return value
+
+
+def require_string_list(container: dict, label: str, field: str, *, nonempty: bool = False) -> list[str]:
+    value = container.get(field)
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        fail(f"{label}.{field} is not a string array: {value!r}")
+    if nonempty and not value:
+        fail(f"{label}.{field} is empty")
+    return value
+
+
+def require_ci_audit_runner_cancellations(root: pathlib.Path, *, required: bool = False) -> None:
+    path = ci_audit_runner_cancellations_path(root)
+    if not path.exists():
+        if required:
+            fail(f"missing {path}")
+        return
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail(f"{path} is not an object")
+    if artifact.get("schema") != "ub-review.ci_runner_cancellations.v1":
+        fail(
+            f"{path} has wrong schema: expected "
+            "ub-review.ci_runner_cancellations.v1"
+        )
+    require_string(artifact, str(path), "repo", nonempty=True)
+    require_non_negative_int(artifact, str(path), "window_days")
+    classifications = artifact.get("classifications")
+    if not isinstance(classifications, list):
+        fail(f"{path} classifications is not an array")
+    require_string_list(artifact, str(path), "evidence_gaps")
+    for index, entry in enumerate(classifications):
+        label = f"{path} classifications[{index}]"
+        if not isinstance(entry, dict):
+            fail(f"{label} is not an object")
+        classification = require_string(
+            entry, label, "classification", nonempty=True
+        )
+        if classification not in CI_RUNNER_CANCELLATION_CLASSIFICATIONS:
+            fail(f"{label}.classification is unknown: {classification!r}")
+        require_string(entry, label, "workflow", nonempty=True)
+        require_string(entry, label, "workflow_name")
+        require_string(entry, label, "job", nonempty=True)
+        runs = require_non_negative_int(entry, label, "runs")
+        cancellations = require_non_negative_int(entry, label, "cancellations")
+        if cancellations == 0:
+            fail(f"{label}.cancellations is zero for a cancellation receipt")
+        if cancellations > runs:
+            fail(f"{label}.cancellations exceeds runs")
+        rate = entry.get("cancellation_rate")
+        if isinstance(rate, bool) or not isinstance(rate, (int, float)) or rate < 0 or rate > 1:
+            fail(f"{label}.cancellation_rate is not in [0, 1]: {rate!r}")
+        audit_events = entry.get("audit_cancel_events")
+        if audit_events is not None and (
+            isinstance(audit_events, bool)
+            or not isinstance(audit_events, int)
+            or audit_events < 0
+        ):
+            fail(f"{label}.audit_cancel_events is not null or a non-negative integer")
+        runner_shutdown_signal = entry.get("runner_shutdown_signal")
+        if not isinstance(runner_shutdown_signal, bool):
+            fail(f"{label}.runner_shutdown_signal is not a boolean")
+        github_hosted = entry.get("github_hosted")
+        if not isinstance(github_hosted, bool):
+            fail(f"{label}.github_hosted is not a boolean")
+        require_string_list(entry, label, "runner_labels")
+        suggested_action = require_string(
+            entry, label, "suggested_action", nonempty=True
+        )
+        receipts = require_string_list(entry, label, "receipts", nonempty=True)
+        for receipt in receipts:
+            if not receipt.startswith("ci-audit/"):
+                fail(f"{label}.receipts contains non-ci-audit pointer: {receipt!r}")
+        evidence = require_string_list(entry, label, "evidence")
+        require_string_list(entry, label, "evidence_gaps")
+        if classification == "runner_eviction_suspected":
+            if audit_events != 0 or not runner_shutdown_signal or not github_hosted:
+                fail(
+                    f"{label} runner_eviction_suspected needs "
+                    "audit_cancel_events=0, runner_shutdown_signal=true, "
+                    "and github_hosted=true"
+                )
+            if "self-hosted" not in suggested_action and "cx profile" not in suggested_action:
+                fail(f"{label} runner_eviction_suspected lacks a rerun action")
+            if any("cancel-in-progress" in item for item in evidence):
+                fail(f"{label} runner eviction cannot also be superseded evidence")
+        if classification == "cancelled_superseded" and not any(
+            "cancel-in-progress" in item for item in evidence
+        ):
+            fail(f"{label} cancelled_superseded lacks cancel-in-progress evidence")
 
 
 def no_standalone_approval_line(text: str, path: pathlib.Path) -> None:
@@ -6318,6 +6430,93 @@ def self_test_ripr_exposure_gap_contract() -> None:
         lambda root=write_root(
             decision, dict(detail, entries=[entry])
         ): require_ripr_exposure_gap_details(root),
+        )
+
+
+def self_test_ci_audit_runner_cancellations_contract() -> None:
+    import tempfile
+
+    def write_root(artifact: dict) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        audit_dir = root / "ci-audit"
+        audit_dir.mkdir()
+        (audit_dir / "runner-cancellations.json").write_text(
+            json.dumps(artifact), encoding="utf-8"
+        )
+        return root
+
+    def receipt(**overrides) -> dict:
+        base = {
+            "classification": "runner_eviction_suspected",
+            "workflow": ".github/workflows/ub-review-gate.yml",
+            "workflow_name": "ub-review gate",
+            "job": "ub-review/gate",
+            "runs": 16,
+            "cancellations": 16,
+            "cancellation_rate": 1.0,
+            "audit_cancel_events": 0,
+            "runner_shutdown_signal": True,
+            "github_hosted": True,
+            "runner_labels": ["ubuntu-latest"],
+            "suggested_action": "rerun on self-hosted or cx profile",
+            "receipts": ["ci-audit/history.json#ub-review/gate"],
+            "evidence": [
+                "16 cancelled job(s) started without a completed_at timestamp",
+                "runs-on matches GitHub-hosted runner labels",
+            ],
+            "evidence_gaps": [],
+        }
+        base.update(overrides)
+        return base
+
+    def artifact(entry: dict) -> dict:
+        return {
+            "schema": "ub-review.ci_runner_cancellations.v1",
+            "repo": "acme/widgets",
+            "window_days": 90,
+            "classifications": [entry],
+            "evidence_gaps": [],
+        }
+
+    require_ci_audit_runner_cancellations(write_root(artifact(receipt())), required=True)
+    require_ci_audit_runner_cancellations(
+        write_root(
+            artifact(
+                receipt(
+                    classification="cancelled_superseded",
+                    audit_cancel_events=0,
+                    runner_shutdown_signal=True,
+                    github_hosted=True,
+                    suggested_action=(
+                        "inspect the newer run; do not treat this cancellation as code evidence"
+                    ),
+                    evidence=["workflow has cancel-in-progress: true"],
+                )
+            )
+        ),
+        required=True,
+    )
+    expect_self_test_failure(
+        "ci-audit runner cancellation unknown classification",
+        "classification is unknown",
+        lambda: require_ci_audit_runner_cancellations(
+            write_root(artifact(receipt(classification="vibes"))), required=True
+        ),
+    )
+    expect_self_test_failure(
+        "ci-audit runner eviction without audit evidence",
+        "runner_eviction_suspected needs",
+        lambda: require_ci_audit_runner_cancellations(
+            write_root(artifact(receipt(audit_cancel_events=None))), required=True
+        ),
+    )
+    expect_self_test_failure(
+        "ci-audit superseded without concurrency evidence",
+        "cancelled_superseded lacks",
+        lambda: require_ci_audit_runner_cancellations(
+            write_root(artifact(receipt(classification="cancelled_superseded"))),
+            required=True,
+        ),
     )
 
 
@@ -7382,6 +7581,7 @@ def run_self_tests() -> None:
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_ci_audit_runner_cancellations_contract()
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()
@@ -7455,6 +7655,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--require-no-model-evidence-failures", action="store_true")
     parser.add_argument("--expected-review-profile", default="bun-ub-v0")
     parser.add_argument("--expected-repo-kind", default="bun")
+    parser.add_argument("--ci-audit-only", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv[1:])
 
@@ -7469,6 +7670,12 @@ def main(argv: list[str]) -> int:
     if not root.is_dir():
         fail(f"artifact root is not a directory: {root}")
 
+    if args.ci_audit_only:
+        require_ci_audit_runner_cancellations(root, required=True)
+        print(f"ci-audit artifact contract verified: root={root}")
+        return 0
+
+    require_ci_audit_runner_cancellations(root)
     require_common_tree(root)
     require_summary(root)
     require_profile_artifacts(

@@ -14,6 +14,7 @@ pub(crate) const CI_COSTS_SCHEMA: &str = "ub-review.ci_costs.v1";
 pub(crate) const CI_HISTORY_SCHEMA: &str = "ub-review.ci_history.v1";
 pub(crate) const CI_INVENTORY_SCHEMA: &str = "ub-review.ci_inventory.v1";
 pub(crate) const CI_RECOMMENDATIONS_SCHEMA: &str = "ub-review.ci_recommendations.v1";
+pub(crate) const CI_RUNNER_CANCELLATIONS_SCHEMA: &str = "ub-review.ci_runner_cancellations.v1";
 pub(crate) const COVERAGE_CHANGED_LINES_SCHEMA: &str = "ub-review.coverage_changed_lines.v1";
 pub(crate) const COVERAGE_STATUS_SCHEMA: &str = "ub-review.coverage_status.v1";
 pub(crate) const COVERAGE_SUMMARY_SCHEMA: &str = "ub-review.coverage_summary.v1";
