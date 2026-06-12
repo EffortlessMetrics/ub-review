@@ -1031,6 +1031,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/metrics.json",
         "review/ub-review-cost.json",
         "review/fill-ledger.json",
+        "review/quality-receipt.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -1984,6 +1985,190 @@ def require_fill_ledger_entry(root: pathlib.Path, entry: Any, index: int) -> Non
             fail(f"fill-ledger.json entries[{index}].source_artifacts[{source_index}] missing file: {source}")
     if not check_id.strip():
         fail(f"fill-ledger.json entries[{index}].check_id is empty")
+
+
+QUALITY_BACKFILL_FIELDS = [
+    "comments_posted",
+    "comments_accepted",
+    "comments_resolved",
+    "reviewer_overrides",
+    "adopted_generated_tests",
+]
+
+
+def require_quality_receipt(root: pathlib.Path, metrics: dict, review: dict) -> None:
+    receipt = load_json(root / "review/quality-receipt.json")
+    if not isinstance(receipt, dict):
+        fail("review/quality-receipt.json is not an object")
+    if receipt.get("schema") != "ub-review.quality_receipt.v1":
+        fail(f"quality-receipt.json schema invalid: {receipt.get('schema')!r}")
+    run_id = require_non_empty_string_value(receipt.get("run_id"), "quality-receipt.json run_id")
+    cost_receipt = load_json(root / "review/ub-review-cost.json")
+    fill_ledger = load_json(root / "review/fill-ledger.json")
+    if run_id != cost_receipt.get("run_id") or run_id != fill_ledger.get("run_id"):
+        fail("quality-receipt.json run_id does not match cost/fill receipts")
+
+    source_artifacts = receipt.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail("quality-receipt.json source_artifacts is not a non-empty array")
+    for required in [
+        "review/metrics.json",
+        "review/fill-ledger.json",
+        "review/provider-preflight-status.json",
+        "review/review.json",
+    ]:
+        if required not in source_artifacts:
+            fail(f"quality-receipt.json source_artifacts missing {required}")
+    expected_payload_source = (
+        "review/github-review.json"
+        if (root / "review/github-review.json").is_file()
+        else "review/github-review-skip.json"
+    )
+    payload_sources = {
+        source
+        for source in source_artifacts
+        if source in {"review/github-review.json", "review/github-review-skip.json"}
+    }
+    if payload_sources != {expected_payload_source}:
+        fail("quality-receipt.json source_artifacts must name exactly the active review payload artifact")
+    if expected_payload_source not in source_artifacts:
+        fail(f"quality-receipt.json source_artifacts missing {expected_payload_source}")
+    for index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(source, f"quality-receipt.json source_artifacts[{index}]")
+        if not (root / source).is_file():
+            fail(f"quality-receipt.json source_artifacts[{index}] missing file: {source}")
+
+    review_payload_status = receipt.get("review_payload_status")
+    if review_payload_status != metrics.get("review_payload_status"):
+        fail("quality-receipt.json review_payload_status does not match metrics")
+    terminal_state = review.get("terminal_state")
+    if isinstance(terminal_state, dict) and review_payload_status != terminal_state.get("review_payload_status"):
+        fail("quality-receipt.json review_payload_status does not match terminal_state")
+
+    comments_prepared = require_non_negative_int(
+        receipt, "quality-receipt.json comments_prepared", "comments_prepared"
+    )
+    if comments_prepared != metrics.get("github_review_comments"):
+        fail("quality-receipt.json comments_prepared does not match metrics.github_review_comments")
+    if expected_payload_source == "review/github-review.json":
+        github_review = load_json(root / "review/github-review.json")
+        comments = github_review.get("comments") if isinstance(github_review, dict) else None
+        if not isinstance(comments, list):
+            fail("review/github-review.json comments is not an array")
+        if comments_prepared != len(comments):
+            fail("quality-receipt.json comments_prepared does not match github-review.json comments")
+    elif comments_prepared != 0:
+        fail("quality-receipt.json comments_prepared must be 0 when github-review-skip.json is active")
+    comments_off_diff_rejected = require_non_negative_int(
+        receipt,
+        "quality-receipt.json comments_off_diff_rejected",
+        "comments_off_diff_rejected",
+    )
+    if comments_off_diff_rejected != metrics.get("off_diff_candidates_rejected"):
+        fail(
+            "quality-receipt.json comments_off_diff_rejected does not match metrics.off_diff_candidates_rejected"
+        )
+
+    entries = fill_ledger.get("entries") if isinstance(fill_ledger, dict) else None
+    if not isinstance(entries, list):
+        fail("fill-ledger.json entries is not an array")
+    selected_entries = [
+        entry for entry in entries if isinstance(entry, dict) and entry.get("selected") is True
+    ]
+    expected_fills_total = len(selected_entries)
+    expected_fills_with_signal = len(
+        [
+            entry
+            for entry in selected_entries
+            if isinstance(entry.get("actual_signal"), str) and entry["actual_signal"].strip()
+        ]
+    )
+    fills_total = require_non_negative_int(
+        receipt, "quality-receipt.json fills_total", "fills_total"
+    )
+    fills_with_signal = require_non_negative_int(
+        receipt, "quality-receipt.json fills_with_signal", "fills_with_signal"
+    )
+    if fills_total != expected_fills_total:
+        fail("quality-receipt.json fills_total does not match selected fill-ledger entries")
+    if fills_with_signal != expected_fills_with_signal:
+        fail("quality-receipt.json fills_with_signal does not match fill-ledger actual_signal")
+    if fills_with_signal > fills_total:
+        fail("quality-receipt.json fills_with_signal exceeds fills_total")
+
+    llm_unavailable_events = require_non_negative_int(
+        receipt,
+        "quality-receipt.json llm_unavailable_events",
+        "llm_unavailable_events",
+    )
+    expected_llm_unavailable_events = quality_llm_unavailable_events(review)
+    if llm_unavailable_events != expected_llm_unavailable_events:
+        fail("quality-receipt.json llm_unavailable_events does not match model/provider receipts")
+    fallback_used_lanes = require_non_negative_int(
+        receipt, "quality-receipt.json fallback_used_lanes", "fallback_used_lanes"
+    )
+    if fallback_used_lanes != metrics.get("models", {}).get("model_fallbacks_used"):
+        fail("quality-receipt.json fallback_used_lanes does not match metrics.models.model_fallbacks_used")
+    model_lanes = review.get("model_lanes")
+    if isinstance(model_lanes, list):
+        expected_fallbacks = len(
+            [
+                lane
+                for lane in model_lanes
+                if isinstance(lane, dict) and lane.get("fallback_from") is not None
+            ]
+        )
+        if fallback_used_lanes != expected_fallbacks:
+            fail("quality-receipt.json fallback_used_lanes does not match review.json model lanes")
+
+    missing = receipt.get("missing")
+    if not isinstance(missing, list):
+        fail("quality-receipt.json missing is not an array")
+    for index, entry in enumerate(missing):
+        if not isinstance(entry, dict):
+            fail(f"quality-receipt.json missing[{index}] is not an object")
+        require_non_empty_string_value(entry.get("field"), f"quality-receipt.json missing[{index}].field")
+        require_non_empty_string_value(entry.get("reason"), f"quality-receipt.json missing[{index}].reason")
+        require_non_empty_string_value(
+            entry.get("source_artifact"), f"quality-receipt.json missing[{index}].source_artifact"
+        )
+
+    for field in QUALITY_BACKFILL_FIELDS:
+        if receipt.get(field) is not None:
+            fail(f"quality-receipt.json {field} must be null in run-completion v1")
+        if not any(entry.get("field") == field for entry in missing):
+            fail(f"quality-receipt.json missing[] does not receipt {field}")
+
+
+def quality_llm_unavailable_events(review: dict) -> int:
+    events = 0
+    for receipt in review.get("provider_preflights", []):
+        if isinstance(receipt, dict) and quality_llm_unavailable_status(receipt):
+            events += 1
+    for receipt in review.get("model_lanes", []):
+        if not isinstance(receipt, dict):
+            continue
+        if quality_llm_unavailable_status(receipt):
+            events += 1
+        if receipt.get("fallback_from") is not None:
+            events += 1
+    return events
+
+
+def quality_llm_unavailable_status(receipt: dict) -> bool:
+    status = receipt.get("status")
+    http_status = receipt.get("http_status")
+    return status in {
+        "missing_key",
+        "preflight_failed",
+        "auth_failed",
+        "rate_limited",
+        "timed_out",
+    } or (
+        isinstance(http_status, int)
+        and not isinstance(http_status, bool)
+        and 500 <= http_status <= 599
+    )
 
 
 def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
@@ -7002,6 +7187,154 @@ def self_test_fill_ledger_contract() -> None:
     )
 
 
+def self_test_quality_receipt_contract() -> None:
+    import copy
+    import tempfile
+
+    metrics = {
+        "review_payload_status": "skipped_empty_smoke",
+        "github_review_comments": 0,
+        "off_diff_candidates_rejected": 1,
+        "models": {"model_fallbacks_used": 1},
+    }
+    review = {
+        "terminal_state": {"review_payload_status": "skipped_empty_smoke"},
+        "provider_preflights": [
+            {
+                "provider": "minimax",
+                "model": "m1",
+                "endpoint_kind": "anthropic",
+                "status": "missing_key",
+                "http_status": None,
+            }
+        ],
+        "model_lanes": [
+            {
+                "lane": "tests-oracle",
+                "status": "ok",
+                "http_status": None,
+                "fallback_from": "minimax/m1",
+            }
+        ],
+    }
+    fill_ledger = {
+        "schema": "ub-review.fill_ledger.v1",
+        "run_id": "local-abc123",
+        "entries": [
+            {
+                "check_id": "ripr",
+                "kind": "sensor",
+                "selected": True,
+                "actual_signal": "ok: ripr completed",
+                "affected_merge": False,
+            },
+            {
+                "check_id": "miri",
+                "kind": "proof-skip",
+                "selected": False,
+                "actual_signal": None,
+                "affected_merge": None,
+            },
+        ],
+    }
+    receipt = {
+        "schema": "ub-review.quality_receipt.v1",
+        "run_id": "local-abc123",
+        "source_artifacts": [
+            "review/metrics.json",
+            "review/fill-ledger.json",
+            "review/provider-preflight-status.json",
+            "review/review.json",
+            "review/github-review-skip.json",
+        ],
+        "review_payload_status": "skipped_empty_smoke",
+        "comments_prepared": 0,
+        "comments_posted": None,
+        "comments_accepted": None,
+        "comments_resolved": None,
+        "comments_off_diff_rejected": 1,
+        "fills_with_signal": 1,
+        "fills_total": 1,
+        "llm_unavailable_events": 2,
+        "fallback_used_lanes": 1,
+        "reviewer_overrides": None,
+        "adopted_generated_tests": None,
+        "missing": [
+            {
+                "field": "comments_posted",
+                "reason": "post-result.json is not available",
+                "source_artifact": "post-result.json",
+            },
+            {
+                "field": "comments_accepted",
+                "reason": "GitHub thread state is not available",
+                "source_artifact": "github-api-review-threads",
+            },
+            {
+                "field": "comments_resolved",
+                "reason": "GitHub thread state is not available",
+                "source_artifact": "github-api-review-threads",
+            },
+            {
+                "field": "reviewer_overrides",
+                "reason": "reviewer-action backfill is not available",
+                "source_artifact": "github-api-review-threads",
+            },
+            {
+                "field": "adopted_generated_tests",
+                "reason": "commit backfill is not available",
+                "source_artifact": "github-api-commits",
+            },
+        ],
+    }
+
+    def write_root(receipt_overrides: dict | None = None) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        candidate = copy.deepcopy(receipt)
+        if receipt_overrides:
+            candidate.update(receipt_overrides)
+        write_self_test_json(root / "review/metrics.json", metrics)
+        write_self_test_json(root / "review/review.json", review)
+        write_self_test_json(root / "review/provider-preflight-status.json", review["provider_preflights"])
+        write_self_test_json(root / "review/fill-ledger.json", fill_ledger)
+        write_self_test_json(root / "review/ub-review-cost.json", {"run_id": "local-abc123"})
+        write_self_test_json(
+            root / "review/github-review-skip.json",
+            {"status": "skipped", "review_payload_status": "skipped_empty_smoke"},
+        )
+        write_self_test_json(root / "review/quality-receipt.json", candidate)
+        return root
+
+    require_quality_receipt(write_root(), metrics, review)
+    expect_self_test_failure(
+        "quality receipt schema drift",
+        "schema invalid",
+        lambda: require_quality_receipt(
+            write_root({"schema": "ub-review.quality_receipt.v2"}), metrics, review
+        ),
+    )
+    expect_self_test_failure(
+        "quality receipt run id drift",
+        "run_id does not match",
+        lambda: require_quality_receipt(write_root({"run_id": "local-drift"}), metrics, review),
+    )
+    expect_self_test_failure(
+        "quality receipt fill signal drift",
+        "fills_with_signal does not match",
+        lambda: require_quality_receipt(write_root({"fills_with_signal": 0}), metrics, review),
+    )
+    expect_self_test_failure(
+        "quality receipt fallback drift",
+        "fallback_used_lanes does not match",
+        lambda: require_quality_receipt(write_root({"fallback_used_lanes": 0}), metrics, review),
+    )
+    expect_self_test_failure(
+        "quality receipt reviewer override overclaim",
+        "reviewer_overrides must be null",
+        lambda: require_quality_receipt(write_root({"reviewer_overrides": 1}), metrics, review),
+    )
+
+
 def self_test_ci_audit_runner_cancellations_contract() -> None:
     import tempfile
 
@@ -8156,6 +8489,7 @@ def run_self_tests() -> None:
     self_test_ripr_exposure_gap_contract()
     self_test_cost_receipt_contract()
     self_test_fill_ledger_contract()
+    self_test_quality_receipt_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
@@ -8260,6 +8594,7 @@ def main(argv: list[str]) -> int:
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
     require_fill_ledger(root)
+    require_quality_receipt(root, metrics, review)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
     if args.require_no_model_evidence_failures:
         require_no_model_evidence_failures(review)

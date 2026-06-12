@@ -52,6 +52,7 @@ pub(crate) const PROOF_REQUEST_GROUP_SCHEMA: &str = "ub-review.proof_request_gro
 pub(crate) const PROOF_REQUEST_SCHEMA: &str = "ub-review.proof_request.v1";
 pub(crate) const PROOF_TASK_SCHEMA: &str = "ub-review.proof_task.v1";
 pub(crate) const PR_THREAD_CONTEXT_SCHEMA: &str = "ub-review.pr_thread_context.v1";
+pub(crate) const QUALITY_RECEIPT_SCHEMA: &str = "ub-review.quality_receipt.v1";
 pub(crate) const QUESTION_OBSERVATIONS_SCHEMA: &str = "ub-review.question_observations.v1";
 pub(crate) const RECEIPT_ROUTES_SCHEMA: &str = "ub-review.receipt_routes.v1";
 pub(crate) const RECEIPT_ROUTE_SCHEMA: &str = "ub-review.receipt_route.v1";

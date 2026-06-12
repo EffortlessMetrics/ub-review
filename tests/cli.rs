@@ -226,6 +226,7 @@ fn active_len_tracks_view_after_resize() {
         "review/metrics.json",
         "review/ub-review-cost.json",
         "review/fill-ledger.json",
+        "review/quality-receipt.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -796,6 +797,65 @@ fn active_len_tracks_view_after_resize() {
             .any(|entry| entry["kind"] == "proof-skip" && entry["selected"] == false),
         "fill ledger should preserve deterministic skipped proof options"
     );
+    let quality: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/quality-receipt.json"))?)?;
+    assert_eq!(quality["schema"], "ub-review.quality_receipt.v1");
+    assert_eq!(quality["run_id"], cost["run_id"]);
+    assert_eq!(quality["run_id"], fill_ledger["run_id"]);
+    assert_eq!(
+        quality["review_payload_status"],
+        metrics["review_payload_status"]
+    );
+    assert_eq!(
+        quality["comments_prepared"],
+        metrics["github_review_comments"]
+    );
+    assert!(quality["comments_posted"].is_null());
+    assert!(quality["comments_accepted"].is_null());
+    assert!(quality["comments_resolved"].is_null());
+    assert!(quality["reviewer_overrides"].is_null());
+    assert!(quality["adopted_generated_tests"].is_null());
+    assert_eq!(
+        quality["comments_off_diff_rejected"],
+        metrics["off_diff_candidates_rejected"]
+    );
+    let selected_fill_count = fill_entries
+        .iter()
+        .filter(|entry| entry["selected"] == true)
+        .count() as u64;
+    let selected_signal_count = fill_entries
+        .iter()
+        .filter(|entry| {
+            entry["selected"] == true
+                && entry["actual_signal"]
+                    .as_str()
+                    .is_some_and(|signal| !signal.trim().is_empty())
+        })
+        .count() as u64;
+    assert_eq!(quality["fills_total"], selected_fill_count);
+    assert_eq!(quality["fills_with_signal"], selected_signal_count);
+    assert_eq!(
+        quality["fallback_used_lanes"],
+        metrics["models"]["model_fallbacks_used"]
+    );
+    let missing_quality_fields = quality["missing"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("quality missing[] absent"))?
+        .iter()
+        .filter_map(|entry| entry["field"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for field in [
+        "comments_posted",
+        "comments_accepted",
+        "comments_resolved",
+        "reviewer_overrides",
+        "adopted_generated_tests",
+    ] {
+        assert!(
+            missing_quality_fields.contains(field),
+            "quality receipt should mark {field} unavailable in run-completion v1"
+        );
+    }
     let scheduler: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
     assert_eq!(scheduler["schema"], "ub-review.scheduler.v1");
