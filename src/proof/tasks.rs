@@ -1,8 +1,10 @@
 //! Focused proof task and plan types.
 
+use std::collections::BTreeSet;
+
 use serde::Serialize;
 
-use super::ProofCommandSpec;
+use crate::*;
 
 #[derive(Clone, Debug)]
 pub(crate) struct FocusedTestTask {
@@ -89,6 +91,476 @@ pub(crate) struct ProofPlannerRuntimeBudget {
     pub(crate) total_proof_timeout_sec: u64,
 }
 
+pub(crate) fn canonical_proof_request_group_command(command: &str, cost: &str) -> String {
+    if cost != "focused-test" {
+        return command.to_owned();
+    }
+    let parts = command.split_whitespace().collect::<Vec<_>>();
+    let Some((file, args)) = focused_bun_request_parts(&parts) else {
+        return command.to_owned();
+    };
+    format!(
+        "focused-bun:{}:{}",
+        normalize_repo_path(file),
+        focused_test_name_arg(args).unwrap_or_default()
+    )
+}
+
+pub(crate) fn focused_proof_plans_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedProofPlan> {
+    focused_test_tasks_from_diff(diff, proof_requests, budget)
+        .into_iter()
+        .map(|task| {
+            let timeout_sec = focused_test_task_command_timeout(&task, budget);
+            let head_command = proof_task_plan_command(&task, "head", "head");
+            let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
+                proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
+            } else {
+                "not planned for head-only proof".to_owned()
+            };
+            FocusedProofPlan {
+                id: task.id,
+                test_file: task.file,
+                test_name: task.test_name,
+                mode: task.mode,
+                timeout_sec,
+                head_command,
+                base_plus_tests_command,
+                requested_by: task.requested_by,
+                request_ids: task.request_ids,
+                status: "planned".to_owned(),
+                reason: format!(
+                    "planner-only focused test target under budget: max {} file(s), {} test(s), {}s per command, {}s total",
+                    budget.max_focused_test_files,
+                    budget.max_focused_tests,
+                    budget.per_command_timeout_sec,
+                    budget.max_total_seconds
+                ),
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn focused_test_tasks_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedTestTask> {
+    let candidates = focused_test_candidates_from_diff(diff, proof_requests);
+    let mut tasks = Vec::new();
+    let mut files = BTreeSet::new();
+    let mut estimated_seconds = 0_u64;
+    for task in candidates {
+        let task_timeout_sec = focused_test_task_command_timeout(&task, budget);
+        if !focused_proof_budget_allows_next(
+            tasks.len(),
+            &files,
+            &task.file,
+            estimated_seconds,
+            task_timeout_sec,
+            task.mode.command_count(),
+            budget,
+        ) {
+            return tasks;
+        }
+        files.insert(task.file.clone());
+        estimated_seconds = estimated_seconds
+            .saturating_add(task_timeout_sec.saturating_mul(task.mode.command_count()));
+        tasks.push(task);
+    }
+    tasks
+}
+
+pub(crate) fn focused_test_candidates_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+) -> Vec<FocusedTestTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
+    for file in diff
+        .changed_files
+        .iter()
+        .filter(|path| is_bun_focused_test_file(path))
+    {
+        let names = focused_test_names_for_file(&diff.patch, file);
+        if names.is_empty() {
+            merge_focused_test_task(
+                &mut tasks,
+                focused_test_task_with_mode(
+                    file,
+                    None,
+                    FocusedProofMode::RedGreen,
+                    &request_groups,
+                ),
+            );
+        } else {
+            for name in names {
+                merge_focused_test_task(
+                    &mut tasks,
+                    focused_test_task_with_mode(
+                        file,
+                        Some(name),
+                        FocusedProofMode::RedGreen,
+                        &request_groups,
+                    ),
+                );
+            }
+        }
+    }
+    merge_focused_test_request_group_tasks(&mut tasks, &request_groups);
+    tasks
+}
+
+pub(crate) fn focused_test_candidates_from_requests(
+    proof_requests: &[ProofRequest],
+) -> Vec<FocusedTestTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
+    merge_focused_test_request_group_tasks(&mut tasks, &request_groups);
+    tasks
+}
+
+pub(crate) fn focused_build_plans_from_requests(
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedBuildPlan> {
+    focused_build_candidates_from_requests(proof_requests)
+        .into_iter()
+        .take(budget.max_focused_tests)
+        .map(|task| {
+            let timeout_sec = focused_build_task_command_timeout(&task, budget);
+            FocusedBuildPlan {
+                id: task.id,
+                command: command_display(&task.argv),
+                timeout_sec,
+                requested_by: task.requested_by,
+                request_ids: task.request_ids,
+                status: "planned".to_owned(),
+                reason: format!(
+                    "planner-only focused build target under budget: max {} command(s), {}s per command, {}s total",
+                    budget.max_focused_tests, budget.per_command_timeout_sec, budget.max_total_seconds
+                ),
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn focused_build_candidates_from_requests(
+    proof_requests: &[ProofRequest],
+) -> Vec<FocusedBuildTask> {
+    let request_groups = proof_request_groups(proof_requests);
+    let mut tasks = Vec::new();
+    for group in &request_groups {
+        let Some(task) = focused_build_task_from_request_group(group) else {
+            continue;
+        };
+        merge_focused_build_task(&mut tasks, task);
+    }
+    tasks
+}
+
+fn merge_focused_test_request_group_tasks(
+    tasks: &mut Vec<FocusedTestTask>,
+    request_groups: &[ProofRequestGroup],
+) {
+    for group in request_groups {
+        let Some(target) = focused_test_request_target(group) else {
+            continue;
+        };
+        merge_focused_test_task(
+            tasks,
+            FocusedTestTask {
+                id: focused_test_task_id_for_target(
+                    &target.file,
+                    target.test_name.as_deref(),
+                    FocusedProofMode::RedGreen,
+                    target.command_specs.as_ref(),
+                ),
+                file: target.file,
+                test_name: target.test_name,
+                mode: FocusedProofMode::RedGreen,
+                command_specs: target.command_specs,
+                timeout_sec: Some(group.timeout_sec),
+                requested_by: group.requested_by.clone(),
+                request_ids: group.request_ids.clone(),
+            },
+        );
+    }
+}
+
+fn focused_build_task_from_request_group(group: &ProofRequestGroup) -> Option<FocusedBuildTask> {
+    if group.status != "requested" || group.cost != "focused-build" {
+        return None;
+    }
+    let spec = focused_build_command_spec(&group.command)?;
+    let command = command_display(&spec.argv);
+    Some(FocusedBuildTask {
+        id: focused_build_task_id(&command),
+        command,
+        argv: spec.argv,
+        timeout_sec: group.timeout_sec,
+        requested_by: group.requested_by.clone(),
+        request_ids: group.request_ids.clone(),
+    })
+}
+
+fn focused_build_task_id(command: &str) -> String {
+    let fingerprint = sha256_hex(command.as_bytes());
+    format!("proof-build-{}", &fingerprint[..12])
+}
+
+fn merge_focused_build_task(tasks: &mut Vec<FocusedBuildTask>, mut task: FocusedBuildTask) {
+    if let Some(existing) = tasks
+        .iter_mut()
+        .find(|existing| existing.command == task.command)
+    {
+        existing.timeout_sec = existing.timeout_sec.max(task.timeout_sec);
+        for lane in task.requested_by.drain(..) {
+            push_unique(&mut existing.requested_by, &lane);
+        }
+        for request_id in task.request_ids.drain(..) {
+            push_unique(&mut existing.request_ids, &request_id);
+        }
+        return;
+    }
+    tasks.push(task);
+}
+
+pub(crate) fn focused_proof_budget_allows_next(
+    current_tasks: usize,
+    current_files: &BTreeSet<String>,
+    next_file: &str,
+    estimated_seconds: u64,
+    next_timeout_sec: u64,
+    next_command_count: u64,
+    budget: ProofBudget,
+) -> bool {
+    current_tasks < budget.max_focused_tests
+        && (current_files.contains(next_file)
+            || current_files.len() < budget.max_focused_test_files)
+        && estimated_seconds
+            .saturating_add(next_timeout_sec)
+            .saturating_add(next_timeout_sec.saturating_mul(next_command_count.saturating_sub(1)))
+            <= budget.max_total_seconds
+}
+
+#[cfg(test)]
+pub(crate) fn focused_test_task(
+    file: &str,
+    test_name: Option<String>,
+    request_groups: &[ProofRequestGroup],
+) -> FocusedTestTask {
+    focused_test_task_with_mode(file, test_name, FocusedProofMode::RedGreen, request_groups)
+}
+
+fn focused_test_task_with_mode(
+    file: &str,
+    test_name: Option<String>,
+    mode: FocusedProofMode,
+    request_groups: &[ProofRequestGroup],
+) -> FocusedTestTask {
+    let mut requested_by = Vec::new();
+    let mut request_ids = Vec::new();
+    let mut timeout_sec = None;
+    for group in request_groups {
+        if group.status == "requested"
+            && group.command.contains(file)
+            && test_name
+                .as_ref()
+                .is_none_or(|name| group.command.contains(name))
+        {
+            merge_task_timeout(&mut timeout_sec, Some(group.timeout_sec));
+            for lane in &group.requested_by {
+                push_unique(&mut requested_by, lane);
+            }
+            for id in &group.request_ids {
+                push_unique(&mut request_ids, id);
+            }
+        }
+    }
+    if requested_by.is_empty() {
+        requested_by.push("proof-broker".to_owned());
+    }
+    FocusedTestTask {
+        id: focused_test_task_id(file, test_name.as_deref(), mode),
+        file: file.to_owned(),
+        test_name,
+        mode,
+        command_specs: None,
+        timeout_sec,
+        requested_by,
+        request_ids,
+    }
+}
+
+fn focused_test_task_id_for_target(
+    file: &str,
+    test_name: Option<&str>,
+    mode: FocusedProofMode,
+    command_specs: Option<&FocusedTestCommandSpecs>,
+) -> String {
+    if let Some(command_specs) = command_specs {
+        return focused_test_command_task_id(&command_display(&command_specs.head.argv), mode);
+    }
+    focused_test_task_id(file, test_name, mode)
+}
+
+fn focused_test_task_id(file: &str, test_name: Option<&str>, mode: FocusedProofMode) -> String {
+    let fingerprint = sha256_hex(format!("{file}\n{}", test_name.unwrap_or("")).as_bytes());
+    let prefix = match mode {
+        FocusedProofMode::HeadOnly => "proof-head",
+        FocusedProofMode::RedGreen => "proof-red-green",
+    };
+    format!("{prefix}-{}", &fingerprint[..12])
+}
+
+fn focused_test_command_task_id(command: &str, mode: FocusedProofMode) -> String {
+    let fingerprint = sha256_hex(command.as_bytes());
+    let prefix = match mode {
+        FocusedProofMode::HeadOnly => "proof-head",
+        FocusedProofMode::RedGreen => "proof-red-green",
+    };
+    format!("{prefix}-{}", &fingerprint[..12])
+}
+
+fn merge_focused_test_task(tasks: &mut Vec<FocusedTestTask>, mut task: FocusedTestTask) {
+    if let Some(existing) = tasks.iter_mut().find(|existing| {
+        focused_test_task_merge_key(existing) == focused_test_task_merge_key(&task)
+    }) {
+        if existing.mode == FocusedProofMode::HeadOnly && task.mode == FocusedProofMode::RedGreen {
+            existing.mode = FocusedProofMode::RedGreen;
+            existing.id = focused_test_task_id_for_target(
+                &existing.file,
+                existing.test_name.as_deref(),
+                existing.mode,
+                existing.command_specs.as_ref(),
+            );
+        }
+        merge_task_timeout(&mut existing.timeout_sec, task.timeout_sec);
+        for lane in task.requested_by.drain(..) {
+            push_unique(&mut existing.requested_by, &lane);
+        }
+        for request_id in task.request_ids.drain(..) {
+            push_unique(&mut existing.request_ids, &request_id);
+        }
+        return;
+    }
+    tasks.push(task);
+}
+
+fn merge_task_timeout(existing: &mut Option<u64>, incoming: Option<u64>) {
+    let Some(incoming) = incoming else {
+        return;
+    };
+    *existing = Some(existing.map_or(incoming, |current| current.max(incoming)));
+}
+
+pub(crate) fn focused_test_task_command_timeout(
+    task: &FocusedTestTask,
+    budget: ProofBudget,
+) -> u64 {
+    task.timeout_sec
+        .filter(|timeout| *timeout > 0)
+        .unwrap_or(budget.per_command_timeout_sec)
+        .min(budget.per_command_timeout_sec)
+}
+
+pub(crate) fn focused_build_task_command_timeout(
+    task: &FocusedBuildTask,
+    budget: ProofBudget,
+) -> u64 {
+    task.timeout_sec.max(1).min(budget.per_command_timeout_sec)
+}
+
+fn focused_test_task_merge_key(task: &FocusedTestTask) -> String {
+    if let Some(command_specs) = &task.command_specs {
+        return format!("command:{}", command_display(&command_specs.head.argv));
+    }
+    format!(
+        "bun:{}:{}",
+        task.file,
+        task.test_name.as_deref().unwrap_or_default()
+    )
+}
+
+#[derive(Clone, Debug)]
+struct FocusedTestRequestTarget {
+    file: String,
+    test_name: Option<String>,
+    command_specs: Option<FocusedTestCommandSpecs>,
+}
+
+fn focused_test_request_target(group: &ProofRequestGroup) -> Option<FocusedTestRequestTarget> {
+    if group.status != "requested" || group.cost != "focused-test" {
+        return None;
+    }
+    let parts = group.command.split_whitespace().collect::<Vec<_>>();
+    let Some((file, args)) = focused_bun_request_parts(&parts) else {
+        let spec = focused_cargo_test_command_spec(&group.command)?;
+        return Some(FocusedTestRequestTarget {
+            file: focused_cargo_test_target_label(&spec.argv),
+            test_name: focused_cargo_test_filter_name(&spec.argv),
+            command_specs: Some(FocusedTestCommandSpecs {
+                head: spec.clone(),
+                base_plus_tests: spec,
+            }),
+        });
+    };
+    if !is_bun_focused_test_file(file) {
+        return None;
+    }
+    Some(FocusedTestRequestTarget {
+        file: normalize_repo_path(file),
+        test_name: focused_test_name_arg(args),
+        command_specs: None,
+    })
+}
+
+pub(crate) fn focused_bun_request_parts<'a>(
+    parts: &'a [&'a str],
+) -> Option<(&'a str, &'a [&'a str])> {
+    match parts {
+        ["bun", "test", file, args @ ..] => Some((*file, args)),
+        ["bun", "bd", "test", file, args @ ..] => Some((*file, args)),
+        ["USE_SYSTEM_BUN=1", "bun", "test", file, args @ ..] => Some((*file, args)),
+        _ => None,
+    }
+}
+
+fn focused_test_name_arg(args: &[&str]) -> Option<String> {
+    let index = args
+        .iter()
+        .position(|arg| matches!(*arg, "-t" | "--test-name-pattern"))?;
+    let mut tokens = Vec::new();
+    for token in &args[index + 1..] {
+        if token.starts_with('-') {
+            break;
+        }
+        tokens.push(*token);
+    }
+    let joined = tokens.join(" ");
+    let value = strip_matching_quotes(joined.trim());
+    (!value.is_empty()).then(|| value.to_owned())
+}
+
+fn strip_matching_quotes(value: &str) -> &str {
+    if value.len() < 2 {
+        return value;
+    }
+    let bytes = value.as_bytes();
+    if matches!(
+        (bytes.first(), bytes.last()),
+        (Some(b'\''), Some(b'\'')) | (Some(b'"'), Some(b'"'))
+    ) {
+        &value[1..value.len() - 1]
+    } else {
+        value
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -99,5 +571,85 @@ mod tests {
         assert_eq!(FocusedProofMode::HeadOnly.command_count(), 1);
         assert_eq!(FocusedProofMode::RedGreen.key(), "red-green");
         assert_eq!(FocusedProofMode::RedGreen.command_count(), 2);
+    }
+
+    #[test]
+    fn focused_proof_budget_allows_next_enforces_count_file_and_time_caps() {
+        let budget = ProofBudget {
+            max_focused_test_files: 1,
+            max_focused_tests: 2,
+            per_command_timeout_sec: 300,
+            max_total_seconds: 600,
+        };
+        let mut files = BTreeSet::new();
+        files.insert("test/a.test.ts".to_owned());
+
+        assert!(focused_proof_budget_allows_next(
+            1,
+            &files,
+            "test/a.test.ts",
+            300,
+            150,
+            FocusedProofMode::RedGreen.command_count(),
+            budget,
+        ));
+        assert!(!focused_proof_budget_allows_next(
+            2,
+            &files,
+            "test/a.test.ts",
+            0,
+            150,
+            FocusedProofMode::RedGreen.command_count(),
+            budget,
+        ));
+        assert!(!focused_proof_budget_allows_next(
+            1,
+            &files,
+            "test/b.test.ts",
+            0,
+            150,
+            FocusedProofMode::RedGreen.command_count(),
+            budget,
+        ));
+        assert!(!focused_proof_budget_allows_next(
+            1,
+            &files,
+            "test/a.test.ts",
+            500,
+            150,
+            FocusedProofMode::RedGreen.command_count(),
+            budget,
+        ));
+    }
+
+    #[test]
+    fn canonical_proof_request_group_command_normalizes_focused_bun_requests() {
+        let command = "bun test test/js/bun/md/md-edge-cases.test.ts -t 'snapshots input'";
+        let focused = canonical_proof_request_group_command(command, "focused-test");
+
+        assert_ne!(focused, command);
+        assert_eq!(
+            focused,
+            "focused-bun:test/js/bun/md/md-edge-cases.test.ts:snapshots input"
+        );
+        assert_eq!(
+            canonical_proof_request_group_command(command, "manual"),
+            command
+        );
+    }
+
+    #[test]
+    fn focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names() {
+        assert_eq!(
+            focused_test_name_arg(&["-t", "'snapshots", "input'"]),
+            Some("snapshots input".to_owned())
+        );
+        assert_eq!(focused_test_name_arg(&["-t", "x"]), Some("x".to_owned()));
+        assert_eq!(focused_test_name_arg(&["-t", "'x'"]), Some("x".to_owned()));
+        assert_eq!(focused_test_name_arg(&["-t", "''"]), None);
+        assert_eq!(
+            focused_test_name_arg(&["--test-name-pattern", "\"\""]),
+            None
+        );
     }
 }

@@ -798,3 +798,13 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_budget.rs:50:predicate"
 owner = "ub-review/core"
 reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_lease_budget disk guard moved from main.rs. invalid_enabled_proof_lease_disk_budget_is_rejected asserts the exact disk error and disabled_test_leases_allow_zero_proof_resources asserts the disabled branch. Line-keyed id; re-verify after any edit to budget.rs."
+
+# PR #412 proof task-planning extraction: one deletion-side key for moved
+# quote-boundary helper code. CI ripr 0.8.0 / schema 0.5 keeps the
+# src/main.rs deletion hunk as a new finding even after the added oracle below;
+# local ripr schema 0.3 reports zero unsuppressed gaps for the branch diff.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:9643:predicate"
+owner = "ub-review/core"
+reason = "CI-side deletion key for moved-not-modified strip_matching_quotes len guard in the PR #412 proof task-planning extraction. The quote boundary is directly pinned by focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names: one-character names stay valid, matching quote pairs around non-empty names strip, and empty quoted patterns ('' / \"\") do not promote to a focused test name. CI ripr reports a strong oracle but still classifies the moved deletion hunk weakly_exposed; re-verify after any edit near strip_matching_quotes or focused_test_name_arg."
