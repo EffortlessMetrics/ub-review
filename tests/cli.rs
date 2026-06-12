@@ -224,6 +224,7 @@ fn active_len_tracks_view_after_resize() {
         "review/tool-gate-outcomes.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
+        "review/ub-review-cost.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -722,6 +723,53 @@ fn active_len_tracks_view_after_resize() {
     assert!(cache_events.contains("\"kind\":\"shared_context_prepared\""));
     let metrics: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    let cost: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/ub-review-cost.json"))?)?;
+    assert_eq!(cost["schema"], "ub-review.cost_receipt.v1");
+    assert!(cost.get("suggested_fill_seconds").is_none());
+    assert!(
+        ["github-hosted", "self-hosted", "local", "unknown"]
+            .contains(&cost["runner_kind"].as_str().unwrap_or_default())
+    );
+    assert_eq!(cost["target_minutes"], 30);
+    assert_eq!(cost["cap_minutes"], 60);
+    assert!(cost["fallback_used"].as_bool().is_some());
+    assert!(cost["required_floor_wall_seconds"].is_null());
+    assert!(cost["estimated_cost_usd"].is_null());
+    assert_eq!(
+        cost["llm_seconds"].as_f64().unwrap_or_default(),
+        metrics["run"]["model_call_duration_ms_sum"]
+            .as_u64()
+            .unwrap_or_default() as f64
+            / 1000.0
+    );
+    assert_eq!(
+        cost["tokens"]["cached_input"],
+        metrics["models"]["prompt_cache_read_input_tokens"]
+    );
+    for pointer in [
+        "/tokens/fresh_input",
+        "/tokens/cached_input",
+        "/tokens/output",
+        "/cost_basis/runner_minutes",
+    ] {
+        assert!(
+            cost.pointer(pointer)
+                .and_then(serde_json::Value::as_f64)
+                .is_some(),
+            "missing non-negative cost field {pointer}"
+        );
+    }
+    let missing_cost_fields = cost["missing"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("cost missing[] absent"))?
+        .iter()
+        .filter_map(|entry| entry["field"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(missing_cost_fields.contains("required_floor_wall_seconds"));
+    assert!(missing_cost_fields.contains("cost_basis.linux_minute_rate_usd"));
+    assert!(missing_cost_fields.contains("estimated_cost_usd"));
+    assert!(missing_cost_fields.contains("cache.cargo"));
     let scheduler: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
     assert_eq!(scheduler["schema"], "ub-review.scheduler.v1");
@@ -4060,6 +4108,8 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
         .arg("--nocapture")
         .env("UB_REVIEW_PROFILE", "gh-runner-full")
         .env("UB_REVIEW_RUNTIME_PROFILE", "gh-runner-full")
+        .env("GITHUB_ACTIONS", "true")
+        .env("RUNNER_ENVIRONMENT", "github-hosted")
         .env("UB_SCRUB_REPO", &repo)
         .env("UB_SCRUB_OUT", &out)
         .output()?;
@@ -4081,6 +4131,12 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
     assert_eq!(
         resolved_profile["selected_runtime_profile"], "gh-runner",
         "ambient UB_REVIEW_RUNTIME_PROFILE leaked into an isolated_command child"
+    );
+    let box_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("box-state.json"))?)?;
+    assert_eq!(
+        box_state["github_actions"], false,
+        "ambient GITHUB_ACTIONS leaked into an isolated_command child"
     );
     Ok(())
 }
@@ -4696,7 +4752,7 @@ fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result
         .map_err(|_| anyhow::anyhow!("fake provider thread panicked"))?
 }
 
-/// Builds a child command with every ambient `UB_REVIEW_*` variable scrubbed.
+/// Builds a child command with ambient ub-review/runtime profile state scrubbed.
 ///
 /// When the dogfood gate runs this suite, the surrounding GitHub Actions step
 /// exports `UB_REVIEW_PROFILE`, `UB_REVIEW_RUNTIME_PROFILE`,
@@ -4704,13 +4760,23 @@ fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result
 /// those up through clap `env = "UB_REVIEW_..."` fallbacks, so nested test
 /// runs silently resolve a gh-runner profile and assertions about default
 /// profile output fail only inside the gate. Scrubbing the prefix first keeps
-/// tests hermetic; explicit per-test envs are applied afterwards and still
-/// win.
+/// tests hermetic.
+///
+/// Hosted runner identity is also scrubbed: many CLI fixture tests exercise
+/// specific planner branches, and inheriting `GITHUB_ACTIONS=true` can make an
+/// unrelated box guard run before the branch under test. Explicit per-test envs
+/// are applied afterwards and still win.
 fn isolated_command(program: &str, cwd: &Path) -> Command {
     let mut command = Command::new(program);
     command.current_dir(cwd);
     for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with("UB_REVIEW_") {
+        let name_string = name.to_string_lossy();
+        if name_string.starts_with("UB_REVIEW_")
+            || matches!(
+                name_string.as_ref(),
+                "GITHUB_ACTIONS" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
+            )
+        {
             command.env_remove(&name);
         }
     }
