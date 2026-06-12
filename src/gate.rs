@@ -348,16 +348,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
             if let (true, Some(sensor)) = (issue.status == "timed_out", required_sensor) {
                 reasons.push(required_tool_timeout_reason(sensor, issue));
             } else {
-                reasons.push(GateReason {
-                    kind: "required-sensor".to_owned(),
-                    id: issue.sensor.clone(),
-                    detail: format!(
-                        "required sensor evidence gap (status `{}`): {}",
-                        issue.status, issue.reason
-                    ),
-                    receipt: required_sensor_gap_receipt(issue),
-                    next_action: None,
-                });
+                reasons.push(required_sensor_gap_reason(issue));
             }
         } else {
             evidence_gaps_advisory += 1;
@@ -449,6 +440,19 @@ pub(crate) fn required_sensor_gap_receipt(issue: &SensorEvidenceIssue) -> String
         "review/terminal_state.json".to_owned()
     } else {
         format!("sensors/{}/ub-review-sensor-status.json", issue.sensor)
+    }
+}
+
+pub(crate) fn required_sensor_gap_reason(issue: &SensorEvidenceIssue) -> GateReason {
+    GateReason {
+        kind: "required-sensor".to_owned(),
+        id: issue.sensor.clone(),
+        detail: format!(
+            "required sensor evidence gap (status `{}`): {}",
+            issue.status, issue.reason
+        ),
+        receipt: required_sensor_gap_receipt(issue),
+        next_action: None,
     }
 }
 
@@ -983,16 +987,22 @@ mod tests {
         });
 
         assert_eq!(gate.reasons.len(), 1);
+        let direct_reason = required_sensor_gap_reason(&issues[0]);
         let reason = &gate.reasons[0];
+        assert_eq!(reason.kind, direct_reason.kind);
+        assert_eq!(reason.id, direct_reason.id);
         assert_eq!(reason.kind, "required-sensor");
         assert_eq!(
             reason.detail,
             "required sensor evidence gap (status `failed`): exit 1"
         );
+        assert_eq!(reason.detail, direct_reason.detail);
         assert_eq!(
             reason.receipt,
             "sensors/actionlint/ub-review-sensor-status.json"
         );
+        assert_eq!(reason.receipt, direct_reason.receipt);
+        assert_eq!(reason.next_action, direct_reason.next_action);
         let serialized = serde_json::to_value(reason)?;
         assert!(serialized.get("next_action").is_none());
         Ok(())
