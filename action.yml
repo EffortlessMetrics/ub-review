@@ -363,14 +363,20 @@ runs:
           fi
         }
 
+        report_release_unavailable() {
+          local auto_level="$1"
+          local message="$2"
+          if [[ "$mode" == "auto" ]]; then
+            echo "::$auto_level::$message; using source fallback"
+          else
+            echo "::error::$message"
+          fi
+        }
+
         download_release_binary() {
           release_version="$(normalize_release_version "$release_version")"
           if [[ -z "$release_version" ]]; then
-            if [[ "$mode" == "auto" ]]; then
-              echo "::notice::release binary unavailable; no release-version or action ref is set"
-            else
-              echo "::warning::release binary unavailable; no release-version or action ref is set"
-            fi
+            report_release_unavailable notice "release binary unavailable; no release-version or action ref is set"
             return 1
           fi
           if [[ "$mode" == "auto" && ! "$release_version" =~ ^v[0-9] ]]; then
@@ -379,19 +385,11 @@ runs:
           fi
           validate_release_request
           if [[ -z "$action_repo" ]]; then
-            if [[ "$mode" == "auto" ]]; then
-              echo "::notice::release binary unavailable; action repository is unknown"
-            else
-              echo "::warning::release binary unavailable; action repository is unknown"
-            fi
+            report_release_unavailable notice "release binary unavailable; action repository is unknown"
             return 1
           fi
           if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
-            if [[ "$mode" == "auto" ]]; then
-              echo "::notice::release binary unavailable; only Linux x64 runners are supported"
-            else
-              echo "::warning::release binary unavailable; only Linux x64 runners are supported"
-            fi
+            report_release_unavailable notice "release binary unavailable; only Linux x64 runners are supported"
             return 1
           fi
 
@@ -406,24 +404,24 @@ runs:
           echo "::group::Download ub-review release binary"
           if ! curl -fL --retry 3 --retry-delay 2 -o "$archive" "$url"; then
             echo "::endgroup::"
-            echo "::warning::release binary download failed; using source fallback"
+            report_release_unavailable warning "release binary download failed"
             return 1
           fi
           if ! curl -fL --retry 3 --retry-delay 2 -o "$checksum" "$checksum_url"; then
             echo "::endgroup::"
-            echo "::warning::release binary checksum download failed; using source fallback"
+            report_release_unavailable warning "release binary checksum download failed"
             return 1
           fi
           expected_sha="$(awk 'NF >= 1 {print $1; exit}' "$checksum")"
           if [[ ! "$expected_sha" =~ ^[A-Fa-f0-9]{64}$ ]]; then
             echo "::endgroup::"
-            echo "::warning::release binary checksum receipt is malformed; using source fallback"
+            report_release_unavailable warning "release binary checksum receipt is malformed"
             return 1
           fi
           actual_sha="$(sha256sum "$archive" | awk '{print $1}')"
           if [[ "$actual_sha" != "$expected_sha" ]]; then
             echo "::endgroup::"
-            echo "::warning::release binary checksum mismatch; using source fallback"
+            report_release_unavailable warning "release binary checksum mismatch"
             return 1
           fi
 
@@ -431,7 +429,7 @@ runs:
             *.tar.gz|*.tgz)
               if ! tar -xzf "$archive" -C "$release_dir"; then
                 echo "::endgroup::"
-                echo "::warning::release binary archive extraction failed; using source fallback"
+                report_release_unavailable warning "release binary archive extraction failed"
                 return 1
               fi
               candidate="$(find "$release_dir" -type f -name ub-review | head -n 1 || true)"
@@ -444,12 +442,12 @@ runs:
           echo "::endgroup::"
 
           if [[ -z "${candidate:-}" || ! -f "$candidate" ]]; then
-            echo "::warning::release binary archive did not contain ub-review; using source fallback"
+            report_release_unavailable warning "release binary archive did not contain ub-review"
             return 1
           fi
           chmod +x "$candidate"
           if [[ ! -x "$candidate" ]]; then
-            echo "::warning::release binary is not executable; using source fallback"
+            report_release_unavailable warning "release binary is not executable"
             return 1
           fi
           echo "release-url=$url" >> "$GITHUB_OUTPUT"
@@ -460,6 +458,10 @@ runs:
         if [[ "$mode" == "release" || "$mode" == "auto" ]]; then
           if download_release_binary; then
             exit 0
+          fi
+          if [[ "$mode" == "release" ]]; then
+            echo "::error::install-mode=release failed; use install-mode=auto for source fallback or provide a valid release-version and release-asset"
+            exit 1
           fi
         fi
 

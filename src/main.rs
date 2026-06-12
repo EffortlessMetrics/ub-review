@@ -21523,8 +21523,25 @@ diff_classes = ["docs-only"]
                 && action.contains("[[ ! \"$expected_sha\" =~ ^[A-Fa-f0-9]{64}$ ]]")
                 && action.contains("actual_sha=\"$(sha256sum \"$archive\" | awk '{print $1}')\"")
                 && action.contains("[[ \"$actual_sha\" != \"$expected_sha\" ]]")
-                && action.contains("release binary checksum mismatch; using source fallback"),
+                && action.contains(
+                    "report_release_unavailable warning \"release binary checksum mismatch\""
+                ),
             "release download must verify the .sha256 receipt before accepting the binary"
+        );
+    }
+
+    #[test]
+    fn action_release_install_mode_fails_closed_instead_of_source_fallback() {
+        let action = include_str!("../action.yml");
+        assert!(
+            action.contains("if [[ \"$mode\" == \"release\" ]]; then")
+                && action.contains(
+                    "install-mode=release failed; use install-mode=auto for source fallback"
+                )
+                && action.contains(
+                    "report_release_unavailable warning \"release binary download failed\""
+                ),
+            "explicit install-mode=release should fail when release receipts are unavailable; only auto may source-build fallback"
         );
     }
 
