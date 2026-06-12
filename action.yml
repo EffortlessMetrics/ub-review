@@ -398,6 +398,8 @@ runs:
           release_dir="${RUNNER_TEMP:-/tmp}/ub-review-action-release"
           archive="$release_dir/$release_asset"
           url="${server_url%/}/$action_repo/releases/download/$release_version/$release_asset"
+          checksum="$release_dir/$release_asset.sha256"
+          checksum_url="$url.sha256"
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
 
@@ -405,6 +407,23 @@ runs:
           if ! curl -fL --retry 3 --retry-delay 2 -o "$archive" "$url"; then
             echo "::endgroup::"
             echo "::warning::release binary download failed; using source fallback"
+            return 1
+          fi
+          if ! curl -fL --retry 3 --retry-delay 2 -o "$checksum" "$checksum_url"; then
+            echo "::endgroup::"
+            echo "::warning::release binary checksum download failed; using source fallback"
+            return 1
+          fi
+          expected_sha="$(awk 'NF >= 1 {print $1; exit}' "$checksum")"
+          if [[ ! "$expected_sha" =~ ^[A-Fa-f0-9]{64}$ ]]; then
+            echo "::endgroup::"
+            echo "::warning::release binary checksum receipt is malformed; using source fallback"
+            return 1
+          fi
+          actual_sha="$(sha256sum "$archive" | awk '{print $1}')"
+          if [[ "$actual_sha" != "$expected_sha" ]]; then
+            echo "::endgroup::"
+            echo "::warning::release binary checksum mismatch; using source fallback"
             return 1
           fi
 

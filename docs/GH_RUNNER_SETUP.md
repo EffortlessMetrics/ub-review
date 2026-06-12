@@ -16,9 +16,10 @@ Use a full commit SHA for the Bun gate. The current known-good pin is
 `804d198b5a15a0df94bb4f43750dba71165916cd`, validated by
 `EffortlessSteven/bun#49` with terminal state `sufficient` and an artifact-only
 post skip. Tagged action refs use `install-mode: auto` to try the Linux x64
-release asset `ub-review-x86_64-unknown-linux-gnu.tar.gz` first, then fall back
-to a source build when the asset is not available. Pushing a `v*` tag in this
-repository builds and publishes that archive plus its `.sha256` receipt.
+release asset `ub-review-x86_64-unknown-linux-gnu.tar.gz` first, download and
+verify its `.sha256` receipt, then fall back to a source build when the asset or
+receipt is not available. Pushing a `v*` tag in this repository builds and
+publishes that archive plus its `.sha256` receipt.
 
 For Bun review posting, the consuming workflow should set:
 
