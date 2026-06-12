@@ -479,7 +479,10 @@ Honest current-state limits a consumer must know:
   production since #335 (#316 closed): verbatim badge-json stdout, threshold
   on `counts.unsuppressed_exposure_gaps`, two real blocks (PR #342, #346).
   Per-finding detail ships next to it in `sensors/ripr/exposure-gaps.json`
-  (verifier-reconciled against the badge counts; #347 closed).
+  (verifier-reconciled against the badge counts; #347 closed). Each entry
+  carries the finding id, path/range, exposure-gap class, suppression state,
+  threshold contribution, and an artifact pointer so a red ripr gate is
+  diagnosable from receipts without a local rerun.
 - Proof receipt and resource lease edge statuses (lease `absent`,
   `base_patch_failed` routing, manual-cost allowlist path) have named test
   gaps (#312); treat rare status values in `proof_receipts.json` /

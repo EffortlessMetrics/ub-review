@@ -5490,6 +5490,48 @@ def require_ripr_exposure_gap_details(root: pathlib.Path) -> None:
     for index, entry in enumerate(entries):
         if not isinstance(entry, dict) or not entry.get("id") or not entry.get("classification"):
             fail(f"exposure-gaps.json entry {index + 1} missing id/classification")
+        label = f"exposure-gaps.json entry {index + 1}"
+        require_string(entry, label, "path", nonempty=True)
+        range_value = entry.get("range")
+        if not isinstance(range_value, dict):
+            fail(f"{label} missing range object")
+        start_line = range_value.get("start_line")
+        end_line = range_value.get("end_line")
+        if (
+            isinstance(start_line, bool)
+            or isinstance(end_line, bool)
+            or not isinstance(start_line, int)
+            or not isinstance(end_line, int)
+            or start_line <= 0
+            or end_line < start_line
+        ):
+            fail(f"{label} has invalid range: {range_value!r}")
+        exposure_gap_class = require_string(
+            entry, label, "exposure_gap_class", nonempty=True
+        )
+        if exposure_gap_class != entry.get("classification"):
+            fail(f"{label} exposure_gap_class does not match classification")
+        suppression_state = require_string(
+            entry, label, "suppression_state", nonempty=True
+        )
+        if suppression_state not in {"unsuppressed", "suppressed"}:
+            fail(f"{label} has unknown suppression_state: {suppression_state!r}")
+        contribution = entry.get("threshold_contribution")
+        if isinstance(contribution, bool) or contribution not in {0, 1}:
+            fail(f"{label} has invalid threshold_contribution: {contribution!r}")
+        if suppression_state == "suppressed" and contribution != 0:
+            fail(f"{label} suppressed entry contributes to threshold")
+        if suppression_state == "unsuppressed" and contribution != 1:
+            fail(f"{label} unsuppressed entry does not contribute to threshold")
+        artifact_pointer = require_string(
+            entry, label, "artifact_pointer", nonempty=True
+        )
+        expected_pointer = f"sensors/ripr/exposure-gaps.json#/entries/{index}"
+        if artifact_pointer != expected_pointer:
+            fail(
+                f"{label} artifact_pointer {artifact_pointer!r} "
+                f"does not match {expected_pointer!r}"
+            )
     decision = load_json(decision_path)
     counts = decision.get("counts")
     if isinstance(counts, dict):
@@ -6374,13 +6416,29 @@ def self_test_ripr_exposure_gap_contract() -> None:
         return tmp
 
     decision = {"counts": {"unsuppressed_exposure_gaps": 2, "suppressed_exposure_gaps": 1}}
-    entry = {"id": "probe:src_x.rs:1:call_deletion", "classification": "no_static_path"}
+    entry = {
+        "id": "probe:src_x.rs:1:call_deletion",
+        "classification": "no_static_path",
+        "exposure_gap_class": "no_static_path",
+        "path": "src/x.rs",
+        "range": {"start_line": 1, "end_line": 1},
+        "suppression_state": "unsuppressed",
+        "threshold_contribution": 1,
+        "artifact_pointer": "sensors/ripr/exposure-gaps.json#/entries/0",
+    }
+    entry_2 = dict(entry, artifact_pointer="sensors/ripr/exposure-gaps.json#/entries/1")
+    entry_3 = dict(
+        entry,
+        artifact_pointer="sensors/ripr/exposure-gaps.json#/entries/2",
+        suppression_state="suppressed",
+        threshold_contribution=0,
+    )
     detail = {
         "schema": "ub-review.ripr_exposure_gaps.v1",
         "status": "ok",
         "total_gap_findings": 3,
         "truncated": False,
-        "entries": [entry, entry, entry],
+        "entries": [entry, entry_2, entry_3],
     }
     require_ripr_exposure_gap_details(write_root(decision, detail))
     require_ripr_exposure_gap_details(
@@ -6407,7 +6465,7 @@ def self_test_ripr_exposure_gap_contract() -> None:
         "ripr detail totals reconcile with badge counts",
         "does not reconcile with gate-decision counts",
         lambda root=write_root(
-            decision, dict(detail, total_gap_findings=2, entries=[entry, entry])
+            decision, dict(detail, total_gap_findings=2, entries=[entry, entry_2])
         ): require_ripr_exposure_gap_details(root),
     )
     expect_self_test_failure(
@@ -6431,6 +6489,23 @@ def self_test_ripr_exposure_gap_contract() -> None:
             decision, dict(detail, entries=[entry])
         ): require_ripr_exposure_gap_details(root),
         )
+    missing_action_entry = dict(entry)
+    missing_action_entry.pop("threshold_contribution")
+    expect_self_test_failure(
+        "ripr detail entries carry threshold contribution",
+        "invalid threshold_contribution",
+        lambda root=write_root(
+            decision,
+            dict(
+                detail,
+                entries=[
+                    missing_action_entry,
+                    entry_2,
+                    entry_3,
+                ],
+            ),
+        ): require_ripr_exposure_gap_details(root),
+    )
 
 
 def self_test_ci_audit_runner_cancellations_contract() -> None:
