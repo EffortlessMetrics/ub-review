@@ -34,6 +34,25 @@ pub(crate) struct FocusedBuildTask {
     pub(crate) request_ids: Vec<String>,
 }
 
+pub(crate) fn is_bun_focused_test_file(path: &str) -> bool {
+    let path = normalize_repo_path(path);
+    if !is_repo_relative_path(&path) {
+        return false;
+    }
+    let lower = path.to_ascii_lowercase();
+    (lower.starts_with("test/") || lower.starts_with("tests/"))
+        && [
+            ".test.ts",
+            ".test.tsx",
+            ".test.js",
+            ".test.jsx",
+            ".test.mjs",
+            ".test.cjs",
+        ]
+        .iter()
+        .any(|suffix| lower.ends_with(suffix))
+}
+
 pub(crate) fn focused_cargo_test_command_spec(command: &str) -> Option<ProofCommandSpec> {
     if has_shell_control_token(command) {
         return None;
@@ -915,6 +934,26 @@ mod tests {
             150,
             FocusedProofMode::RedGreen.command_count(),
             budget,
+        ));
+    }
+
+    #[test]
+    fn bun_focused_test_file_classifier_requires_repo_relative_test_suffixes() {
+        assert!(is_bun_focused_test_file(
+            "test/js/bun/md/md-edge-cases.test.ts"
+        ));
+        assert!(is_bun_focused_test_file(
+            "tests\\node\\fs\\fs-write.test.JS"
+        ));
+        assert!(!is_bun_focused_test_file(
+            ".\\tests\\node\\fs\\fs-write.test.js"
+        ));
+        assert!(!is_bun_focused_test_file(
+            "src/js/bun/md/md-edge-cases.test.ts"
+        ));
+        assert!(!is_bun_focused_test_file("test/js/bun/md/helper.ts"));
+        assert!(!is_bun_focused_test_file(
+            "../test/js/bun/md/escape.test.ts"
         ));
     }
 

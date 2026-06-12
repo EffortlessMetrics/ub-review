@@ -9386,25 +9386,6 @@ fn parse_js_string_literal(text: &str) -> Option<String> {
     None
 }
 
-fn is_bun_focused_test_file(path: &str) -> bool {
-    let path = normalize_repo_path(path);
-    if !is_repo_relative_path(&path) {
-        return false;
-    }
-    let lower = path.to_ascii_lowercase();
-    (lower.starts_with("test/") || lower.starts_with("tests/"))
-        && [
-            ".test.ts",
-            ".test.tsx",
-            ".test.js",
-            ".test.jsx",
-            ".test.mjs",
-            ".test.cjs",
-        ]
-        .iter()
-        .any(|suffix| lower.ends_with(suffix))
-}
-
 fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSpec {
     if let Some(command_specs) = &task.command_specs {
         return if side == "head" {
