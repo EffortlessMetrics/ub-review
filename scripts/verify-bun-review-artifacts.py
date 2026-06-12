@@ -1030,6 +1030,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/model_stages.json",
         "review/metrics.json",
         "review/ub-review-cost.json",
+        "review/floor-trend.json",
         "review/fill-ledger.json",
         "review/quality-receipt.json",
         "review/scheduler.json",
@@ -1854,6 +1855,167 @@ def require_cost_receipt(root: pathlib.Path, metrics: dict) -> None:
         require_missing_field(missing, "estimated_cost_usd")
     if cache.get("cargo") == "unknown":
         require_missing_field(missing, "cache.cargo")
+
+
+def require_floor_trend(root: pathlib.Path) -> None:
+    trend = load_json(root / "review/floor-trend.json")
+    if not isinstance(trend, dict):
+        fail("review/floor-trend.json is not an object")
+    if trend.get("schema") != "ub-review.floor_trend.v1":
+        fail(f"floor-trend.json schema invalid: {trend.get('schema')!r}")
+    cost = load_json(root / "review/ub-review-cost.json")
+    if trend.get("run_id") != cost.get("run_id"):
+        fail("floor-trend.json run_id does not match ub-review-cost.json")
+    as_of = trend.get("as_of")
+    if not isinstance(as_of, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", as_of):
+        fail(f"floor-trend.json as_of is not YYYY-MM-DD: {as_of!r}")
+    if trend.get("window_scope") != "single_run_v1":
+        fail(f"floor-trend.json window_scope invalid: {trend.get('window_scope')!r}")
+    if trend.get("window_runs") != 1:
+        fail(f"floor-trend.json window_runs must be 1 for single_run_v1: {trend.get('window_runs')!r}")
+
+    source_artifacts = trend.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail("floor-trend.json source_artifacts is not a non-empty array")
+    for required in [
+        "review/ub-review-cost.json",
+        "review/metrics.json",
+        "policy/ci-budget.toml",
+    ]:
+        if required not in source_artifacts:
+            fail(f"floor-trend.json source_artifacts missing {required}")
+    for index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(source, f"floor-trend.json source_artifacts[{index}]")
+
+    releases = trend.get("releases")
+    if not isinstance(releases, list) or len(releases) != 1:
+        fail("floor-trend.json releases must contain one single-run sample")
+    release = releases[0]
+    if not isinstance(release, dict):
+        fail("floor-trend.json releases[0] is not an object")
+    require_non_empty_string_value(release.get("version"), "floor-trend.json releases[0].version")
+    if release.get("sample_runs") != 1:
+        fail("floor-trend.json releases[0].sample_runs must be 1")
+
+    required_floor = cost.get("required_floor_wall_seconds")
+    floor_p50 = require_optional_non_negative_number(
+        release,
+        "floor-trend.json releases[0].floor_wall_seconds_p50",
+        "floor_wall_seconds_p50",
+    )
+    floor_p95 = require_optional_non_negative_number(
+        release,
+        "floor-trend.json releases[0].floor_wall_seconds_p95",
+        "floor_wall_seconds_p95",
+    )
+    if required_floor is None:
+        if floor_p50 is not None or floor_p95 is not None:
+            fail("floor-trend.json floor percentiles must be null when cost floor is unavailable")
+    else:
+        expected_floor = require_non_negative_number_value(
+            required_floor, "ub-review-cost.json required_floor_wall_seconds"
+        )
+        if floor_p50 != expected_floor or floor_p95 != expected_floor:
+            fail("floor-trend.json floor percentiles do not match cost required_floor_wall_seconds")
+
+    expected_cargo_hit = floor_cache_hit_rate(cost.get("cache", {}).get("cargo"))
+    expected_model_hit = floor_cache_hit_rate(cost.get("cache", {}).get("model_prefix"))
+    cargo_hit = require_optional_non_negative_number(
+        release, "floor-trend.json releases[0].cargo_cache_hit_rate", "cargo_cache_hit_rate"
+    )
+    model_hit = require_optional_non_negative_number(
+        release,
+        "floor-trend.json releases[0].model_prefix_cache_hit_rate",
+        "model_prefix_cache_hit_rate",
+    )
+    if cargo_hit != expected_cargo_hit:
+        fail("floor-trend.json cargo_cache_hit_rate does not match cost cache.cargo")
+    if model_hit != expected_model_hit:
+        fail("floor-trend.json model_prefix_cache_hit_rate does not match cost cache.model_prefix")
+
+    fallback_rate = require_non_negative_number_value(
+        release.get("fallback_used_rate"), "floor-trend.json releases[0].fallback_used_rate"
+    )
+    expected_fallback_rate = 1.0 if cost.get("fallback_used") is True else 0.0
+    if fallback_rate != expected_fallback_rate:
+        fail("floor-trend.json fallback_used_rate does not match cost fallback_used")
+    avg_cost = require_optional_non_negative_number(
+        release, "floor-trend.json releases[0].avg_cost_usd", "avg_cost_usd"
+    )
+    expected_cost = cost.get("estimated_cost_usd")
+    if expected_cost is None:
+        if avg_cost is not None:
+            fail("floor-trend.json avg_cost_usd must be null when cost estimate is unavailable")
+    else:
+        expected_cost_number = require_non_negative_number_value(
+            expected_cost, "ub-review-cost.json estimated_cost_usd"
+        )
+        if avg_cost != expected_cost_number:
+            fail("floor-trend.json avg_cost_usd does not match cost estimated_cost_usd")
+
+    trend_summary = trend.get("trend")
+    if not isinstance(trend_summary, dict):
+        fail("floor-trend.json trend is not an object")
+    missing = trend.get("missing")
+    if not isinstance(missing, list):
+        fail("floor-trend.json missing is not an array")
+    for index, entry in enumerate(missing):
+        if not isinstance(entry, dict):
+            fail(f"floor-trend.json missing[{index}] is not an object")
+        require_non_empty_string_value(entry.get("field"), f"floor-trend.json missing[{index}].field")
+        require_non_empty_string_value(entry.get("reason"), f"floor-trend.json missing[{index}].reason")
+        require_non_empty_string_value(
+            entry.get("source_artifact"), f"floor-trend.json missing[{index}].source_artifact"
+        )
+    for field in [
+        "trend.floor_creep_detected",
+        "trend.cache_hit_rate_delta",
+        "trend.avg_cost_delta_usd",
+    ]:
+        summary_key = field.rsplit(".", 1)[1]
+        if trend_summary.get(summary_key) is not None:
+            fail(f"floor-trend.json {field} must be null for single_run_v1")
+        require_floor_trend_missing_field(missing, field)
+
+    pressure = trend_summary.get("floor_budget_pressure_detected")
+    if required_floor is None:
+        if pressure is not None:
+            fail("floor-trend.json trend.floor_budget_pressure_detected must be null without floor seconds")
+        require_floor_trend_missing_field(missing, "trend.floor_budget_pressure_detected")
+    elif not isinstance(pressure, bool):
+        fail("floor-trend.json trend.floor_budget_pressure_detected must be boolean when floor seconds exist")
+    else:
+        target_minutes = cost.get("target_minutes")
+        if not isinstance(target_minutes, int) or isinstance(target_minutes, bool) or target_minutes < 0:
+            fail("ub-review-cost.json target_minutes invalid for floor trend")
+        expected_pressure = float(required_floor) > (target_minutes * 60.0 / 2.0)
+        if pressure != expected_pressure:
+            fail("floor-trend.json floor_budget_pressure_detected does not match cost floor/target")
+
+    if required_floor is None:
+        require_floor_trend_missing_field(missing, "releases[].floor_wall_seconds_p50")
+        require_floor_trend_missing_field(missing, "releases[].floor_wall_seconds_p95")
+    if expected_cargo_hit is None:
+        require_floor_trend_missing_field(missing, "releases[].cargo_cache_hit_rate")
+    if expected_model_hit is None:
+        require_floor_trend_missing_field(missing, "releases[].model_prefix_cache_hit_rate")
+    if expected_cost is None:
+        require_floor_trend_missing_field(missing, "releases[].avg_cost_usd")
+
+
+def floor_cache_hit_rate(status: Any) -> float | None:
+    if status == "hit":
+        return 1.0
+    if status == "partial":
+        return 0.5
+    if status == "miss":
+        return 0.0
+    return None
+
+
+def require_floor_trend_missing_field(missing: list, field: str) -> None:
+    if not any(entry.get("field") == field for entry in missing):
+        fail(f"floor-trend.json missing[] does not receipt {field}")
 
 
 def require_fill_ledger(root: pathlib.Path) -> None:
@@ -7037,6 +7199,139 @@ def self_test_cost_receipt_contract() -> None:
     )
 
 
+def self_test_floor_trend_contract() -> None:
+    import copy
+    import tempfile
+
+    cost = {
+        "schema": "ub-review.cost_receipt.v1",
+        "run_id": "local-abc123",
+        "runner_kind": "local",
+        "target_minutes": 30,
+        "cap_minutes": 60,
+        "fallback_used": True,
+        "required_floor_wall_seconds": 45.0,
+        "llm_seconds": 1.25,
+        "cache": {"cargo": "unknown", "model_prefix": "hit"},
+        "tokens": {"fresh_input": 100, "cached_input": 25, "output": 12},
+        "estimated_cost_usd": None,
+        "cost_basis": {
+            "runner_minutes": 1.5,
+            "linux_minute_rate_usd": None,
+            "token_pricing": "excluded_v1",
+        },
+        "source_artifacts": ["review/metrics.json"],
+        "missing": [],
+    }
+    trend = {
+        "schema": "ub-review.floor_trend.v1",
+        "run_id": "local-abc123",
+        "as_of": "2026-06-12",
+        "window_scope": "single_run_v1",
+        "window_runs": 1,
+        "source_artifacts": [
+            "review/ub-review-cost.json",
+            "review/metrics.json",
+            "policy/ci-budget.toml",
+        ],
+        "releases": [
+            {
+                "version": "0.1.0",
+                "sample_runs": 1,
+                "floor_wall_seconds_p50": 45.0,
+                "floor_wall_seconds_p95": 45.0,
+                "cargo_cache_hit_rate": None,
+                "model_prefix_cache_hit_rate": 1.0,
+                "fallback_used_rate": 1.0,
+                "avg_cost_usd": None,
+            }
+        ],
+        "trend": {
+            "floor_creep_detected": None,
+            "floor_budget_pressure_detected": False,
+            "cache_hit_rate_delta": None,
+            "avg_cost_delta_usd": None,
+        },
+        "missing": [
+            {
+                "field": "releases[].cargo_cache_hit_rate",
+                "reason": "cargo cache status is unknown in cost receipt v1",
+                "source_artifact": "review/ub-review-cost.json",
+            },
+            {
+                "field": "releases[].avg_cost_usd",
+                "reason": "ub-review-cost.json estimated_cost_usd is unavailable",
+                "source_artifact": "review/ub-review-cost.json",
+            },
+            {
+                "field": "trend.floor_creep_detected",
+                "reason": "historical run artifacts are required",
+                "source_artifact": "review/ub-review-cost.json",
+            },
+            {
+                "field": "trend.cache_hit_rate_delta",
+                "reason": "historical run artifacts are required",
+                "source_artifact": "review/ub-review-cost.json",
+            },
+            {
+                "field": "trend.avg_cost_delta_usd",
+                "reason": "historical run artifacts are required",
+                "source_artifact": "review/ub-review-cost.json",
+            },
+        ],
+    }
+
+    def write_root(trend_overrides: dict | None = None) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        candidate = copy.deepcopy(trend)
+        if trend_overrides:
+            candidate.update(trend_overrides)
+        write_self_test_json(root / "review/ub-review-cost.json", cost)
+        write_self_test_json(root / "review/metrics.json", {"run": {}})
+        write_self_test_json(root / "review/floor-trend.json", candidate)
+        return root
+
+    require_floor_trend(write_root())
+    expect_self_test_failure(
+        "floor trend schema drift",
+        "schema invalid",
+        lambda: require_floor_trend(write_root({"schema": "ub-review.floor_trend.v2"})),
+    )
+    expect_self_test_failure(
+        "floor trend run id drift",
+        "run_id does not match",
+        lambda: require_floor_trend(write_root({"run_id": "local-drift"})),
+    )
+
+    p95_drift = copy.deepcopy(trend)
+    p95_drift["releases"][0]["floor_wall_seconds_p95"] = 50.0
+    expect_self_test_failure(
+        "floor trend percentile drift",
+        "floor percentiles do not match",
+        lambda: require_floor_trend(write_root(p95_drift)),
+    )
+
+    trend_overclaim = copy.deepcopy(trend)
+    trend_overclaim["trend"]["floor_creep_detected"] = False
+    expect_self_test_failure(
+        "floor trend historical overclaim",
+        "trend.floor_creep_detected must be null",
+        lambda: require_floor_trend(write_root(trend_overclaim)),
+    )
+
+    missing_gap = copy.deepcopy(trend)
+    missing_gap["missing"] = [
+        entry
+        for entry in missing_gap["missing"]
+        if entry["field"] != "releases[].cargo_cache_hit_rate"
+    ]
+    expect_self_test_failure(
+        "floor trend missing cache gap",
+        "missing[] does not receipt releases[].cargo_cache_hit_rate",
+        lambda: require_floor_trend(write_root(missing_gap)),
+    )
+
+
 def self_test_fill_ledger_contract() -> None:
     import tempfile
 
@@ -8488,6 +8783,7 @@ def run_self_tests() -> None:
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()
     self_test_cost_receipt_contract()
+    self_test_floor_trend_contract()
     self_test_fill_ledger_contract()
     self_test_quality_receipt_contract()
     self_test_noise_rule_phrase_parity_with_rust()
@@ -8593,6 +8889,7 @@ def main(argv: list[str]) -> int:
     )
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
+    require_floor_trend(root)
     require_fill_ledger(root)
     require_quality_receipt(root, metrics, review)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)

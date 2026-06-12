@@ -225,6 +225,7 @@ fn active_len_tracks_view_after_resize() {
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/ub-review-cost.json",
+        "review/floor-trend.json",
         "review/fill-ledger.json",
         "review/quality-receipt.json",
         "review/scheduler.json",
@@ -772,6 +773,41 @@ fn active_len_tracks_view_after_resize() {
     assert!(missing_cost_fields.contains("cost_basis.linux_minute_rate_usd"));
     assert!(missing_cost_fields.contains("estimated_cost_usd"));
     assert!(missing_cost_fields.contains("cache.cargo"));
+    let floor_trend: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/floor-trend.json"))?)?;
+    assert_eq!(floor_trend["schema"], "ub-review.floor_trend.v1");
+    assert_eq!(floor_trend["run_id"], cost["run_id"]);
+    assert_eq!(floor_trend["window_scope"], "single_run_v1");
+    assert_eq!(floor_trend["window_runs"], 1);
+    let as_of = floor_trend["as_of"].as_str().unwrap_or_default();
+    assert_eq!(as_of.len(), "2026-06-12".len());
+    assert_eq!(as_of.chars().nth(4), Some('-'));
+    assert_eq!(as_of.chars().nth(7), Some('-'));
+    let floor_releases = floor_trend["releases"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("floor-trend releases[] absent"))?;
+    assert_eq!(floor_releases.len(), 1);
+    assert_eq!(floor_releases[0]["sample_runs"], 1);
+    assert_eq!(
+        floor_releases[0]["fallback_used_rate"],
+        if cost["fallback_used"] == true {
+            1.0
+        } else {
+            0.0
+        }
+    );
+    assert!(floor_trend["trend"]["floor_creep_detected"].is_null());
+    assert!(floor_trend["trend"]["cache_hit_rate_delta"].is_null());
+    assert!(floor_trend["trend"]["avg_cost_delta_usd"].is_null());
+    let missing_floor_fields = floor_trend["missing"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("floor-trend missing[] absent"))?
+        .iter()
+        .filter_map(|entry| entry["field"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(missing_floor_fields.contains("trend.floor_creep_detected"));
+    assert!(missing_floor_fields.contains("trend.cache_hit_rate_delta"));
+    assert!(missing_floor_fields.contains("trend.avg_cost_delta_usd"));
     let fill_ledger: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/fill-ledger.json"))?)?;
     assert_eq!(fill_ledger["schema"], "ub-review.fill_ledger.v1");
