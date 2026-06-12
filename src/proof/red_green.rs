@@ -214,20 +214,21 @@ where
         Err(error) => {
             let mut commands = vec![head];
             let base_spec = proof_task_command_spec(task, "base-plus-tests");
+            let patch_reason = format!("base+tests patch failed: {error:#}");
             commands.push(skipped_proof_command_receipt(
                 out,
                 task,
                 "base-plus-tests",
                 &base_spec,
                 "skipped",
-                format!("base+tests patch failed: {error:#}"),
+                patch_reason.clone(),
             )?);
             return Ok(focused_red_green_receipt(
                 diff,
                 task,
                 commands,
                 "base_patch_failed".to_owned(),
-                "base+tests patch failed".to_owned(),
+                patch_reason,
             ));
         }
     };
