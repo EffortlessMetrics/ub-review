@@ -1061,6 +1061,8 @@ struct ReviewInlineComment {
     side: String,
     body: String,
     evidence: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    suggestion: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -1441,6 +1443,21 @@ struct GitHubReviewComment {
     suggestion: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+struct GitHubReviewPostPayload {
+    event: String,
+    body: String,
+    comments: Vec<GitHubReviewPostComment>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GitHubReviewPostComment {
+    path: String,
+    line: u32,
+    side: String,
+    body: String,
+}
+
 #[derive(Debug)]
 struct LaneModelOutput {
     summary: Option<String>,
@@ -1506,6 +1523,8 @@ struct ModelCandidateComment {
     line: u32,
     body: String,
     evidence: String,
+    #[serde(default)]
+    suggestion: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3345,6 +3364,10 @@ fn resolved_profile_artifact(config: &Config, profile: &Profile) -> serde_json::
 /// field is absent. Suggestion blocks therefore cannot be emitted from this
 /// source without fabricating edits. See the narrow follow-up issue:
 /// "repair-queue should emit applicable edits for suggestion blocks".
+///
+/// That assessment is for observed `repair-queue/0.1` output. The optional
+/// fields below are forward-compatible producer fields and are used only when
+/// the tool supplies concrete replacement text.
 #[derive(Clone, Debug, Deserialize)]
 struct RepairQueueEntry {
     card_id: String,
@@ -3357,6 +3380,61 @@ struct RepairQueueEntry {
     /// Missing evidence items (prose guidance; not a diff suggestion).
     #[serde(default)]
     missing_evidence: Vec<String>,
+    /// Future producer fields for a concrete replacement. Current
+    /// unsafe-review 0.3.4 output does not emit these.
+    #[serde(default)]
+    replacement: Option<String>,
+    #[serde(default)]
+    replacement_text: Option<String>,
+    #[serde(default)]
+    new_text: Option<String>,
+    #[serde(default)]
+    suggestion_text: Option<String>,
+    #[serde(default)]
+    applicable_edit: Option<RepairQueueApplicableEdit>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RepairQueueApplicableEdit {
+    #[serde(default)]
+    replacement: Option<String>,
+    #[serde(default)]
+    replacement_text: Option<String>,
+    #[serde(default)]
+    new_text: Option<String>,
+    #[serde(default)]
+    suggestion_text: Option<String>,
+}
+
+impl RepairQueueApplicableEdit {
+    fn suggestion(&self) -> Option<String> {
+        [
+            self.suggestion_text.as_deref(),
+            self.replacement_text.as_deref(),
+            self.new_text.as_deref(),
+            self.replacement.as_deref(),
+        ]
+        .into_iter()
+        .find_map(normalize_github_suggestion_text)
+    }
+}
+
+impl RepairQueueEntry {
+    fn suggestion(&self) -> Option<String> {
+        [
+            self.suggestion_text.as_deref(),
+            self.replacement_text.as_deref(),
+            self.new_text.as_deref(),
+            self.replacement.as_deref(),
+        ]
+        .into_iter()
+        .find_map(normalize_github_suggestion_text)
+        .or_else(|| {
+            self.applicable_edit
+                .as_ref()
+                .and_then(|edit| edit.suggestion())
+        })
+    }
 }
 
 /// Top-level shape of `repair-queue.json` (schema_version `"0.1"`).
@@ -3482,10 +3560,8 @@ fn build_unsafe_review_inline_comments(
         // Optional: if the repair queue has an entry for this card, surface the
         // bucket reason, operation, and missing evidence as additional context
         // (guidance only, not a suggestion block).
-        let rq_context = entry
-            .card_id
-            .as_deref()
-            .and_then(|id| repair_queue.get(id))
+        let rq_entry = entry.card_id.as_deref().and_then(|id| repair_queue.get(id));
+        let rq_context = rq_entry
             .map(|rq_entry| {
                 let bucket = rq_entry
                     .bucket_reason
@@ -3511,6 +3587,7 @@ fn build_unsafe_review_inline_comments(
                 }
             })
             .unwrap_or_default();
+        let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
         let body = format!(
             "[unsafe-review]{card_label} **{gap}**\n\n\
              **Next action**: {action}\n\n\
@@ -3528,7 +3605,7 @@ fn build_unsafe_review_inline_comments(
             line,
             side: "RIGHT".to_owned(),
             body,
-            suggestion: None,
+            suggestion,
         });
     }
     comments
@@ -3609,10 +3686,8 @@ fn unsafe_review_comment_plan_candidates(
             .map(|id| format!(" (`{id}`)"))
             .unwrap_or_default();
         let trust = entry.trust_boundary.as_deref().unwrap_or(gate_trust);
-        let rq_context = entry
-            .card_id
-            .as_deref()
-            .and_then(|id| repair_queue.get(id))
+        let rq_entry = entry.card_id.as_deref().and_then(|id| repair_queue.get(id));
+        let rq_context = rq_entry
             .map(|rq_entry| {
                 let bucket = rq_entry
                     .bucket_reason
@@ -3638,6 +3713,7 @@ fn unsafe_review_comment_plan_candidates(
                 }
             })
             .unwrap_or_default();
+        let suggestion = rq_entry.and_then(RepairQueueEntry::suggestion);
         let body = truncate_chars(
             &format!(
                 "**{gap}**{card_label}\n\n\
@@ -3662,6 +3738,7 @@ fn unsafe_review_comment_plan_candidates(
             evidence: format!(
                 "unsafe-review comment-plan{card_label}: {selection}; confirmation_state: {action}"
             ),
+            suggestion,
         });
     }
     (candidates, skips)
@@ -5907,7 +5984,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
                 line: comment.line,
                 side: comment.side.clone(),
                 body: comment.body.clone(),
-                suggestion: None,
+                suggestion: comment.suggestion.clone(),
             })
             .collect(),
     };
@@ -8124,6 +8201,7 @@ fn candidate_review_surfaces(
                     side,
                     body: candidate.claim.clone(),
                     evidence: candidate.evidence.clone(),
+                    suggestion: None,
                 });
             }
             ("summary-only-finding", "summary-only") => {
@@ -15334,6 +15412,28 @@ fn truncate_chars(value: &str, max_chars: usize) -> String {
     truncated
 }
 
+const GITHUB_SUGGESTION_MAX_CHARS: usize = 800;
+
+fn normalize_github_suggestion_text(value: Option<&str>) -> Option<String> {
+    let text = value?.trim();
+    validate_github_suggestion_text(text).ok()?;
+    Some(text.to_owned())
+}
+
+fn validate_github_suggestion_text(value: &str) -> Result<()> {
+    let text = value.trim();
+    if text.is_empty() {
+        bail!("github review suggestion must not be empty");
+    }
+    if text.chars().count() > GITHUB_SUGGESTION_MAX_CHARS {
+        bail!("github review suggestion must be {GITHUB_SUGGESTION_MAX_CHARS} chars or fewer");
+    }
+    if text.contains("```") {
+        bail!("github review suggestion must not contain fenced code markers");
+    }
+    Ok(())
+}
+
 fn validate_inline_candidate(
     lane: &LanePlan,
     candidate: ModelCandidateComment,
@@ -15350,6 +15450,11 @@ fn validate_inline_candidate(
     let body_present = !body_text.is_empty();
     let evidence_present = !evidence.is_empty();
     let repo_relative = is_repo_relative_path(&path);
+    let suggestion = if lane.id == "unsafe-review" {
+        normalize_github_suggestion_text(candidate.suggestion.as_deref())
+    } else {
+        None
+    };
 
     if allowed_severity
         && allowed_confidence
@@ -15368,6 +15473,7 @@ fn validate_inline_candidate(
             side: "RIGHT".to_owned(),
             body,
             evidence,
+            suggestion,
         })
     } else {
         Err(SummaryOnlyFinding {
@@ -17717,8 +17823,9 @@ fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     )
     .with_context(|| format!("parse {}", args.review_json.display()))?;
     validate_github_review_payload_for_post(args, &review)?;
+    let api_payload = github_review_post_payload(&review)?;
     let post_payload = args.out.join("github-review-post-payload.json");
-    fs::write(&post_payload, serde_json::to_vec_pretty(&review)?)?;
+    fs::write(&post_payload, serde_json::to_vec_pretty(&api_payload)?)?;
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
         args.github_api_url.trim_end_matches('/'),
@@ -17796,6 +17903,38 @@ fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     })
 }
 
+fn github_review_post_payload(review: &GitHubReview) -> Result<GitHubReviewPostPayload> {
+    let comments = review
+        .comments
+        .iter()
+        .map(|comment| {
+            Ok(GitHubReviewPostComment {
+                path: comment.path.clone(),
+                line: comment.line,
+                side: comment.side.clone(),
+                body: github_review_post_comment_body(comment)?,
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(GitHubReviewPostPayload {
+        event: review.event.clone(),
+        body: review.body.clone(),
+        comments,
+    })
+}
+
+fn github_review_post_comment_body(comment: &GitHubReviewComment) -> Result<String> {
+    let Some(suggestion) = comment.suggestion.as_deref() else {
+        return Ok(comment.body.clone());
+    };
+    validate_github_suggestion_text(suggestion)?;
+    Ok(format!(
+        "{}\n\n```suggestion\n{}\n```",
+        comment.body.trim_end(),
+        suggestion.trim()
+    ))
+}
+
 /// Default-policy convenience wrapper kept for the payload contract tests;
 /// production callers thread the effective policy and waiver explicitly.
 #[cfg(test)]
@@ -17846,6 +17985,12 @@ fn validate_github_review_payload_with_policy_waiver(
         }
         if has_forbidden_pr_review_boilerplate(&comment.body) {
             bail!("github review comment contains artifact-only boilerplate");
+        }
+        if let Some(suggestion) = comment.suggestion.as_deref() {
+            if !comment.body.starts_with("[unsafe-review]") {
+                bail!("github review suggestion must be sourced from unsafe-review");
+            }
+            validate_github_suggestion_text(suggestion)?;
         }
     }
     Ok(())
@@ -23698,12 +23843,33 @@ index 1111111..2222222 100644
                 body: "This reaches the helper but does not assert the changed boundary."
                     .to_owned(),
                 evidence: "diff hunk".to_owned(),
+                suggestion: None,
             },
             &line_map,
         )
         .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
         assert_eq!(accepted.side, "RIGHT");
         assert!(accepted.body.starts_with("[tests]"));
+        assert!(accepted.suggestion.is_none());
+
+        let model_suggestion = validate_inline_candidate(
+            &lane,
+            ModelCandidateComment {
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                body: "[tests] model-proposed edit must remain advisory".to_owned(),
+                evidence: "diff hunk".to_owned(),
+                suggestion: Some("assert!(proved);".to_owned()),
+            },
+            &line_map,
+        )
+        .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
+        assert!(
+            model_suggestion.suggestion.is_none(),
+            "non-unsafe-review lanes must not smuggle suggestion blocks"
+        );
 
         let rejected = validate_inline_candidate(
             &lane,
@@ -23714,6 +23880,7 @@ index 1111111..2222222 100644
                 line: 50,
                 body: "[tests] guessed stale line".to_owned(),
                 evidence: "none".to_owned(),
+                suggestion: None,
             },
             &line_map,
         );
@@ -23727,6 +23894,7 @@ index 1111111..2222222 100644
                 line: 2,
                 body: "[tests] line-valid but unsupported claim".to_owned(),
                 evidence: "".to_owned(),
+                suggestion: None,
             },
             &line_map,
         );
@@ -23744,6 +23912,7 @@ index 1111111..2222222 100644
                 line: 2,
                 body: "   ".to_owned(),
                 evidence: "diff hunk".to_owned(),
+                suggestion: None,
             },
             &line_map,
         );
@@ -23781,6 +23950,7 @@ index 1111111..2222222 100644
                 body: "[source-route-fast] This is line-valid but must stay candidate-only."
                     .to_owned(),
                 evidence: "diff hunk".to_owned(),
+                suggestion: None,
             }],
             candidate_findings: Vec::new(),
             summary_only_findings: Vec::new(),
@@ -25746,6 +25916,7 @@ index 1111111..2222222 100644
                 body: "[tests-oracle] This test reaches the helper but not the boundary."
                     .to_owned(),
                 evidence: "ripr excerpt".to_owned(),
+                suggestion: None,
             },
             ReviewInlineComment {
                 lane: "ub-active-view".to_owned(),
@@ -25757,6 +25928,7 @@ index 1111111..2222222 100644
                 body: "[ub-active-view] The view length can diverge from backing storage."
                     .to_owned(),
                 evidence: "unsafe-review card".to_owned(),
+                suggestion: None,
             },
         ];
         let mut summary_only_findings = Vec::new();
@@ -25788,6 +25960,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
             evidence: "ripr excerpt".to_owned(),
+            suggestion: None,
         }];
 
         let prompt = render_refuter_prompt(&inline_comments)?;
@@ -25810,6 +25983,7 @@ index 1111111..2222222 100644
                 side: "RIGHT".to_owned(),
                 body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
                 evidence: "ripr excerpt".to_owned(),
+                suggestion: None,
             },
             ReviewInlineComment {
                 lane: "source-route".to_owned(),
@@ -25820,6 +25994,7 @@ index 1111111..2222222 100644
                 side: "RIGHT".to_owned(),
                 body: "[source-route] A sibling path may share the helper.".to_owned(),
                 evidence: "route map".to_owned(),
+                suggestion: None,
             },
         ];
         let mut summary_only_findings = Vec::new();
@@ -25865,6 +26040,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[tests-oracle] This test does not prove the changed boundary.".to_owned(),
             evidence: "ripr excerpt".to_owned(),
+            suggestion: None,
         }];
         let mut summary_only_findings = Vec::new();
 
@@ -25940,6 +26116,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[tests-oracle] Existing inline candidate fills the post cap.".to_owned(),
             evidence: "test setup".to_owned(),
+            suggestion: None,
         }];
         let mut summary_only_findings = Vec::new();
         let mut model_observations = Vec::new();
@@ -26418,6 +26595,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[ub-active-view] The view length can diverge from backing storage.".to_owned(),
             evidence: "candidate evidence".to_owned(),
+            suggestion: None,
         }];
         let mut summary_only_findings = Vec::new();
         let output = RefuterOutput {
@@ -29103,6 +29281,7 @@ required_proof_unprooven = true
                 side: "RIGHT".to_owned(),
                 body: format!("Confirm concise-review guard boundary {index}."),
                 evidence: "generated regression fixture".to_owned(),
+                suggestion: None,
             })
             .collect::<Vec<_>>();
 
@@ -29314,6 +29493,7 @@ required_proof_unprooven = true
                 side: "RIGHT".to_owned(),
                 body: format!("Confirm concise-review guard boundary {index}."),
                 evidence: "generated regression fixture".to_owned(),
+                suggestion: None,
             })
             .collect::<Vec<_>>();
         let review_body_policy = ReviewBodyPolicy {
@@ -29533,6 +29713,7 @@ required_proof_unprooven = true
             side: "RIGHT".to_owned(),
             body: "Confirm the resize path cannot alias the detached buffer.".to_owned(),
             evidence: "generated regression fixture".to_owned(),
+            suggestion: None,
         }
     }
 
@@ -29576,6 +29757,51 @@ required_proof_unprooven = true
                 .contains("pass `synchronize` is not in [gate].post_review_on"),
             "terminal reason should name the pass policy: {}",
             surface.terminal_state.reason
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_preserves_unsafe_review_suggestions() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = vec![model_lane_receipt("unsafe-review", "ok")];
+        let inline_comments = vec![ReviewInlineComment {
+            lane: "unsafe-review".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: "src/main.rs".to_owned(),
+            line: 100,
+            side: "RIGHT".to_owned(),
+            body: "[unsafe-review] Guard evidence is missing.".to_owned(),
+            evidence: "unsafe-review comment-plan card-001".to_owned(),
+            suggestion: Some("let header = guarded_header_read(ptr)?;".to_owned()),
+        }];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+        })?;
+
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(
+            surface.github_review.comments[0].suggestion.as_deref(),
+            Some("let header = guarded_header_read(ptr)?;")
         );
         Ok(())
     }
@@ -29843,6 +30069,7 @@ required_proof_unprooven = true
                 side: "RIGHT".to_owned(),
                 body: "Confirm the C++ copy cannot race detach or resize between the Rust guard and native read.".to_owned(),
                 evidence: "line 196 calls Bun__createArrayBufferForCopy".to_owned(),
+                suggestion: None,
             }],
             &[] as &[SummaryOnlyFinding],
             &[] as &[Observation],
@@ -32033,6 +32260,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[tests-oracle] Added regression needs a red witness.".to_owned(),
             evidence: "RIGHT-side line map and test proof request".to_owned(),
+            suggestion: None,
         }];
         let summary_only_findings = vec![
             SummaryOnlyFinding {
@@ -32778,6 +33006,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[tests-oracle] Confirm the focused proof covers the changed route.".to_owned(),
             evidence: "test evidence".to_owned(),
+            suggestion: None,
         }];
         let summary_only_findings = vec![SummaryOnlyFinding {
             lane: "orchestrator-follow-up-follow-secondary".to_owned(),
@@ -33894,6 +34123,7 @@ index 1111111..2222222 100644
             side: "RIGHT".to_owned(),
             body: "[ub-active-view] The reborrow may alias the active view.".to_owned(),
             evidence: "unsafe block at src/lib.rs:7".to_owned(),
+            suggestion: None,
         }];
         let summary_only_findings = vec![SummaryOnlyFinding {
             lane: "tests-oracle".to_owned(),
@@ -33994,6 +34224,7 @@ index 1111111..2222222 100644
                 body: "[tests-oracle] The test reaches the helper but needs a red witness."
                     .to_owned(),
                 evidence: "ripr excerpt".to_owned(),
+                suggestion: None,
             }],
             summary_only_findings: vec![SummaryOnlyFinding {
                 lane: "source-route".to_owned(),
@@ -34191,6 +34422,7 @@ index 1111111..2222222 100644
             body: "[tests-oracle] The no-finalizer regression still needs a red witness."
                 .to_owned(),
             evidence: "diff hunk".to_owned(),
+            suggestion: None,
         }];
         let summary_only_findings = vec![SummaryOnlyFinding {
             lane: "source-route".to_owned(),
@@ -36705,6 +36937,67 @@ jobs:
                 .contains("raw_pointer_read without alignment guard")
         );
         assert!(comment.evidence.contains("changed line in unsafe block"));
+        assert!(comment.suggestion.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_comment_plan_suggestion_enters_compiler_intake() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-compiler-suggest",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "raw_pointer_read without alignment guard",
+                "selection_reason": "changed line in unsafe block",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            Some(
+                r#"{
+                "schema_version": "0.2",
+                "buckets": {
+                    "repairable_by_guard": [{
+                        "card_id": "card-compiler-suggest",
+                        "bucket_reason": "guard_evidence_missing",
+                        "applicable_edit": {
+                            "suggestion_text": "let header = guarded_header_read(ptr)?;"
+                        }
+                    }]
+                }
+            }"#,
+            ),
+        )?;
+        let line_map = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+
+        super::apply_unsafe_review_comment_plan_candidates(
+            &sensor_dir,
+            &line_map,
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut model_observations,
+                proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+
+        assert_eq!(inline_comments.len(), 1);
+        assert!(summary_only_findings.is_empty());
+        assert_eq!(
+            inline_comments[0].suggestion.as_deref(),
+            Some("let header = guarded_header_read(ptr)?;")
+        );
         Ok(())
     }
 
@@ -36914,6 +37207,63 @@ jobs:
         Ok(())
     }
 
+    /// Future repair-queue producers may provide concrete replacement text.
+    /// Only then can ub-review prepare a GitHub suggestion block; guidance
+    /// fields alone are still never promoted into edits.
+    #[test]
+    fn build_unsafe_review_inline_comments_uses_concrete_repair_queue_suggestion() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        let repair_queue = r#"{
+            "schema_version": "0.2",
+            "tool": "unsafe-review",
+            "mode": "aggregate_repair_queue",
+            "buckets": {
+                "repairable_by_guard": [{
+                    "card_id": "card-suggest-001",
+                    "operation": "unsafe { ptr.cast::<Header>().read() }",
+                    "missing_evidence": ["Missing visible local guard"],
+                    "bucket_reason": "guard_evidence_missing",
+                    "replacement_text": "let header = guarded_header_read(ptr)?;"
+                }],
+                "requires_human_review": []
+            }
+        }"#;
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-suggest-001",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "raw_pointer_read without alignment guard",
+                "selection_reason": "changed line in unsafe block",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            Some(repair_queue),
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
+        assert_eq!(comments.len(), 1);
+        assert_eq!(
+            comments[0].suggestion.as_deref(),
+            Some("let header = guarded_header_read(ptr)?;")
+        );
+        assert!(
+            comments[0].body.contains("guard_evidence_missing"),
+            "body should still carry repair context: {}",
+            comments[0].body
+        );
+        Ok(())
+    }
+
     /// Absent repair-queue file: `build_unsafe_review_inline_comments` still
     /// produces comments (degrades gracefully — repair-queue context is
     /// optional).
@@ -36987,6 +37337,58 @@ jobs:
         assert!(
             json_with.contains("alignment verified above"),
             "suggestion content must be serialised: {json_with}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn github_review_post_payload_renders_suggestion_without_internal_field() -> Result<()> {
+        let review = super::GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the unsafe guard proof.".to_owned(),
+            comments: vec![super::GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 8,
+                side: "RIGHT".to_owned(),
+                body: "[unsafe-review] Guard evidence is missing.".to_owned(),
+                suggestion: Some("let header = guarded_header_read(ptr)?;".to_owned()),
+            }],
+        };
+
+        super::validate_github_review_payload(&review)?;
+        let payload = super::github_review_post_payload(&review)?;
+        let json = serde_json::to_value(&payload)?;
+        assert!(
+            json["comments"][0].get("suggestion").is_none(),
+            "post payload must not leak the internal suggestion field: {json}"
+        );
+        let body = json["comments"][0]["body"].as_str().unwrap_or_default();
+        assert!(
+            body.contains("```suggestion\nlet header = guarded_header_read(ptr)?;\n```"),
+            "post body must render GitHub suggestion markdown: {body}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn github_review_payload_rejects_non_unsafe_review_suggestion() -> Result<()> {
+        let review = super::GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the test proof.".to_owned(),
+            comments: vec![super::GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 8,
+                side: "RIGHT".to_owned(),
+                body: "[tests] A model lane cannot provide one-click edits.".to_owned(),
+                suggestion: Some("assert!(proved);".to_owned()),
+            }],
+        };
+        let err = super::validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("non-unsafe suggestion unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("sourced from unsafe-review"),
+            "{err:#}"
         );
         Ok(())
     }

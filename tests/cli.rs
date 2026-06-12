@@ -7,7 +7,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
      policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
@@ -3885,6 +3885,93 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
         assert!(!text.contains("Authorization"));
         assert!(!text.contains("Bearer"));
     }
+    Ok(())
+}
+
+#[test]
+fn post_payload_renders_suggestion_blocks_for_github_api() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let diff_patch = temp.path().join("diff.patch");
+    let out = temp.path().join("post");
+    let token = "test-token-redacted";
+    fs::write(
+        &diff_patch,
+        "\
+diff --git a/src/lib.rs b/src/lib.rs
+index 1111111..2222222 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
+ pub fn active_len(len: usize) -> usize {
++    let header = unsafe { ptr.cast::<Header>().read() };
+     len
+}
+",
+    )
+    .with_context(|| format!("write {}", diff_patch.display()))?;
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Verification questions\n\n- Confirm the unsafe guard proof.",
+            "comments": [
+                {
+                    "path": "src/lib.rs",
+                    "line": 2,
+                    "side": "RIGHT",
+                    "body": "[unsafe-review] Guard evidence is missing.",
+                    "suggestion": "let header = guarded_header_read(ptr)?;"
+                }
+            ]
+        }))?,
+    )
+    .with_context(|| format!("write {}", review_json.display()))?;
+    let (github_api_url, handle) = spawn_fake_github_api()?;
+
+    run(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--diff-patch",
+            path_str(&diff_patch)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            token,
+            "--github-api-url",
+            &github_api_url,
+        ],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    assert_eq!(requests.len(), 1);
+    let request_text = &requests[0];
+    assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
+    assert!(
+        !request_text.contains("\"suggestion\""),
+        "GitHub API payload must not contain internal suggestion field: {request_text}"
+    );
+
+    let post_payload_text = fs::read_to_string(out.join("github-review-post-payload.json"))?;
+    assert!(
+        post_payload_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```")
+    );
+    assert!(
+        !post_payload_text.contains("\"suggestion\""),
+        "post payload artifact must not leak internal suggestion field: {post_payload_text}"
+    );
+    let post_result: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(out.join("post-result.json"))?)?;
+    assert_eq!(post_result["status"], "ok");
+    assert_eq!(post_result["comments"], 1);
     Ok(())
 }
 

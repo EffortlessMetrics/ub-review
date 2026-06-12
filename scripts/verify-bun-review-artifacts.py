@@ -51,6 +51,7 @@ APPROVAL_LINES = {
 }
 MAX_PR_REVIEW_BODY_BYTES = 6_000
 MAX_PR_REVIEW_BODY_BULLETS = 12
+GITHUB_SUGGESTION_MAX_CHARS = 800
 ARTIFACT_NAME_MAX_CHARS = 96
 ARTIFACT_NAME_HASH_CHARS = 16
 SECRET_VALUE_NAMES = [
@@ -1458,6 +1459,19 @@ def require_github_comment(comment: dict, index: int) -> None:
     require_pr_review_body_policy(
         body, pathlib.Path(f"review/github-review.json comments[{index}].body")
     )
+    suggestion = comment.get("suggestion")
+    if suggestion is not None:
+        if not isinstance(suggestion, str) or not suggestion.strip():
+            fail(f"github review comment {index} suggestion must be a non-empty string")
+        if not body.startswith("[unsafe-review]"):
+            fail(f"github review comment {index} suggestion must be sourced from unsafe-review")
+        if len(suggestion) > GITHUB_SUGGESTION_MAX_CHARS:
+            fail(
+                f"github review comment {index} suggestion exceeds "
+                f"{GITHUB_SUGGESTION_MAX_CHARS} characters"
+            )
+        if "```" in suggestion:
+            fail(f"github review comment {index} suggestion contains fenced code markers")
 
 
 def require_metrics(root: pathlib.Path, review: dict) -> dict:
@@ -8606,6 +8620,44 @@ def run_self_tests() -> None:
             ),
         },
         0,
+    )
+    require_github_comment(
+        {
+            "path": "src/lib.rs",
+            "side": "RIGHT",
+            "line": 12,
+            "body": "[unsafe-review] Guard evidence is missing.",
+            "suggestion": "let header = guarded_header_read(ptr)?;",
+        },
+        0,
+    )
+    expect_self_test_failure(
+        "non unsafe-review suggestion",
+        "sourced from unsafe-review",
+        lambda: require_github_comment(
+            {
+                "path": "src/lib.rs",
+                "side": "RIGHT",
+                "line": 12,
+                "body": "[tests-oracle] Model suggestions are not proof.",
+                "suggestion": "assert!(proved);",
+            },
+            1,
+        ),
+    )
+    expect_self_test_failure(
+        "fenced suggestion",
+        "fenced code markers",
+        lambda: require_github_comment(
+            {
+                "path": "src/lib.rs",
+                "side": "RIGHT",
+                "line": 12,
+                "body": "[unsafe-review] Guard evidence is missing.",
+                "suggestion": "```\nlet header = guarded_header_read(ptr)?;\n```",
+            },
+            1,
+        ),
     )
     expect_self_test_failure(
         "inline comment boilerplate",
