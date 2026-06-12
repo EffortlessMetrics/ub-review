@@ -161,7 +161,7 @@ evidence_gaps_blocking    count
 evidence_gaps_advisory    count
 ```
 
-Reason kinds (src/main.rs gate outcome construction; docs/adr/0002):
+Reason kinds (src/gate.rs gate outcome construction; docs/adr/0002):
 
 ```text
 required-proof      a matched [[proof.required]] task failed (head_failed,
@@ -169,8 +169,15 @@ required-proof      a matched [[proof.required]] task failed (head_failed,
 tool-gate           a configured [tools.*.gate] threshold was evaluated and
                     exceeded
 required-sensor     a required sensor's matched trigger produced no evidence
-                    (receipt-absent, failed, skipped, timed-out);
-                    intelligent-ci mode only
+                    (receipt-absent, failed, skipped); intelligent-ci mode
+                    only
+required-tool-timeout
+                    a required sensor's status is timed_out: the lease
+                    expired before any threshold evaluated, so this is a
+                    capacity verdict, not a finding. detail names timeout_sec
+                    and, when configured, the [tools.<id>.gate] threshold
+                    that never evaluated; next_action names the operator
+                    move.
 blocking-finding    today emitted only by the two [gate.blocking] evidence
                     opt-ins (required_proof_unproven,
                     tool_gate_missing_evidence); per-finding-class
