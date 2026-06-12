@@ -4351,13 +4351,6 @@ fn plan_tool(
     if matches!(tool.class, ToolClass::Build) && profile.limits.builds == 0 {
         return skipped(tool, "profile disables build leases", required);
     }
-    if !guard_ok && !matches!(tool.class, ToolClass::Packet) {
-        return skipped(
-            tool,
-            "box guard failed; only packet generation is allowed",
-            required,
-        );
-    }
     match trigger_match(tool.default, &diff.flags) {
         Some(reason) => {
             if tool.id == "cargo-allow" {
@@ -4378,6 +4371,13 @@ fn plan_tool(
                         );
                     }
                 }
+            }
+            if !guard_ok && !matches!(tool.class, ToolClass::Packet) {
+                return skipped(
+                    tool,
+                    "box guard failed; only packet generation is allowed",
+                    required,
+                );
             }
             SensorPlan {
                 id: tool.id.clone(),
@@ -22303,6 +22303,45 @@ diff_classes = ["docs-only"]
             .find(|tool| tool.id == "actionlint")
             .ok_or_else(|| anyhow::anyhow!("source resolved actionlint missing"))?;
         assert!(!source_resolved_actionlint.required);
+        Ok(())
+    }
+
+    #[test]
+    fn cargo_allow_foreign_dialect_reason_wins_before_box_guard() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        fs::create_dir_all(root.join("policy"))?;
+        fs::write(
+            root.join("policy/allow.toml"),
+            "schema_version = \"1\"\ntool = \"xtask-policy\"\n",
+        )?;
+        let config = Config::default();
+        let profile = config.selected_profile()?;
+        let cargo_allow = config
+            .tools
+            .get("cargo-allow")
+            .ok_or_else(|| anyhow::anyhow!("cargo-allow tool policy missing"))?;
+        let flags = DiffFlags {
+            source_changed: true,
+            ..DiffFlags::default()
+        };
+        let diff = DiffContext {
+            base: "HEAD~1".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["src/lib.rs".to_owned()],
+            patch: "diff --git a/src/lib.rs b/src/lib.rs\n".to_owned(),
+            flags,
+            diff_class: DiffClass::SourceGeneral,
+        };
+
+        let plan = super::plan_tool(cargo_allow, profile, &diff, root, false, false);
+
+        assert!(!plan.run);
+        assert_eq!(
+            plan.reason,
+            "policy/allow.toml is not a cargo-allow-dialect ledger; add \
+             policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)"
+        );
         Ok(())
     }
 
