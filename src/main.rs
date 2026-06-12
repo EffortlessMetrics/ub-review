@@ -677,6 +677,41 @@ struct QualityReceipt {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct QualityTrendArtifact {
+    schema: &'static str,
+    run_id: String,
+    as_of: String,
+    window_scope: &'static str,
+    window_runs: usize,
+    source_artifacts: Vec<String>,
+    comments_prepared: usize,
+    comments_posted: Option<usize>,
+    comment_acceptance_rate: Option<f64>,
+    comment_resolution_rate: Option<f64>,
+    fills_signal_rate: Option<f64>,
+    llm_unavailable_rate: f64,
+    reviewer_override_rate: Option<f64>,
+    adopted_generated_tests: Option<usize>,
+    trend: QualityTrendSummary,
+    missing: Vec<QualityTrendMissingInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct QualityTrendSummary {
+    comment_acceptance_rate_delta: Option<f64>,
+    fills_signal_rate_delta: Option<f64>,
+    llm_unavailable_rate_delta: Option<f64>,
+    reviewer_override_rate_delta: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct QualityTrendMissingInput {
+    field: String,
+    reason: String,
+    source_artifact: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct QualityMissingInput {
     field: String,
     reason: String,
@@ -5610,7 +5645,8 @@ fn write_review_artifacts(
         review: &review,
         metrics: &metrics,
     })?;
-    write_quality_receipt_artifact(out, &metrics, &review, &fill_ledger)?;
+    let quality_receipt = write_quality_receipt_artifact(out, &metrics, &review, &fill_ledger)?;
+    write_quality_trend_artifact(out, &quality_receipt)?;
     write_scheduler_artifact(&review_dir, &metrics.run)?;
     fs::write(
         review_dir.join("terminal_state.json"),
@@ -6736,13 +6772,13 @@ fn write_quality_receipt_artifact(
     metrics: &ReviewMetrics,
     review: &ReviewArtifacts,
     fill_ledger: &FillLedger,
-) -> Result<()> {
+) -> Result<QualityReceipt> {
     let receipt = build_quality_receipt(metrics, review, fill_ledger);
     fs::write(
         out.join("review").join("quality-receipt.json"),
         serde_json::to_vec_pretty(&receipt)?,
     )?;
-    Ok(())
+    Ok(receipt)
 }
 
 fn build_quality_receipt(
@@ -6827,6 +6863,102 @@ fn quality_review_payload_source(metrics: &ReviewMetrics) -> String {
         "review/github-review-skip.json"
     };
     source.to_owned()
+}
+
+fn write_quality_trend_artifact(out: &Path, receipt: &QualityReceipt) -> Result<()> {
+    let artifact = build_quality_trend_artifact(receipt);
+    fs::write(
+        out.join("review").join("quality-trend.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    Ok(())
+}
+
+fn build_quality_trend_artifact(receipt: &QualityReceipt) -> QualityTrendArtifact {
+    let mut missing = Vec::new();
+    let mut source_artifacts = vec!["review/quality-receipt.json".to_owned()];
+    for source in &receipt.source_artifacts {
+        if !source_artifacts.contains(source) {
+            source_artifacts.push(source.clone());
+        }
+    }
+
+    let fills_signal_rate = if receipt.fills_total == 0 {
+        missing.push(quality_trend_missing(
+            "fills_signal_rate",
+            "fill signal rate requires at least one selected optional fill",
+            "review/quality-receipt.json",
+        ));
+        None
+    } else {
+        Some(receipt.fills_with_signal as f64 / receipt.fills_total as f64)
+    };
+
+    for field in [
+        "comments_posted",
+        "comment_acceptance_rate",
+        "comment_resolution_rate",
+        "reviewer_override_rate",
+        "adopted_generated_tests",
+    ] {
+        missing.push(quality_trend_missing(
+            field,
+            "reviewer outcome telemetry requires GitHub thread state after reviewer action",
+            "review/quality-receipt.json",
+        ));
+    }
+    for field in [
+        "trend.comment_acceptance_rate_delta",
+        "trend.fills_signal_rate_delta",
+        "trend.llm_unavailable_rate_delta",
+        "trend.reviewer_override_rate_delta",
+    ] {
+        missing.push(quality_trend_missing(
+            field,
+            "historical quality receipts are required; run-completion v1 has one sample",
+            "review/quality-receipt.json",
+        ));
+    }
+
+    QualityTrendArtifact {
+        schema: QUALITY_TREND_SCHEMA,
+        run_id: receipt.run_id.clone(),
+        as_of: Utc::now().date_naive().to_string(),
+        window_scope: "single_run_v1",
+        window_runs: 1,
+        source_artifacts,
+        comments_prepared: receipt.comments_prepared,
+        comments_posted: receipt.comments_posted,
+        comment_acceptance_rate: None,
+        comment_resolution_rate: None,
+        fills_signal_rate,
+        llm_unavailable_rate: if receipt.llm_unavailable_events > 0 {
+            1.0
+        } else {
+            0.0
+        },
+        reviewer_override_rate: None,
+        adopted_generated_tests: None,
+        trend: QualityTrendSummary {
+            comment_acceptance_rate_delta: None,
+            fills_signal_rate_delta: None,
+            llm_unavailable_rate_delta: None,
+            reviewer_override_rate_delta: None,
+        },
+        missing,
+    }
+}
+
+fn quality_trend_missing(
+    field: &str,
+    reason: &str,
+    source_artifact: &str,
+) -> QualityTrendMissingInput {
+    QualityTrendMissingInput {
+        field: field.to_owned(),
+        reason: reason.to_owned(),
+        source_artifact: source_artifact.to_owned(),
+    }
 }
 
 fn quality_llm_unavailable_events(review: &ReviewArtifacts) -> usize {
@@ -31482,6 +31614,72 @@ index 1111111..2222222 100644
                 .source_artifacts
                 .contains(&"review/github-review.json".to_owned())
         );
+    }
+
+    #[test]
+    fn quality_trend_records_single_run_without_reviewer_or_history_overclaim() {
+        let receipt = super::QualityReceipt {
+            schema: super::QUALITY_RECEIPT_SCHEMA,
+            run_id: "local-abc123".to_owned(),
+            source_artifacts: vec![
+                "review/metrics.json".to_owned(),
+                "review/fill-ledger.json".to_owned(),
+                "review/provider-preflight-status.json".to_owned(),
+                "review/review.json".to_owned(),
+                "review/github-review-skip.json".to_owned(),
+            ],
+            review_payload_status: "skipped_empty_smoke".to_owned(),
+            comments_prepared: 0,
+            comments_posted: None,
+            comments_accepted: None,
+            comments_resolved: None,
+            comments_off_diff_rejected: 1,
+            fills_with_signal: 1,
+            fills_total: 2,
+            llm_unavailable_events: 1,
+            fallback_used_lanes: 1,
+            reviewer_overrides: None,
+            adopted_generated_tests: None,
+            missing: Vec::new(),
+        };
+
+        let trend = super::build_quality_trend_artifact(&receipt);
+        let missing_fields = trend
+            .missing
+            .iter()
+            .map(|entry| entry.field.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(trend.schema, super::QUALITY_TREND_SCHEMA);
+        assert_eq!(trend.run_id, receipt.run_id);
+        assert_eq!(trend.window_scope, "single_run_v1");
+        assert_eq!(trend.window_runs, 1);
+        assert_eq!(trend.comments_prepared, 0);
+        assert_eq!(trend.comments_posted, None);
+        assert_eq!(trend.comment_acceptance_rate, None);
+        assert_eq!(trend.comment_resolution_rate, None);
+        assert_eq!(trend.fills_signal_rate, Some(0.5));
+        assert_eq!(trend.llm_unavailable_rate, 1.0);
+        assert_eq!(trend.reviewer_override_rate, None);
+        assert_eq!(trend.adopted_generated_tests, None);
+        assert_eq!(trend.trend.comment_acceptance_rate_delta, None);
+        assert_eq!(trend.trend.fills_signal_rate_delta, None);
+        assert_eq!(trend.trend.llm_unavailable_rate_delta, None);
+        assert_eq!(trend.trend.reviewer_override_rate_delta, None);
+        assert!(
+            trend
+                .source_artifacts
+                .contains(&"review/quality-receipt.json".to_owned())
+        );
+        assert!(missing_fields.contains("comment_acceptance_rate"));
+        assert!(missing_fields.contains("comment_resolution_rate"));
+        assert!(missing_fields.contains("reviewer_override_rate"));
+        assert!(missing_fields.contains("adopted_generated_tests"));
+        assert!(missing_fields.contains("trend.comment_acceptance_rate_delta"));
+        assert!(missing_fields.contains("trend.fills_signal_rate_delta"));
+        assert!(missing_fields.contains("trend.llm_unavailable_rate_delta"));
+        assert!(missing_fields.contains("trend.reviewer_override_rate_delta"));
+        assert!(!missing_fields.contains("fills_signal_rate"));
     }
 
     #[test]

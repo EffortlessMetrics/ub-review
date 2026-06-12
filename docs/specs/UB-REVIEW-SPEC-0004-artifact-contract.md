@@ -144,6 +144,12 @@ quality-receipt.json           ub-review.quality_receipt.v1; per-run
                                the prepared/skipped review payload; reviewer
                                outcome fields stay null with missing[]
                                receipts until a GitHub-backed backfill exists
+quality-trend.json             ub-review.quality_trend.v1; single-run
+                               usefulness trend seed derived from
+                               quality-receipt.json; reviewer-outcome rates
+                               and historical deltas stay null with
+                               missing[] until GitHub/backfill aggregation
+                               supplies them
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,
@@ -569,6 +575,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/floor-trend.json | stable | floor_trend.v1; window_scope single_run_v1 | downstream automation (floor-time telemetry seed) | required (require_floor_trend, #338) |
 | review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1 | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
 | review/quality-receipt.json | stable | quality_receipt.v1; run-completion telemetry with reviewer outcome fields null in v1 | downstream automation (quality/usefulness telemetry) | required (require_quality_receipt, #339) |
+| review/quality-trend.json | stable | quality_trend.v1; window_scope single_run_v1 | downstream automation (quality/usefulness telemetry seed) | required (require_quality_trend, #339) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
 | review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |
 | review/review.md | stable | seven required headings | humans | required (require_review) |

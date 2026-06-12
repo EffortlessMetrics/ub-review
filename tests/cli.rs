@@ -228,6 +228,7 @@ fn active_len_tracks_view_after_resize() {
         "review/floor-trend.json",
         "review/fill-ledger.json",
         "review/quality-receipt.json",
+        "review/quality-trend.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -890,6 +891,69 @@ fn active_len_tracks_view_after_resize() {
         assert!(
             missing_quality_fields.contains(field),
             "quality receipt should mark {field} unavailable in run-completion v1"
+        );
+    }
+    let quality_trend: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/quality-trend.json"))?)?;
+    assert_eq!(quality_trend["schema"], "ub-review.quality_trend.v1");
+    assert_eq!(quality_trend["run_id"], quality["run_id"]);
+    assert_eq!(quality_trend["window_scope"], "single_run_v1");
+    assert_eq!(quality_trend["window_runs"], 1);
+    assert_eq!(
+        quality_trend["comments_prepared"],
+        quality["comments_prepared"]
+    );
+    assert!(quality_trend["comments_posted"].is_null());
+    assert!(quality_trend["comment_acceptance_rate"].is_null());
+    assert!(quality_trend["comment_resolution_rate"].is_null());
+    assert!(quality_trend["reviewer_override_rate"].is_null());
+    assert!(quality_trend["adopted_generated_tests"].is_null());
+    if selected_fill_count == 0 {
+        assert!(quality_trend["fills_signal_rate"].is_null());
+    } else {
+        assert_eq!(
+            quality_trend["fills_signal_rate"]
+                .as_f64()
+                .unwrap_or_default(),
+            selected_signal_count as f64 / selected_fill_count as f64
+        );
+    }
+    assert_eq!(
+        quality_trend["llm_unavailable_rate"],
+        if quality["llm_unavailable_events"]
+            .as_u64()
+            .unwrap_or_default()
+            > 0
+        {
+            1.0
+        } else {
+            0.0
+        }
+    );
+    assert!(quality_trend["trend"]["comment_acceptance_rate_delta"].is_null());
+    assert!(quality_trend["trend"]["fills_signal_rate_delta"].is_null());
+    assert!(quality_trend["trend"]["llm_unavailable_rate_delta"].is_null());
+    assert!(quality_trend["trend"]["reviewer_override_rate_delta"].is_null());
+    let missing_quality_trend_fields = quality_trend["missing"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("quality-trend missing[] absent"))?
+        .iter()
+        .filter_map(|entry| entry["field"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    for field in [
+        "comments_posted",
+        "comment_acceptance_rate",
+        "comment_resolution_rate",
+        "reviewer_override_rate",
+        "adopted_generated_tests",
+        "trend.comment_acceptance_rate_delta",
+        "trend.fills_signal_rate_delta",
+        "trend.llm_unavailable_rate_delta",
+        "trend.reviewer_override_rate_delta",
+    ] {
+        assert!(
+            missing_quality_trend_fields.contains(field),
+            "quality trend should mark {field} unavailable in single_run_v1"
         );
     }
     let scheduler: serde_json::Value =

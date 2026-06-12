@@ -1033,6 +1033,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/floor-trend.json",
         "review/fill-ledger.json",
         "review/quality-receipt.json",
+        "review/quality-trend.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -2300,6 +2301,118 @@ def require_quality_receipt(root: pathlib.Path, metrics: dict, review: dict) -> 
             fail(f"quality-receipt.json {field} must be null in run-completion v1")
         if not any(entry.get("field") == field for entry in missing):
             fail(f"quality-receipt.json missing[] does not receipt {field}")
+
+
+def require_quality_trend(root: pathlib.Path) -> None:
+    trend = load_json(root / "review/quality-trend.json")
+    if not isinstance(trend, dict):
+        fail("review/quality-trend.json is not an object")
+    if trend.get("schema") != "ub-review.quality_trend.v1":
+        fail(f"quality-trend.json schema invalid: {trend.get('schema')!r}")
+    receipt = load_json(root / "review/quality-receipt.json")
+    if trend.get("run_id") != receipt.get("run_id"):
+        fail("quality-trend.json run_id does not match quality-receipt.json")
+    as_of = trend.get("as_of")
+    if not isinstance(as_of, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", as_of):
+        fail(f"quality-trend.json as_of is not YYYY-MM-DD: {as_of!r}")
+    if trend.get("window_scope") != "single_run_v1":
+        fail(f"quality-trend.json window_scope invalid: {trend.get('window_scope')!r}")
+    if trend.get("window_runs") != 1:
+        fail(f"quality-trend.json window_runs must be 1 for single_run_v1: {trend.get('window_runs')!r}")
+
+    source_artifacts = trend.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail("quality-trend.json source_artifacts is not a non-empty array")
+    receipt_sources = receipt.get("source_artifacts")
+    if not isinstance(receipt_sources, list) or not receipt_sources:
+        fail("quality-receipt.json source_artifacts is not a non-empty array")
+    for required in ["review/quality-receipt.json", *receipt_sources]:
+        if required not in source_artifacts:
+            fail(f"quality-trend.json source_artifacts missing {required}")
+    for index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(source, f"quality-trend.json source_artifacts[{index}]")
+        if not (root / source).is_file():
+            fail(f"quality-trend.json source_artifacts[{index}] missing file: {source}")
+
+    comments_prepared = require_non_negative_int(
+        trend, "quality-trend.json comments_prepared", "comments_prepared"
+    )
+    if comments_prepared != receipt.get("comments_prepared"):
+        fail("quality-trend.json comments_prepared does not match quality-receipt.json")
+
+    comments_posted = trend.get("comments_posted")
+    if comments_posted is not None and (
+        isinstance(comments_posted, bool) or not isinstance(comments_posted, int) or comments_posted < 0
+    ):
+        fail(f"quality-trend.json comments_posted is not null or non-negative integer: {comments_posted!r}")
+    if comments_posted != receipt.get("comments_posted"):
+        fail("quality-trend.json comments_posted does not match quality-receipt.json")
+
+    fills_total = require_non_negative_int(receipt, "quality-receipt.json fills_total", "fills_total")
+    fills_with_signal = require_non_negative_int(
+        receipt, "quality-receipt.json fills_with_signal", "fills_with_signal"
+    )
+    fills_signal_rate = require_optional_non_negative_number(
+        trend, "quality-trend.json fills_signal_rate", "fills_signal_rate"
+    )
+    if fills_total == 0:
+        if fills_signal_rate is not None:
+            fail("quality-trend.json fills_signal_rate must be null when no fills were selected")
+    else:
+        expected_signal_rate = fills_with_signal / fills_total
+        if fills_signal_rate is None or abs(fills_signal_rate - expected_signal_rate) > 0.000001:
+            fail("quality-trend.json fills_signal_rate does not match quality-receipt.json")
+
+    llm_unavailable_rate = require_non_negative_number_value(
+        trend.get("llm_unavailable_rate"), "quality-trend.json llm_unavailable_rate"
+    )
+    expected_llm_rate = 1.0 if receipt.get("llm_unavailable_events", 0) > 0 else 0.0
+    if llm_unavailable_rate != expected_llm_rate:
+        fail("quality-trend.json llm_unavailable_rate does not match quality-receipt.json")
+
+    missing = trend.get("missing")
+    if not isinstance(missing, list):
+        fail("quality-trend.json missing is not an array")
+    for index, entry in enumerate(missing):
+        if not isinstance(entry, dict):
+            fail(f"quality-trend.json missing[{index}] is not an object")
+        require_non_empty_string_value(entry.get("field"), f"quality-trend.json missing[{index}].field")
+        require_non_empty_string_value(entry.get("reason"), f"quality-trend.json missing[{index}].reason")
+        require_non_empty_string_value(
+            entry.get("source_artifact"), f"quality-trend.json missing[{index}].source_artifact"
+        )
+
+    for field in [
+        "comments_posted",
+        "comment_acceptance_rate",
+        "comment_resolution_rate",
+        "reviewer_override_rate",
+        "adopted_generated_tests",
+    ]:
+        if trend.get(field) is not None:
+            fail(f"quality-trend.json {field} must be null for run-completion v1")
+        require_quality_trend_missing_field(missing, field)
+    if fills_total == 0:
+        require_quality_trend_missing_field(missing, "fills_signal_rate")
+
+    trend_summary = trend.get("trend")
+    if not isinstance(trend_summary, dict):
+        fail("quality-trend.json trend is not an object")
+    for field in [
+        "trend.comment_acceptance_rate_delta",
+        "trend.fills_signal_rate_delta",
+        "trend.llm_unavailable_rate_delta",
+        "trend.reviewer_override_rate_delta",
+    ]:
+        summary_key = field.rsplit(".", 1)[1]
+        if trend_summary.get(summary_key) is not None:
+            fail(f"quality-trend.json {field} must be null for single_run_v1")
+        require_quality_trend_missing_field(missing, field)
+
+
+def require_quality_trend_missing_field(missing: list, field: str) -> None:
+    if not any(entry.get("field") == field for entry in missing):
+        fail(f"quality-trend.json missing[] does not receipt {field}")
 
 
 def quality_llm_unavailable_events(review: dict) -> int:
@@ -7630,6 +7743,182 @@ def self_test_quality_receipt_contract() -> None:
     )
 
 
+def self_test_quality_trend_contract() -> None:
+    import copy
+    import tempfile
+
+    receipt = {
+        "schema": "ub-review.quality_receipt.v1",
+        "run_id": "local-abc123",
+        "source_artifacts": [
+            "review/metrics.json",
+            "review/fill-ledger.json",
+            "review/provider-preflight-status.json",
+            "review/review.json",
+            "review/github-review-skip.json",
+        ],
+        "review_payload_status": "skipped_empty_smoke",
+        "comments_prepared": 0,
+        "comments_posted": None,
+        "comments_accepted": None,
+        "comments_resolved": None,
+        "comments_off_diff_rejected": 1,
+        "fills_with_signal": 1,
+        "fills_total": 2,
+        "llm_unavailable_events": 2,
+        "fallback_used_lanes": 1,
+        "reviewer_overrides": None,
+        "adopted_generated_tests": None,
+        "missing": [
+            {
+                "field": "comments_posted",
+                "reason": "post-result.json is not available",
+                "source_artifact": "post-result.json",
+            },
+            {
+                "field": "comments_accepted",
+                "reason": "GitHub thread state is not available",
+                "source_artifact": "github-api-review-threads",
+            },
+            {
+                "field": "comments_resolved",
+                "reason": "GitHub thread state is not available",
+                "source_artifact": "github-api-review-threads",
+            },
+            {
+                "field": "reviewer_overrides",
+                "reason": "reviewer-action backfill is not available",
+                "source_artifact": "github-api-review-threads",
+            },
+            {
+                "field": "adopted_generated_tests",
+                "reason": "commit backfill is not available",
+                "source_artifact": "github-api-commits",
+            },
+        ],
+    }
+    trend = {
+        "schema": "ub-review.quality_trend.v1",
+        "run_id": "local-abc123",
+        "as_of": "2026-06-12",
+        "window_scope": "single_run_v1",
+        "window_runs": 1,
+        "source_artifacts": [
+            "review/quality-receipt.json",
+            "review/metrics.json",
+            "review/fill-ledger.json",
+            "review/provider-preflight-status.json",
+            "review/review.json",
+            "review/github-review-skip.json",
+        ],
+        "comments_prepared": 0,
+        "comments_posted": None,
+        "comment_acceptance_rate": None,
+        "comment_resolution_rate": None,
+        "fills_signal_rate": 0.5,
+        "llm_unavailable_rate": 1.0,
+        "reviewer_override_rate": None,
+        "adopted_generated_tests": None,
+        "trend": {
+            "comment_acceptance_rate_delta": None,
+            "fills_signal_rate_delta": None,
+            "llm_unavailable_rate_delta": None,
+            "reviewer_override_rate_delta": None,
+        },
+        "missing": [
+            {
+                "field": "comments_posted",
+                "reason": "GitHub post state is not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "comment_acceptance_rate",
+                "reason": "GitHub thread state is not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "comment_resolution_rate",
+                "reason": "GitHub thread state is not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "reviewer_override_rate",
+                "reason": "reviewer override backfill is not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "adopted_generated_tests",
+                "reason": "commit backfill is not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "trend.comment_acceptance_rate_delta",
+                "reason": "historical receipts are not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "trend.fills_signal_rate_delta",
+                "reason": "historical receipts are not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "trend.llm_unavailable_rate_delta",
+                "reason": "historical receipts are not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+            {
+                "field": "trend.reviewer_override_rate_delta",
+                "reason": "historical receipts are not available",
+                "source_artifact": "review/quality-receipt.json",
+            },
+        ],
+    }
+
+    def write_root(trend_overrides: dict | None = None) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        candidate = copy.deepcopy(trend)
+        if trend_overrides:
+            candidate.update(trend_overrides)
+        write_self_test_json(root / "review/quality-receipt.json", receipt)
+        for source in receipt["source_artifacts"]:
+            write_self_test_json(root / source, {"status": "self-test"})
+        write_self_test_json(root / "review/quality-trend.json", candidate)
+        return root
+
+    require_quality_trend(write_root())
+    expect_self_test_failure(
+        "quality trend schema drift",
+        "schema invalid",
+        lambda: require_quality_trend(write_root({"schema": "ub-review.quality_trend.v2"})),
+    )
+    expect_self_test_failure(
+        "quality trend run id drift",
+        "run_id does not match",
+        lambda: require_quality_trend(write_root({"run_id": "local-drift"})),
+    )
+    expect_self_test_failure(
+        "quality trend fill signal drift",
+        "fills_signal_rate does not match",
+        lambda: require_quality_trend(write_root({"fills_signal_rate": 0.25})),
+    )
+    expect_self_test_failure(
+        "quality trend reviewer overclaim",
+        "comment_acceptance_rate must be null",
+        lambda: require_quality_trend(write_root({"comment_acceptance_rate": 1.0})),
+    )
+    missing_gap = copy.deepcopy(trend)
+    missing_gap["missing"] = [
+        entry
+        for entry in trend["missing"]
+        if entry["field"] != "trend.llm_unavailable_rate_delta"
+    ]
+    expect_self_test_failure(
+        "quality trend missing historical gap",
+        "missing[] does not receipt trend.llm_unavailable_rate_delta",
+        lambda: require_quality_trend(write_root(missing_gap)),
+    )
+
+
 def self_test_ci_audit_runner_cancellations_contract() -> None:
     import tempfile
 
@@ -8786,6 +9075,7 @@ def run_self_tests() -> None:
     self_test_floor_trend_contract()
     self_test_fill_ledger_contract()
     self_test_quality_receipt_contract()
+    self_test_quality_trend_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
@@ -8892,6 +9182,7 @@ def main(argv: list[str]) -> int:
     require_floor_trend(root)
     require_fill_ledger(root)
     require_quality_receipt(root, metrics, review)
+    require_quality_trend(root)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
     if args.require_no_model_evidence_failures:
         require_no_model_evidence_failures(review)
