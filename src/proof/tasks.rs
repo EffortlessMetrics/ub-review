@@ -269,20 +269,27 @@ pub(crate) fn focused_build_command_spec(command: &str) -> Option<ProofCommandSp
     if program != "cargo" {
         return None;
     }
+    // `cargo xtask policy-check` is the repo-local parse-only policy receipt
+    // validation (see xtask/src/main.rs). Only this exact invocation is
+    // brokered so xtask cannot smuggle arbitrary repo commands into the
+    // focused proof lane.
+    if subcommand == "xtask" {
+        return (args == ["policy-check"]).then(|| ProofCommandSpec {
+            argv: argv.clone(),
+            env: BTreeMap::new(),
+        });
+    }
+    // unsafe-review-swarm already requires `xtask check-pr`; broker only that
+    // exact cargo invocation so generic cargo-run commands cannot enter proof.
     let args_str = args.iter().map(String::as_str).collect::<Vec<_>>();
-    // Exact repo-local xtask commands the proof broker may run:
-    // - ub-review's parse-only policy receipt
-    // - unsafe-review-swarm's existing required check-pr floor
-    //
-    // Keep both exact so generic xtask/cargo-run commands never become a
-    // proof-broker escape hatch.
     match (subcommand.as_str(), args_str.as_slice()) {
-        ("xtask", ["policy-check"]) | ("run", ["--locked", "-p", "xtask", "--", "check-pr"]) => {
+        ("run", ["--locked", "-p", "xtask", "--", "check-pr"]) => {
             return Some(ProofCommandSpec {
                 argv: argv.clone(),
                 env: BTreeMap::new(),
             });
         }
+        ("run", _) => return None,
         _ => {}
     }
     if !matches!(subcommand.as_str(), "build" | "check" | "doc") {
