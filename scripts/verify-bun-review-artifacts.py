@@ -1030,6 +1030,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/model_stages.json",
         "review/metrics.json",
         "review/ub-review-cost.json",
+        "review/fill-ledger.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -1852,6 +1853,137 @@ def require_cost_receipt(root: pathlib.Path, metrics: dict) -> None:
         require_missing_field(missing, "estimated_cost_usd")
     if cache.get("cargo") == "unknown":
         require_missing_field(missing, "cache.cargo")
+
+
+def require_fill_ledger(root: pathlib.Path) -> None:
+    ledger = load_json(root / "review/fill-ledger.json")
+    if not isinstance(ledger, dict):
+        fail("review/fill-ledger.json is not an object")
+    if ledger.get("schema") != "ub-review.fill_ledger.v1":
+        fail(f"fill-ledger.json schema invalid: {ledger.get('schema')!r}")
+    require_non_empty_string_value(ledger.get("run_id"), "fill-ledger.json run_id")
+    if ledger.get("catalog_scope") != "executed_work_queue_v1":
+        fail(f"fill-ledger.json catalog_scope invalid: {ledger.get('catalog_scope')!r}")
+    source_artifacts = ledger.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail("fill-ledger.json source_artifacts is not a non-empty array")
+    for required in [
+        "work_queue.json",
+        "review/proof_requests.json",
+        "review/proof_planner_output.json",
+        "review/proof_receipts.json",
+        "review/tool-gate-outcomes.json",
+        "review/gate_outcome.json",
+        "review/metrics.json",
+    ]:
+        if required not in source_artifacts:
+            fail(f"fill-ledger.json source_artifacts missing {required}")
+
+    entries = ledger.get("entries")
+    if not isinstance(entries, list):
+        fail("fill-ledger.json entries is not an array")
+
+    work_queue = load_json(root / "work_queue.json")
+    queue_tasks = work_queue.get("tasks") if isinstance(work_queue, dict) else None
+    if not isinstance(queue_tasks, list):
+        fail("work_queue.json tasks is not an array")
+    proof_requests = load_json(root / "review/proof_requests.json")
+    if not isinstance(proof_requests, list):
+        fail("review/proof_requests.json is not an array")
+    proof_planner_output = load_json(root / "review/proof_planner_output.json")
+    planner_skips = proof_planner_output.get("skip") if isinstance(proof_planner_output, dict) else None
+    if not isinstance(planner_skips, list):
+        fail("review/proof_planner_output.json skip is not an array")
+
+    expected: dict[tuple[str, str], bool] = {}
+    for task in queue_tasks:
+        if not isinstance(task, dict) or task.get("kind") != "sensor":
+            continue
+        if task.get("packet_policy") == "must-run":
+            continue
+        task_id = require_non_empty_string_value(task.get("id"), "work_queue sensor task id")
+        if not task_id.startswith("sensor-"):
+            fail(f"work_queue sensor task id invalid: {task_id!r}")
+        expected[("sensor", task_id.removeprefix("sensor-"))] = task.get("status") == "planned"
+    for request in proof_requests:
+        if not isinstance(request, dict):
+            fail(f"review/proof_requests.json entry is not an object: {request!r}")
+        request_id = require_non_empty_string_value(request.get("id"), "proof request id")
+        if request.get("required") is True and request.get("lane") == "intelligent-ci-policy":
+            continue
+        expected[("proof-request", request_id)] = request.get("status") == "requested"
+    for skip in planner_skips:
+        if not isinstance(skip, dict):
+            fail(f"proof planner skip entry is not an object: {skip!r}")
+        kind = require_non_empty_string_value(skip.get("kind"), "proof planner skip kind")
+        expected[("proof-skip", kind)] = False
+
+    seen: dict[tuple[str, str], bool] = {}
+    for index, entry in enumerate(entries):
+        require_fill_ledger_entry(root, entry, index)
+        key = (entry["kind"], entry["check_id"])
+        if key in seen:
+            fail(f"fill-ledger.json duplicate entry for {key}")
+        seen[key] = entry["selected"]
+        if key in expected and expected[key] != entry["selected"]:
+            fail(f"fill-ledger.json selected mismatch for {key}: {entry!r}")
+    if seen != expected:
+        fail(f"fill-ledger.json entries do not match optional work queue/proof planner surface: seen={seen!r} expected={expected!r}")
+
+
+def require_fill_ledger_entry(root: pathlib.Path, entry: Any, index: int) -> None:
+    if not isinstance(entry, dict):
+        fail(f"fill-ledger.json entries[{index}] is not an object")
+    check_id = require_non_empty_string_value(
+        entry.get("check_id"), f"fill-ledger.json entries[{index}].check_id"
+    )
+    kind = entry.get("kind")
+    if kind not in {"sensor", "proof-request", "proof-skip"}:
+        fail(f"fill-ledger.json entries[{index}].kind invalid: {kind!r}")
+    selected = entry.get("selected")
+    if not isinstance(selected, bool):
+        fail(f"fill-ledger.json entries[{index}].selected is not boolean")
+    require_non_empty_string_value(
+        entry.get("selection_reason"),
+        f"fill-ledger.json entries[{index}].selection_reason",
+    )
+    for field in ["expected_signal", "actual_signal", "artifact_path"]:
+        value = entry.get(field)
+        if value is not None:
+            require_non_empty_string_value(
+                value, f"fill-ledger.json entries[{index}].{field}"
+            )
+    require_non_negative_number_value(
+        entry.get("time_spent_sec"), f"fill-ledger.json entries[{index}].time_spent_sec"
+    )
+    affected_merge = entry.get("affected_merge")
+    if selected:
+        if not isinstance(affected_merge, bool):
+            fail(f"fill-ledger.json entries[{index}].affected_merge must be boolean when selected")
+    elif affected_merge is not None:
+        fail(f"fill-ledger.json entries[{index}].affected_merge must be null when skipped")
+    if not selected:
+        if entry.get("actual_signal") is not None:
+            fail(f"fill-ledger.json entries[{index}].actual_signal must be null when skipped")
+        if entry.get("time_spent_sec") != 0:
+            fail(f"fill-ledger.json entries[{index}].time_spent_sec must be 0 when skipped")
+    artifact_path = entry.get("artifact_path")
+    if artifact_path is not None:
+        artifact_file = artifact_path.split("#", 1)[0]
+        if not (root / artifact_file).is_file():
+            fail(f"fill-ledger.json entries[{index}].artifact_path missing file: {artifact_path}")
+    source_artifacts = entry.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail(f"fill-ledger.json entries[{index}].source_artifacts is not a non-empty array")
+    for source_index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(
+            source, f"fill-ledger.json entries[{index}].source_artifacts[{source_index}]"
+        )
+        source_file = source.split("#", 1)[0]
+        if not (root / source_file).is_file():
+            fail(f"fill-ledger.json entries[{index}].source_artifacts[{source_index}] missing file: {source}")
+    if not check_id.strip():
+        fail(f"fill-ledger.json entries[{index}].check_id is empty")
 
 
 def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
@@ -6112,6 +6244,7 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/review.json",
         root / "review/review.md",
         root / "review/ub-review-cost.json",
+        root / "review/fill-ledger.json",
         root / "review/github-review.json",
         root / "review/github-review-skip.json",
         root / "review/post-result.json",
@@ -6716,6 +6849,156 @@ def self_test_cost_receipt_contract() -> None:
         "cost receipt timing drift",
         "llm_seconds does not match metrics.run.model_call_duration_ms_sum",
         lambda: write_and_require(drifted_timing),
+    )
+
+
+def self_test_fill_ledger_contract() -> None:
+    import tempfile
+
+    def write_valid_root(ledger_overrides: dict | None = None) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        write_self_test_json(
+            root / "work_queue.json",
+            {
+                "schema": "ub-review.work_queue.v1",
+                "tasks": [
+                    {
+                        "schema": "ub-review.work_queue_task.v1",
+                        "id": "sensor-ripr",
+                        "kind": "sensor",
+                        "packet_policy": "include-if-ready",
+                        "status": "planned",
+                    },
+                    {
+                        "schema": "ub-review.work_queue_task.v1",
+                        "id": "sensor-tokmd",
+                        "kind": "sensor",
+                        "packet_policy": "must-run",
+                        "status": "planned",
+                    },
+                ],
+            },
+        )
+        write_self_test_json(root / "tool-status.json", {"tools": []})
+        write_self_test_json(root / "review/tool-gate-outcomes.json", {"outcomes": []})
+        write_self_test_json(root / "review/gate_outcome.json", {"reasons": []})
+        write_self_test_json(root / "review/metrics.json", {"run": {}})
+        write_self_test_json(
+            root / "review/proof_requests.json",
+            [
+                {
+                    "id": "proof-optional",
+                    "lane": "tests-oracle",
+                    "required": False,
+                    "status": "requested",
+                },
+                {
+                    "id": "proof-required",
+                    "lane": "intelligent-ci-policy",
+                    "required": True,
+                    "status": "requested",
+                },
+            ],
+        )
+        write_self_test_json(
+            root / "review/proof_receipts.json",
+            [{"id": "receipt-optional", "request_ids": ["proof-optional"]}],
+        )
+        write_self_test_json(
+            root / "review/proof_planner_output.json",
+            {"schema": "ub-review.proof_planner_output.v1", "skip": [{"kind": "miri", "reason": "No unsafe/native risk."}]},
+        )
+        write_self_test_json(
+            root / "sensors/ripr/ub-review-sensor-status.json",
+            {"status": "ok", "reason": "ripr completed", "duration_ms": 10},
+        )
+        ledger = {
+            "schema": "ub-review.fill_ledger.v1",
+            "run_id": "local-abc123",
+            "catalog_scope": "executed_work_queue_v1",
+            "source_artifacts": [
+                "work_queue.json",
+                "review/proof_requests.json",
+                "review/proof_planner_output.json",
+                "review/proof_receipts.json",
+                "review/tool-gate-outcomes.json",
+                "review/gate_outcome.json",
+                "review/metrics.json",
+            ],
+            "entries": [
+                {
+                    "check_id": "ripr",
+                    "kind": "sensor",
+                    "selected": True,
+                    "selection_reason": "Rust behavior or tests changed",
+                    "expected_signal": "static mutation-exposure signal",
+                    "actual_signal": "ok: ripr completed",
+                    "time_spent_sec": 0.01,
+                    "artifact_path": "sensors/ripr/ub-review-sensor-status.json",
+                    "affected_merge": False,
+                    "source_artifacts": [
+                        "work_queue.json",
+                        "tool-status.json",
+                        "sensors/ripr/ub-review-sensor-status.json",
+                        "review/tool-gate-outcomes.json",
+                    ],
+                },
+                {
+                    "check_id": "proof-optional",
+                    "kind": "proof-request",
+                    "selected": True,
+                    "selection_reason": "Need focused proof.",
+                    "expected_signal": "Focused proof result",
+                    "actual_signal": "head_passed: proof passed",
+                    "time_spent_sec": 1.2,
+                    "artifact_path": "review/proof_receipts.json#receipt-optional",
+                    "affected_merge": False,
+                    "source_artifacts": [
+                        "review/proof_requests.json",
+                        "review/proof_planner_output.json",
+                        "review/proof_receipts.json",
+                    ],
+                },
+                {
+                    "check_id": "miri",
+                    "kind": "proof-skip",
+                    "selected": False,
+                    "selection_reason": "No unsafe/native risk.",
+                    "expected_signal": None,
+                    "actual_signal": None,
+                    "time_spent_sec": 0,
+                    "artifact_path": None,
+                    "affected_merge": None,
+                    "source_artifacts": ["review/proof_planner_output.json"],
+                },
+            ],
+        }
+        if ledger_overrides:
+            ledger.update(ledger_overrides)
+        write_self_test_json(root / "review/fill-ledger.json", ledger)
+        return root
+
+    def write_fill_ledger_without_skip() -> pathlib.Path:
+        root = write_valid_root()
+        ledger = load_json(root / "review/fill-ledger.json")
+        ledger["entries"] = [
+            entry
+            for entry in ledger["entries"]
+            if not (entry.get("kind") == "proof-skip" and entry.get("check_id") == "miri")
+        ]
+        write_self_test_json(root / "review/fill-ledger.json", ledger)
+        return root
+
+    require_fill_ledger(write_valid_root())
+    expect_self_test_failure(
+        "fill ledger schema drift",
+        "schema invalid",
+        lambda: require_fill_ledger(write_valid_root({"schema": "ub-review.fill_ledger.v2"})),
+    )
+    expect_self_test_failure(
+        "fill ledger missing planner skip",
+        "entries do not match optional work queue/proof planner surface",
+        lambda: require_fill_ledger(write_fill_ledger_without_skip()),
     )
 
 
@@ -7872,6 +8155,7 @@ def run_self_tests() -> None:
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()
     self_test_cost_receipt_contract()
+    self_test_fill_ledger_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
@@ -7975,6 +8259,7 @@ def main(argv: list[str]) -> int:
     )
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
+    require_fill_ledger(root)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
     if args.require_no_model_evidence_failures:
         require_no_model_evidence_failures(review)

@@ -225,6 +225,7 @@ fn active_len_tracks_view_after_resize() {
         "review/provider-preflight-status.json",
         "review/metrics.json",
         "review/ub-review-cost.json",
+        "review/fill-ledger.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -770,6 +771,31 @@ fn active_len_tracks_view_after_resize() {
     assert!(missing_cost_fields.contains("cost_basis.linux_minute_rate_usd"));
     assert!(missing_cost_fields.contains("estimated_cost_usd"));
     assert!(missing_cost_fields.contains("cache.cargo"));
+    let fill_ledger: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/fill-ledger.json"))?)?;
+    assert_eq!(fill_ledger["schema"], "ub-review.fill_ledger.v1");
+    assert_eq!(fill_ledger["catalog_scope"], "executed_work_queue_v1");
+    assert_eq!(fill_ledger["run_id"], cost["run_id"]);
+    let fill_entries = fill_ledger["entries"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("fill-ledger entries[] absent"))?;
+    assert!(
+        fill_entries.iter().any(|entry| {
+            entry["kind"] == "sensor"
+                && entry["selected"].as_bool().is_some()
+                && entry["selection_reason"]
+                    .as_str()
+                    .is_some_and(|reason| !reason.is_empty())
+                && entry["time_spent_sec"].as_f64().is_some()
+        }),
+        "fill ledger should record optional sensor selection receipts"
+    );
+    assert!(
+        fill_entries
+            .iter()
+            .any(|entry| entry["kind"] == "proof-skip" && entry["selected"] == false),
+        "fill ledger should preserve deterministic skipped proof options"
+    );
     let scheduler: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
     assert_eq!(scheduler["schema"], "ub-review.scheduler.v1");
