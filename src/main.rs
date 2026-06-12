@@ -594,6 +594,40 @@ struct CostMissingInput {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct FillLedger {
+    schema: &'static str,
+    run_id: String,
+    catalog_scope: &'static str,
+    source_artifacts: Vec<String>,
+    entries: Vec<FillLedgerEntry>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FillLedgerEntry {
+    check_id: String,
+    kind: String,
+    selected: bool,
+    selection_reason: String,
+    expected_signal: Option<String>,
+    actual_signal: Option<String>,
+    time_spent_sec: f64,
+    artifact_path: Option<String>,
+    affected_merge: Option<bool>,
+    source_artifacts: Vec<String>,
+}
+
+struct FillLedgerInput<'a> {
+    out: &'a Path,
+    diff: &'a DiffContext,
+    profile: &'a Profile,
+    plan: &'a Plan,
+    tool_gate_outcomes: &'a [ToolGateOutcomeEntry],
+    gate_outcome: &'a GateOutcome,
+    review: &'a ReviewArtifacts,
+    metrics: &'a ReviewMetrics,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct RunLoopMetrics {
     concurrency_model: String,
     scheduler_profile: String,
@@ -1936,6 +1970,8 @@ struct ModelCallOutcome<T> {
 struct SensorReceipt {
     status: String,
     reason: String,
+    #[serde(default)]
+    duration_ms: Option<u128>,
     #[serde(default)]
     exit_code: Option<i32>,
     #[serde(default)]
@@ -5495,6 +5531,16 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&metrics)?,
     )?;
     write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
+    write_fill_ledger_artifact(FillLedgerInput {
+        out,
+        diff,
+        profile,
+        plan,
+        tool_gate_outcomes,
+        gate_outcome: &gate_outcome,
+        review: &review,
+        metrics: &metrics,
+    })?;
     write_scheduler_artifact(&review_dir, &metrics.run)?;
     fs::write(
         review_dir.join("terminal_state.json"),
@@ -6428,6 +6474,270 @@ fn build_cost_receipt(
         ],
         missing,
     }
+}
+
+fn write_fill_ledger_artifact(input: FillLedgerInput<'_>) -> Result<()> {
+    let out = input.out;
+    let ledger = build_fill_ledger(input)?;
+    fs::write(
+        out.join("review").join("fill-ledger.json"),
+        serde_json::to_vec_pretty(&ledger)?,
+    )?;
+    Ok(())
+}
+
+fn build_fill_ledger(input: FillLedgerInput<'_>) -> Result<FillLedger> {
+    let proof_output =
+        build_proof_planner_output(input.diff, input.profile, &input.review.proof_requests)?;
+    let mut entries = Vec::new();
+    entries.extend(
+        input
+            .plan
+            .sensors
+            .iter()
+            .filter(|sensor| !sensor.required)
+            .map(|sensor| {
+                fill_sensor_entry(
+                    input.out,
+                    sensor,
+                    input.tool_gate_outcomes,
+                    input.gate_outcome,
+                )
+            }),
+    );
+    entries.extend(
+        input
+            .review
+            .proof_requests
+            .iter()
+            .filter(|request| !proof_request_is_gate_required(request))
+            .map(|request| {
+                fill_proof_request_entry(
+                    request,
+                    &proof_output.proof_tasks,
+                    &input.review.proof_receipts,
+                    input.gate_outcome,
+                )
+            }),
+    );
+    entries.extend(
+        proof_output
+            .skip
+            .into_iter()
+            .map(fill_proof_planner_skip_entry),
+    );
+
+    Ok(FillLedger {
+        schema: FILL_LEDGER_SCHEMA,
+        run_id: cost_run_id(input.metrics),
+        catalog_scope: "executed_work_queue_v1",
+        source_artifacts: vec![
+            "work_queue.json".to_owned(),
+            "review/proof_requests.json".to_owned(),
+            "review/proof_planner_output.json".to_owned(),
+            "review/proof_receipts.json".to_owned(),
+            "review/tool-gate-outcomes.json".to_owned(),
+            "review/gate_outcome.json".to_owned(),
+            "review/metrics.json".to_owned(),
+        ],
+        entries,
+    })
+}
+
+fn fill_sensor_entry(
+    out: &Path,
+    sensor: &SensorPlan,
+    tool_gate_outcomes: &[ToolGateOutcomeEntry],
+    gate_outcome: &GateOutcome,
+) -> FillLedgerEntry {
+    let receipt_path = format!("sensors/{}/ub-review-sensor-status.json", sensor.id);
+    let receipt_exists = out.join(&receipt_path).is_file();
+    let receipt = read_sensor_receipt(&out.join(&receipt_path));
+    let actual_signal = if sensor.run {
+        Some(
+            receipt
+                .as_ref()
+                .map(|receipt| format!("{}: {}", receipt.status, receipt.reason))
+                .unwrap_or_else(|| "planned sensor did not produce a status receipt".to_owned()),
+        )
+    } else {
+        None
+    };
+    let time_spent_sec = receipt
+        .as_ref()
+        .and_then(|receipt| receipt.duration_ms)
+        .map(|duration_ms| round_f64(duration_ms as f64 / 1000.0, 3))
+        .unwrap_or(0.0);
+    let artifact_path = if receipt_exists {
+        Some(receipt_path.clone())
+    } else {
+        None
+    };
+    let mut source_artifacts = vec!["work_queue.json".to_owned(), "tool-status.json".to_owned()];
+    if receipt_exists {
+        source_artifacts.push(receipt_path.clone());
+    }
+    if tool_gate_outcomes
+        .iter()
+        .any(|outcome| outcome.tool == sensor.id)
+    {
+        source_artifacts.push("review/tool-gate-outcomes.json".to_owned());
+    }
+
+    FillLedgerEntry {
+        check_id: sensor.id.clone(),
+        kind: "sensor".to_owned(),
+        selected: sensor.run,
+        selection_reason: sensor.reason.clone(),
+        expected_signal: Some(sensor_expected_signal(&sensor.id).to_owned()),
+        actual_signal,
+        time_spent_sec,
+        artifact_path,
+        affected_merge: sensor
+            .run
+            .then(|| sensor_fill_entry_affected_merge(&sensor.id, gate_outcome)),
+        source_artifacts,
+    }
+}
+
+fn fill_proof_request_entry(
+    request: &ProofRequest,
+    proof_tasks: &[ProofTaskArtifact],
+    proof_receipts: &[ProofReceipt],
+    gate_outcome: &GateOutcome,
+) -> FillLedgerEntry {
+    let selected = request.status == "requested";
+    let task = proof_tasks.iter().find(|task| {
+        task.request_ids
+            .iter()
+            .any(|request_id| request_id == &request.id)
+    });
+    let receipts = proof_receipts
+        .iter()
+        .filter(|receipt| {
+            receipt
+                .request_ids
+                .iter()
+                .any(|request_id| request_id == &request.id)
+        })
+        .collect::<Vec<_>>();
+    let time_spent_ms = receipts
+        .iter()
+        .flat_map(|receipt| receipt.commands.iter())
+        .map(|command| command.duration_ms)
+        .sum::<u128>();
+    let artifact_path = receipts
+        .first()
+        .map(|receipt| format!("review/proof_receipts.json#{}", receipt.id));
+    let mut source_artifacts = vec![
+        "review/proof_requests.json".to_owned(),
+        "review/proof_planner_output.json".to_owned(),
+    ];
+    if !receipts.is_empty() {
+        source_artifacts.push("review/proof_receipts.json".to_owned());
+    }
+
+    FillLedgerEntry {
+        check_id: request.id.clone(),
+        kind: "proof-request".to_owned(),
+        selected,
+        selection_reason: request.reason.clone(),
+        expected_signal: Some(proof_request_expected_signal(request, task)),
+        actual_signal: proof_request_actual_signal(selected, &receipts),
+        time_spent_sec: round_f64(time_spent_ms as f64 / 1000.0, 3),
+        artifact_path,
+        affected_merge: selected.then(|| {
+            receipts.iter().any(|receipt| {
+                gate_references_artifact(
+                    gate_outcome,
+                    &format!("review/proof_receipts.json#{}", receipt.id),
+                )
+            })
+        }),
+        source_artifacts,
+    }
+}
+
+fn fill_proof_planner_skip_entry(skip: ProofPlannerSkip) -> FillLedgerEntry {
+    FillLedgerEntry {
+        check_id: skip.kind,
+        kind: "proof-skip".to_owned(),
+        selected: false,
+        selection_reason: skip.reason,
+        expected_signal: None,
+        actual_signal: None,
+        time_spent_sec: 0.0,
+        artifact_path: None,
+        affected_merge: None,
+        source_artifacts: vec!["review/proof_planner_output.json".to_owned()],
+    }
+}
+
+fn sensor_expected_signal(sensor_id: &str) -> &'static str {
+    match sensor_id {
+        "ripr" => "static mutation-exposure signal for changed behavior and tests",
+        "unsafe-review" => "unsafe/native reviewability and coverage signal",
+        "coverage" => "changed-line execution coverage telemetry",
+        "actionlint" => "workflow syntax and action composition signal",
+        "cargo-allow" => "source-tree exception policy receipt",
+        "tokmd" => "structured code context packet for model lanes",
+        "ast-grep" => "syntax-pattern evidence for changed source routes",
+        _ => "optional sensor evidence for review and compiler context",
+    }
+}
+
+fn sensor_fill_entry_affected_merge(sensor_id: &str, gate_outcome: &GateOutcome) -> bool {
+    gate_outcome.reasons.iter().any(|reason| {
+        reason.id == sensor_id
+            || gate_references_artifact(
+                gate_outcome,
+                &format!("sensors/{sensor_id}/ub-review-sensor-status.json"),
+            )
+            || gate_references_artifact(
+                gate_outcome,
+                &format!("review/tool-gate-outcomes.json#{sensor_id}"),
+            )
+    })
+}
+
+fn proof_request_expected_signal(
+    request: &ProofRequest,
+    task: Option<&ProofTaskArtifact>,
+) -> String {
+    task.map(|task| format!("{} {}", task.value, task.purpose))
+        .unwrap_or_else(|| {
+            format!(
+                "{} proof request `{}` with status `{}`",
+                request.cost, request.command, request.status
+            )
+        })
+}
+
+fn proof_request_actual_signal(selected: bool, receipts: &[&ProofReceipt]) -> Option<String> {
+    if receipts.is_empty() {
+        return selected.then(|| "no proof receipt matched request".to_owned());
+    }
+    if receipts.len() == 1 {
+        let receipt = receipts[0];
+        return Some(format!("{}: {}", receipt.result, receipt.reason));
+    }
+    let summary = receipts
+        .iter()
+        .map(|receipt| format!("{}={}", receipt.id, receipt.result))
+        .collect::<Vec<_>>()
+        .join("; ");
+    Some(format!("{} proof receipts: {summary}", receipts.len()))
+}
+
+fn gate_references_artifact(gate_outcome: &GateOutcome, artifact: &str) -> bool {
+    gate_outcome.reasons.iter().any(|reason| {
+        reason.receipt == artifact
+            || (!artifact.contains('#')
+                && reason
+                    .receipt
+                    .strip_prefix(artifact)
+                    .is_some_and(|suffix| suffix.starts_with('#')))
+    })
 }
 
 fn cost_run_id(metrics: &ReviewMetrics) -> String {
@@ -30278,6 +30588,10 @@ index 1111111..2222222 100644
             serde_json::from_slice(&fs::read(out.join("review/ub-review-cost.json"))?)?;
         assert_eq!(cost["schema"], "ub-review.cost_receipt.v1");
         assert!(cost.get("suggested_fill_seconds").is_none());
+        let fill_ledger: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/fill-ledger.json"))?)?;
+        assert_eq!(fill_ledger["schema"], "ub-review.fill_ledger.v1");
+        assert_eq!(fill_ledger["catalog_scope"], "executed_work_queue_v1");
         let reason = skip["reason"].as_str().unwrap_or_default();
         assert!(
             reason.contains("pass `synchronize` is not in [gate].post_review_on"),

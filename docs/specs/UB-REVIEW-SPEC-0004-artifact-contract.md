@@ -129,6 +129,10 @@ ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
                                explicit missing[] entries for unavailable
                                floor/cost inputs; no suggested_fill_seconds
                                in v1
+fill-ledger.json               ub-review.fill_ledger.v1; advisory
+                               optional-fill ledger derived from
+                               work_queue/proof planner/sensor/proof
+                               receipts; catalog_scope states v1 scope
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,
@@ -551,6 +555,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
+| review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1 | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
 | review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |
 | review/review.md | stable | seven required headings | humans | required (require_review) |

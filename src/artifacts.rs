@@ -22,6 +22,7 @@ pub(crate) const COVERAGE_SUMMARY_SCHEMA: &str = "ub-review.coverage_summary.v1"
 pub(crate) const COVERAGE_UPLOAD_SCHEMA: &str = "ub-review.coverage_upload.v1";
 pub(crate) const DROPPED_OBSERVATION_SCHEMA: &str = "ub-review.dropped_observation.v1";
 pub(crate) const FINAL_COMPILER_INPUT_V2_SCHEMA: &str = "ub-review.final_compiler_input.v2";
+pub(crate) const FILL_LEDGER_SCHEMA: &str = "ub-review.fill_ledger.v1";
 pub(crate) const FOLLOW_UP_EVIDENCE_SCHEMA: &str = "ub-review.follow_up_evidence.v1";
 pub(crate) const FOLLOW_UP_OUTPUT_SCHEMA: &str = "ub-review.follow_up_output.v1";
 pub(crate) const FOLLOW_UP_QUESTION_PACKET_SCHEMA: &str = "ub-review.follow_up_question_packet.v1";
