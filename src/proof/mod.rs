@@ -14,6 +14,9 @@ pub(crate) use budget::*;
 pub(crate) mod command;
 pub(crate) use command::*;
 
+pub(crate) mod tasks;
+pub(crate) use tasks::*;
+
 pub(crate) mod build;
 pub(crate) use build::*;
 
