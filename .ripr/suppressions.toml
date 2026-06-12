@@ -762,3 +762,39 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_command.rs:195:error_path"
 owner = "ub-review/core"
 reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C3 motion): skipped_focused_build_receipt propagates the same skipped command receipt construction error path formerly in main.rs. focused_build_request_skips_when_profile_disables_build_leases asserts the skipped focused-build receipt and command status. Line-keyed id from CI merge-ref; re-verify after any edit to command.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:14:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_budget command-timeout guard moved from main.rs. invalid_enabled_proof_budget_is_rejected asserts the exact error and disabled_focused_proof_allows_zero_command_budget asserts the disabled branch. Line-keyed id; re-verify after any edit to budget.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:20:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_budget total-timeout guard moved from main.rs. invalid_enabled_proof_total_budget_is_rejected asserts the exact error and disabled_focused_proof_allows_zero_command_budget asserts the disabled branch. Line-keyed id; re-verify after any edit to budget.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:37:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_lease_budget enabled-resource guard moved from main.rs. disabled_test_leases_allow_zero_proof_resources asserts the disabled branch and resource validation tests assert enabled failures. Line-keyed id; re-verify after any edit to budget.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:38:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_lease_budget CPU guard moved from main.rs. invalid_enabled_proof_lease_budget_is_rejected asserts the exact CPU error and disabled_test_leases_allow_zero_proof_resources asserts the disabled branch. Line-keyed id; re-verify after any edit to budget.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:44:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_lease_budget memory guard moved from main.rs. invalid_enabled_proof_lease_memory_budget_is_rejected asserts the exact memory error and disabled_test_leases_allow_zero_proof_resources asserts the disabled branch. Line-keyed id; re-verify after any edit to budget.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_budget.rs:50:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, proof slice C5 motion): proof_lease_budget disk guard moved from main.rs. invalid_enabled_proof_lease_disk_budget_is_rejected asserts the exact disk error and disabled_test_leases_allow_zero_proof_resources asserts the disabled branch. Line-keyed id; re-verify after any edit to budget.rs."
