@@ -29,6 +29,8 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
     )?;
     assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.8.0"));
+    assert!(script.contains("UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4"));
     assert!(script.contains("prefix=\"${UB_REVIEW_TOOL_DIR:-/opt/ub-review}\""));
     assert!(script.contains("export PATH=\"$prefix/bin:\\$PATH\""));
     assert!(script.contains("export UB_REVIEW_TOOL_DIR=\"$prefix\""));
@@ -403,24 +405,40 @@ fn active_len_tracks_view_after_resize() {
                 })
         })
     }));
-    assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| {
-            tool["id"] == "cargo-allow"
-                && tool["class"] == "static"
-                && tool["required_if"] == "source-exception-changed"
-                && tool["required_reason"] == "source-tree exception surface changed"
-                && tool["planned_run"] == false
-                && tool["plan_reason"] == "cargo-allow policy config not found"
-                && tool["artifact_paths"].as_array().is_some_and(|paths| {
-                    paths
-                        .iter()
-                        .any(|path| path == "sensors/cargo-allow/cargo-allow.receipt.json")
-                        && paths
-                            .iter()
-                            .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
-                })
-        })
-    }));
+    let tools = resolved_tools["tools"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("resolved tools must be an array"))?;
+    let cargo_allow = tools
+        .iter()
+        .find(|tool| tool["id"] == "cargo-allow")
+        .ok_or_else(|| anyhow::anyhow!("cargo-allow resolved tool missing"))?;
+    assert_eq!(cargo_allow["class"], "static");
+    assert_eq!(cargo_allow["required_if"], "source-exception-changed");
+    assert_eq!(
+        cargo_allow["required_reason"],
+        "source-tree exception surface changed"
+    );
+    let cargo_allow_paths = cargo_allow["artifact_paths"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("cargo-allow artifact_paths must be an array"))?;
+    assert!(
+        cargo_allow_paths
+            .iter()
+            .any(|path| path == "sensors/cargo-allow/cargo-allow.receipt.json")
+    );
+    assert!(
+        cargo_allow_paths
+            .iter()
+            .any(|path| path == "sensors/cargo-allow/cargo-allow.md")
+    );
+    match (
+        cargo_allow["planned_run"].as_bool(),
+        cargo_allow["plan_reason"].as_str(),
+    ) {
+        (Some(false), Some("cargo-allow policy config not found"))
+        | (Some(true), Some("source-tree exception surface changed")) => {}
+        _ => bail!("unexpected cargo-allow plan state: {cargo_allow}"),
+    }
     assert!(resolved_tools["tools"].as_array().is_some_and(|tools| {
         tools.iter().any(|tool| {
             tool["id"] == "coverage"
@@ -1252,6 +1270,11 @@ command = "ub-review-test-missing-tokmd"
     )?;
     assert!(output.contains("required core review tools missing from standard image"));
     assert!(output.contains("tokmd"));
+    assert!(output.contains("Fixes:"));
+    assert!(
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+    );
+    assert!(output.contains("see Fixes above"));
     Ok(())
 }
 
@@ -1273,6 +1296,8 @@ fn doctor_reports_provider_key_env_status_without_values() -> Result<()> {
     )?;
 
     assert!(output.contains("Providers:"));
+    assert!(output.contains("Binary path:"));
+    assert!(output.contains("path="));
     assert!(output.contains("minimax"));
     assert!(output.contains("present"));
     assert!(output.contains("env=UB_REVIEW_MINIMAX_API_KEY"));
@@ -1305,6 +1330,11 @@ command = "ub-review-test-missing-tokmd"
     )?;
     assert!(output.contains("required core review tools missing from standard image"));
     assert!(output.contains("tokmd"));
+    assert!(output.contains("Fixes:"));
+    assert!(
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force")
+    );
+    assert!(output.contains("see Fixes above"));
     Ok(())
 }
 
@@ -1333,6 +1363,12 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
     assert!(output.contains("required core review tool versions drifted"));
     assert!(output.contains("tokmd expected 1.12.0"));
     assert!(output.contains("tokmd 1.10.0"));
+    assert!(output.contains("Fixes:"));
+    assert!(
+        output
+            .contains("tokmd version drift: cargo install tokmd --locked --version 1.12.0 --force")
+    );
+    assert!(output.contains("see Fixes above"));
     Ok(())
 }
 
