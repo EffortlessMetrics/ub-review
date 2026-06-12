@@ -2665,6 +2665,179 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn model_suggested_shell_token_proof_request_is_rejected_before_execution() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(repo.join("src"))?;
+    write_file(
+        &repo.join("Cargo.toml"),
+        r#"[package]
+name = "shell-token-proof-fixture"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+path = "src/lib.rs"
+"#,
+    )?;
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 1 }\n")?;
+
+    run(&repo, "git", &["init"])?;
+    run(
+        &repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "baseline"])?;
+
+    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 2 }\n")?;
+    run(&repo, "git", &["add", "."])?;
+    run(&repo, "git", &["commit", "-m", "change value"])?;
+
+    let shell_command =
+        "cargo test --locked shell_token_should_not_execute && cargo test --locked should_not_run";
+    let planner_content = serde_json::json!({
+        "summary": null,
+        "observations": [],
+        "candidate_findings": [],
+        "summary_only_findings": [],
+        "failed_objections": [],
+        "proof_requests": [
+            {
+                "command": shell_command,
+                "reason": "Shell-shaped proof request must be rejected before execution.",
+                "cost": "focused-test",
+                "timeout_sec": 60,
+                "required": false
+            }
+        ]
+    })
+    .to_string();
+    let dummy_key = "dummy-minimax-key-for-shell-token-proof";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+        fake_openai_lane_content(),
+        fake_openai_lane_content(),
+        planner_content,
+    ])?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_cargo(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let fake_cargo_log = temp.path().join("fake-cargo.log");
+    let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "2",
+            "--model-timeout-sec",
+            "10",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[
+            ("PATH", path.as_str()),
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 3);
+
+    let proof_requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    let request = proof_requests
+        .iter()
+        .find(|request| request["command"].as_str() == Some(shell_command))
+        .ok_or_else(|| anyhow::anyhow!("shell-token proof request missing"))?;
+    assert_eq!(request["status"], "unsupported");
+    assert_eq!(request["cost"], "focused-test");
+    let request_id = json_str_field(request, "id")?;
+
+    let groups: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_request_groups.json"))?)?;
+    let group = groups
+        .iter()
+        .find(|group| {
+            group["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        })
+        .ok_or_else(|| anyhow::anyhow!("shell-token proof request group missing"))?;
+    assert_eq!(group["status"], "unsupported");
+
+    let planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    let proof_tasks = json_array_field(&planner_output, "proof_tasks")?;
+    assert!(
+        proof_tasks.iter().all(|task| {
+            !task["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        }),
+        "unsupported shell-token request must not become a proof task"
+    );
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert!(
+        receipts.iter().all(|receipt| {
+            !receipt["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        }),
+        "unsupported shell-token request must not receive an execution receipt"
+    );
+    let leases: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+    assert!(
+        leases.iter().all(|lease| {
+            !lease["command"]
+                .as_str()
+                .is_some_and(|command| command.contains("shell_token_should_not_execute"))
+        }),
+        "unsupported shell-token request must not receive a command lease"
+    );
+    if fake_cargo_log.exists() {
+        let log = fs::read_to_string(fake_cargo_log)?;
+        assert!(!log.contains("shell_token_should_not_execute"));
+        assert!(!log.contains("should_not_run"));
+    }
+    Ok(())
+}
+
+#[test]
 fn model_auto_run_overlaps_initial_diff_proof_with_model_lanes() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -4149,6 +4322,9 @@ fn write_fake_cargo(dir: &Path) -> Result<()> {
             &script,
             r#"#!/bin/sh
 echo "fake cargo $*"
+if [ -n "$FAKE_CARGO_LOG" ]; then
+  printf '%s\n' "fake cargo $*" >> "$FAKE_CARGO_LOG"
+fi
 if [ -n "$FAKE_CARGO_SLEEP_SECONDS" ]; then
   sleep "$FAKE_CARGO_SLEEP_SECONDS"
 fi
@@ -4198,6 +4374,16 @@ const FAKE_CARGO_SOURCE: &str = r#"use std::env;
 fn main() {
     let args = env::args().skip(1).collect::<Vec<_>>();
     println!("fake cargo {}", args.join(" "));
+    if let Ok(path) = env::var("FAKE_CARGO_LOG") {
+        let _ = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .and_then(|mut file| {
+                use std::io::Write;
+                writeln!(file, "fake cargo {}", args.join(" "))
+            });
+    }
     if let Ok(value) = env::var("FAKE_CARGO_SLEEP_MS") {
         if let Ok(ms) = value.parse::<u64>() {
             std::thread::sleep(std::time::Duration::from_millis(ms));

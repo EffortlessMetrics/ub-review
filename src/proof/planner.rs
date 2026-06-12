@@ -1139,6 +1139,60 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn proof_request_status_rejects_manual_cost_and_shell_tokens() {
+        let lane = model_lane(
+            "tests-oracle",
+            "Tests oracle",
+            &["tokmd"],
+            "Check focused proof requests.",
+        );
+        let requests = [
+            super::ModelProofRequest {
+                command:
+                    "cargo test --locked -p ub-review proof_request_status_enforces_v0_focused_allowlist -- --exact"
+                        .to_owned(),
+                reason: "Manual-cost command must not be brokered automatically.".to_owned(),
+                cost: Some("manual".to_owned()),
+                timeout_sec: Some(300),
+                required: Some(false),
+            },
+            super::ModelProofRequest {
+                command: "cargo check --workspace --all-targets --locked && cargo test --locked"
+                    .to_owned(),
+                reason: "Shell control tokens must not reach execution.".to_owned(),
+                cost: Some("focused-build".to_owned()),
+                timeout_sec: Some(300),
+                required: Some(false),
+            },
+            super::ModelProofRequest {
+                command: "bun test test/js/bun/md/md-edge-cases.test.ts; rm -rf target"
+                    .to_owned(),
+                reason: "Shell control tokens must not be brokered even with manual cost."
+                    .to_owned(),
+                cost: Some("manual".to_owned()),
+                timeout_sec: Some(300),
+                required: Some(false),
+            },
+        ]
+        .into_iter()
+        .enumerate()
+        .map(|(index, request)| super::validate_proof_request(&lane, request, index))
+        .collect::<Vec<_>>();
+
+        assert_eq!(requests[0].cost, "manual");
+        assert_eq!(requests[0].status, "unsupported");
+        assert_eq!(requests[1].cost, "focused-build");
+        assert_eq!(requests[1].status, "unsupported");
+        assert_eq!(requests[2].cost, "manual");
+        assert_eq!(requests[2].status, "unsupported");
+        assert!(
+            super::proof_request_groups(&requests)
+                .iter()
+                .all(|group| group.status != "requested")
+        );
+    }
+
+    #[test]
     fn proof_request_artifacts_write_focused_planner_without_execution() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let patch = "\
