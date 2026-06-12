@@ -9386,41 +9386,6 @@ fn parse_js_string_literal(text: &str) -> Option<String> {
     None
 }
 
-fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSpec {
-    if let Some(command_specs) = &task.command_specs {
-        return if side == "head" {
-            command_specs.head.clone()
-        } else {
-            command_specs.base_plus_tests.clone()
-        };
-    }
-    let mut env = BTreeMap::new();
-    let mut argv = if side == "head" {
-        vec![
-            "bun".to_owned(),
-            "bd".to_owned(),
-            "test".to_owned(),
-            task.file.clone(),
-        ]
-    } else {
-        env.insert("USE_SYSTEM_BUN".to_owned(), "1".to_owned());
-        vec!["bun".to_owned(), "test".to_owned(), task.file.clone()]
-    };
-    if let Some(name) = &task.test_name {
-        argv.push("-t".to_owned());
-        argv.push(name.clone());
-    }
-    ProofCommandSpec { argv, env }
-}
-
-fn proof_task_plan_command(task: &FocusedTestTask, side: &str, worktree: &str) -> String {
-    let spec = proof_task_command_spec(task, side);
-    format!(
-        "cwd=target/ub-review/proof-worktrees/{worktree} {}",
-        command_display_with_env(&spec.env, &spec.argv)
-    )
-}
-
 fn command_display(argv: &[String]) -> String {
     argv.iter()
         .map(|part| {

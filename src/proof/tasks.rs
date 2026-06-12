@@ -397,6 +397,45 @@ pub(crate) struct FocusedBuildPlan {
     pub(crate) reason: String,
 }
 
+pub(crate) fn proof_task_command_spec(task: &FocusedTestTask, side: &str) -> ProofCommandSpec {
+    if let Some(command_specs) = &task.command_specs {
+        return if side == "head" {
+            command_specs.head.clone()
+        } else {
+            command_specs.base_plus_tests.clone()
+        };
+    }
+    let mut env = BTreeMap::new();
+    let mut argv = if side == "head" {
+        vec![
+            "bun".to_owned(),
+            "bd".to_owned(),
+            "test".to_owned(),
+            task.file.clone(),
+        ]
+    } else {
+        env.insert("USE_SYSTEM_BUN".to_owned(), "1".to_owned());
+        vec!["bun".to_owned(), "test".to_owned(), task.file.clone()]
+    };
+    if let Some(name) = &task.test_name {
+        argv.push("-t".to_owned());
+        argv.push(name.clone());
+    }
+    ProofCommandSpec { argv, env }
+}
+
+pub(crate) fn proof_task_plan_command(
+    task: &FocusedTestTask,
+    side: &str,
+    worktree: &str,
+) -> String {
+    let spec = proof_task_command_spec(task, side);
+    format!(
+        "cwd=target/ub-review/proof-worktrees/{worktree} {}",
+        command_display_with_env(&spec.env, &spec.argv)
+    )
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ProofPlannerRuntimeBudget {
     pub(crate) target_timeout_sec: u64,
@@ -955,6 +994,62 @@ mod tests {
         assert!(!is_bun_focused_test_file(
             "../test/js/bun/md/escape.test.ts"
         ));
+    }
+
+    #[test]
+    fn proof_task_plan_command_formats_default_bun_and_explicit_command_specs() {
+        let task = FocusedTestTask {
+            id: "proof-red-green:test/js/bun/ffi/ffi.test.js:ffi toBuffer bad free".to_owned(),
+            file: "test/js/bun/ffi/ffi.test.js".to_owned(),
+            test_name: Some("ffi toBuffer bad free".to_owned()),
+            mode: FocusedProofMode::RedGreen,
+            command_specs: None,
+            timeout_sec: None,
+            requested_by: Vec::new(),
+            request_ids: Vec::new(),
+        };
+        assert_eq!(
+            proof_task_plan_command(&task, "head", "head"),
+            "cwd=target/ub-review/proof-worktrees/head bun bd test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"
+        );
+        assert_eq!(
+            proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests"),
+            "cwd=target/ub-review/proof-worktrees/base-plus-tests USE_SYSTEM_BUN=1 bun test test/js/bun/ffi/ffi.test.js -t 'ffi toBuffer bad free'"
+        );
+
+        let explicit = FocusedTestTask {
+            id: "proof-red-green:command:cargo-test".to_owned(),
+            file: "cargo-package:ub-review".to_owned(),
+            test_name: Some("focused_proof".to_owned()),
+            mode: FocusedProofMode::RedGreen,
+            command_specs: Some(FocusedTestCommandSpecs {
+                head: ProofCommandSpec {
+                    argv: vec![
+                        "cargo".to_owned(),
+                        "test".to_owned(),
+                        "--locked".to_owned(),
+                        "focused_proof".to_owned(),
+                    ],
+                    env: BTreeMap::new(),
+                },
+                base_plus_tests: ProofCommandSpec {
+                    argv: vec![
+                        "cargo".to_owned(),
+                        "test".to_owned(),
+                        "--locked".to_owned(),
+                        "focused_proof".to_owned(),
+                    ],
+                    env: BTreeMap::new(),
+                },
+            }),
+            timeout_sec: None,
+            requested_by: Vec::new(),
+            request_ids: Vec::new(),
+        };
+        assert_eq!(
+            proof_task_plan_command(&explicit, "base-plus-tests", "base-plus-tests"),
+            "cwd=target/ub-review/proof-worktrees/base-plus-tests cargo test --locked focused_proof"
+        );
     }
 
     #[test]
