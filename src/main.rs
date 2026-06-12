@@ -3246,14 +3246,16 @@ fn read_repair_queue(
 /// on `GitHubReviewComment` for a future repair-queue version that adds
 /// `replacement` / `applicable_edit` output. This is an honest capability gap
 /// reported upstream as a narrow follow-up issue.
+#[cfg(test)]
 fn build_unsafe_review_inline_comments(
     sensor_dir: &Path,
     existing_paths_lines: &std::collections::BTreeSet<(String, u32)>,
+    right_side_lines: &std::collections::BTreeSet<(String, u32)>,
     max_inline_budget: usize,
 ) -> Vec<GitHubReviewComment> {
     let artifacts = match read_unsafe_review_artifacts(sensor_dir) {
-        Some(a) => a,
-        None => return Vec::new(),
+        Ok(a) => a,
+        Err(_) => return Vec::new(),
     };
     let repair_queue = read_repair_queue(sensor_dir, &artifacts.gate);
     let trust = artifacts
@@ -3275,6 +3277,9 @@ fn build_unsafe_review_inline_comments(
         };
         // Dedup: skip if a model lane already claimed this (path, line).
         let norm_path = normalize_repo_path(path);
+        if !right_side_lines.contains(&(norm_path.clone(), line)) {
+            continue;
+        }
         if existing_paths_lines.contains(&(norm_path.clone(), line)) {
             continue;
         }
@@ -3344,6 +3349,165 @@ fn build_unsafe_review_inline_comments(
         });
     }
     comments
+}
+
+fn unsafe_review_sensor_lane() -> LanePlan {
+    LanePlan {
+        id: "unsafe-review".to_owned(),
+        role: "Unsafe-review comment-plan intake".to_owned(),
+        model: "unsafe-review".to_owned(),
+        model_display: "unsafe-review deterministic sensor".to_owned(),
+        receives: vec!["unsafe-review".to_owned()],
+        focus: "Route unsafe-review comment-plan entries through the review compiler.".to_owned(),
+    }
+}
+
+fn unsafe_review_comment_plan_candidates(
+    sensor_dir: &Path,
+) -> (Vec<ModelCandidateComment>, Vec<SummaryOnlyFinding>) {
+    let mut candidates = Vec::new();
+    let mut skips = Vec::new();
+    let artifacts = match read_unsafe_review_artifacts(sensor_dir) {
+        Ok(artifacts) => artifacts,
+        Err(_) => return (candidates, skips),
+    };
+    let repair_queue = read_repair_queue(sensor_dir, &artifacts.gate);
+    let gate_trust = artifacts
+        .gate
+        .trust_boundary
+        .as_deref()
+        .unwrap_or("advisory");
+    for entry in &artifacts.comment_plan {
+        if entry.changed_line != Some(true) {
+            let label = entry
+                .card_id
+                .as_deref()
+                .map(|id| format!(" `{id}`"))
+                .unwrap_or_default();
+            skips.push(SummaryOnlyFinding {
+                lane: "unsafe-review".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: format!(
+                    "unsafe-review comment-plan{label} did not target a changed RIGHT-side line; kept artifact-only"
+                ),
+                evidence: "unsafe-review comment-plan changed_line guard".to_owned(),
+            });
+            continue;
+        }
+        let (Some(path), Some(line)) = (entry.path.as_deref(), entry.line) else {
+            let label = entry
+                .card_id
+                .as_deref()
+                .map(|id| format!(" `{id}`"))
+                .unwrap_or_default();
+            skips.push(SummaryOnlyFinding {
+                lane: "unsafe-review".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: format!(
+                    "unsafe-review comment-plan{label} lacked path or line; kept artifact-only"
+                ),
+                evidence: "unsafe-review comment-plan anchor guard".to_owned(),
+            });
+            continue;
+        };
+        let gap = entry
+            .coverage_gap
+            .as_deref()
+            .unwrap_or("unsafe coverage gap");
+        let action = entry
+            .confirmation_state
+            .as_deref()
+            .unwrap_or("reviewer confirmation required");
+        let card_label = entry
+            .card_id
+            .as_deref()
+            .map(|id| format!(" (`{id}`)"))
+            .unwrap_or_default();
+        let trust = entry.trust_boundary.as_deref().unwrap_or(gate_trust);
+        let rq_context = entry
+            .card_id
+            .as_deref()
+            .and_then(|id| repair_queue.get(id))
+            .map(|rq_entry| {
+                let bucket = rq_entry
+                    .bucket_reason
+                    .as_deref()
+                    .unwrap_or("see repair-queue.json");
+                let operation_line = rq_entry
+                    .operation
+                    .as_deref()
+                    .map(|op| format!("\n\n**Operation**: `{op}`"))
+                    .unwrap_or_default();
+                let evidence_lines = rq_entry
+                    .missing_evidence
+                    .iter()
+                    .map(|e| format!("  - {e}"))
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                if evidence_lines.is_empty() {
+                    format!("\n\n**Repair class**: {bucket}{operation_line}")
+                } else {
+                    format!(
+                        "\n\n**Repair class**: {bucket}{operation_line}\n\n**Missing evidence**:\n{evidence_lines}"
+                    )
+                }
+            })
+            .unwrap_or_default();
+        let body = truncate_chars(
+            &format!(
+                "**{gap}**{card_label}\n\n\
+                 **Next action**: {action}\n\n\
+                 **Trust boundary** (advisory): {trust}{rq_context}\n\n\
+                 _Sourced from unsafe-review advisory output. \
+                 Apply only after reviewer verification. \
+                 Inline comments are advisory - they do not change the merge decision._"
+            ),
+            1_100,
+        );
+        let selection = entry
+            .selection_reason
+            .as_deref()
+            .unwrap_or("deterministic comment-plan candidate");
+        candidates.push(ModelCandidateComment {
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            path: path.to_owned(),
+            line,
+            body,
+            evidence: format!(
+                "unsafe-review comment-plan{card_label}: {selection}; confirmation_state: {action}"
+            ),
+        });
+    }
+    (candidates, skips)
+}
+
+fn apply_unsafe_review_comment_plan_candidates(
+    sensor_dir: &Path,
+    line_map: &BTreeSet<(String, u32)>,
+    max_inline: usize,
+    sinks: ModelOutputSinks<'_>,
+) {
+    let (candidates, skips) = unsafe_review_comment_plan_candidates(sensor_dir);
+    sinks.summary_only_findings.extend(skips);
+    if candidates.is_empty() {
+        return;
+    }
+    let lane = unsafe_review_sensor_lane();
+    let output = LaneModelOutput {
+        summary: None,
+        inline_comments: Vec::new(),
+        candidate_findings: candidates,
+        summary_only_findings: Vec::new(),
+        observations: Vec::new(),
+        failed_objections: Vec::new(),
+        proof_requests: Vec::new(),
+        issue_candidates: Vec::new(),
+        degraded: false,
+    };
+    apply_model_output(&lane, output, line_map, max_inline, sinks);
 }
 
 fn resolved_plan_artifact(
@@ -4574,20 +4738,10 @@ fn render_unsafe_review_lane_evidence(sensor_dir: &Path, status: &str) -> String
         return String::new();
     }
     match read_unsafe_review_artifacts(sensor_dir) {
-        None => {
-            // The gate file is absent or has an unrecognised schema_version.
-            let gate_path = sensor_dir
-                .join(UNSAFE_REVIEW_OUTPUT_SUBDIR)
-                .join("unsafe-review-gate.json");
-            let reason = if gate_path.exists() {
-                "unsafe-review-gate.json present but schema_version not recognised; \
-                 structured evidence unavailable (schema routing degraded)"
-            } else {
-                "unsafe-review-gate.json absent; structured evidence unavailable"
-            };
-            format!("  - unsafe-review structured evidence: {reason}\n")
+        Err(gap) => {
+            format!("  - unsafe-review structured evidence: {}\n", gap.reason())
         }
-        Some(artifacts) => {
+        Ok(artifacts) => {
             let gate = &artifacts.gate;
             let trust = gate.trust_boundary.as_deref().unwrap_or("advisory");
             let summary = &gate.summary;
@@ -4793,6 +4947,19 @@ fn write_review_artifacts(
                 &mut proof_requests,
                 &mut issue_candidates,
             )?;
+            dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+            apply_unsafe_review_comment_plan_candidates(
+                &out.join("sensors").join("unsafe-review"),
+                &line_map,
+                args.max_inline_comments,
+                ModelOutputSinks {
+                    inline_comments: &mut inline_comments,
+                    summary_only_findings: &mut summary_only_findings,
+                    model_observations: &mut model_observations,
+                    proof_requests: &mut proof_requests,
+                    issue_candidates: &mut issue_candidates,
+                },
+            );
             dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
             model_calls_used += run_proof_planner_model_lane(
                 ProofPlannerRunContext {
@@ -5197,29 +5364,11 @@ fn write_review_artifacts(
     let mut review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
     let summary_only_policy_posted = final_surface.summary_only_policy_posted;
-    let mut github_review = final_surface.github_review;
+    let github_review = final_surface.github_review;
     let artifact_body = final_surface.artifact_body;
-    // Inject unsafe-review comment-plan entries as inline review comments (#360).
-    // These are appended after the final model-lane surface so the grouped
-    // review body is unaffected. Only `changed_line: true` entries are eligible
-    // (GitHub API requirement). Dedup against already-present comments prevents
-    // double-posting on any path:line pair claimed by a model lane. Advisory
-    // only — they never change the deterministic merge gate.
-    if should_prepare_github_review {
-        let unsafe_review_sensor_dir = out.join("sensors").join("unsafe-review");
-        let existing: std::collections::BTreeSet<(String, u32)> = github_review
-            .comments
-            .iter()
-            .map(|c| (normalize_repo_path(&c.path), c.line))
-            .collect();
-        let extra = build_unsafe_review_inline_comments(
-            &unsafe_review_sensor_dir,
-            &existing,
-            args.max_inline_comments
-                .saturating_sub(github_review.comments.len()),
-        );
-        github_review.comments.extend(extra);
-    }
+    // unsafe-review comment-plan candidates entered the compiler intake before
+    // candidate records were built. No post-compile comment injection happens
+    // here; appending here would bypass the ledger, cap, dedupe, and refuter.
     let terminal_state = final_surface.terminal_state;
     review.terminal_state = terminal_state.clone();
     review.body = artifact_body.clone();
@@ -9909,17 +10058,13 @@ fn render_shared_context(
         text.push_str(&format!("- Sensor status: `{sensor_status}`\n"));
         if sensor_status == "ok" {
             match read_unsafe_review_artifacts(&sensor_dir) {
-                None => {
-                    let gate_path = sensor_dir
-                        .join(UNSAFE_REVIEW_OUTPUT_SUBDIR)
-                        .join("unsafe-review-gate.json");
-                    if gate_path.exists() {
-                        text.push_str("- Structured evidence: schema_version not recognised; falling back to status-only\n");
-                    } else {
-                        text.push_str("- Structured evidence: unsafe-review-gate.json not found; falling back to status-only\n");
-                    }
+                Err(gap) => {
+                    text.push_str(&format!(
+                        "- Structured evidence: {} (falling back to status-only)\n",
+                        gap.reason()
+                    ));
                 }
-                Some(artifacts) => {
+                Ok(artifacts) => {
                     let gate = &artifacts.gate;
                     let trust = gate.trust_boundary.as_deref().unwrap_or("advisory");
                     let summary = &gate.summary;
@@ -11612,6 +11757,17 @@ fn collect_sensor_evidence_issues(out: &Path, plan: &Plan) -> Vec<SensorEvidence
             let reason = receipt
                 .map(|receipt| receipt.reason)
                 .unwrap_or_else(|| sensor.reason.clone());
+            if sensor.id == "unsafe-review"
+                && status == "ok"
+                && let Err(gap) =
+                    read_unsafe_review_artifacts(&out.join("sensors").join(&sensor.id))
+            {
+                return Some(SensorEvidenceIssue {
+                    sensor: sensor.id.clone(),
+                    status: "artifact-gap".to_owned(),
+                    reason: gap.reason(),
+                });
+            }
             if !is_sensor_evidence_issue(sensor, &status, &reason) {
                 return None;
             }
@@ -21789,6 +21945,54 @@ max_new_unsuppressed_findings = 0
         assert_eq!(issues[0].sensor, "actionlint");
         assert_eq!(issues[0].status, "skipped");
         assert_eq!(issues[0].reason, "disabled by config");
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut sensor = sensor_plan("unsafe-review", "unsafe-review", true);
+        sensor.required = true;
+        write_sensor_status(
+            &out,
+            &sensor,
+            SensorStatusWrite {
+                status: "ok",
+                argv: &["unsafe-review".to_owned(), "first-pr".to_owned()],
+                duration_ms: 10,
+                reason: "completed",
+                exit_code: Some(0),
+                timed_out: false,
+            },
+        )?;
+        let plan = test_plan(vec![sensor.clone()]);
+
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].sensor, "unsafe-review");
+        assert_eq!(issues[0].status, "artifact-gap");
+        assert_eq!(
+            issues[0].reason,
+            "unsafe-review-gate.json absent; structured evidence unavailable"
+        );
+
+        let gate_dir = out
+            .join("sensors")
+            .join("unsafe-review")
+            .join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        fs::create_dir_all(&gate_dir)?;
+        fs::write(
+            gate_dir.join("unsafe-review-gate.json"),
+            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory"}"#,
+        )?;
+
+        let issues = collect_sensor_evidence_issues(&out, &plan);
+        assert!(
+            issues.is_empty(),
+            "valid structured unsafe-review evidence should clear the gap: {issues:?}"
+        );
         Ok(())
     }
 
@@ -34172,7 +34376,7 @@ jobs:
         )?;
         let block = super::render_unsafe_review_lane_evidence(&sensor_dir, "ok");
         assert!(
-            block.contains("schema_version not recognised"),
+            block.contains("schema_version `unsafe-review-gate/v99` not recognised"),
             "degradation note must appear: {block}"
         );
         Ok(())
@@ -34211,6 +34415,15 @@ jobs:
         Ok(())
     }
 
+    fn unsafe_review_right_side_lines(
+        path: &str,
+        line: u32,
+    ) -> std::collections::BTreeSet<(String, u32)> {
+        let mut lines = std::collections::BTreeSet::new();
+        lines.insert((super::normalize_repo_path(path), line));
+        lines
+    }
+
     /// `changed_line: true` entry → one inline comment is produced at the
     /// correct `path:line`, body contains `coverage_gap`, `confirmation_state`,
     /// and the advisory `trust_boundary`. No suggestion block is set.
@@ -34235,7 +34448,13 @@ jobs:
             None,
         )?;
         let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
         assert_eq!(comments.len(), 1, "expected exactly one inline comment");
         let c = &comments[0];
         assert_eq!(c.path, "src/lib.rs");
@@ -34284,10 +34503,158 @@ jobs:
             None,
         )?;
         let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 5);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
         assert!(
             comments.is_empty(),
             "unchanged-line entry must be skipped, got {comments:?}"
+        );
+        Ok(())
+    }
+
+    /// `changed_line: true` is treated as a tool claim, not proof. The
+    /// compiler's diff line map is the authority for whether a candidate can
+    /// become a GitHub RIGHT-side inline comment.
+    #[test]
+    fn build_unsafe_review_inline_comments_skips_non_diff_anchor() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-002b",
+                "path": "src/lib.rs",
+                "line": 99,
+                "changed_line": true,
+                "coverage_gap": "guard_coverage: weak",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        let existing = std::collections::BTreeSet::new();
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
+        assert!(
+            comments.is_empty(),
+            "stale changed_line claim must be skipped, got {comments:?}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_comment_plan_enters_compiler_intake() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-compiler-001",
+                "path": "src/lib.rs",
+                "line": 8,
+                "changed_line": true,
+                "coverage_gap": "raw_pointer_read without alignment guard",
+                "selection_reason": "changed line in unsafe block",
+                "confirmation_state": "unconfirmed",
+                "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict"
+            }]"#,
+            None,
+        )?;
+        let line_map = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+
+        super::apply_unsafe_review_comment_plan_candidates(
+            &sensor_dir,
+            &line_map,
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut model_observations,
+                proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+
+        assert_eq!(inline_comments.len(), 1);
+        assert!(summary_only_findings.is_empty());
+        let comment = &inline_comments[0];
+        assert_eq!(comment.lane, "unsafe-review");
+        assert_eq!(comment.severity, "medium");
+        assert_eq!(comment.confidence, "medium-high");
+        assert_eq!(comment.path, "src/lib.rs");
+        assert_eq!(comment.line, 8);
+        assert_eq!(comment.side, "RIGHT");
+        assert!(comment.body.starts_with("[unsafe-review]"));
+        assert!(
+            comment
+                .body
+                .contains("raw_pointer_read without alignment guard")
+        );
+        assert!(comment.evidence.contains("changed line in unsafe block"));
+        Ok(())
+    }
+
+    #[test]
+    fn unsafe_review_comment_plan_stale_anchor_uses_shared_inline_guard() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let sensor_dir = temp.path().join("sensors/unsafe-review");
+        let out_dir = sensor_dir.join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
+        write_inline_comment_fixtures(
+            &out_dir,
+            r#"[{
+                "card_id": "card-compiler-002",
+                "path": "src/lib.rs",
+                "line": 99,
+                "changed_line": true,
+                "coverage_gap": "guard_coverage: weak",
+                "selection_reason": "changed line in unsafe block",
+                "confirmation_state": "unconfirmed"
+            }]"#,
+            None,
+        )?;
+        let line_map = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+
+        super::apply_unsafe_review_comment_plan_candidates(
+            &sensor_dir,
+            &line_map,
+            8,
+            ModelOutputSinks {
+                inline_comments: &mut inline_comments,
+                summary_only_findings: &mut summary_only_findings,
+                model_observations: &mut model_observations,
+                proof_requests: &mut proof_requests,
+                issue_candidates: &mut issue_candidates,
+            },
+        );
+
+        assert!(inline_comments.is_empty());
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(summary_only_findings[0].lane, "unsafe-review");
+        assert!(
+            summary_only_findings[0].reason.contains("line_valid=false"),
+            "stale anchors must be rejected by validate_inline_candidate: {:?}",
+            summary_only_findings[0]
         );
         Ok(())
     }
@@ -34314,7 +34681,13 @@ jobs:
         // Simulate a model lane already posting to src/lib.rs:8.
         let mut existing = std::collections::BTreeSet::new();
         existing.insert(("src/lib.rs".to_owned(), 8u32));
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
         assert!(
             comments.is_empty(),
             "duplicate path:line must be deduped, got {comments:?}"
@@ -34342,7 +34715,13 @@ jobs:
             None,
         )?;
         let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 0);
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            0,
+        );
         assert!(
             comments.is_empty(),
             "budget=0 must produce no comments, got {comments:?}"
@@ -34400,7 +34779,13 @@ jobs:
             Some(repair_queue),
         )?;
         let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let right_side_lines = unsafe_review_right_side_lines("src/lib.rs", 8);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
         assert_eq!(comments.len(), 1);
         let c = &comments[0];
         // Repair-queue context surfaces bucket reason, operation, and evidence.
@@ -34453,7 +34838,13 @@ jobs:
             None,
         )?;
         let existing = std::collections::BTreeSet::new();
-        let comments = super::build_unsafe_review_inline_comments(&sensor_dir, &existing, 8);
+        let right_side_lines = unsafe_review_right_side_lines("src/ffi.rs", 12);
+        let comments = super::build_unsafe_review_inline_comments(
+            &sensor_dir,
+            &existing,
+            &right_side_lines,
+            8,
+        );
         assert_eq!(
             comments.len(),
             1,
@@ -34548,7 +34939,7 @@ jobs:
             }"#,
         )?;
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
-            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts)"))?;
+            .map_err(|gap| anyhow::anyhow!("expected ingested artifacts, got gap: {gap:?}"))?;
         let map = super::read_repair_queue(&sensor_dir, &artifacts.gate);
         assert_eq!(map.len(), 2, "two distinct card_ids expected");
         // cid-1 should keep the first bucket hit (repairable_by_guard).
@@ -34587,7 +34978,7 @@ jobs:
             }"#,
         )?;
         let artifacts = super::read_unsafe_review_artifacts(&sensor_dir)
-            .ok_or_else(|| anyhow::anyhow!("expected Some(artifacts)"))?;
+            .map_err(|gap| anyhow::anyhow!("expected ingested artifacts, got gap: {gap:?}"))?;
         let map = super::read_repair_queue(&sensor_dir, &artifacts.gate);
         assert!(map.is_empty(), "absent repair-queue must return empty map");
         Ok(())
