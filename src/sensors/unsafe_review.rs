@@ -51,6 +51,11 @@ pub(crate) struct UnsafeReviewGate {
     /// the hyphenated filenames.
     #[serde(default)]
     pub(crate) artifacts: std::collections::BTreeMap<String, String>,
+    /// Optional upstream floor timing for cost receipts. Absent in
+    /// unsafe-review 0.3.4; ub-review records the absence explicitly rather
+    /// than synthesizing a duration.
+    #[serde(default)]
+    pub(crate) required_floor_wall_seconds: Option<f64>,
 }
 
 /// Movement summary block nested under `summary` in `unsafe-review-gate/v1`.
@@ -235,6 +240,7 @@ mod tests {
                     "lsp": "lsp.json",
                     "policy_report": "policy-report.json"
                 },
+                "required_floor_wall_seconds": 12.5,
                 "trust_boundary": "static unsafe-review coverage evidence; not proof, not a merge verdict",
                 "tool": "unsafe-review",
                 "tool_version": "0.3.4"
@@ -272,6 +278,7 @@ mod tests {
             artifacts.gate.trust_boundary.as_deref(),
             Some("static unsafe-review coverage evidence; not proof, not a merge verdict")
         );
+        assert_eq!(artifacts.gate.required_floor_wall_seconds, Some(12.5));
         // comment-plan loaded via the snake_case `comment_plan` artifacts key.
         assert_eq!(artifacts.comment_plan.len(), 1);
         let entry = &artifacts.comment_plan[0];

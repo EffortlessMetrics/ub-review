@@ -224,6 +224,7 @@ fn active_len_tracks_view_after_resize() {
         "review/tool-gate-outcomes.json",
         "review/provider-preflight-status.json",
         "review/metrics.json",
+        "review/ub-review-cost.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -722,6 +723,53 @@ fn active_len_tracks_view_after_resize() {
     assert!(cache_events.contains("\"kind\":\"shared_context_prepared\""));
     let metrics: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    let cost: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/ub-review-cost.json"))?)?;
+    assert_eq!(cost["schema"], "ub-review.cost_receipt.v1");
+    assert!(cost.get("suggested_fill_seconds").is_none());
+    assert!(
+        ["github-hosted", "self-hosted", "local", "unknown"]
+            .contains(&cost["runner_kind"].as_str().unwrap_or_default())
+    );
+    assert_eq!(cost["target_minutes"], 30);
+    assert_eq!(cost["cap_minutes"], 60);
+    assert!(cost["fallback_used"].as_bool().is_some());
+    assert!(cost["required_floor_wall_seconds"].is_null());
+    assert!(cost["estimated_cost_usd"].is_null());
+    assert_eq!(
+        cost["llm_seconds"].as_f64().unwrap_or_default(),
+        metrics["run"]["model_call_duration_ms_sum"]
+            .as_u64()
+            .unwrap_or_default() as f64
+            / 1000.0
+    );
+    assert_eq!(
+        cost["tokens"]["cached_input"],
+        metrics["models"]["prompt_cache_read_input_tokens"]
+    );
+    for pointer in [
+        "/tokens/fresh_input",
+        "/tokens/cached_input",
+        "/tokens/output",
+        "/cost_basis/runner_minutes",
+    ] {
+        assert!(
+            cost.pointer(pointer)
+                .and_then(serde_json::Value::as_f64)
+                .is_some(),
+            "missing non-negative cost field {pointer}"
+        );
+    }
+    let missing_cost_fields = cost["missing"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("cost missing[] absent"))?
+        .iter()
+        .filter_map(|entry| entry["field"].as_str())
+        .collect::<std::collections::BTreeSet<_>>();
+    assert!(missing_cost_fields.contains("required_floor_wall_seconds"));
+    assert!(missing_cost_fields.contains("cost_basis.linux_minute_rate_usd"));
+    assert!(missing_cost_fields.contains("estimated_cost_usd"));
+    assert!(missing_cost_fields.contains("cache.cargo"));
     let scheduler: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/scheduler.json"))?)?;
     assert_eq!(scheduler["schema"], "ub-review.scheduler.v1");

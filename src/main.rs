@@ -549,6 +549,51 @@ struct ReviewMetrics {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct CostReceipt {
+    schema: &'static str,
+    run_id: String,
+    runner_kind: String,
+    target_minutes: u64,
+    cap_minutes: u64,
+    fallback_used: bool,
+    required_floor_wall_seconds: Option<f64>,
+    llm_seconds: f64,
+    cache: CostCacheReceipt,
+    tokens: CostTokenReceipt,
+    estimated_cost_usd: Option<f64>,
+    cost_basis: CostBasisReceipt,
+    source_artifacts: Vec<String>,
+    missing: Vec<CostMissingInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CostCacheReceipt {
+    cargo: String,
+    model_prefix: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+struct CostTokenReceipt {
+    fresh_input: u64,
+    cached_input: u64,
+    output: u64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CostBasisReceipt {
+    runner_minutes: f64,
+    linux_minute_rate_usd: Option<f64>,
+    token_pricing: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct CostMissingInput {
+    field: String,
+    reason: String,
+    source_artifact: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct RunLoopMetrics {
     concurrency_model: String,
     scheduler_profile: String,
@@ -5449,6 +5494,7 @@ fn write_review_artifacts(
         review_dir.join("metrics.json"),
         serde_json::to_vec_pretty(&metrics)?,
     )?;
+    write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
     write_scheduler_artifact(&review_dir, &metrics.run)?;
     fs::write(
         review_dir.join("terminal_state.json"),
@@ -6298,6 +6344,274 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review_body_truncated: github_review
             .is_some_and(|review| review.body.contains(REVIEW_BODY_TRUNCATED_SUFFIX.trim())),
     }
+}
+
+fn write_cost_receipt_artifact(
+    root: &Path,
+    out: &Path,
+    config: &Config,
+    metrics: &ReviewMetrics,
+    review: &ReviewArtifacts,
+    follow_up_results: &[FollowUpResult],
+) -> Result<()> {
+    let receipt = build_cost_receipt(root, out, config, metrics, review, follow_up_results);
+    fs::write(
+        out.join("review").join("ub-review-cost.json"),
+        serde_json::to_vec_pretty(&receipt)?,
+    )?;
+    Ok(())
+}
+
+fn build_cost_receipt(
+    root: &Path,
+    out: &Path,
+    config: &Config,
+    metrics: &ReviewMetrics,
+    review: &ReviewArtifacts,
+    follow_up_results: &[FollowUpResult],
+) -> CostReceipt {
+    let mut missing = Vec::new();
+    let (required_floor_wall_seconds, floor_missing) = unsafe_review_required_floor_seconds(out);
+    if let Some(floor_missing) = floor_missing {
+        missing.push(floor_missing);
+    }
+    let (linux_minute_rate_usd, rate_missing) = linux_minute_rate_usd(root);
+    if let Some(rate_missing) = rate_missing {
+        missing.push(rate_missing);
+    }
+    missing.push(cost_missing(
+        "cache.cargo",
+        "cargo cache telemetry is not emitted in cost receipt v1",
+        "review/metrics.json",
+    ));
+
+    let runner_minutes = round_f64(metrics.run.elapsed_wall_ms as f64 / 60_000.0, 6);
+    let estimated_cost_usd = linux_minute_rate_usd.map(|rate| round_f64(runner_minutes * rate, 6));
+    if estimated_cost_usd.is_none() {
+        missing.push(cost_missing(
+            "estimated_cost_usd",
+            "policy/ci-budget.toml budget.linux_minute_rate_usd is unavailable",
+            "policy/ci-budget.toml",
+        ));
+    }
+
+    CostReceipt {
+        schema: COST_RECEIPT_SCHEMA,
+        run_id: cost_run_id(metrics),
+        runner_kind: runner_kind(),
+        target_minutes: config.gate.target_minutes,
+        cap_minutes: config.gate.hard_timeout_minutes,
+        fallback_used: review
+            .model_lanes
+            .iter()
+            .any(|receipt| receipt.fallback_from.is_some()),
+        required_floor_wall_seconds,
+        llm_seconds: round_f64(metrics.run.model_call_duration_ms_sum as f64 / 1000.0, 3),
+        cache: CostCacheReceipt {
+            cargo: "unknown".to_owned(),
+            model_prefix: model_prefix_cache_status(&metrics.models).to_owned(),
+        },
+        tokens: cost_tokens(review, follow_up_results),
+        estimated_cost_usd,
+        cost_basis: CostBasisReceipt {
+            runner_minutes,
+            linux_minute_rate_usd,
+            token_pricing: "excluded_v1".to_owned(),
+        },
+        source_artifacts: vec![
+            "review/metrics.json".to_owned(),
+            "review/provider-preflight-status.json".to_owned(),
+            "review/model_stages.json".to_owned(),
+            "review/follow_up_results.json".to_owned(),
+            "policy/ci-budget.toml".to_owned(),
+            "sensors/unsafe-review/unsafe-review-output/unsafe-review-gate.json".to_owned(),
+        ],
+        missing,
+    }
+}
+
+fn cost_run_id(metrics: &ReviewMetrics) -> String {
+    env_value_present("GITHUB_RUN_ID")
+        .then(|| std::env::var("GITHUB_RUN_ID").ok())
+        .flatten()
+        .unwrap_or_else(|| {
+            let short = metrics
+                .shared_context_id
+                .get(..12)
+                .unwrap_or(&metrics.shared_context_id);
+            format!("local-{short}")
+        })
+}
+
+fn runner_kind() -> String {
+    if !env_value_present("GITHUB_ACTIONS") {
+        return "local".to_owned();
+    }
+    match std::env::var("RUNNER_ENVIRONMENT")
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "github-hosted" => "github-hosted".to_owned(),
+        "self-hosted" => "self-hosted".to_owned(),
+        _ => "unknown".to_owned(),
+    }
+}
+
+fn unsafe_review_required_floor_seconds(out: &Path) -> (Option<f64>, Option<CostMissingInput>) {
+    let source_artifact = "sensors/unsafe-review/unsafe-review-output/unsafe-review-gate.json";
+    match read_unsafe_review_artifacts(&out.join("sensors").join("unsafe-review")) {
+        Ok(artifacts) => match artifacts.gate.required_floor_wall_seconds {
+            Some(seconds) if seconds.is_finite() && seconds >= 0.0 => {
+                (Some(round_f64(seconds, 3)), None)
+            }
+            Some(_) => (
+                None,
+                Some(cost_missing(
+                    "required_floor_wall_seconds",
+                    "unsafe-review-gate.json required_floor_wall_seconds was not finite and non-negative",
+                    source_artifact,
+                )),
+            ),
+            None => (
+                None,
+                Some(cost_missing(
+                    "required_floor_wall_seconds",
+                    "unsafe-review-gate.json did not include required_floor_wall_seconds",
+                    source_artifact,
+                )),
+            ),
+        },
+        Err(gap) => (
+            None,
+            Some(cost_missing(
+                "required_floor_wall_seconds",
+                &gap.reason(),
+                source_artifact,
+            )),
+        ),
+    }
+}
+
+fn linux_minute_rate_usd(root: &Path) -> (Option<f64>, Option<CostMissingInput>) {
+    let source_artifact = "policy/ci-budget.toml";
+    let path = root.join(source_artifact);
+    let text = match fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return (
+                None,
+                Some(cost_missing(
+                    "cost_basis.linux_minute_rate_usd",
+                    "policy/ci-budget.toml absent",
+                    source_artifact,
+                )),
+            );
+        }
+        Err(err) => {
+            return (
+                None,
+                Some(cost_missing(
+                    "cost_basis.linux_minute_rate_usd",
+                    &format!("policy/ci-budget.toml unreadable: {err}"),
+                    source_artifact,
+                )),
+            );
+        }
+    };
+    let parsed = match toml::from_str::<toml::Value>(&text) {
+        Ok(parsed) => parsed,
+        Err(err) => {
+            return (
+                None,
+                Some(cost_missing(
+                    "cost_basis.linux_minute_rate_usd",
+                    &format!("policy/ci-budget.toml malformed: {err}"),
+                    source_artifact,
+                )),
+            );
+        }
+    };
+    let Some(value) = parsed
+        .get("budget")
+        .and_then(|budget| budget.get("linux_minute_rate_usd"))
+    else {
+        return (
+            None,
+            Some(cost_missing(
+                "cost_basis.linux_minute_rate_usd",
+                "budget.linux_minute_rate_usd missing",
+                source_artifact,
+            )),
+        );
+    };
+    let rate = value
+        .as_float()
+        .or_else(|| value.as_integer().map(|number| number as f64));
+    match rate {
+        Some(rate) if rate.is_finite() && rate >= 0.0 => (Some(rate), None),
+        _ => (
+            None,
+            Some(cost_missing(
+                "cost_basis.linux_minute_rate_usd",
+                "budget.linux_minute_rate_usd is not a finite non-negative number",
+                source_artifact,
+            )),
+        ),
+    }
+}
+
+fn cost_tokens(review: &ReviewArtifacts, follow_up_results: &[FollowUpResult]) -> CostTokenReceipt {
+    let mut tokens = CostTokenReceipt::default();
+    for usage in review
+        .provider_preflights
+        .iter()
+        .map(|receipt| &receipt.cache_usage)
+        .chain(
+            review
+                .model_lanes
+                .iter()
+                .map(|receipt| &receipt.cache_usage),
+        )
+        .chain(follow_up_results.iter().map(|result| &result.cache_usage))
+    {
+        let cached = usage.cache_read_input_tokens.unwrap_or(0);
+        tokens.cached_input = tokens.cached_input.saturating_add(cached);
+        tokens.fresh_input = tokens
+            .fresh_input
+            .saturating_add(usage.input_tokens.unwrap_or(0).saturating_sub(cached));
+        tokens.output = tokens
+            .output
+            .saturating_add(usage.output_tokens.unwrap_or(0));
+    }
+    tokens
+}
+
+fn model_prefix_cache_status(models: &ModelMetrics) -> &'static str {
+    match (
+        models.prompt_cache_lane_hits,
+        models.prompt_cache_lane_misses,
+        models.prompt_cache_lane_unknown,
+    ) {
+        (0, 0, 0) => "unknown",
+        (hits, 0, 0) if hits > 0 => "hit",
+        (0, misses, 0) if misses > 0 => "miss",
+        (0, 0, unknown) if unknown > 0 => "unknown",
+        _ => "partial",
+    }
+}
+
+fn cost_missing(field: &str, reason: &str, source_artifact: &str) -> CostMissingInput {
+    CostMissingInput {
+        field: field.to_owned(),
+        reason: reason.to_owned(),
+        source_artifact: source_artifact.to_owned(),
+    }
+}
+
+fn round_f64(value: f64, places: i32) -> f64 {
+    let scale = 10_f64.powi(places);
+    (value * scale).round() / scale
 }
 
 fn write_scheduler_artifact(review_dir: &Path, run: &RunLoopMetrics) -> Result<()> {
@@ -20366,14 +20680,15 @@ mod tests {
         SummaryOnlyFinding, TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
         append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_final_orchestrator_plan, build_issue_broker_plan, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_witness_records, builtin_profiles,
-        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
-        classify_diff, classify_diff_class, classify_issue_candidates, classify_proof_cost,
-        cmd_gate_check, cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues,
-        combined_observations, command_display, compile_review_surface, dedupe_inline_comments,
-        deep_minimax_lanes, default_lanes, direct_minimax_spec, execute_issue_broker,
-        extract_model_content, fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
+        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
+        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
         is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
@@ -29959,6 +30274,10 @@ index 1111111..2222222 100644
         assert_eq!(skip["status"], "skipped");
         assert_eq!(skip["review_payload_status"], "skipped_pass_policy");
         assert_eq!(skip["run_pass"], "synchronize");
+        let cost: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/ub-review-cost.json"))?)?;
+        assert_eq!(cost["schema"], "ub-review.cost_receipt.v1");
+        assert!(cost.get("suggested_fill_seconds").is_none());
         let reason = skip["reason"].as_str().unwrap_or_default();
         assert!(
             reason.contains("pass `synchronize` is not in [gate].post_review_on"),
@@ -30171,6 +30490,157 @@ index 1111111..2222222 100644
         assert_eq!(metrics.resource_leases, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
+    }
+
+    #[test]
+    fn cost_receipt_records_measured_v1_inputs() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("policy"))?;
+        fs::write(
+            temp.path().join("policy/ci-budget.toml"),
+            "[budget]\nlinux_minute_rate_usd = 0.008\n",
+        )?;
+        let unsafe_review_dir = temp
+            .path()
+            .join("sensors/unsafe-review/unsafe-review-output");
+        fs::create_dir_all(&unsafe_review_dir)?;
+        fs::write(
+            unsafe_review_dir.join("unsafe-review-gate.json"),
+            r#"{
+                "schema_version": "unsafe-review-gate/v1",
+                "status": "advisory",
+                "required_floor_wall_seconds": 45.25
+            }"#,
+        )?;
+
+        let mut review = test_review_artifacts();
+        review.provider_preflights = vec![super::ProviderPreflightReceipt {
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "preflight ok".to_owned(),
+            duration_ms: Some(1_000),
+            http_status: Some(200),
+            response_shape: Some("anthropic".to_owned()),
+            cache_usage: super::ModelCacheUsage {
+                input_tokens: Some(1_000),
+                output_tokens: Some(50),
+                cache_creation_input_tokens: Some(700),
+                cache_read_input_tokens: Some(200),
+            },
+        }];
+        let mut cached_lane = model_lane_receipt("tests-oracle", "ok");
+        cached_lane.endpoint_kind = "anthropic-messages".to_owned();
+        cached_lane.duration_ms = Some(2_000);
+        cached_lane.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(500),
+            output_tokens: Some(20),
+            cache_creation_input_tokens: Some(300),
+            cache_read_input_tokens: Some(100),
+        };
+        review.model_lanes = vec![cached_lane];
+        let mut follow_up = test_follow_up_result("follow-up-a", "group-a", "ok");
+        follow_up.duration_ms = Some(3_000);
+        follow_up.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(250),
+            output_tokens: Some(10),
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: None,
+        };
+        let follow_up_results = vec![follow_up];
+
+        let mut run = test_run_loop_metrics();
+        run.elapsed_wall_ms = 120_000;
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: temp.path(),
+            diff: &test_diff(),
+            plan: &test_plan(Vec::new()),
+            review: &review,
+            github_review: None,
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &follow_up_results,
+            final_follow_up_tasks: 1,
+            run,
+            elapsed: std::time::Duration::from_secs(120),
+        });
+        let mut config = Config::default();
+        config.gate.target_minutes = 25;
+        config.gate.hard_timeout_minutes = 50;
+
+        let receipt = build_cost_receipt(
+            temp.path(),
+            temp.path(),
+            &config,
+            &metrics,
+            &review,
+            &follow_up_results,
+        );
+
+        assert_eq!(receipt.schema, super::COST_RECEIPT_SCHEMA);
+        assert_eq!(receipt.target_minutes, 25);
+        assert_eq!(receipt.cap_minutes, 50);
+        assert_eq!(receipt.required_floor_wall_seconds, Some(45.25));
+        assert_eq!(receipt.llm_seconds, 6.0);
+        assert_eq!(receipt.cost_basis.runner_minutes, 2.0);
+        assert_eq!(receipt.cost_basis.linux_minute_rate_usd, Some(0.008));
+        assert_eq!(receipt.estimated_cost_usd, Some(0.016));
+        assert_eq!(receipt.cache.model_prefix, "hit");
+        assert_eq!(receipt.tokens.fresh_input, 1_450);
+        assert_eq!(receipt.tokens.cached_input, 300);
+        assert_eq!(receipt.tokens.output, 80);
+        assert!(
+            !receipt
+                .missing
+                .iter()
+                .any(|missing| missing.field == "required_floor_wall_seconds")
+        );
+        assert!(
+            receipt
+                .missing
+                .iter()
+                .any(|missing| missing.field == "cache.cargo")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn cost_receipt_records_missing_inputs_without_suggested_fill() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = test_review_artifacts();
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: temp.path(),
+            diff: &test_diff(),
+            plan: &test_plan(Vec::new()),
+            review: &review,
+            github_review: None,
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &[],
+            final_follow_up_tasks: 0,
+            run: test_run_loop_metrics(),
+            elapsed: std::time::Duration::from_secs(1),
+        });
+        let config = Config::default();
+
+        let receipt = build_cost_receipt(temp.path(), temp.path(), &config, &metrics, &review, &[]);
+        let missing_fields = receipt
+            .missing
+            .iter()
+            .map(|missing| missing.field.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(receipt.required_floor_wall_seconds, None);
+        assert_eq!(receipt.estimated_cost_usd, None);
+        assert!(missing_fields.contains("required_floor_wall_seconds"));
+        assert!(missing_fields.contains("cost_basis.linux_minute_rate_usd"));
+        assert!(missing_fields.contains("estimated_cost_usd"));
+        assert!(missing_fields.contains("cache.cargo"));
+
+        let serialized = serde_json::to_value(&receipt)?;
+        assert!(serialized.get("suggested_fill_seconds").is_none());
+        Ok(())
     }
 
     #[test]
@@ -32903,6 +33373,42 @@ index 1111111..2222222 100644
             response_shape: None,
             fallback_from: None,
             cache_usage: super::ModelCacheUsage::default(),
+        }
+    }
+
+    fn test_review_artifacts() -> super::ReviewArtifacts {
+        super::ReviewArtifacts {
+            shared_context_id: "abc123abc123abc123abc123abc123abc123abc123abc123abc123abc123abcd"
+                .to_owned(),
+            review_profile: DEFAULT_REVIEW_PROFILE.to_owned(),
+            mode: "review-byok".to_owned(),
+            posting: "review".to_owned(),
+            runtime_profile: "gh-runner".to_owned(),
+            run_pass: "opened".to_owned(),
+            model_mode: "auto".to_owned(),
+            depth: "standard".to_owned(),
+            provider_policy: "minimax-only".to_owned(),
+            model_provider_policy: "minimax-only".to_owned(),
+            lane_width: 10,
+            model_concurrency: 8,
+            max_model_calls: 18,
+            max_inline_comments: 8,
+            model_timeout_sec: 300,
+            ledger_path: String::new(),
+            ledger_max_bytes: 65_536,
+            pr_thread_context: test_pr_thread_context(),
+            terminal_state: test_terminal_state("needs-reviewer-attention"),
+            provider_preflights: Vec::new(),
+            model_lanes: Vec::new(),
+            missing_or_failed_sensor_evidence: Vec::new(),
+            missing_or_failed_model_evidence: Vec::new(),
+            inline_comments: Vec::new(),
+            summary_only_findings: Vec::new(),
+            observations: Vec::new(),
+            proof_requests: Vec::new(),
+            proof_receipts: Vec::new(),
+            resource_leases: Vec::new(),
+            body: "artifact body".to_owned(),
         }
     }
 

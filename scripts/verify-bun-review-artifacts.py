@@ -8,6 +8,7 @@ import contextlib
 import hashlib
 import io
 import json
+import math
 import pathlib
 import re
 import sys
@@ -1028,6 +1029,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/provider-preflight-status.json",
         "review/model_stages.json",
         "review/metrics.json",
+        "review/ub-review-cost.json",
         "review/scheduler.json",
         "review/review.json",
         "review/review.md",
@@ -1725,6 +1727,131 @@ def require_non_negative_int(container: dict, label: str, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         fail(f"{label} is not a non-negative integer: {value!r}")
     return value
+
+
+def require_non_empty_string_value(value: Any, label: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        fail(f"{label} is not a non-empty string: {value!r}")
+    return value
+
+
+def require_non_negative_number_value(value: Any, label: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or float(value) < 0
+    ):
+        fail(f"{label} is not a finite non-negative number: {value!r}")
+    return float(value)
+
+
+def require_optional_non_negative_number(container: dict, label: str, field: str) -> float | None:
+    value = container.get(field)
+    if value is None:
+        return None
+    return require_non_negative_number_value(value, label)
+
+
+def require_missing_field(missing: list, field: str) -> None:
+    if not any(entry.get("field") == field for entry in missing):
+        fail(f"ub-review-cost.json missing[] does not receipt {field}")
+
+
+def require_cost_receipt(root: pathlib.Path, metrics: dict) -> None:
+    receipt = load_json(root / "review/ub-review-cost.json")
+    if not isinstance(receipt, dict):
+        fail("review/ub-review-cost.json is not an object")
+    if receipt.get("schema") != "ub-review.cost_receipt.v1":
+        fail(f"ub-review-cost.json schema invalid: {receipt.get('schema')!r}")
+    if "suggested_fill_seconds" in receipt:
+        fail("ub-review-cost.json v1 must not contain suggested_fill_seconds")
+
+    require_non_empty_string_value(receipt.get("run_id"), "ub-review-cost.json run_id")
+    runner_kind = receipt.get("runner_kind")
+    if runner_kind not in {"github-hosted", "self-hosted", "local", "unknown"}:
+        fail(f"ub-review-cost.json runner_kind invalid: {runner_kind!r}")
+    require_non_negative_int(receipt, "ub-review-cost.json target_minutes", "target_minutes")
+    require_non_negative_int(receipt, "ub-review-cost.json cap_minutes", "cap_minutes")
+    if not isinstance(receipt.get("fallback_used"), bool):
+        fail("ub-review-cost.json fallback_used is not a boolean")
+
+    required_floor = require_optional_non_negative_number(
+        receipt, "ub-review-cost.json required_floor_wall_seconds", "required_floor_wall_seconds"
+    )
+    llm_seconds = require_non_negative_number_value(
+        receipt.get("llm_seconds"), "ub-review-cost.json llm_seconds"
+    )
+    expected_llm_seconds = metrics.get("run", {}).get("model_call_duration_ms_sum", 0) / 1000.0
+    if abs(llm_seconds - expected_llm_seconds) > 0.001:
+        fail("ub-review-cost.json llm_seconds does not match metrics.run.model_call_duration_ms_sum")
+
+    cache = receipt.get("cache")
+    if not isinstance(cache, dict):
+        fail("ub-review-cost.json cache is missing")
+    if cache.get("cargo") not in {"hit", "miss", "partial", "unknown"}:
+        fail(f"ub-review-cost.json cache.cargo invalid: {cache.get('cargo')!r}")
+    if cache.get("model_prefix") not in {"hit", "miss", "partial", "unknown"}:
+        fail(
+            f"ub-review-cost.json cache.model_prefix invalid: {cache.get('model_prefix')!r}"
+        )
+
+    tokens = receipt.get("tokens")
+    if not isinstance(tokens, dict):
+        fail("ub-review-cost.json tokens is missing")
+    for field in ["fresh_input", "cached_input", "output"]:
+        require_non_negative_int(tokens, f"ub-review-cost.json tokens.{field}", field)
+    if (
+        tokens.get("cached_input")
+        != metrics.get("models", {}).get("prompt_cache_read_input_tokens")
+    ):
+        fail("ub-review-cost.json tokens.cached_input does not match metrics prompt cache reads")
+
+    cost_basis = receipt.get("cost_basis")
+    if not isinstance(cost_basis, dict):
+        fail("ub-review-cost.json cost_basis is missing")
+    runner_minutes = require_non_negative_number_value(
+        cost_basis.get("runner_minutes"), "ub-review-cost.json cost_basis.runner_minutes"
+    )
+    expected_runner_minutes = metrics.get("run", {}).get("elapsed_wall_ms", 0) / 60000.0
+    if abs(runner_minutes - expected_runner_minutes) > 0.000001:
+        fail("ub-review-cost.json cost_basis.runner_minutes does not match metrics.run.elapsed_wall_ms")
+    linux_rate = require_optional_non_negative_number(
+        cost_basis, "ub-review-cost.json cost_basis.linux_minute_rate_usd", "linux_minute_rate_usd"
+    )
+    if cost_basis.get("token_pricing") != "excluded_v1":
+        fail("ub-review-cost.json cost_basis.token_pricing must be excluded_v1")
+
+    estimated_cost = require_optional_non_negative_number(
+        receipt, "ub-review-cost.json estimated_cost_usd", "estimated_cost_usd"
+    )
+    source_artifacts = receipt.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail("ub-review-cost.json source_artifacts is not a non-empty array")
+    for index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(source, f"ub-review-cost.json source_artifacts[{index}]")
+    if "review/metrics.json" not in source_artifacts:
+        fail("ub-review-cost.json source_artifacts must include review/metrics.json")
+
+    missing = receipt.get("missing")
+    if not isinstance(missing, list):
+        fail("ub-review-cost.json missing is not an array")
+    for index, entry in enumerate(missing):
+        if not isinstance(entry, dict):
+            fail(f"ub-review-cost.json missing[{index}] is not an object")
+        require_non_empty_string_value(entry.get("field"), f"ub-review-cost.json missing[{index}].field")
+        require_non_empty_string_value(entry.get("reason"), f"ub-review-cost.json missing[{index}].reason")
+        require_non_empty_string_value(
+            entry.get("source_artifact"), f"ub-review-cost.json missing[{index}].source_artifact"
+        )
+    if required_floor is None:
+        require_missing_field(missing, "required_floor_wall_seconds")
+    if linux_rate is None:
+        require_missing_field(missing, "cost_basis.linux_minute_rate_usd")
+    if estimated_cost is None:
+        require_missing_field(missing, "estimated_cost_usd")
+    if cache.get("cargo") == "unknown":
+        require_missing_field(missing, "cache.cargo")
 
 
 def require_candidate_artifacts(root: pathlib.Path, review: dict) -> None:
@@ -5984,6 +6111,7 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/terminal_state.json",
         root / "review/review.json",
         root / "review/review.md",
+        root / "review/ub-review-cost.json",
         root / "review/github-review.json",
         root / "review/github-review-skip.json",
         root / "review/post-result.json",
@@ -6505,6 +6633,89 @@ def self_test_ripr_exposure_gap_contract() -> None:
                 ],
             ),
         ): require_ripr_exposure_gap_details(root),
+    )
+
+
+def self_test_cost_receipt_contract() -> None:
+    import tempfile
+
+    metrics = {
+        "run": {
+            "elapsed_wall_ms": 90_000,
+            "model_call_duration_ms_sum": 1_250,
+        },
+        "models": {
+            "prompt_cache_read_input_tokens": 25,
+        },
+    }
+    valid = {
+        "schema": "ub-review.cost_receipt.v1",
+        "run_id": "local-abc123",
+        "runner_kind": "local",
+        "target_minutes": 30,
+        "cap_minutes": 60,
+        "fallback_used": False,
+        "required_floor_wall_seconds": None,
+        "llm_seconds": 1.25,
+        "cache": {"cargo": "unknown", "model_prefix": "hit"},
+        "tokens": {"fresh_input": 100, "cached_input": 25, "output": 12},
+        "estimated_cost_usd": 0.012,
+        "cost_basis": {
+            "runner_minutes": 1.5,
+            "linux_minute_rate_usd": 0.008,
+            "token_pricing": "excluded_v1",
+        },
+        "source_artifacts": [
+            "review/metrics.json",
+            "policy/ci-budget.toml",
+            "sensors/unsafe-review/unsafe-review-output/unsafe-review-gate.json",
+        ],
+        "missing": [
+            {
+                "field": "required_floor_wall_seconds",
+                "reason": "unsafe-review-gate.json did not include required_floor_wall_seconds",
+                "source_artifact": "sensors/unsafe-review/unsafe-review-output/unsafe-review-gate.json",
+            },
+            {
+                "field": "cache.cargo",
+                "reason": "cargo cache telemetry is not emitted in cost receipt v1",
+                "source_artifact": "review/metrics.json",
+            },
+        ],
+    }
+
+    def write_and_require(receipt: dict) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = pathlib.Path(temp_dir)
+            write_self_test_json(root / "review/ub-review-cost.json", receipt)
+            require_cost_receipt(root, metrics)
+
+    write_and_require(valid)
+
+    forbidden = dict(valid)
+    forbidden["suggested_fill_seconds"] = 0
+    expect_self_test_failure(
+        "cost receipt suggested-fill leakage",
+        "must not contain suggested_fill_seconds",
+        lambda: write_and_require(forbidden),
+    )
+
+    missing_floor_receipt = dict(valid)
+    missing_floor_receipt["missing"] = [
+        entry for entry in valid["missing"] if entry["field"] != "required_floor_wall_seconds"
+    ]
+    expect_self_test_failure(
+        "cost receipt missing floor gap",
+        "missing[] does not receipt required_floor_wall_seconds",
+        lambda: write_and_require(missing_floor_receipt),
+    )
+
+    drifted_timing = dict(valid)
+    drifted_timing["llm_seconds"] = 1.0
+    expect_self_test_failure(
+        "cost receipt timing drift",
+        "llm_seconds does not match metrics.run.model_call_duration_ms_sum",
+        lambda: write_and_require(drifted_timing),
     )
 
 
@@ -7660,6 +7871,7 @@ def run_self_tests() -> None:
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
     self_test_ripr_exposure_gap_contract()
+    self_test_cost_receipt_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
@@ -7762,6 +7974,7 @@ def main(argv: list[str]) -> int:
         root, args.max_inline_comments, args.expected_review_profile
     )
     metrics = require_metrics(root, review)
+    require_cost_receipt(root, metrics)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
     if args.require_no_model_evidence_failures:
         require_no_model_evidence_failures(review)

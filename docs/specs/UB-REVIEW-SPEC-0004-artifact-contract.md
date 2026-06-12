@@ -124,6 +124,11 @@ gate_outcome.json              ub-review.gate_outcome.v1 (spec 0003 owns the
 metrics.json                   integer schema_version 1; run/streams/
                                scheduler_roles/loops/phases/models; the
                                count-parity anchor for the whole tree
+ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
+                               cost basis, token/cache counters, and
+                               explicit missing[] entries for unavailable
+                               floor/cost inputs; no suggested_fill_seconds
+                               in v1
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,
@@ -545,6 +550,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | root NDJSON streams (candidates, resolved_candidates, model_stages, witnesses, proof_requests, proof_tasks, proof_receipts, receipt_routes, tool_gate_outcomes, resource_leases, follow_up_results, follow_up_outputs, follow_up_questions) | stable | per-stream vN lines | downstream automation | required (per-stream require_* functions, line parity with review/ arrays) |
 | review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
+| review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
 | review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |
 | review/review.md | stable | seven required headings | humans | required (require_review) |
@@ -669,7 +675,7 @@ design (docs/REVIEW_BODY_CONTRACT.md).
 
 What is artifact-only?
 The tree itself: plan, tool, sensor, cache, observation, candidate,
-follow-up, witness, proof, lease, scheduler, and metrics artifacts, plus
+follow-up, witness, proof, lease, scheduler, metrics, and cost artifacts, plus
 gate_outcome.json and the skip receipt on quiet passes. The PR thread never
 carries status tables; the artifacts carry everything.
 
