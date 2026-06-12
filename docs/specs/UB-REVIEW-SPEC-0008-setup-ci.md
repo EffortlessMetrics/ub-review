@@ -2,8 +2,9 @@
 
 Status: authored 2026-06-06 (release surface spec wave, docs-only).
 Umbrella: [UB-REVIEW-SPEC-0001](UB-REVIEW-SPEC-0001-release-surface.md).
-Maturity: slice 1 implemented - `setup-ci --print-pr` exists
-(`Command::SetupCi`, src/cli.rs; `cmd_setup_ci`, src/main.rs). It reads a
+Maturity: `setup-ci --print-pr` and the new-files-only `setup-ci --open-pr`
+surface exist (`Command::SetupCi`, src/cli.rs; `cmd_setup_ci`, src/main.rs).
+The print path reads a
 prior audit-ci run's five receipts fail-closed (missing artifacts and
 schema mismatches are named errors), takes an explicit
 `--accept <job>=<command>` list (adaptive tier only; the maintainer
@@ -12,8 +13,9 @@ migration plan with the eight PR-body sections to stdout and
 `<out>/ci-audit/migration-plan.md`, refuses to invent the
 branch-protection remove list while `required_check_source` is `unknown`,
 and self-checks the generated `.ub-review.toml` block through the config
-loader - any `PolicyError` receipt aborts as a generator failure. No repo
-writes, no network, no GitHub calls; output is byte-identical across runs
+loader - any `PolicyError` receipt aborts as a generator failure. It makes no
+repo writes, network calls, GitHub calls, or branch-protection changes; output
+is byte-identical across runs
 over the same receipts. `--open-pr` opens the migration PR in its
 new-files-only v0: it requires `--action-sha` (the generator refuses to
 invent the workflow pin), refuses any repo that already carries a
@@ -168,7 +170,7 @@ Delivery modes:
 ```text
 setup-ci --print-pr     renders the full PR contents (file diffs + PR body)
                         without opening anything; no network, no token
-setup-ci                opens one PR on a new branch; no force-push
+setup-ci --open-pr      opens one PR on a new branch; no force-push
 ```
 
 What it must never mutate automatically: branch protection and rulesets.
@@ -383,7 +385,7 @@ prereq B  audit-ci permissions + uses_secrets extraction from workflow
 prereq C  item 27 calibration: the rust-test-proof rollout produces the
           multi-repo receipts ADR 0002 says setup-ci is calibrated on.
 
-slice 1   setup-ci skeleton + --print-pr only. New Command variant and
+slice 1   setup-ci skeleton + --print-pr. New Command variant and
           cmd_setup_ci; read and schema-validate the five ci-audit
           receipts; take an explicit accept list; render migration-plan.md
           and the PR body (Decision ... Rollback) to stdout and
