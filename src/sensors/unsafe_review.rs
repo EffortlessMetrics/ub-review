@@ -6,10 +6,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// unsafe-review `first-pr --out <dir>` top-level artifact
+/// unsafe-review `first-pr --out-dir <dir>` top-level artifact
 /// (`unsafe-review-gate.json`, schema `unsafe-review-gate/v1`).
 ///
-/// Shape verified against real `unsafe-review 0.3.4 first-pr --out` output:
+/// Shape verified against real `unsafe-review 0.3.4 first-pr --out-dir` output:
 /// movement counts are NESTED under `summary`, `status` is the advisory word
 /// (`"advisory"`), and the `artifacts` map keys are snake_case
 /// (`comment_plan`, `repair_queue`, ...) while their values are the hyphenated
@@ -101,7 +101,7 @@ pub(crate) struct UnsafeReviewCommentPlanEntry {
     pub(crate) trust_boundary: Option<String>,
 }
 
-/// Parsed unsafe-review artifacts loaded from `--out <dir>`.
+/// Parsed unsafe-review artifacts loaded from `--out-dir <dir>`.
 pub(crate) struct UnsafeReviewArtifacts {
     /// Validated gate receipt (schema_version == "unsafe-review-gate/v1").
     pub(crate) gate: UnsafeReviewGate,
@@ -113,7 +113,7 @@ pub(crate) const UNSAFE_REVIEW_GATE_SCHEMA: &str = "unsafe-review-gate/v1";
 
 pub(crate) const UNSAFE_REVIEW_OUTPUT_SUBDIR: &str = "unsafe-review-output";
 
-/// Parse the structured artifacts written by `unsafe-review first-pr --out`.
+/// Parse the structured artifacts written by `unsafe-review first-pr --out-dir`.
 ///
 /// Returns `None` when the gate file is absent (sensor did not run or failed),
 /// or when `schema_version` is not `"unsafe-review-gate/v1"` (unknown schema —
@@ -155,7 +155,7 @@ mod tests {
     /// v1 gate.json present with a comment-plan: ingestion succeeds, movement
     /// values come through the NESTED `summary` block, and the comment-plan
     /// loads via the snake_case `comment_plan` artifacts key. Fixture matches
-    /// the REAL `unsafe-review 0.3.4 first-pr --out` manifest shape.
+    /// the REAL `unsafe-review 0.3.4 first-pr --out-dir` manifest shape.
     #[test]
     fn unsafe_review_artifacts_v1_gate_ingested() -> Result<()> {
         let temp = tempfile::tempdir()?;
