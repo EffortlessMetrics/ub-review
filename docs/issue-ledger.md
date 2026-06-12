@@ -54,8 +54,8 @@ skipped-by-policy.
             horizon, capture llvm-cov stderr on recurrence
 #317  keep  xtask run_capture buffers unbounded stdout (450 MB ripr.md);
             head+tail budget + stdout_truncated marker
-#318  keep  foreign-dialect policy/allow.toml still counts as config and
-            red-fails unpinned; plan-time dialect sniff + skip-with-reason
+#318  closed  foreign-dialect policy/allow.toml skips with linked reason;
+              CLI artifact test pins resolved/tool-status/gate parity
 #319  closed  tokmd version preflight fails before preset-bearing commands
               and names installed vs pinned version in the sensor receipt
 #320  keep  xtask missing tools = success:true skipped; add distinct

@@ -265,9 +265,9 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
     the pins cover tokmd (1.12.0), ripr (0.8.0), and unsafe-review (0.3.3)
     in both the install script and doctor — unpinned-ripr drift is how
     #316 stayed invisible until a local 0.5/0.8 mismatch surfaced it.
-    Adjacent sensor contract-drift issue: #318 (cargo-allow runs unpinned
-    against a foreign-dialect ledger and red-fails on schema). #319 is covered
-    by the tokmd run preflight: the sensor receipt names installed vs pinned
+    The foreign-dialect cargo-allow path from #318 now skips with a linked
+    reason instead of producing a schema-red failure. #319 is covered by the
+    tokmd run preflight: the sensor receipt names installed vs pinned
     versions before `--preset bun-ub` commands run.
   - on the dev-side install surface, `cargo xtask precommit` records
     missing sensors as `success: true` skipped receipts with exit 0,
@@ -284,8 +284,9 @@ pinning by commit SHA pins the source you build; pinning by tag trusts
   GitHub release storage for the prebuilt asset
 missing sensors after install are missing evidence, never clean evidence
 doctor verifies presence and three version pins (tokmd, ripr,
-  unsafe-review since #335); tokmd run preflight guards #319, but doctor
-  still does not certify sensor output contracts (see #318)
+  unsafe-review since #335); tokmd run preflight guards #319 and
+  cargo-allow planning guards #318, but doctor still does not certify sensor
+  output contracts
 ```
 
 Version pinning doctrine: consumers pin the action by full commit SHA. The
@@ -366,8 +367,8 @@ This spec is docs-only; it routes open work:
 4. PARTIALLY DONE (#335): ripr (0.8.0) and unsafe-review (0.3.3) are
    pinned in the install script and doctor
    (`expected_standard_image_tool_version`); the ripr gate-decision
-   receipt landed under spec 0005. Remaining: pin cargo-allow (the #318
-   family's drift half).
+   receipt landed under spec 0005. Remaining: pin cargo-allow itself;
+   #318 covered only the foreign-ledger skip path.
 5. Make xtask precommit missing-tool receipts honest and actionable:
    distinguish missing-tool skips from relevance skips (#320) and include
    install instructions in the receipt (#321).

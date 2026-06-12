@@ -488,9 +488,10 @@ Honest current-state limits a consumer must know:
   production.
 - Sensor status receipts are required and shape-pinned, but the quality of
   their `reason` strings still depends on sensor-specific coverage:
-  cargo-allow foreign-dialect failures remain tracked by #318, while tokmd
-  version-pin rejections are guarded by the run preflight and regression test
-  for #319. The xtask precommit receipt surface (#317, #320, #321) is a
+  cargo-allow foreign-dialect skips are guarded by the CLI artifact test for
+  #318, while tokmd version-pin rejections are guarded by the run preflight
+  and regression test for #319. The xtask precommit receipt surface (#317,
+  #320, #321) is a
   different artifact tree entirely and is out of scope here (sensor
   integration is spec 0005).
 - `ci-audit/*` artifacts exist with v1 schema strings but their contract is

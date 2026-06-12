@@ -194,12 +194,12 @@ scripts/install-gh-runner-tools.sh). On a generic hosted runner an install
 miss is an evidence gap; on the standard image it is drift and should fail
 `ub-review doctor --require-core-tools` (docs/GH_RUNNER_BUN.md). The tokmd
 sensor now preflights `--version` and names installed vs pinned versions in
-the sensor receipt before running `--preset bun-ub` (#319). Remaining sensor
-sharp edge that the preset inherits rather than hides: cargo-allow run against
-a repo whose policy/allow.toml is a foreign dialect red-fails on schema
-instead of skipping with a linked reason (#318) - the Bun
-fork has no native ub-review ledger (`[repo] ledger = ""` in
-profiles/bun-ub-v0.toml), so #318 is live for this preset.
+the sensor receipt before running `--preset bun-ub` (#319). Cargo-allow now
+skips a foreign-dialect `policy/allow.toml` with a linked reason mirrored
+through resolved tools, sensor status, tool status, and tool-gate artifacts
+(#318); the Bun fork still has no native cargo-allow ledger
+(`policy/cargo-allow.toml`), so that sensor remains missing evidence until
+maintainers add one.
 
 ### Red/green focused proof vs heavy witnesses
 
@@ -360,10 +360,10 @@ that is not yet implemented.
   (docs/ARCHITECTURE.md invariant).
 - Auxiliary bots (Droid focused review) stay auxiliary and fork-only; their
   output is never called a comparison (docs/ROADMAP.md operating rules).
-- Sensor defects are filed upstream with receipts (#318 and the ripr-swarm
-  #1052/#1053/#1054 family are the live examples touching this preset's
-  sensors); #319 is now guarded locally by a tokmd run preflight, not by
-  preset glue.
+- Sensor defects are filed upstream with receipts; #318 and #319 are now
+  guarded locally by sensor preflight/planning receipts, while the ripr-swarm
+  #1052/#1053/#1054 family remains the live example touching this preset's
+  sensors.
 
 ## Reliance answers
 
@@ -418,10 +418,9 @@ around:
    `sensors/ripr/gate-decision.json` evaluates in production on this repo.
    A Bun-side ripr threshold remains opt-in for the Bun maintainers;
    receipt depth past counts routes through #347.
-2. DONE (#319): tokmd version-drift reason is surfaced by a run preflight
-   before `--preset bun-ub`; remaining sensor failure-reason fidelity is
-   cargo-allow foreign-dialect ledger skip-with-reason instead of schema
-   red-fail (#318).
+2. DONE (#318, #319): cargo-allow foreign-dialect ledgers skip with a linked
+   reason through tool artifacts, and tokmd version-drift reason is surfaced
+   by a run preflight before `--preset bun-ub`.
 3. Proof broker edge cases that bound red/green receipt weight: lease
    `absent`, `base_patch_failed` routing, manual-cost allowlist, shell-token
    test gap (#312).
