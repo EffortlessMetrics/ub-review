@@ -567,6 +567,46 @@ struct CostReceipt {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct FloorTrendArtifact {
+    schema: &'static str,
+    run_id: String,
+    as_of: String,
+    window_scope: &'static str,
+    window_runs: usize,
+    source_artifacts: Vec<String>,
+    releases: Vec<FloorTrendRelease>,
+    trend: FloorTrendSummary,
+    missing: Vec<FloorTrendMissingInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FloorTrendRelease {
+    version: String,
+    sample_runs: usize,
+    floor_wall_seconds_p50: Option<f64>,
+    floor_wall_seconds_p95: Option<f64>,
+    cargo_cache_hit_rate: Option<f64>,
+    model_prefix_cache_hit_rate: Option<f64>,
+    fallback_used_rate: f64,
+    avg_cost_usd: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FloorTrendSummary {
+    floor_creep_detected: Option<bool>,
+    floor_budget_pressure_detected: Option<bool>,
+    cache_hit_rate_delta: Option<f64>,
+    avg_cost_delta_usd: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct FloorTrendMissingInput {
+    field: String,
+    reason: String,
+    source_artifact: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct CostCacheReceipt {
     cargo: String,
     model_prefix: String,
@@ -5557,7 +5597,9 @@ fn write_review_artifacts(
         review_dir.join("metrics.json"),
         serde_json::to_vec_pretty(&metrics)?,
     )?;
-    write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
+    let cost_receipt =
+        write_cost_receipt_artifact(root, out, config, &metrics, &review, &follow_up_results)?;
+    write_floor_trend_artifact(out, &cost_receipt)?;
     let fill_ledger = write_fill_ledger_artifact(FillLedgerInput {
         out,
         diff,
@@ -6427,13 +6469,13 @@ fn write_cost_receipt_artifact(
     metrics: &ReviewMetrics,
     review: &ReviewArtifacts,
     follow_up_results: &[FollowUpResult],
-) -> Result<()> {
+) -> Result<CostReceipt> {
     let receipt = build_cost_receipt(root, out, config, metrics, review, follow_up_results);
     fs::write(
         out.join("review").join("ub-review-cost.json"),
         serde_json::to_vec_pretty(&receipt)?,
     )?;
-    Ok(())
+    Ok(receipt)
 }
 
 fn build_cost_receipt(
@@ -6501,6 +6543,123 @@ fn build_cost_receipt(
             "sensors/unsafe-review/unsafe-review-output/unsafe-review-gate.json".to_owned(),
         ],
         missing,
+    }
+}
+
+fn write_floor_trend_artifact(out: &Path, cost: &CostReceipt) -> Result<()> {
+    let artifact = build_floor_trend_artifact(cost);
+    fs::write(
+        out.join("review").join("floor-trend.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    Ok(())
+}
+
+fn build_floor_trend_artifact(cost: &CostReceipt) -> FloorTrendArtifact {
+    let mut missing = Vec::new();
+    let floor = cost.required_floor_wall_seconds;
+    let cargo_cache_hit_rate = cache_hit_rate(&cost.cache.cargo);
+    let model_prefix_cache_hit_rate = cache_hit_rate(&cost.cache.model_prefix);
+    let floor_budget_pressure_detected = floor.map(|seconds| {
+        let half_target_window_seconds = cost.target_minutes as f64 * 60.0 / 2.0;
+        seconds > half_target_window_seconds
+    });
+
+    if floor.is_none() {
+        missing.push(floor_trend_missing(
+            "releases[].floor_wall_seconds_p50",
+            "ub-review-cost.json required_floor_wall_seconds is unavailable",
+            "review/ub-review-cost.json",
+        ));
+        missing.push(floor_trend_missing(
+            "releases[].floor_wall_seconds_p95",
+            "ub-review-cost.json required_floor_wall_seconds is unavailable",
+            "review/ub-review-cost.json",
+        ));
+        missing.push(floor_trend_missing(
+            "trend.floor_budget_pressure_detected",
+            "floor budget pressure requires required_floor_wall_seconds",
+            "review/ub-review-cost.json",
+        ));
+    }
+    if cargo_cache_hit_rate.is_none() {
+        missing.push(floor_trend_missing(
+            "releases[].cargo_cache_hit_rate",
+            "cargo cache status is unknown in cost receipt v1",
+            "review/ub-review-cost.json",
+        ));
+    }
+    if model_prefix_cache_hit_rate.is_none() {
+        missing.push(floor_trend_missing(
+            "releases[].model_prefix_cache_hit_rate",
+            "model prefix cache status is unknown",
+            "review/ub-review-cost.json",
+        ));
+    }
+    if cost.estimated_cost_usd.is_none() {
+        missing.push(floor_trend_missing(
+            "releases[].avg_cost_usd",
+            "ub-review-cost.json estimated_cost_usd is unavailable",
+            "review/ub-review-cost.json",
+        ));
+    }
+    for field in [
+        "trend.floor_creep_detected",
+        "trend.cache_hit_rate_delta",
+        "trend.avg_cost_delta_usd",
+    ] {
+        missing.push(floor_trend_missing(
+            field,
+            "historical run artifacts are required; run-completion v1 has one sample",
+            "review/ub-review-cost.json",
+        ));
+    }
+
+    FloorTrendArtifact {
+        schema: FLOOR_TREND_SCHEMA,
+        run_id: cost.run_id.clone(),
+        as_of: Utc::now().date_naive().to_string(),
+        window_scope: "single_run_v1",
+        window_runs: 1,
+        source_artifacts: vec![
+            "review/ub-review-cost.json".to_owned(),
+            "review/metrics.json".to_owned(),
+            "policy/ci-budget.toml".to_owned(),
+        ],
+        releases: vec![FloorTrendRelease {
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+            sample_runs: 1,
+            floor_wall_seconds_p50: floor,
+            floor_wall_seconds_p95: floor,
+            cargo_cache_hit_rate,
+            model_prefix_cache_hit_rate,
+            fallback_used_rate: if cost.fallback_used { 1.0 } else { 0.0 },
+            avg_cost_usd: cost.estimated_cost_usd,
+        }],
+        trend: FloorTrendSummary {
+            floor_creep_detected: None,
+            floor_budget_pressure_detected,
+            cache_hit_rate_delta: None,
+            avg_cost_delta_usd: None,
+        },
+        missing,
+    }
+}
+
+fn cache_hit_rate(status: &str) -> Option<f64> {
+    match status {
+        "hit" => Some(1.0),
+        "partial" => Some(0.5),
+        "miss" => Some(0.0),
+        _ => None,
+    }
+}
+
+fn floor_trend_missing(field: &str, reason: &str, source_artifact: &str) -> FloorTrendMissingInput {
+    FloorTrendMissingInput {
+        field: field.to_owned(),
+        reason: reason.to_owned(),
+        source_artifact: source_artifact.to_owned(),
     }
 }
 
@@ -31116,6 +31275,65 @@ index 1111111..2222222 100644
                 .any(|missing| missing.field == "cache.cargo")
         );
         Ok(())
+    }
+
+    #[test]
+    fn floor_trend_records_single_run_without_history_overclaim() {
+        let cost = super::CostReceipt {
+            schema: super::COST_RECEIPT_SCHEMA,
+            run_id: "local-abc123".to_owned(),
+            runner_kind: "local".to_owned(),
+            target_minutes: 30,
+            cap_minutes: 60,
+            fallback_used: true,
+            required_floor_wall_seconds: Some(1_000.0),
+            llm_seconds: 6.0,
+            cache: super::CostCacheReceipt {
+                cargo: "miss".to_owned(),
+                model_prefix: "hit".to_owned(),
+            },
+            tokens: super::CostTokenReceipt {
+                fresh_input: 1,
+                cached_input: 2,
+                output: 3,
+            },
+            estimated_cost_usd: Some(0.016),
+            cost_basis: super::CostBasisReceipt {
+                runner_minutes: 2.0,
+                linux_minute_rate_usd: Some(0.008),
+                token_pricing: "excluded_v1".to_owned(),
+            },
+            source_artifacts: Vec::new(),
+            missing: Vec::new(),
+        };
+
+        let trend = super::build_floor_trend_artifact(&cost);
+        let release = &trend.releases[0];
+        let missing_fields = trend
+            .missing
+            .iter()
+            .map(|entry| entry.field.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(trend.schema, super::FLOOR_TREND_SCHEMA);
+        assert_eq!(trend.run_id, cost.run_id);
+        assert_eq!(trend.window_scope, "single_run_v1");
+        assert_eq!(trend.window_runs, 1);
+        assert_eq!(release.sample_runs, 1);
+        assert_eq!(release.floor_wall_seconds_p50, Some(1_000.0));
+        assert_eq!(release.floor_wall_seconds_p95, Some(1_000.0));
+        assert_eq!(release.cargo_cache_hit_rate, Some(0.0));
+        assert_eq!(release.model_prefix_cache_hit_rate, Some(1.0));
+        assert_eq!(release.fallback_used_rate, 1.0);
+        assert_eq!(release.avg_cost_usd, Some(0.016));
+        assert_eq!(trend.trend.floor_creep_detected, None);
+        assert_eq!(trend.trend.floor_budget_pressure_detected, Some(true));
+        assert_eq!(trend.trend.cache_hit_rate_delta, None);
+        assert_eq!(trend.trend.avg_cost_delta_usd, None);
+        assert!(missing_fields.contains("trend.floor_creep_detected"));
+        assert!(missing_fields.contains("trend.cache_hit_rate_delta"));
+        assert!(missing_fields.contains("trend.avg_cost_delta_usd"));
+        assert!(!missing_fields.contains("releases[].floor_wall_seconds_p50"));
     }
 
     #[test]

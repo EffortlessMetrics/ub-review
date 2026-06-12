@@ -129,6 +129,11 @@ ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
                                explicit missing[] entries for unavailable
                                floor/cost inputs; no suggested_fill_seconds
                                in v1
+floor-trend.json               ub-review.floor_trend.v1; single-run
+                               floor-time trend seed derived from
+                               ub-review-cost.json; historical deltas stay
+                               null with missing[] until a cross-run
+                               aggregation job supplies them
 fill-ledger.json               ub-review.fill_ledger.v1; advisory
                                optional-fill ledger derived from
                                work_queue/proof planner/sensor/proof
@@ -561,6 +566,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
+| review/floor-trend.json | stable | floor_trend.v1; window_scope single_run_v1 | downstream automation (floor-time telemetry seed) | required (require_floor_trend, #338) |
 | review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1 | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
 | review/quality-receipt.json | stable | quality_receipt.v1; run-completion telemetry with reviewer outcome fields null in v1 | downstream automation (quality/usefulness telemetry) | required (require_quality_receipt, #339) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
@@ -687,8 +693,8 @@ design (docs/REVIEW_BODY_CONTRACT.md).
 
 What is artifact-only?
 The tree itself: plan, tool, sensor, cache, observation, candidate,
-follow-up, witness, proof, lease, scheduler, metrics, cost, fill, and quality
-artifacts, plus
+follow-up, witness, proof, lease, scheduler, metrics, cost, floor, fill, and
+quality artifacts, plus
 gate_outcome.json and the skip receipt on quiet passes. The PR thread never
 carries status tables; the artifacts carry everything.
 
