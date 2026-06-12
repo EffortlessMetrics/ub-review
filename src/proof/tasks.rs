@@ -637,4 +637,19 @@ mod tests {
             command
         );
     }
+
+    #[test]
+    fn focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names() {
+        assert_eq!(
+            focused_test_name_arg(&["-t", "'snapshots", "input'"]),
+            Some("snapshots input".to_owned())
+        );
+        assert_eq!(focused_test_name_arg(&["-t", "x"]), Some("x".to_owned()));
+        assert_eq!(focused_test_name_arg(&["-t", "'x'"]), Some("x".to_owned()));
+        assert_eq!(focused_test_name_arg(&["-t", "''"]), None);
+        assert_eq!(
+            focused_test_name_arg(&["--test-name-pattern", "\"\""]),
+            None
+        );
+    }
 }
