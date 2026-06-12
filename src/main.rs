@@ -22858,6 +22858,45 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
+    fn release_binary_workflow_dispatch_is_packaging_dry_run() {
+        let workflow = include_str!("../.github/workflows/release-binary.yml");
+        assert!(
+            workflow.contains("workflow_dispatch:"),
+            "release packaging should be manually dry-runnable before a tag is pushed"
+        );
+        assert!(
+            workflow.contains("package:\n    name: Build release asset"),
+            "the manual-runnable job should describe packaging, not release publishing"
+        );
+        assert!(
+            workflow.contains("package:\n    name: Build release asset")
+                && workflow.contains("permissions:\n      contents: read"),
+            "the manual-runnable packaging job must not receive release-write permission"
+        );
+        assert!(
+            workflow.contains("name: Upload workflow artifact")
+                && workflow.contains("dist/${{ env.ASSET_NAME }}")
+                && workflow.contains("dist/${{ env.ASSET_NAME }}.sha256"),
+            "manual dry-runs must leave the archive and .sha256 as workflow artifacts"
+        );
+        let tag_only_guard =
+            "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')";
+        assert!(
+            workflow.contains(&format!(
+                "publish:\n    name: Publish release asset\n    needs: package\n    {tag_only_guard}"
+            )),
+            "the publish job must exist only on tag pushes"
+        );
+        assert!(
+            workflow.contains("publish:\n    name: Publish release asset")
+                && workflow.contains("permissions:\n      contents: write")
+                && workflow.contains("uses: actions/download-artifact@v7")
+                && workflow.contains("name: Publish GitHub release asset"),
+            "release write permission and GitHub release mutation must stay inside the tag-only publish job"
+        );
+    }
+
+    #[test]
     fn action_release_download_verifies_sha256_receipt() {
         let action = include_str!("../action.yml");
         assert!(

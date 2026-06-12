@@ -346,9 +346,11 @@ scripts/smoke-local.sh                  # doctor -> init -> plan -> dry-run
 actionlint .github/workflows/release-binary.yml
 ```
 
-End-to-end release-path validation does not exist yet; it requires pushing
-a `v*` tag and observing a consumer run with `install-mode: release` (first
-slice below).
+Packaging validation can run without publishing by manually dispatching
+`.github/workflows/release-binary.yml`; it builds the Linux x64 archive,
+writes the sibling `.sha256`, and uploads both as workflow artifacts. Full
+release-path validation still requires pushing a `v*` tag and observing a
+consumer run with `install-mode: release` (first slice below).
 
 ## Implementation PR slices
 
@@ -361,6 +363,9 @@ This spec is docs-only; it routes open work:
    release notes must not claim a prebuilt install. No issue yet.
 2. DONE: Verify the `.sha256` receipt in the action's download path before
    accepting the asset.
+2a. DONE: Add a `workflow_dispatch` dry-run to release-binary.yml so
+   maintainers can prove archive + `.sha256` packaging before release
+   authorization; GitHub release creation/upload remains tag-push-only.
 3. DONE: unknown `tool-bundle` values fail the install step with an error
    naming the accepted values, matching the strict `install-mode`
    validation.
