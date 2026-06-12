@@ -129,7 +129,6 @@ pub(crate) struct GateConfig {
     pub(crate) target_minutes: u64,
     pub(crate) hard_timeout_minutes: u64,
     pub(crate) post_review_on: Vec<String>,
-    pub(crate) synchronize_mode: String,
     pub(crate) blocking: GateBlockingPolicy,
 }
 
@@ -555,7 +554,6 @@ impl Default for GateConfig {
             target_minutes: 30,
             hard_timeout_minutes: 60,
             post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
-            synchronize_mode: "gate-only".to_owned(),
             blocking: GateBlockingPolicy::default(),
         }
     }
@@ -977,6 +975,8 @@ fn sanitize_review_body_section(table: &mut toml::value::Table, errors: &mut Vec
     }
 }
 
+const SYNCHRONIZE_MODE_DEPRECATION_DETAIL: &str = "`[gate].synchronize_mode` was removed because it never controlled review posting; use `[gate].post_review_on` to list the pull_request passes that may post reviews (#306)";
+
 /// Per-key validation for `[gate]`: each key is probed as a single-key table
 /// against `GateConfig` (which carries `deny_unknown_fields`), so an unknown
 /// key, a wrong value type, or a malformed `[gate.blocking]` sub-table strips
@@ -1001,6 +1001,14 @@ fn sanitize_gate_section(table: &mut toml::value::Table, errors: &mut Vec<Policy
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect::<Vec<_>>();
     for (key, entry) in entries {
+        if key == "synchronize_mode" {
+            errors.push(PolicyError {
+                section: "gate.synchronize_mode".to_owned(),
+                detail: SYNCHRONIZE_MODE_DEPRECATION_DETAIL.to_owned(),
+            });
+            gate_table.remove(&key);
+            continue;
+        }
         let mut probe = toml::value::Table::new();
         probe.insert(key.clone(), entry);
         if let Err(err) = toml::Value::Table(probe).try_into::<GateConfig>() {
@@ -1337,6 +1345,48 @@ mod tests {
         assert!(sanitize_policy_sections(&mut valid).is_empty());
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn synchronize_mode_records_deprecation_receipt_and_keeps_gate_siblings() -> anyhow::Result<()>
+    {
+        let mut gate = toml::value::Table::new();
+        gate.insert(
+            "required_check".to_owned(),
+            toml::Value::String("ub-review/gate".to_owned()),
+        );
+        gate.insert(
+            "post_review_on".to_owned(),
+            toml::Value::Array(vec![
+                toml::Value::String("opened".to_owned()),
+                toml::Value::String("synchronize".to_owned()),
+            ]),
+        );
+        gate.insert(
+            "synchronize_mode".to_owned(),
+            toml::Value::String("review".to_owned()),
+        );
+        let mut root = toml::value::Table::new();
+        root.insert("gate".to_owned(), toml::Value::Table(gate));
+        let mut value = toml::Value::Table(root);
+        let errors = sanitize_policy_sections(&mut value);
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].section, "gate.synchronize_mode");
+        assert_eq!(errors[0].detail, SYNCHRONIZE_MODE_DEPRECATION_DETAIL);
+        let Some(gate) = value.get("gate").and_then(toml::Value::as_table) else {
+            anyhow::bail!("gate table should survive synchronize_mode sanitization");
+        };
+        assert!(!gate.contains_key("synchronize_mode"));
+        assert!(gate.contains_key("required_check"));
+        assert!(gate.contains_key("post_review_on"));
+
+        let sanitized: Config = value.try_into()?;
+        assert_eq!(sanitized.gate.required_check, "ub-review/gate");
+        assert_eq!(
+            sanitized.gate.post_review_on,
+            vec!["opened".to_owned(), "synchronize".to_owned()]
+        );
         Ok(())
     }
 

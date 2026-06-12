@@ -216,9 +216,9 @@ never feed the gate verdict (umbrella boundary).
   job-failing.
 - Posting on quiet passes fails closed into silence: a pass whose event is
   not in `post_review_on` writes `github-review-skip.json` with
-  `skipped_pass_policy` instead of posting. `[gate].synchronize_mode` exists
-  in config but is read by no functional code (#306); do not configure it
-  expecting behavior.
+  `skipped_pass_policy` instead of posting. Legacy
+  `[gate].synchronize_mode` is stripped with a deprecation `PolicyError`
+  (#306); do not configure it expecting behavior.
 
 ## Trust boundary / non-claims
 
@@ -279,8 +279,8 @@ This spec is docs-only; it routes open work, it does not add any:
    parsing (lands under spec 0006).
 2. #311 — include proof receipt content in follow-up prompts (landed in
    PR #322).
-3. #306 — wire `[gate].synchronize_mode` to real routing or delete the field;
-   until then this spec documents `post_review_on` as the only posting policy.
+3. #306 — DONE: `[gate].synchronize_mode` was deleted with a deprecation
+   `PolicyError`; `post_review_on` is the only posting policy.
 4. Non-Bun quickstart: a documented ten-minute path for repos that are not
    Bun-shaped (preset/tokmd-preset generalization). New slice; no issue yet.
 

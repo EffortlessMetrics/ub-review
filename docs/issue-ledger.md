@@ -30,8 +30,8 @@ Tally this pass: 4 closed, 8 narrowed, 15 kept.
 #77   narrowed  terminal sufficient state shipped; remaining: cross-pass
                 convergence (pass N+1 vs pass N resolutions) + materiality
                 threshold
-#306  keep      synchronize_mode still read by no functional code; fix =
-                remove field with deprecation PolicyError receipt, one PR
+#306  DONE      synchronize_mode removed from config contract; legacy configs
+                receive a deprecation PolicyError receipt
 #310  narrowed  retry (#315) and [providers].policy D2 (#351) shipped;
                 retitled to the remainder: per-provider max_concurrency +
                 429 wave shedding

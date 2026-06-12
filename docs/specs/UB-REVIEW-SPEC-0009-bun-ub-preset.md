@@ -43,8 +43,8 @@ runtime profile declares the same trusted-repo pass triggers with
 governed solely by `[gate].post_review_on`, default
 `["opened", "ready_for_review"]` (src/config.rs); passes outside that list
 run fully but record `skipped_pass_policy` instead of posting (PR #304).
-`[gate].synchronize_mode` is declared and defaulted but read by no functional
-code (#306); the Bun preset does not rely on it.
+Legacy `[gate].synchronize_mode` is stripped with a deprecation
+`PolicyError` (#306); the Bun preset does not rely on it.
 
 ## Consumer
 
@@ -426,8 +426,8 @@ around:
    test gap (#312).
 4. Coverage sensor transient-failure hardening before any leased coverage
    story for Bun (#313).
-5. Resolve `[gate].synchronize_mode`: wire it or delete it before
-   recommending `synchronize` triggers to any consumer (#306).
+5. DONE: legacy `[gate].synchronize_mode` was deleted with a deprecation
+   receipt before recommending `synchronize` triggers to any consumer (#306).
 6. Provider remainder before any non-minimax-only Bun policy: runtime
    fallback coverage and per-provider concurrency (#310).
 

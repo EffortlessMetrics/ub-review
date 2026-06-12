@@ -151,8 +151,9 @@ What does success look like in ten minutes?
   CLI flags today (src/config.rs:776-790). Keys inside it (`prompt_cache`,
   `max_concurrency`, `fallback_for`) are documentation of intent, not wired
   behavior.
-- `[gate].synchronize_mode`: declared, defaulted, asserted in tests, read by
-  no functional code (#306). Posting on quiet passes is governed solely by
+- Legacy `[gate].synchronize_mode`: removed from the config contract because
+  it never controlled posting (#306). Configs that still set it receive a
+  deprecation `PolicyError`; posting on quiet passes is governed solely by
   `[gate].post_review_on`.
 - `[tools.ripr.gate] max_new_unsuppressed`: production-enforcing since #335
   (#316 closed) — the sensor persists `sensors/ripr/gate-decision.json` and
