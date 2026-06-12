@@ -2669,33 +2669,7 @@ fn model_suggested_shell_token_proof_request_is_rejected_before_execution() -> R
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
-    fs::create_dir_all(repo.join("src"))?;
-    write_file(
-        &repo.join("Cargo.toml"),
-        r#"[package]
-name = "shell-token-proof-fixture"
-version = "0.1.0"
-edition = "2024"
-
-[lib]
-path = "src/lib.rs"
-"#,
-    )?;
-    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 1 }\n")?;
-
-    run(&repo, "git", &["init"])?;
-    run(
-        &repo,
-        "git",
-        &["config", "user.email", "ub-review@example.invalid"],
-    )?;
-    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
-    run(&repo, "git", &["add", "."])?;
-    run(&repo, "git", &["commit", "-m", "baseline"])?;
-
-    write_file(&repo.join("src/lib.rs"), "pub fn value() -> u32 { 2 }\n")?;
-    run(&repo, "git", &["add", "."])?;
-    run(&repo, "git", &["commit", "-m", "change value"])?;
+    init_minimal_repo(&repo)?;
 
     let shell_command =
         "cargo test --locked shell_token_should_not_execute && cargo test --locked should_not_run";
@@ -2727,6 +2701,15 @@ path = "src/lib.rs"
     let path = prepend_to_path(&fake_bin)?;
     let fake_cargo_log = temp.path().join("fake-cargo.log");
     let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    run_with_env(
+        temp.path(),
+        "cargo",
+        &["--version"],
+        &[
+            ("PATH", path.as_str()),
+            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
+        ],
+    )?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
@@ -2825,15 +2808,14 @@ path = "src/lib.rs"
         leases.iter().all(|lease| {
             !lease["command"]
                 .as_str()
-                .is_some_and(|command| command.contains("shell_token_should_not_execute"))
+                .is_some_and(|command| command.contains(shell_command))
         }),
         "unsupported shell-token request must not receive a command lease"
     );
-    if fake_cargo_log.exists() {
-        let log = fs::read_to_string(fake_cargo_log)?;
-        assert!(!log.contains("shell_token_should_not_execute"));
-        assert!(!log.contains("should_not_run"));
-    }
+    let log = fs::read_to_string(fake_cargo_log)?;
+    assert!(log.contains("fake cargo --version"));
+    assert!(!log.contains("shell_token_should_not_execute"));
+    assert!(!log.contains("should_not_run"));
     Ok(())
 }
 

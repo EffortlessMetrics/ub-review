@@ -888,6 +888,18 @@ reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path 
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:2698:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of starting the fake OpenAI provider in model_suggested_shell_token_proof_request_is_rejected_before_execution. A failed provider fixture fails the test; #312 behavior is pinned by exact unsupported proof request/group assertions, no proof task/receipt/lease assertions, and fake-cargo sentinel absence checks. Line-keyed id; re-verify after edits near the shell-token proof-request CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:2712:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of the benign fake-cargo --version baseline in model_suggested_shell_token_proof_request_is_rejected_before_execution. A failed baseline command fails the test; #312 behavior is pinned by the fake-cargo log baseline, sentinel absence checks, and no matching command lease assertion. Line-keyed id; re-verify after edits near the shell-token proof-request CLI test."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:tests_cli.rs:4555:error_path"
 owner = "ub-review/core"
 reason = "Probe on integration-test JSON lookup plumbing (ripr-swarm#1055): tool_entry locates the named tool before field assertions. Missing entries fail the test, while #318 behavior is pinned by exact artifact parity and cargo-allow field assertions. Line-keyed id; re-verify after edits near tool_entry."
