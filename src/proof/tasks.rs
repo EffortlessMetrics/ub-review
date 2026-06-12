@@ -1106,6 +1106,7 @@ mod tests {
             "npm run build --locked",
             "cargo test --workspace --locked",
             "cargo check --workspace",
+            "cargo check --workspace --locked && cargo test --locked",
             "cargo xtask",
             "cargo xtask policy-check --fix",
         ] {
@@ -1140,6 +1141,7 @@ mod tests {
             "cargo test --locked",
             "cargo test --test proof --locked -- --test-threads many",
             "cargo test --test proof --locked -- --format json",
+            "cargo test --locked focused_case && cargo doc --locked --no-deps",
         ] {
             assert!(
                 focused_cargo_test_command_spec(rejected).is_none(),
