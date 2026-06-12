@@ -106,10 +106,11 @@ under `summary`** (not flat top-level), and the `artifacts` map keys are
 **snake_case** (`comment_plan`, `repair_queue`, …) while their values are the
 hyphenated filenames.
 
-ub-review validates `schema_version` on ingestion: only `unsafe-review-gate/v1`
-is parsed; unknown or absent schema versions degrade gracefully to status-only
-rendering — no crash, no silent pass. The `trust_boundary` field is preserved
-and surfaced verbatim in every lane packet and in the shared context.
+ub-review routes by `schema_version` before binding the typed shape: only
+`unsafe-review-gate/v1` is parsed. Absent, unreadable, malformed, or unknown
+gate artifacts become typed evidence gaps naming the failure; an unknown
+version names the found version. The `trust_boundary` field is preserved and
+surfaced verbatim in every lane packet and in the shared context.
 
 **Lane packets** (`lanes/<lane>.md`, "Routed sensor evidence" section): when
 unsafe-review's sensor status is `ok` and `unsafe-review-gate/v1` is parsed,
@@ -121,18 +122,22 @@ candidates loaded by following the `comment_plan` artifacts pointer.
 **Shared context** (`review/shared_context.md`): an "unsafe-review Coverage
 Evidence" section is added between Sensor Statuses and Initial Work Queue. It
 includes the tool/version provenance, advisory status, movement summary,
-candidate count, and comment-plan entries rendered as JSON (for audit and for
-#360 to consume).
+candidate count, and comment-plan entries rendered as JSON for audit.
 
-**Schema routing**: `schema_version == "unsafe-review-gate/v1"` → full
-structured evidence. Any other value → note in lane packet and shared context
-explaining the degradation; existing Markdown precontext continues to work.
+**Schema routing and evidence gaps**: `schema_version ==
+"unsafe-review-gate/v1"` means full structured evidence. Any other value, or
+an absent/malformed file while the sensor status is `ok`, becomes an
+`artifact-gap` entry in `missing_or_failed_sensor_evidence`. Required
+unsafe-review sensors therefore block from the same receipt chain as other
+required sensor gaps. Markdown output is never scraped as a substitute.
 
-**Inline posting is NOT implemented here** — that is issue #360. The
-`comment-plan.json` entries are deserialized into a structured type (carrying
-`card_id`, `path`, `line`, `changed_line`, `coverage_gap`, `selection_reason`,
-`selection_reason_code`, `confirmation_state`, `trust_boundary`) and preserved
-in the shared context as JSON so #360 can consume them without re-parsing.
+**Compiler intake**: `comment-plan.json` entries are deserialized into a
+structured type (carrying `card_id`, `path`, `line`, `changed_line`,
+`coverage_gap`, `selection_reason`, `selection_reason_code`,
+`confirmation_state`, `trust_boundary`) and routed into the review compiler as
+inline-comment candidates. They share the same `max_inline_comments` cap,
+RIGHT-side diff-line guard, candidate ledger, dedupe, and refuter path as model
+lane candidates. Tools do not post inside ub-review mode.
 
 ### Trust boundary
 
