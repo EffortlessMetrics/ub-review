@@ -31,8 +31,8 @@ pub(crate) enum Command {
     Post(PostArgs),
     /// Write a read-only CI right-sizing report under `<out>/ci-audit/`.
     AuditCi(AuditCiArgs),
-    /// Render the CI migration PR contents from a prior audit-ci run.
-    /// v0 is --print-pr only: no repo writes, no network, no GitHub calls.
+    /// Render or open the CI migration PR from a prior audit-ci run.
+    /// `--print-pr` is local-only; `--open-pr` creates the migration branch and PR.
     SetupCi(SetupCiArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
@@ -659,9 +659,8 @@ pub(crate) struct SetupCiArgs {
     #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
     pub(crate) out: PathBuf,
     /// Render the full migration PR contents (file blocks + PR body) to
-    /// stdout and `<out>/ci-audit/migration-plan.md`. Required in v0: PR
-    /// opening is a later slice and bare `setup-ci` says so instead of
-    /// guessing.
+    /// stdout and `<out>/ci-audit/migration-plan.md` without repo writes,
+    /// network calls, GitHub calls, or branch-protection changes.
     #[arg(long = "print-pr")]
     pub(crate) print_pr: bool,
     /// Accept an audited job into the generated gate policy, as

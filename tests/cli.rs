@@ -45,6 +45,45 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
 }
 
 #[test]
+fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+
+    let init_help = run_capture_with_env(temp.path(), bin, &["init", "--help"], &[])?;
+    assert!(
+        init_help.contains("--profile <PROFILE>"),
+        "init help should advertise the supported profile selector:\n{init_help}"
+    );
+    assert!(
+        !init_help.contains("--mode"),
+        "init help must not advertise unsupported onboarding mode flags:\n{init_help}"
+    );
+
+    let setup_ci_help = run_capture_with_env(temp.path(), bin, &["setup-ci", "--help"], &[])?;
+    assert!(
+        setup_ci_help.contains("--print-pr"),
+        "setup-ci help should keep the local render path visible:\n{setup_ci_help}"
+    );
+    assert!(
+        setup_ci_help.contains("--open-pr"),
+        "setup-ci help should advertise the implemented PR-opening path:\n{setup_ci_help}"
+    );
+    for stale in [
+        "print-pr only",
+        "PR opening is a later slice",
+        "no network, no GitHub calls",
+    ] {
+        assert!(
+            !setup_ci_help.contains(stale),
+            "setup-ci help leaked stale onboarding text `{stale}`:\n{setup_ci_help}"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn plan_and_dry_run_write_expected_packet_tree() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
