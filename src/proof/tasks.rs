@@ -948,4 +948,69 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check() {
+        assert_eq!(
+            focused_build_command_spec("cargo check --workspace --locked").map(|spec| spec.argv),
+            Some(vec![
+                "cargo".to_owned(),
+                "check".to_owned(),
+                "--workspace".to_owned(),
+                "--locked".to_owned()
+            ])
+        );
+        assert_eq!(
+            focused_build_command_spec("cargo xtask policy-check").map(|spec| spec.argv),
+            Some(vec![
+                "cargo".to_owned(),
+                "xtask".to_owned(),
+                "policy-check".to_owned()
+            ])
+        );
+        for rejected in [
+            "npm run build --locked",
+            "cargo test --workspace --locked",
+            "cargo check --workspace",
+            "cargo xtask",
+            "cargo xtask policy-check --fix",
+        ] {
+            assert!(
+                focused_build_command_spec(rejected).is_none(),
+                "{rejected} must not be brokered as focused build proof"
+            );
+        }
+    }
+
+    #[test]
+    fn focused_cargo_test_command_spec_pins_focus_and_passthrough_allowlist() {
+        assert_eq!(
+            focused_cargo_test_command_spec(
+                "cargo test --test proof --locked exact_filter -- --test-threads 1 --nocapture"
+            )
+            .map(|spec| spec.argv),
+            Some(vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "--test".to_owned(),
+                "proof".to_owned(),
+                "--locked".to_owned(),
+                "exact_filter".to_owned(),
+                "--".to_owned(),
+                "--test-threads".to_owned(),
+                "1".to_owned(),
+                "--nocapture".to_owned()
+            ])
+        );
+        for rejected in [
+            "cargo test --locked",
+            "cargo test --test proof --locked -- --test-threads many",
+            "cargo test --test proof --locked -- --format json",
+        ] {
+            assert!(
+                focused_cargo_test_command_spec(rejected).is_none(),
+                "{rejected} must not be brokered as focused test proof"
+            );
+        }
+    }
 }

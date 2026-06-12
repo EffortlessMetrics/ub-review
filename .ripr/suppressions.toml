@@ -808,3 +808,41 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:9643:predicate"
 owner = "ub-review/core"
 reason = "CI-side deletion key for moved-not-modified strip_matching_quotes len guard in the PR #412 proof task-planning extraction. The quote boundary is directly pinned by focused_test_name_arg_strips_matching_quotes_without_promoting_empty_names: one-character names stay valid, matching quote pairs around non-empty names strip, and empty quoted patterns ('' / \"\") do not promote to a focused test name. CI ripr reports a strong oracle but still classifies the moved deletion hunk weakly_exposed; re-verify after any edit near strip_matching_quotes or focused_test_name_arg."
+
+# PR #413 proof command-spec extraction: moved-not-modified Cargo command
+# parsers from main.rs into proof/tasks.rs. Each finding below reports a
+# strong oracle, but local ripr 0.3 and CI ripr 0.8.0/schema 0.5 still classify
+# the moved predicates as weakly_exposed. The parser boundaries are pinned by
+# focused_cargo_test_command_spec_pins_focus_and_passthrough_allowlist,
+# focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check,
+# focused_build_allowlist_brokers_exact_repo_policy_check_only, and
+# proof_request_status_enforces_v0_focused_allowlist.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:85:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified focused Cargo test parser code (PR #413, ripr-swarm#1054): the --test-threads value guard is directly pinned by focused_cargo_test_command_spec_pins_focus_and_passthrough_allowlist, which accepts --test-threads 1 and rejects --test-threads many. Line-keyed id; re-verify after edits near focused_cargo_test_args_allowed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:250:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified focused build parser code (PR #413, ripr-swarm#1054): the cargo-program guard is directly pinned by focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check, which rejects npm run build --locked and accepts cargo check --workspace --locked. Line-keyed id; re-verify after edits near focused_build_command_spec."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:257:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified focused build parser code (PR #413, ripr-swarm#1054): the xtask branch guard is directly pinned by focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check and focused_build_allowlist_brokers_exact_repo_policy_check_only. Line-keyed id; re-verify after edits near focused_build_command_spec."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:258:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified focused build parser code (PR #413, ripr-swarm#1054): the exact cargo xtask policy-check allowlist is pinned by focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check and focused_build_allowlist_brokers_exact_repo_policy_check_only, including rejection of cargo xtask and cargo xtask policy-check --fix. Line-keyed id; re-verify after edits near focused_build_command_spec."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_tasks.rs:266:predicate"
+owner = "ub-review/core"
+reason = "Discriminate false-negative on moved-not-modified focused build parser code (PR #413, ripr-swarm#1054): the required --locked guard is pinned by focused_build_command_spec_accepts_only_cargo_build_family_or_exact_policy_check, which accepts cargo check --workspace --locked and rejects cargo check --workspace. Line-keyed id; re-verify after edits near focused_build_command_spec."
