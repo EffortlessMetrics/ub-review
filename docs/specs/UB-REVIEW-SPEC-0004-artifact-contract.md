@@ -173,7 +173,9 @@ github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_gate_failure_artifact_only; only failed
                                artifact-only gates may use the last status,
                                and those gates never use
-                               skipped_empty_smoke)
+                               skipped_empty_smoke); comments may include
+                               optional `suggestion` only when sourced from
+                               unsafe-review concrete replacement text
 provider-preflight-status.json provider/endpoint/status/cache_usage receipts
 shared_context.md              the shared model context
 shared_context_cache_block.md  byte-equal mirror of shared_context.md
@@ -230,7 +232,10 @@ post-stdout.json, post-stderr.txt       and they carry no schema string,
                                         fail-closed-checks their status/
                                         validity fields and requires one of
                                         post-result.json/post-error.json to
-                                        exist on posting passes
+                                        exist on posting passes; post payload
+                                        renders internal suggestions as
+                                        GitHub suggestion markdown and does
+                                        not carry a `suggestion` JSON field
 observations/<lane>.ndjson              per-lane decomposition of
                                         review/observations.json; verified
                                         for consistency, but the canonical

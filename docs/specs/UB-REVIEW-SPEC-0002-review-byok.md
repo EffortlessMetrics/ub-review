@@ -146,7 +146,10 @@ paths as outputs, including `gate-outcome-path`, `github-review-path`,
 
 ```text
 review/github-review.json        event == "COMMENT"; body within
-                                 review-body-max-bytes; comments validated
+                                 review-body-max-bytes; comments validated;
+                                 optional suggestion is allowed only on
+                                 unsafe-review comments with bounded concrete
+                                 replacement text
 review/github-review-skip.json   XOR with github-review.json; status one of
                                  skipped_empty_smoke |
                                  skipped_artifact_only_body |
