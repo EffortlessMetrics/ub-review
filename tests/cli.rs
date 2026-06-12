@@ -4108,6 +4108,8 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
         .arg("--nocapture")
         .env("UB_REVIEW_PROFILE", "gh-runner-full")
         .env("UB_REVIEW_RUNTIME_PROFILE", "gh-runner-full")
+        .env("GITHUB_ACTIONS", "true")
+        .env("RUNNER_ENVIRONMENT", "github-hosted")
         .env("UB_SCRUB_REPO", &repo)
         .env("UB_SCRUB_OUT", &out)
         .output()?;
@@ -4129,6 +4131,12 @@ fn isolated_command_scrubs_ambient_profile_env_from_child_runs() -> Result<()> {
     assert_eq!(
         resolved_profile["selected_runtime_profile"], "gh-runner",
         "ambient UB_REVIEW_RUNTIME_PROFILE leaked into an isolated_command child"
+    );
+    let box_state: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("box-state.json"))?)?;
+    assert_eq!(
+        box_state["github_actions"], false,
+        "ambient GITHUB_ACTIONS leaked into an isolated_command child"
     );
     Ok(())
 }
@@ -4744,7 +4752,7 @@ fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result
         .map_err(|_| anyhow::anyhow!("fake provider thread panicked"))?
 }
 
-/// Builds a child command with every ambient `UB_REVIEW_*` variable scrubbed.
+/// Builds a child command with ambient ub-review/runtime profile state scrubbed.
 ///
 /// When the dogfood gate runs this suite, the surrounding GitHub Actions step
 /// exports `UB_REVIEW_PROFILE`, `UB_REVIEW_RUNTIME_PROFILE`,
@@ -4752,13 +4760,23 @@ fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Result
 /// those up through clap `env = "UB_REVIEW_..."` fallbacks, so nested test
 /// runs silently resolve a gh-runner profile and assertions about default
 /// profile output fail only inside the gate. Scrubbing the prefix first keeps
-/// tests hermetic; explicit per-test envs are applied afterwards and still
-/// win.
+/// tests hermetic.
+///
+/// Hosted runner identity is also scrubbed: many CLI fixture tests exercise
+/// specific planner branches, and inheriting `GITHUB_ACTIONS=true` can make an
+/// unrelated box guard run before the branch under test. Explicit per-test envs
+/// are applied afterwards and still win.
 fn isolated_command(program: &str, cwd: &Path) -> Command {
     let mut command = Command::new(program);
     command.current_dir(cwd);
     for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with("UB_REVIEW_") {
+        let name_string = name.to_string_lossy();
+        if name_string.starts_with("UB_REVIEW_")
+            || matches!(
+                name_string.as_ref(),
+                "GITHUB_ACTIONS" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
+            )
+        {
             command.env_remove(&name);
         }
     }
