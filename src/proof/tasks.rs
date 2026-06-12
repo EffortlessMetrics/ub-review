@@ -269,15 +269,21 @@ pub(crate) fn focused_build_command_spec(command: &str) -> Option<ProofCommandSp
     if program != "cargo" {
         return None;
     }
-    // `cargo xtask policy-check` is the repo-local parse-only policy receipt
-    // validation (see xtask/src/main.rs). Only this exact invocation is
-    // brokered so xtask cannot smuggle arbitrary repo commands into the
-    // focused proof lane.
-    if subcommand == "xtask" {
-        return (args == ["policy-check"]).then(|| ProofCommandSpec {
-            argv: argv.clone(),
-            env: BTreeMap::new(),
-        });
+    let args_str = args.iter().map(String::as_str).collect::<Vec<_>>();
+    // Exact repo-local xtask commands the proof broker may run:
+    // - ub-review's parse-only policy receipt
+    // - unsafe-review-swarm's existing required check-pr floor
+    //
+    // Keep both exact so generic xtask/cargo-run commands never become a
+    // proof-broker escape hatch.
+    match (subcommand.as_str(), args_str.as_slice()) {
+        ("xtask", ["policy-check"]) | ("run", ["--locked", "-p", "xtask", "--", "check-pr"]) => {
+            return Some(ProofCommandSpec {
+                argv: argv.clone(),
+                env: BTreeMap::new(),
+            });
+        }
+        _ => {}
     }
     if !matches!(subcommand.as_str(), "build" | "check" | "doc") {
         return None;
@@ -1102,6 +1108,19 @@ mod tests {
                 "policy-check".to_owned()
             ])
         );
+        assert_eq!(
+            focused_build_command_spec("cargo run --locked -p xtask -- check-pr")
+                .map(|spec| spec.argv),
+            Some(vec![
+                "cargo".to_owned(),
+                "run".to_owned(),
+                "--locked".to_owned(),
+                "-p".to_owned(),
+                "xtask".to_owned(),
+                "--".to_owned(),
+                "check-pr".to_owned()
+            ])
+        );
         for rejected in [
             "npm run build --locked",
             "cargo test --workspace --locked",
@@ -1109,12 +1128,52 @@ mod tests {
             "cargo check --workspace --locked && cargo test --locked",
             "cargo xtask",
             "cargo xtask policy-check --fix",
+            "cargo run -p xtask -- check-pr",
+            "cargo run --locked -p xtask -- fix-pr",
+            "cargo run --locked -p other -- check-pr",
         ] {
             assert!(
                 focused_build_command_spec(rejected).is_none(),
                 "{rejected} must not be brokered as focused build proof"
             );
         }
+    }
+
+    #[test]
+    fn focused_build_command_spec_accepts_only_exact_xtask_check_pr_run() {
+        assert_eq!(
+            focused_build_command_spec("cargo run --locked -p xtask -- check-pr")
+                .map(|spec| spec.argv),
+            Some(vec![
+                "cargo".to_owned(),
+                "run".to_owned(),
+                "--locked".to_owned(),
+                "-p".to_owned(),
+                "xtask".to_owned(),
+                "--".to_owned(),
+                "check-pr".to_owned()
+            ])
+        );
+        assert!(
+            focused_build_command_spec("cargo run -p xtask -- check-pr").is_none(),
+            "missing --locked must not be accepted"
+        );
+        assert!(
+            focused_build_command_spec("cargo run --locked -p xtask -- fix-pr").is_none(),
+            "only check-pr is allowed behind xtask"
+        );
+        assert!(
+            focused_build_command_spec("cargo run --locked -p other -- check-pr").is_none(),
+            "only the xtask package is allowed"
+        );
+        assert!(
+            focused_build_command_spec("cargo run --locked -p xtask check-pr").is_none(),
+            "the explicit cargo -- separator is required"
+        );
+        assert!(
+            focused_build_command_spec("cargo run --locked -p xtask -- check-pr --fix").is_none(),
+            "additional check-pr flags are not allowed"
+        );
     }
 
     #[test]
