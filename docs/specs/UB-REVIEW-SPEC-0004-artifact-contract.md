@@ -143,7 +143,10 @@ pr_thread_context.json         ub-review.pr_thread_context.v1; status
 github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_empty_smoke |
                                skipped_artifact_only_body |
-                               skipped_pass_policy)
+                               skipped_pass_policy |
+                               skipped_gate_failure_artifact_only; failed
+                               artifact-only gates never use
+                               skipped_empty_smoke)
 provider-preflight-status.json provider/endpoint/status/cache_usage receipts
 shared_context.md              the shared model context
 shared_context_cache_block.md  byte-equal mirror of shared_context.md
