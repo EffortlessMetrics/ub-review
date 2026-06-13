@@ -24111,6 +24111,14 @@ fn parse_setup_ci_accepts(raw: &[String]) -> Result<Vec<SetupCiAccept>> {
     Ok(accepts)
 }
 
+fn setup_ci_required_flag_for_tier(tier: &str) -> Option<bool> {
+    match tier {
+        "move-to-ub-review-required" => Some(true),
+        "adaptive" => Some(false),
+        _ => None,
+    }
+}
+
 fn load_ci_audit_receipt<T: serde::de::DeserializeOwned>(
     dir: &Path,
     name: &str,
@@ -24170,7 +24178,7 @@ fn toml_basic_string(value: &str) -> String {
 
 /// Render the generated `.ub-review.toml` additions for the accepted jobs.
 /// Emits nothing but `[gate].required_check` and one `[[proof.required]]`
-/// entry per accepted adaptive job - no `[providers]`, no
+/// entry per accepted generated-proof job - no `[providers]`, no
 /// `synchronize_mode`, no `[tools.*.gate]` thresholds (spec 0008: never
 /// ship decorative policy into a consumer repo).
 fn render_setup_ci_gate_config(
@@ -24186,6 +24194,9 @@ fn render_setup_ci_gate_config(
     ));
     for accept in accepts {
         let recommendation = recommendations.iter().find(|entry| entry.job == accept.job);
+        let required = recommendation
+            .and_then(|entry| setup_ci_required_flag_for_tier(&entry.tier))
+            .unwrap_or(false);
         let receipt = recommendation
             .and_then(|entry| entry.receipts.first().cloned())
             .unwrap_or_else(|| format!("ci-audit/recommendations.json#{}", accept.job));
@@ -24197,14 +24208,22 @@ fn render_setup_ci_gate_config(
             .map(|minutes| minutes.saturating_mul(60))
             .filter(|seconds| *seconds > 0)
             .unwrap_or(600);
-        text.push_str(&format!(
-            "\n[[proof.required]]\nid = {id}\nlanguages = [\"all\"]\ndiff_classes = [\"all\"]\ncommand = {command}\nreason = {reason}\ntimeout_sec = {timeout_sec}\nrequired = false\nenabled = true\n",
-            id = toml_basic_string(&setup_ci_proof_id(&accept.job)),
-            command = toml_basic_string(&accept.command),
-            reason = toml_basic_string(&format!(
+        let reason = if required {
+            format!(
+                "moved to required proof from audited job `{}`; receipt {receipt}",
+                accept.job
+            )
+        } else {
+            format!(
                 "right-sized to adaptive proof from audited job `{}`; receipt {receipt}",
                 accept.job
-            )),
+            )
+        };
+        text.push_str(&format!(
+            "\n[[proof.required]]\nid = {id}\nlanguages = [\"all\"]\ndiff_classes = [\"all\"]\ncommand = {command}\nreason = {reason}\ntimeout_sec = {timeout_sec}\nrequired = {required}\nenabled = true\n",
+            id = toml_basic_string(&setup_ci_proof_id(&accept.job)),
+            command = toml_basic_string(&accept.command),
+            reason = toml_basic_string(&reason),
         ));
     }
     text
@@ -24222,6 +24241,34 @@ fn setup_ci_section_bullets(recommendations: &[CiRecommendation], tier: &str) ->
     for entry in entries {
         text.push_str(&format!(
             "- `{}` ({}) - {}. receipts: {}\n",
+            entry.job,
+            entry.workflow,
+            entry.reason,
+            entry.receipts.join(", ")
+        ));
+    }
+    text
+}
+
+fn setup_ci_move_required_bullets(
+    recommendations: &[CiRecommendation],
+    accepts: &[SetupCiAccept],
+) -> String {
+    let entries: Vec<&CiRecommendation> = recommendations
+        .iter()
+        .filter(|entry| entry.tier == "move-to-ub-review-required")
+        .collect();
+    if entries.is_empty() {
+        return "- none recommended by this audit\n".to_owned();
+    }
+    let mut text = String::new();
+    for entry in entries {
+        let status = match accepts.iter().find(|accept| accept.job == entry.job) {
+            Some(accept) => format!("accepted; command `{}`", accept.command),
+            None => "not accepted; no policy generated".to_owned(),
+        };
+        text.push_str(&format!(
+            "- `{}` ({}) - {}. {status}. receipts: {}\n",
             entry.job,
             entry.workflow,
             entry.reason,
@@ -24344,23 +24391,20 @@ fn render_setup_ci_migration_plan(
         plan.push_str(&format!(
             "No jobs accepted into the generated gate policy, so there is no migration PR \
              to open. The audit covered {} job(s); pass `--accept <job>=<command>` for each \
-             adaptive-tier job to fold into `{required_check}`.\n\n",
+             adaptive or move-to-ub-review-required job to fold into `{required_check}`.\n\n",
             jobs.len()
         ));
     } else {
         plan.push_str(&format!(
             "Fold {} accepted job(s) into one required check `{required_check}` as adaptive \
-             proof; every other job keeps its current posture per the tiers below.\n\n",
+             or required proof; every other job keeps its current posture per the tiers below.\n\n",
             accepts.len()
         ));
     }
     plan.push_str("## Keep required\n\n");
     plan.push_str(&setup_ci_section_bullets(jobs, "keep-required"));
     plan.push_str("\n## Move into ub-review/gate\n\n");
-    plan.push_str(&setup_ci_section_bullets(
-        jobs,
-        "move-to-ub-review-required",
-    ));
+    plan.push_str(&setup_ci_move_required_bullets(jobs, accepts));
     plan.push_str("\n## Right-size to adaptive\n\n");
     let adaptive: Vec<&CiRecommendation> = jobs
         .iter()
@@ -24791,7 +24835,7 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
             );
         };
         match recommendation.tier.as_str() {
-            "adaptive" => {}
+            tier if setup_ci_required_flag_for_tier(tier).is_some() => {}
             "flag-for-human" => bail!(
                 "--accept `{}` refused: flag-for-human recommendations never become \
                  generated edits; a human reviews that job directly",
@@ -24799,7 +24843,7 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
             ),
             tier => bail!(
                 "--accept `{}` refused: tier `{tier}` proposes no generated edit; only \
-                 adaptive-tier jobs are acceptable",
+                 adaptive or move-to-ub-review-required jobs are acceptable",
                 accept.job
             ),
         }
@@ -41370,7 +41414,7 @@ jobs:
                 "generated_at": "2026-06-07T00:00:00Z",
                 "repo": "acme/widgets",
                 "window_days": 90,
-                "jobs": [job("integration"), job("fmt"), job("deploy")],
+                "jobs": [job("integration"), job("unit"), job("fmt"), job("deploy")],
                 "evidence_gaps": [],
             }))?,
         )?;
@@ -41397,6 +41441,7 @@ jobs:
                 "window_days": 90,
                 "jobs": [
                     recommendation("integration", "adaptive"),
+                    recommendation("unit", "move-to-ub-review-required"),
                     recommendation("fmt", "keep-required"),
                     recommendation("deploy", "flag-for-human"),
                 ],
@@ -41552,6 +41597,53 @@ jobs:
             !preview.exists(),
             "plan-only rerun must not leave stale preview files"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn setup_ci_accepts_move_required_jobs_as_required_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("run");
+        write_setup_ci_fixture(&out.join("ci-audit"))?;
+        super::cmd_setup_ci(setup_ci_args(
+            &out,
+            vec![
+                "integration=cargo test --workspace --locked".to_owned(),
+                "unit=cargo test --lib --locked".to_owned(),
+            ],
+        ))?;
+        let plan = fs::read_to_string(out.join("ci-audit/migration-plan.md"))?;
+        assert!(plan.contains("accepted; command `cargo test --workspace --locked`"));
+        assert!(plan.contains("accepted; command `cargo test --lib --locked`"));
+        assert!(plan.contains("moved to required proof from audited job `unit`"));
+        assert!(plan.contains("right-sized to adaptive proof from audited job `integration`"));
+
+        let toml_block = plan
+            .split("```toml\n")
+            .nth(1)
+            .and_then(|rest| rest.split("```").next())
+            .context("generated toml block")?;
+        let reloaded = Config::from_toml_with_policy_receipts(toml_block)?;
+        assert!(
+            reloaded.policy_errors.is_empty(),
+            "generated config must reload clean: {:?}",
+            reloaded.policy_errors
+        );
+        let proof = |id: &str| {
+            reloaded
+                .proof
+                .required
+                .iter()
+                .find(|entry| entry.id == id)
+                .with_context(|| format!("{id} proof entry"))
+        };
+        let integration = proof("integration")?;
+        assert_eq!(integration.command, "cargo test --workspace --locked");
+        assert!(!integration.required);
+        let unit = proof("unit")?;
+        assert_eq!(unit.command, "cargo test --lib --locked");
+        assert!(unit.required);
+        assert_eq!(unit.timeout_sec, 30 * 60);
         Ok(())
     }
 

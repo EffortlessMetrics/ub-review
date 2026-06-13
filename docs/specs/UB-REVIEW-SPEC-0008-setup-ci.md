@@ -7,8 +7,9 @@ surface exist (`Command::SetupCi`, src/cli.rs; `cmd_setup_ci`, src/main.rs).
 The print path reads a
 prior audit-ci run's five receipts fail-closed (missing artifacts and
 schema mismatches are named errors), takes an explicit
-`--accept <job>=<command>` list (adaptive tier only; the maintainer
-supplies the command because the receipts never record it), renders the
+`--accept <job>=<command>` list (`adaptive` or
+`move-to-ub-review-required`; the maintainer supplies the command because
+the receipts never record it), renders the
 migration plan with the eight PR-body sections to stdout and
 `<out>/ci-audit/migration-plan.md`, refuses to invent the
 branch-protection remove list unless audit-ci has proved every required-check
@@ -239,8 +240,9 @@ The generated `.ub-review.toml` must:
 - express accepted `move-to-ub-review-required` jobs as `[[proof.required]]`
   entries with `id`, `command`, `reason`, `languages`, `diff_classes` (the
   shapes implemented today, src/config.rs `RequiredProofPolicy`);
-- express accepted `adaptive` jobs as trigger-scoped tool or proof policy,
-  carrying the proposed_policy text from recommendations.json;
+- express accepted `adaptive` jobs as non-required proof entries under the
+  single gate until trigger-scoped policy is implemented, carrying the audit
+  receipt in the reason;
 - round-trip through the config loader with zero `PolicyError` receipts -
   a generator that emits keys the loader strips has failed;
 - never emit reserved or deprecated keys: no `[providers]` section
@@ -406,8 +408,9 @@ slice 1   setup-ci skeleton + --print-pr. New Command variant and
           Fail-closed paths from this spec land here with tests.
 slice 2   .ub-review.toml generation. Accepted move-to-ub-review-required
           recommendations become [[proof.required]] entries; accepted
-          adaptive recommendations become trigger policy; required tools
-          carried over. Round-trip test: reload emits zero PolicyError
+          adaptive recommendations become non-required proof entries under
+          the same gate until trigger-scoped policy is implemented; required
+          tools carried over. Round-trip test: reload emits zero PolicyError
           receipts; assert the generated file contains no [providers] and
           no legacy synchronize_mode (#306) and proposes no threshold whose
           sensor emits no gate-decision receipt (the ripr chain is proven,
@@ -485,7 +488,8 @@ built from.
 
 What does success look like in ten minutes?
 Run `audit-ci` with a token, read the report, run `setup-ci --print-pr`,
-then pass `--accept <job>=<command>` for each adaptive job the maintainer
-can actually run. `setup-ci --open-pr` opens a migration PR with the config,
-gate workflow, migration plan, and branch-protection instructions. The
-repo still applies branch protection manually after the PR proves itself.
+then pass `--accept <job>=<command>` for each `adaptive` or
+`move-to-ub-review-required` job the maintainer can actually run.
+`setup-ci --open-pr` opens a migration PR with the config, gate workflow,
+migration plan, and branch-protection instructions. The repo still applies
+branch protection manually after the PR proves itself.
