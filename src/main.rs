@@ -3271,8 +3271,15 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     }
     let tool_gate_outcomes =
         write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
+    let pr_thread_context = collect_pr_thread_context(&args.review.root, &args)?;
 
-    write_lane_packets(&args.review.out, &diff, &selected_model_lanes, &event_log)?;
+    write_lane_packets(
+        &args.review.out,
+        &diff,
+        &selected_model_lanes,
+        &pr_thread_context,
+        &event_log,
+    )?;
     finish_run_loop(
         &event_log,
         &run_started,
@@ -3294,6 +3301,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &plan,
         &tool_gate_outcomes.outcomes,
         &preliminary_summary,
+        pr_thread_context,
         &args,
         &event_log,
         &run_started,
@@ -5581,6 +5589,7 @@ fn write_lane_packets(
     out: &Path,
     diff: &DiffContext,
     lanes: &[LanePlan],
+    pr_thread_context: &PrThreadContext,
     event_log: &EventLog,
 ) -> Result<()> {
     let lane_dir = out.join("lanes");
@@ -5613,6 +5622,13 @@ fn write_lane_packets(
                 text.push_str(&render_unsafe_review_lane_evidence(&sensor_dir, &status));
             }
         }
+        text.push_str("\n## Seeded PR Thread Context\n\n");
+        text.push_str(
+            "This lane receives the cached shared context prefix from \
+             `review/shared_context.md`; the PR-thread seed below is the same \
+             bounded context recorded in `review/pr_thread_context.json`.\n\n",
+        );
+        text.push_str(&render_pr_thread_context(pr_thread_context));
         text.push_str("\n## Review posture\n\n");
         text.push_str(review_posture_for_diff_class(diff.diff_class));
         text.push_str("\n\n## Required output shape\n\n");
@@ -5736,6 +5752,7 @@ fn write_review_artifacts(
     plan: &Plan,
     tool_gate_outcomes: &[ToolGateOutcomeEntry],
     running_summary: &str,
+    pr_thread_context: PrThreadContext,
     args: &RunArgs,
     event_log: &EventLog,
     run_started: &Instant,
@@ -5744,7 +5761,6 @@ fn write_review_artifacts(
 ) -> Result<GateOutcome> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
-    let pr_thread_context = collect_pr_thread_context(root, args)?;
     let profile = config.selected_profile()?;
     let provider_concurrency = provider_concurrency_limits(config);
     let mut proof_requests = Vec::new();
@@ -31622,6 +31638,7 @@ required_proof_unprooven = true
             &plan,
             &[],
             "running summary",
+            test_pr_thread_context(),
             &args,
             &event_log,
             &run_started,
@@ -33789,6 +33806,7 @@ index 1111111..2222222 100644
             &plan,
             &[],
             "running summary",
+            test_pr_thread_context(),
             &args,
             &event_log,
             &run_started,
@@ -33857,6 +33875,7 @@ index 1111111..2222222 100644
             &plan,
             &[],
             "running summary",
+            test_pr_thread_context(),
             &args,
             &event_log,
             &run_started,
@@ -33926,6 +33945,7 @@ index 1111111..2222222 100644
             &plan,
             &[],
             "running summary",
+            test_pr_thread_context(),
             &args,
             &event_log,
             &run_started,

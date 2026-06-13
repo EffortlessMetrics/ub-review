@@ -2472,6 +2472,23 @@ path = "src/lib.rs"
     assert!(shared_context.contains("ASAN bad-free receipt"));
     assert!(shared_context.contains("[truncated]"));
     assert!(!shared_context.contains("tail should be truncated"));
+    let mut lane_packets = fs::read_dir(out.join("lanes"))?
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().and_then(|extension| extension.to_str()) == Some("md"))
+        .collect::<Vec<_>>();
+    lane_packets.sort();
+    let lane_packet_path = lane_packets
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("expected at least one lane packet"))?;
+    let lane_packet = fs::read_to_string(lane_packet_path)?;
+    assert!(lane_packet.contains("## Seeded PR Thread Context"));
+    assert!(lane_packet.contains("review/pr_thread_context.json"));
+    assert!(lane_packet.contains("### Prior Review Thread"));
+    assert!(lane_packet.contains("ASAN bad-free receipt"));
+    assert!(lane_packet.contains("[truncated]"));
+    assert!(!lane_packet.contains("tail should be truncated"));
     Ok(())
 }
 

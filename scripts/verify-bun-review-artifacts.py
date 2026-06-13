@@ -1106,6 +1106,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         lane_text = read_text(lane_path)
         if f"[{lane}]" not in lane_text:
             fail(f"lane packet {lane_path} does not include [{lane}] prefix")
+        require_lane_packet_pr_thread_seed(lane_path, lane_text)
         no_standalone_approval_line(lane_text, lane_path)
     actual_lane_packets = {
         path.name for path in (root / "lanes").glob("*.md") if path.is_file()
@@ -1115,6 +1116,20 @@ def require_common_tree(root: pathlib.Path) -> None:
             "lane packet files do not match effective_model_lanes: "
             f"expected {sorted(expected_lane_packets)!r}, got {sorted(actual_lane_packets)!r}"
         )
+
+
+def require_lane_packet_pr_thread_seed(lane_path: pathlib.Path, lane_text: str) -> None:
+    for marker in [
+        "## Seeded PR Thread Context",
+        "review/shared_context.md",
+        "review/pr_thread_context.json",
+        "- Status: `",
+    ]:
+        if marker not in lane_text:
+            fail(
+                f"lane packet {lane_path} "
+                f"missing seeded PR thread context marker {marker!r}"
+            )
 
 
 def require_events(root: pathlib.Path) -> None:
@@ -6973,6 +6988,28 @@ def self_test_empty_candidate_artifacts_without_dir() -> None:
         require_candidate_artifacts(root, review)
 
 
+def self_test_lane_packet_pr_thread_seed_contract() -> None:
+    lane_path = pathlib.Path("lanes/ub-memory-lifetime.md")
+    require_lane_packet_pr_thread_seed(
+        lane_path,
+        (
+            "# Lane: `ub-memory-lifetime`\n\n"
+            "## Seeded PR Thread Context\n\n"
+            "This lane receives the cached shared context prefix from "
+            "`review/shared_context.md`; the PR-thread seed below is the same "
+            "bounded context recorded in `review/pr_thread_context.json`.\n\n"
+            "- Status: `seeded`\n"
+        ),
+    )
+    expect_self_test_failure(
+        "lane packet missing PR-thread seed",
+        "missing seeded PR thread context marker",
+        lambda: require_lane_packet_pr_thread_seed(
+            lane_path, "[ub-memory-lifetime]\n"
+        ),
+    )
+
+
 def self_test_missing_nonempty_candidate_dir_fails() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
@@ -9660,6 +9697,7 @@ def run_self_tests() -> None:
     if plan["follow_up_tasks"]:
         fail("artifact-only meta observations created follow-up tasks in self-test")
     self_test_empty_candidate_artifacts_without_dir()
+    self_test_lane_packet_pr_thread_seed_contract()
     expect_self_test_failure(
         "non-empty candidate artifacts without directory",
         "missing candidates directory",
