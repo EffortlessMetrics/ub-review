@@ -21,6 +21,8 @@ jobs:
     name: Quality telemetry backfill
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      UB_REVIEW_QUALITY_WINDOW_DAYS: 30
     steps:
       - uses: actions/checkout@v5
 
@@ -42,7 +44,7 @@ jobs:
           gh run list \
             --workflow ub-review-gate.yml \
             --event pull_request \
-            --limit 20 \
+            --limit 100 \
             --json databaseId,headSha,conclusion,createdAt,displayTitle,url \
             > target/ub-review-quality/source/github/actions-runs.json
           gh pr list \
@@ -77,11 +79,23 @@ jobs:
           mkdir -p target/ub-review-quality/source/runs
           python - <<'PY' > target/ub-review-quality/source/run-ids.txt
           import json
+          import os
+          from datetime import datetime, timedelta, timezone
           from pathlib import Path
 
           runs = json.loads(Path("target/ub-review-quality/source/github/actions-runs.json").read_text())
+          window_days = int(os.environ["UB_REVIEW_QUALITY_WINDOW_DAYS"])
+          cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
           for run in runs:
-              if run.get("conclusion") in {"success", "failure"} and run.get("databaseId"):
+              created_at = run.get("createdAt")
+              if not created_at:
+                  continue
+              created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+              if (
+                  created >= cutoff
+                  and run.get("conclusion") in {"success", "failure"}
+                  and run.get("databaseId")
+              ):
                   print(run["databaseId"])
           PY
           while IFS= read -r run_id; do
@@ -143,7 +157,7 @@ jobs:
           target/debug/ub-review quality-backfill \
             --out target/ub-review-quality \
             --github-outcomes target/ub-review-quality/source/github/github-quality-outcomes.json \
-            --window-days 30 \
+            --window-days "$UB_REVIEW_QUALITY_WINDOW_DAYS" \
             "${previous[@]}" \
             "${args[@]}"
 

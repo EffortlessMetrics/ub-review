@@ -7364,9 +7364,9 @@ fn build_quality_backfill_artifact(
     );
     let reviewer_override_rate = quality_backfill_rate(
         reviewer_overrides,
-        Some(window_runs),
+        comments_posted,
         "reviewer_override_rate",
-        "reviewer override rate requires reviewer override receipts and at least one quality run",
+        "reviewer override rate requires posted comments and reviewer override receipts",
         outcome_source,
         &mut missing,
     );
@@ -32769,6 +32769,64 @@ index 1111111..2222222 100644
             artifact.source_artifacts.contains(
                 &"review/quality-backfill-sources/github-quality-outcomes.json".to_owned()
             )
+        );
+    }
+
+    #[test]
+    fn quality_backfill_reviewer_override_rate_uses_posted_comment_denominator() {
+        let runs = vec![super::QualityBackfillRun {
+            receipt: super::QualityReceiptSeed {
+                schema: super::QUALITY_RECEIPT_SCHEMA.to_owned(),
+                run_id: "run-a".to_owned(),
+                comments_prepared: 2,
+                fills_with_signal: 0,
+                fills_total: 1,
+                llm_unavailable_events: 0,
+            },
+            receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
+            trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+        }];
+        let outcomes = super::LoadedGithubQualityOutcomes {
+            outcomes: super::GithubQualityOutcomes {
+                schema: Some(super::GITHUB_QUALITY_OUTCOMES_SCHEMA.to_owned()),
+                source_artifacts: Vec::new(),
+                comments: vec![
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(true),
+                        accepted: Some(true),
+                        resolved: Some(true),
+                        reviewer_override: Some(true),
+                    },
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(true),
+                        accepted: Some(false),
+                        resolved: Some(false),
+                        reviewer_override: Some(true),
+                    },
+                ],
+                adopted_generated_tests: Vec::new(),
+            },
+            has_comments: true,
+            has_adopted_generated_tests: true,
+            source_artifact: "review/quality-backfill-sources/github-quality-outcomes.json"
+                .to_owned(),
+            raw_source_artifacts: Vec::new(),
+        };
+
+        let artifact = super::build_quality_backfill_artifact(30, &runs, Some(&outcomes), None);
+        let missing_fields = artifact
+            .missing
+            .iter()
+            .map(|entry| entry.field.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(artifact.window_runs, 1);
+        assert_eq!(artifact.comments_posted, Some(2));
+        assert_eq!(artifact.reviewer_overrides, Some(2));
+        assert_eq!(artifact.reviewer_override_rate, Some(1.0));
+        assert!(
+            !missing_fields.contains("reviewer_override_rate"),
+            "posted-comment denominator keeps reviewer_override_rate inside verifier bounds"
         );
     }
 

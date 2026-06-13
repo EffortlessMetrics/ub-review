@@ -2547,7 +2547,7 @@ def require_quality_backfill(root: pathlib.Path, required: bool = False) -> None
     require_rate_matches_counts(
         rates["reviewer_override_rate"],
         overrides,
-        window_runs,
+        posted,
         "quality-backfill.json reviewer_override_rate",
     )
 
@@ -8248,6 +8248,14 @@ def self_test_quality_backfill_contract() -> None:
                     ]
                 }
             ),
+            required=True,
+        ),
+    )
+    expect_self_test_failure(
+        "quality backfill reviewer override rate denominator",
+        "reviewer_override_rate does not match numerator divided by denominator",
+        lambda: require_quality_backfill(
+            write_root({"reviewer_overrides": 2, "reviewer_override_rate": 0.5}),
             required=True,
         ),
     )

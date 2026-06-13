@@ -53,6 +53,13 @@ fn quality_backfill_workflow_is_artifact_only_not_pr_gate_noise() -> Result<()> 
     assert_eq!(workflow.matches("pull_request:").count(), 0);
     assert_eq!(workflow.matches("pull-requests: read").count(), 1);
     assert_eq!(workflow.matches("pull-requests: write").count(), 0);
+    assert_eq!(
+        workflow
+            .matches("UB_REVIEW_QUALITY_WINDOW_DAYS: 30")
+            .count(),
+        1
+    );
+    assert_eq!(workflow.matches("created >= cutoff").count(), 1);
     assert_eq!(workflow.matches("ub-review quality-backfill").count(), 1);
     assert_eq!(
         workflow
