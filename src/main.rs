@@ -10471,11 +10471,13 @@ fn build_final_orchestrator_plan(
 }
 
 fn final_follow_up_task_resolved_by_tool_proof(task: &FollowUpQuestionTask) -> bool {
-    task.evidence_need == "proof-confirmation"
-        && task
-            .routed_evidence
-            .iter()
-            .any(|evidence| evidence.kind == "proof-receipt" && evidence.status == "tool-confirmed")
+    matches!(
+        task.evidence_need.as_str(),
+        "proof-confirmation" | "test-oracle-confirmation"
+    ) && task
+        .routed_evidence
+        .iter()
+        .any(|evidence| evidence.kind == "proof-receipt" && evidence.status == "tool-confirmed")
 }
 
 fn write_orchestrator_artifacts(
@@ -37076,6 +37078,51 @@ index 1111111..2222222 100644
                 .as_array()
                 .is_some_and(Vec::is_empty),
             "final routed proof should resolve the proof-confirmation follow-up task"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn final_orchestrator_plan_suppresses_test_oracle_task_when_late_proof_routes() -> Result<()> {
+        let candidates = vec![super::CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: "candidate-test-oracle".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            disposition: "summary-only".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            claim: "The changed test oracle may still be too weak for this behavior.".to_owned(),
+            evidence: "tests-oracle follow-up candidate".to_owned(),
+            path: None,
+            line: None,
+            side: None,
+        }];
+        let observations = Vec::new();
+        let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[]);
+        assert_eq!(initial_plan.follow_up_tasks.len(), 1);
+        assert_eq!(
+            initial_plan.follow_up_tasks[0].evidence_need,
+            "test-oracle-confirmation"
+        );
+
+        let mut late_receipt = test_red_green_proof_receipt("discriminating", "failed");
+        late_receipt.id = "proof-test-oracle-late".to_owned();
+        late_receipt.requested_by = vec!["tests-oracle".to_owned()];
+        late_receipt.request_ids = vec!["proof-test-oracle-1".to_owned()];
+        late_receipt.reason = "Routed proof confirms the changed test oracle.".to_owned();
+
+        let final_plan =
+            build_final_orchestrator_plan(&candidates, &observations, &[late_receipt], &[]);
+
+        assert_eq!(
+            final_plan.evidence_groups[0].routed_evidence[0].status,
+            "tool-confirmed"
+        );
+        assert!(
+            final_plan.follow_up_tasks.is_empty(),
+            "late routed proof should resolve test-oracle follow-up tasks"
         );
         Ok(())
     }
