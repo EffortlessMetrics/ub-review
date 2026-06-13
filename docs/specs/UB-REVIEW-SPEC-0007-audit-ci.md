@@ -124,7 +124,8 @@ docs/CI_AUDIT_WIZARD.md):
 ```text
 inventory.json    workflow, job, name, triggers, path_filters, matrix_size,
                   timeout_minutes, permissions, uses_secrets, required_check,
-                  required_check_source; top-level evidence_gaps
+                  required_check_source, required_check_context; top-level
+                  evidence_gaps
 history.json      job, workflow, window_days, runs, failure_rate,
                   cancellation_rate, flake_rate, rerun_then_pass,
                   evidence_gaps; top-level runs_fetched, pages_fetched,
@@ -282,11 +283,16 @@ Honest v0 limits, stated as limits:
   permissions or secret usage force `flag-for-human`
   (src/main.rs scan_workflow_text, classify_ci_job_tier,
   build_ci_audit_artifacts).
-- branch protection and rulesets are not queried: `required_check` is
-  always null and `required_check_source` always "unknown", also recorded
-  as an inventory evidence-gap line (src/main.rs). The contract example
-  shows `branch-protection | ruleset | unknown`; only "unknown" is real
-  today.
+- branch protection and rulesets are queried when a token is available:
+  `required_check` and `required_check_source` are populated for matched
+  workflow jobs from classic branch-protection and active default-branch
+  ruleset status-check receipts. `required_check_context` preserves the exact
+  GitHub context to remove, which may differ from the YAML job id. Tokenless
+  runs, 404/403/unreadable sources, summary-only ruleset responses, rulesets
+  that do not prove default-branch applicability, and required contexts that
+  do not match audited workflow jobs stay explicit inventory evidence gaps;
+  setup-ci must not invent a remove list from those partial receipts
+  (src/main.rs).
 - the deterministic classifier emits three of seven tiers (above); the
   contract's survivorship rule is implemented only in its conservative
   direction (sibling-signal check caps adaptive confidence).
@@ -337,9 +343,10 @@ This spec is docs-only; delivered work is cited, remaining work is routed:
 1. Delivered: #299 - the audit-ci read-only report (roadmap item 25), first
    production run against this repository; its receipts were consumed by the
    #300/#301 CI fold and the single-gate dogfood (roadmap item 26).
-2. Branch-protection/rulesets query: populate `required_check` and
-   `required_check_source` when token scope allows; until then the inventory
-   gap line stays. No open issue yet; tracked here and in the artifact gaps.
+2. Delivered: branch-protection/rulesets query populates `required_check`,
+   `required_check_source`, and `required_check_context` when token scope
+   allows; tokenless or partial evidence keeps the inventory gap line and
+   setup-ci refusal.
 3. Workflow YAML extraction: matrix structure and any deeper YAML semantics
    beyond the current literal permissions/secrets line scan. No open issue yet.
 4. Bounded model judgment lane: classify over deterministic receipts only,

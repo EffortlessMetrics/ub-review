@@ -73,7 +73,8 @@ Per job:
   "permissions": {"contents": "read"},
   "uses_secrets": [],
   "required_check": true,
-  "required_check_source": "branch-protection | ruleset | unknown"
+  "required_check_source": "branch-protection | ruleset | unknown",
+  "required_check_context": "Rust 1.95 / 2024"
 }
 ```
 

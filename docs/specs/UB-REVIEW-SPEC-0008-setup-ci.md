@@ -11,11 +11,13 @@ schema mismatches are named errors), takes an explicit
 supplies the command because the receipts never record it), renders the
 migration plan with the eight PR-body sections to stdout and
 `<out>/ci-audit/migration-plan.md`, refuses to invent the
-branch-protection remove list while `required_check_source` is `unknown`,
-and self-checks the generated `.ub-review.toml` block through the config
-loader - any `PolicyError` receipt aborts as a generator failure. It makes no
-repo writes, network calls, GitHub calls, or branch-protection changes; output
-is byte-identical across runs
+branch-protection remove list unless audit-ci has proved every required-check
+status and matched every required context to an audited workflow job; when
+that evidence is complete, the plan renders the exact remove list with
+`ci-audit/inventory.json` receipts. It self-checks the generated
+`.ub-review.toml` block through the config loader - any `PolicyError` receipt
+aborts as a generator failure. It makes no repo writes, network calls, GitHub
+calls, or branch-protection changes; output is byte-identical across runs
 over the same receipts. `--open-pr` opens the migration PR in its
 new-files-only v0: it requires `--action-sha` (the generator refuses to
 invent the workflow pin), refuses any repo that already carries a
@@ -123,10 +125,13 @@ implementation decision for slice 1 below.
 Known input gaps the implementation inherits from audit-ci v0, all of which
 bound what setup-ci can generate until fixed (spec 0007 carries these):
 
-- `required_check_source` is always `unknown`: the branch-protection /
-  rulesets query is not implemented, so audit-ci does not know which checks
-  are actually required today. setup-ci cannot write the exact "remove
-  required: <old checks>" list without this. Hard prerequisite.
+- `required_check_source` and `required_check_context` are known only when
+  audit-ci can read classic branch protection or active default-branch
+  ruleset status-check receipts and match each required context to an audited
+  workflow job. Tokenless runs, 404/403/unreadable sources, summary-only
+  ruleset responses, rulesets that do not prove default-branch applicability,
+  or unmatched required contexts keep the branch-protection remove list in
+  "refuse to invent it" mode.
 - audit-ci extracts literal workflow/job `permissions` and job secret
   references from local workflow YAML, then forces write-scoped or ambiguous
   permissions and secret usage to `flag-for-human`. The line scan is still not
@@ -373,11 +378,11 @@ This section is the build plan for the command. Each slice is one
 review-fast PR with verifier or test coverage for any new artifact.
 
 ```text
-prereq A  audit-ci branch-protection / rulesets query: populate
-          required_check and required_check_source for real (today always
-          unknown). Without this, branch-protection-change.md cannot name
-          the old required checks. Lands in the audit-ci surface
-          (spec 0007).
+prereq A  delivered: audit-ci branch-protection / rulesets query populates
+          required_check, required_check_source, and required_check_context
+          when token scope and source shape allow; partial evidence remains
+          an explicit gap. setup-ci now renders the exact remove list only
+          when those receipts are complete.
 prereq B  delivered: audit-ci permissions + uses_secrets extraction from
           workflow YAML hardens the security flag beyond name patterns
           (spec 0007).

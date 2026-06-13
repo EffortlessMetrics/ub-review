@@ -51,9 +51,11 @@ slice                                          spec    issue   proof obligation
 10 rust-test-proof profile + first             0003    item27  a second repo onboards with
    multi-repo onboarding                               ~10 lines of TOML, zero model
                                                        keys, one required check
-11 audit-ci v1: model-assisted judgment,       0007    -       judgment field earns values
-   branch-protection query                             beyond "deterministic";
-                                                   required_check_source resolved
+11 audit-ci v1: model-assisted judgment        0007    -       judgment field earns values
+                                                       beyond "deterministic";
+                                                       required_check_source
+                                                       is delivered for
+                                                       branch/ruleset receipts
 12 coverage flake trend: close or diagnose     0005    #313    second occurrence captures
                                                        llvm-cov stderr, or issue closed
 ```

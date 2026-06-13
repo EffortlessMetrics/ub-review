@@ -21785,6 +21785,16 @@ struct CiAuditFetch {
     runs: Vec<CiRunWithJobs>,
     pages_fetched: usize,
     truncated: bool,
+    required_checks: CiRequiredChecks,
+    evidence_gaps: Vec<String>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct CiRequiredChecks {
+    /// Required check context -> source (`branch-protection` or `ruleset`).
+    contexts: BTreeMap<String, String>,
+    /// Source used for negative determinations once the API answered.
+    default_source: Option<String>,
     evidence_gaps: Vec<String>,
 }
 
@@ -21820,6 +21830,8 @@ struct CiInventoryJob {
     uses_secrets: Vec<String>,
     required_check: Option<bool>,
     required_check_source: String,
+    #[serde(default)]
+    required_check_context: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -22607,6 +22619,243 @@ fn parse_ci_api_array<T: DeserializeOwned>(
     (parsed, dropped)
 }
 
+fn ci_required_check_contexts_from_branch_protection(
+    value: &serde_json::Value,
+) -> BTreeSet<String> {
+    let mut contexts = BTreeSet::new();
+    if let Some(items) = value.get("contexts").and_then(serde_json::Value::as_array) {
+        contexts.extend(
+            items
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .map(str::trim)
+                .filter(|context| !context.is_empty())
+                .map(ToOwned::to_owned),
+        );
+    }
+    if let Some(items) = value.get("checks").and_then(serde_json::Value::as_array) {
+        contexts.extend(
+            items
+                .iter()
+                .filter_map(|item| item.get("context").and_then(serde_json::Value::as_str))
+                .map(str::trim)
+                .filter(|context| !context.is_empty())
+                .map(ToOwned::to_owned),
+        );
+    }
+    contexts
+}
+
+fn ci_ref_pattern_matches_default_branch(pattern: &str, default_branch: &str) -> bool {
+    let pattern = pattern.trim();
+    if pattern.is_empty() {
+        return false;
+    }
+    if matches!(pattern, "~DEFAULT_BRANCH" | "~ALL" | "*") {
+        return true;
+    }
+    let default_ref = format!("refs/heads/{default_branch}");
+    if pattern == default_branch || pattern == default_ref {
+        return true;
+    }
+    if let Some(prefix) = pattern.strip_suffix('*') {
+        return default_branch.starts_with(prefix) || default_ref.starts_with(prefix);
+    }
+    false
+}
+
+fn ci_ruleset_applies_to_default_branch(
+    ruleset: &serde_json::Value,
+    default_branch: &str,
+) -> Option<bool> {
+    match ruleset.get("target").and_then(serde_json::Value::as_str) {
+        Some("branch") => {}
+        Some(_) => return Some(false),
+        None => return None,
+    }
+    match ruleset
+        .get("enforcement")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some("active") => {}
+        Some(_) => return Some(false),
+        None => return None,
+    }
+    let ref_name = ruleset
+        .get("conditions")
+        .and_then(|conditions| conditions.get("ref_name"))?;
+    let includes: Vec<&str> = ref_name
+        .get("include")
+        .and_then(serde_json::Value::as_array)?
+        .iter()
+        .filter_map(serde_json::Value::as_str)
+        .collect();
+    let excludes: Vec<&str> = ref_name
+        .get("exclude")
+        .and_then(serde_json::Value::as_array)
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(serde_json::Value::as_str)
+                .collect()
+        })
+        .unwrap_or_default();
+    if excludes
+        .iter()
+        .any(|pattern| ci_ref_pattern_matches_default_branch(pattern, default_branch))
+    {
+        return Some(false);
+    }
+    Some(
+        includes
+            .iter()
+            .any(|pattern| ci_ref_pattern_matches_default_branch(pattern, default_branch)),
+    )
+}
+
+fn ci_required_check_contexts_from_rulesets(
+    value: &serde_json::Value,
+    default_branch: &str,
+) -> (BTreeSet<String>, Vec<String>) {
+    let mut contexts = BTreeSet::new();
+    let mut gaps = Vec::new();
+    let Some(rulesets) = value.as_array() else {
+        gaps.push("ruleset required checks unreadable: response was not an array".to_owned());
+        return (contexts, gaps);
+    };
+    for ruleset in rulesets {
+        let Some(rules) = ruleset.get("rules").and_then(serde_json::Value::as_array) else {
+            gaps.push(
+                "ruleset required checks unreadable: rulesets response omitted rule details"
+                    .to_owned(),
+            );
+            continue;
+        };
+        let has_required_status_checks = rules.iter().any(|rule| {
+            rule.get("type").and_then(serde_json::Value::as_str) == Some("required_status_checks")
+        });
+        if !has_required_status_checks {
+            continue;
+        }
+        match ci_ruleset_applies_to_default_branch(ruleset, default_branch) {
+            Some(true) => {}
+            Some(false) => continue,
+            None => {
+                gaps.push(
+                    "ruleset required checks unreadable: active branch ruleset did not prove default-branch applicability"
+                        .to_owned(),
+                );
+                continue;
+            }
+        }
+        for rule in rules {
+            if rule.get("type").and_then(serde_json::Value::as_str)
+                != Some("required_status_checks")
+            {
+                continue;
+            }
+            let Some(required) = rule
+                .get("parameters")
+                .and_then(|parameters| parameters.get("required_status_checks"))
+                .and_then(serde_json::Value::as_array)
+            else {
+                gaps.push(
+                    "ruleset required checks unreadable: required_status_checks parameters missing"
+                        .to_owned(),
+                );
+                continue;
+            };
+            contexts.extend(
+                required
+                    .iter()
+                    .filter_map(|item| item.get("context").and_then(serde_json::Value::as_str))
+                    .map(str::trim)
+                    .filter(|context| !context.is_empty())
+                    .map(ToOwned::to_owned),
+            );
+        }
+    }
+    (contexts, gaps)
+}
+
+fn fetch_ci_required_checks(
+    args: &AuditCiArgs,
+    repo: &str,
+    token: &str,
+    scratch_dir: &Path,
+) -> CiRequiredChecks {
+    let mut required = CiRequiredChecks::default();
+    let repo_meta = match ci_github_get_json(args, token, &format!("repos/{repo}"), scratch_dir) {
+        Ok(value) => value,
+        Err(err) => {
+            required.evidence_gaps.push(format!(
+                "required-check status unreadable: repo metadata unavailable: {err:#}"
+            ));
+            return required;
+        }
+    };
+    let Some(default_branch) = repo_meta
+        .get("default_branch")
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|branch| !branch.is_empty())
+    else {
+        required.evidence_gaps.push(
+            "required-check status unreadable: repo metadata omitted default_branch".to_owned(),
+        );
+        return required;
+    };
+    let encoded_branch = percent_encode_query(default_branch);
+    let mut branch_protection_readable = false;
+    let mut rulesets_readable = false;
+    match ci_github_get_json(
+        args,
+        token,
+        &format!("repos/{repo}/branches/{encoded_branch}/protection/required_status_checks"),
+        scratch_dir,
+    ) {
+        Ok(value) => {
+            branch_protection_readable = true;
+            for context in ci_required_check_contexts_from_branch_protection(&value) {
+                required
+                    .contexts
+                    .entry(context)
+                    .or_insert_with(|| "branch-protection".to_owned());
+            }
+        }
+        Err(err) => required.evidence_gaps.push(format!(
+            "branch-protection required checks unreadable for `{default_branch}`: {err:#}"
+        )),
+    }
+    match ci_github_get_json(
+        args,
+        token,
+        &format!("repos/{repo}/rulesets?includes_parents=true&per_page=100"),
+        scratch_dir,
+    ) {
+        Ok(value) => {
+            let (contexts, gaps) = ci_required_check_contexts_from_rulesets(&value, default_branch);
+            rulesets_readable = gaps.is_empty();
+            required.evidence_gaps.extend(gaps);
+            for context in contexts {
+                required
+                    .contexts
+                    .entry(context)
+                    .or_insert_with(|| "ruleset".to_owned());
+            }
+        }
+        Err(err) => required.evidence_gaps.push(format!(
+            "ruleset required checks unreadable for `{default_branch}`: {err:#}"
+        )),
+    }
+    if branch_protection_readable && rulesets_readable {
+        required.default_source = Some("branch-protection".to_owned());
+    } else if !branch_protection_readable && !rulesets_readable {
+        required.default_source = None;
+    }
+    required
+}
+
 fn fetch_ci_audit_history(
     args: &AuditCiArgs,
     repo: &str,
@@ -22694,11 +22943,13 @@ fn fetch_ci_audit_history(
             "{dropped_items} API items failed to deserialize and were dropped from history"
         ));
     }
+    let required_checks = fetch_ci_required_checks(args, repo, token, scratch_dir);
     Ok(CiAuditFetch {
         workflows,
         runs: runs_with_jobs,
         pages_fetched,
         truncated,
+        required_checks,
         evidence_gaps,
     })
 }
@@ -23141,6 +23392,28 @@ fn ci_match_yaml_job<'a>(
     })
 }
 
+fn ci_required_check_status(
+    required: Option<&CiRequiredChecks>,
+    candidates: &[&str],
+) -> (Option<bool>, String, Option<String>) {
+    let Some(required) = required else {
+        return (None, "unknown".to_owned(), None);
+    };
+    for candidate in candidates {
+        let trimmed = candidate.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Some(source) = required.contexts.get(trimmed) {
+            return (Some(true), source.clone(), Some(trimmed.to_owned()));
+        }
+    }
+    match &required.default_source {
+        Some(source) => (Some(false), source.clone(), None),
+        None => (None, "unknown".to_owned(), None),
+    }
+}
+
 fn ci_job_github_hosted(labels: &[String]) -> bool {
     let labels: Vec<String> = labels
         .iter()
@@ -23258,9 +23531,26 @@ fn build_ci_audit_artifacts(
     let mut inventory_gaps: Vec<String> = vec![
         "matrix structure not extracted from workflow YAML (v0 line-scan covers triggers, paths, permissions, secrets, runs-on, timeout-minutes, uses)"
             .to_owned(),
-        "required-check status unknown: branch protection and rulesets not queried in v0"
-            .to_owned(),
     ];
+    let required_checks = fetch.map(|fetch| &fetch.required_checks);
+    match required_checks {
+        Some(required) if required.default_source.is_some() => {
+            inventory_gaps.extend(required.evidence_gaps.iter().cloned());
+        }
+        Some(required) => {
+            inventory_gaps.push(
+                "required-check status unknown: branch protection and rulesets unreadable"
+                    .to_owned(),
+            );
+            inventory_gaps.extend(required.evidence_gaps.iter().cloned());
+        }
+        None => {
+            inventory_gaps.push(
+                "required-check status unknown: branch protection and rulesets need a GitHub token"
+                    .to_owned(),
+            );
+        }
+    }
     // Job universe: observed API jobs plus yaml-declared jobs that never ran on
     // pull_request events in the window (release/deploy lanes must still show
     // up so the security rule can flag them).
@@ -23386,6 +23676,15 @@ fn build_ci_audit_artifacts(
             (None, Some(yaml_job)) => yaml_job.name.clone().unwrap_or_else(|| seed.job.clone()),
             _ => seed.job.clone(),
         };
+        let mut required_check_candidates = vec![seed.job.as_str(), display_name.as_str()];
+        if let Some(yaml_job) = seed.yaml {
+            required_check_candidates.push(yaml_job.id.as_str());
+            if let Some(name) = yaml_job.name.as_deref() {
+                required_check_candidates.push(name);
+            }
+        }
+        let (required_check, required_check_source, required_check_context) =
+            ci_required_check_status(required_checks, &required_check_candidates);
         let permissions = seed
             .yaml
             .and_then(|yaml_job| yaml_job.permissions.clone())
@@ -23407,8 +23706,9 @@ fn build_ci_audit_artifacts(
             timeout_minutes: seed.yaml.and_then(|yaml_job| yaml_job.timeout_minutes),
             permissions: permissions.clone(),
             uses_secrets: uses_secrets.clone(),
-            required_check: None,
-            required_check_source: "unknown".to_owned(),
+            required_check,
+            required_check_source,
+            required_check_context,
         });
         if let Some(stat) = seed.stats {
             history_jobs.push(CiHistoryJob {
@@ -23501,6 +23801,32 @@ fn build_ci_audit_artifacts(
             reason: decision.reason,
             report_note: decision.report_note,
         });
+    }
+    if let Some(required) = required_checks {
+        let mut audited_contexts: BTreeSet<&str> = inventory_jobs
+            .iter()
+            .flat_map(|job| [job.job.as_str(), job.name.as_str()])
+            .collect();
+        for scan in scans {
+            for yaml_job in &scan.yaml_jobs {
+                audited_contexts.insert(yaml_job.id.as_str());
+                if let Some(name) = yaml_job.name.as_deref() {
+                    audited_contexts.insert(name);
+                }
+            }
+        }
+        let unmatched: Vec<&str> = required
+            .contexts
+            .keys()
+            .map(String::as_str)
+            .filter(|context| !audited_contexts.contains(context))
+            .collect();
+        if !unmatched.is_empty() {
+            inventory_gaps.push(format!(
+                "required-check context not matched to an audited workflow job: {}",
+                unmatched.join(", ")
+            ));
+        }
     }
     let runs_fetched = fetch.map(|fetch| fetch.runs.len()).unwrap_or(0);
     let inventory = CiInventoryArtifact {
@@ -23903,6 +24229,63 @@ fn setup_ci_section_bullets(recommendations: &[CiRecommendation], tier: &str) ->
     text
 }
 
+fn setup_ci_branch_protection_change(
+    inventory: &CiInventoryArtifact,
+    required_check: &str,
+) -> String {
+    let status_unknown = inventory.jobs.iter().any(|job| {
+        job.required_check.is_none()
+            || job.required_check_source == "unknown"
+            || (job.required_check == Some(true) && job.required_check_context.is_none())
+    });
+    let required_gap = inventory.evidence_gaps.iter().any(|gap| {
+        gap.contains("required-check status unknown")
+            || gap.contains("required-check context not matched")
+            || gap.contains("required checks unreadable")
+    });
+    if status_unknown || required_gap {
+        let source = inventory
+            .jobs
+            .first()
+            .map(|job| job.required_check_source.as_str())
+            .unwrap_or("unknown");
+        return format!(
+            "- add required check: `{required_check}`\n- old required checks unknown: \
+             audit-ci did not prove the full branch-protection/ruleset remove list \
+             (inventory records `required_check_source: \"{source}\"`), so this plan refuses \
+             to invent it. Review the repository's required checks by hand before removing \
+             anything.\n"
+        );
+    }
+
+    let required_jobs: Vec<&CiInventoryJob> = inventory
+        .jobs
+        .iter()
+        .filter(|job| job.required_check == Some(true))
+        .collect();
+    let mut text = format!("- add required check: `{required_check}`\n");
+    if required_jobs.is_empty() {
+        text.push_str("- remove required checks: none reported by audit-ci receipts\n");
+    } else {
+        text.push_str("- remove required checks reported by audit-ci receipts:\n");
+        for job in required_jobs {
+            let context = job
+                .required_check_context
+                .as_deref()
+                .unwrap_or(job.job.as_str());
+            text.push_str(&format!(
+                "  - `{}` from `{}` (source: {}; receipt: ci-audit/inventory.json#{})\n",
+                context, job.workflow, job.required_check_source, job.job
+            ));
+        }
+    }
+    text.push_str(
+        "- apply this manually after the migration PR has passed the repo's existing CI; \
+         setup-ci did not mutate branch protection.\n",
+    );
+    text
+}
+
 fn render_setup_ci_migration_plan(
     inventory: &CiInventoryArtifact,
     recommendations: &CiRecommendationsArtifact,
@@ -23965,17 +24348,9 @@ fn render_setup_ci_migration_plan(
     plan.push_str("\n## Human review required\n\n");
     plan.push_str(&setup_ci_section_bullets(jobs, "flag-for-human"));
     plan.push_str("\n## Proposed branch protection change\n\n");
-    plan.push_str(&format!(
-        "- add required check: `{required_check}`\n- old required checks unknown: the \
-         branch-protection query is not implemented (audit-ci prerequisite A; \
-         inventory records `required_check_source: \"{}\"`), so this plan refuses to \
-         invent the remove list. Review the repository's required checks by hand before \
-         removing anything.\n",
-        inventory
-            .jobs
-            .first()
-            .map(|job| job.required_check_source.as_str())
-            .unwrap_or("unknown")
+    plan.push_str(&setup_ci_branch_protection_change(
+        inventory,
+        required_check,
     ));
     plan.push_str("\n## Rollback\n\n");
     plan.push_str(
@@ -40078,6 +40453,186 @@ jobs:
         super::parse_ci_api_array(&value, "workflows").0
     }
 
+    fn ci_no_required_checks() -> super::CiRequiredChecks {
+        super::CiRequiredChecks::default()
+    }
+
+    fn ci_required_checks(contexts: &[(&str, &str)]) -> super::CiRequiredChecks {
+        super::CiRequiredChecks {
+            contexts: contexts
+                .iter()
+                .map(|(context, source)| ((*context).to_owned(), (*source).to_owned()))
+                .collect(),
+            default_source: Some("branch-protection".to_owned()),
+            evidence_gaps: Vec::new(),
+        }
+    }
+
+    fn spawn_fake_ci_required_checks_api()
+    -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let handle = thread::spawn(move || -> Result<Vec<String>> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < 3 {
+                match listener.accept() {
+                    Ok((stream, _addr)) => {
+                        requests.push(handle_fake_ci_required_checks_request(stream)?);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            bail!(
+                                "fake audit-ci API received {} of 3 requests",
+                                requests.len()
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            Ok(requests)
+        });
+        Ok((url, handle))
+    }
+
+    fn spawn_fake_ci_required_checks_404_api()
+    -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}", listener.local_addr()?);
+        let handle = thread::spawn(move || -> Result<Vec<String>> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < 3 {
+                match listener.accept() {
+                    Ok((stream, _addr)) => {
+                        requests.push(handle_fake_ci_required_checks_404_request(stream)?);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            bail!(
+                                "fake audit-ci 404 API received {} of 3 requests",
+                                requests.len()
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            Ok(requests)
+        });
+        Ok((url, handle))
+    }
+
+    fn handle_fake_ci_required_checks_404_request(mut stream: TcpStream) -> Result<String> {
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                bail!("fake audit-ci 404 request ended before headers finished");
+            }
+            headers.push_str(&line);
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+        let request_line = headers.lines().next().unwrap_or_default();
+        let (status, response_body) = if request_line == "GET /repos/acme/widgets HTTP/1.1" {
+            (
+                "HTTP/1.1 200 OK",
+                serde_json::to_vec(&serde_json::json!({"default_branch": "main"}))?,
+            )
+        } else if request_line.contains("/protection/required_status_checks")
+            || request_line.contains("/rulesets?includes_parents=true&per_page=100")
+        {
+            (
+                "HTTP/1.1 404 Not Found",
+                serde_json::to_vec(&serde_json::json!({"message": "Not Found"}))?,
+            )
+        } else {
+            bail!("unexpected fake audit-ci 404 request: {request_line}");
+        };
+        write!(
+            stream,
+            "{status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+        stream.write_all(&response_body)?;
+        Ok(headers)
+    }
+
+    fn handle_fake_ci_required_checks_request(mut stream: TcpStream) -> Result<String> {
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                bail!("fake audit-ci request ended before headers finished");
+            }
+            headers.push_str(&line);
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+        let request_line = headers.lines().next().unwrap_or_default();
+        let response_body = if request_line == "GET /repos/acme/widgets HTTP/1.1" {
+            serde_json::to_vec(&serde_json::json!({"default_branch": "release/2026"}))?
+        } else if request_line.contains(
+            "/repos/acme/widgets/branches/release%2F2026/protection/required_status_checks",
+        ) {
+            serde_json::to_vec(&serde_json::json!({
+                "contexts": ["fmt"],
+                "checks": [{"context": "test"}]
+            }))?
+        } else if request_line
+            .contains("/repos/acme/widgets/rulesets?includes_parents=true&per_page=100")
+        {
+            serde_json::to_vec(&serde_json::json!([
+                {
+                    "name": "main rules",
+                    "target": "branch",
+                    "enforcement": "active",
+                    "conditions": {
+                        "ref_name": {
+                            "include": ["~DEFAULT_BRANCH"],
+                            "exclude": []
+                        }
+                    },
+                    "rules": [
+                        {
+                            "type": "required_status_checks",
+                            "parameters": {
+                                "required_status_checks": [{"context": "End to end"}]
+                            }
+                        }
+                    ]
+                }
+            ]))?
+        } else {
+            bail!("unexpected fake audit-ci request: {request_line}");
+        };
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+        stream.write_all(&response_body)?;
+        Ok(headers)
+    }
+
     /// Canned run spec: (run id, [(job name, conclusion, duration seconds)]).
     type CiRunSpec<'a> = (u64, Vec<(&'a str, &'a str, u64)>);
 
@@ -40297,6 +40852,202 @@ jobs:
     }
 
     #[test]
+    fn ci_required_check_parsers_extract_branch_and_ruleset_contexts() {
+        let branch = serde_json::json!({
+            "contexts": ["fmt"],
+            "checks": [
+                {"context": "test", "app_id": 15368},
+                {"context": "  "}
+            ]
+        });
+        assert_eq!(
+            super::ci_required_check_contexts_from_branch_protection(&branch),
+            BTreeSet::from(["fmt".to_owned(), "test".to_owned()])
+        );
+
+        let rulesets = serde_json::json!([
+            {
+                "name": "main",
+                "target": "branch",
+                "enforcement": "active",
+                "conditions": {
+                    "ref_name": {
+                        "include": ["refs/heads/main"],
+                        "exclude": []
+                    }
+                },
+                "rules": [
+                    {
+                        "type": "required_status_checks",
+                        "parameters": {
+                            "required_status_checks": [
+                                {"context": "End to end"},
+                                {"context": ""}
+                            ]
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "inactive",
+                "target": "branch",
+                "enforcement": "evaluate",
+                "conditions": {
+                    "ref_name": {
+                        "include": ["refs/heads/main"],
+                        "exclude": []
+                    }
+                },
+                "rules": [
+                    {
+                        "type": "required_status_checks",
+                        "parameters": {
+                            "required_status_checks": [{"context": "Advisory only"}]
+                        }
+                    }
+                ]
+            },
+            {
+                "name": "linear history",
+                "target": "branch",
+                "enforcement": "active",
+                "conditions": {
+                    "ref_name": {
+                        "include": ["refs/heads/main"],
+                        "exclude": []
+                    }
+                },
+                "rules": [{"type": "required_linear_history"}]
+            }
+        ]);
+        let (contexts, gaps) = super::ci_required_check_contexts_from_rulesets(&rulesets, "main");
+        assert_eq!(contexts, BTreeSet::from(["End to end".to_owned()]));
+        assert!(gaps.is_empty(), "{gaps:?}");
+        let (_contexts, gaps) = super::ci_required_check_contexts_from_rulesets(
+            &serde_json::json!([
+                {"id": 1, "name": "summary-only ruleset"}
+            ]),
+            "main",
+        );
+        assert!(
+            gaps.iter().any(|gap| gap.contains("omitted rule details")),
+            "{gaps:?}"
+        );
+        let (_contexts, gaps) = super::ci_required_check_contexts_from_rulesets(
+            &serde_json::json!([
+                {
+                    "name": "missing applicability",
+                    "rules": [
+                        {
+                            "type": "required_status_checks",
+                            "parameters": {
+                                "required_status_checks": [{"context": "unknown"}]
+                            }
+                        }
+                    ]
+                }
+            ]),
+            "main",
+        );
+        assert!(
+            gaps.iter()
+                .any(|gap| gap.contains("default-branch applicability")),
+            "{gaps:?}"
+        );
+    }
+
+    #[test]
+    fn ci_fetch_required_checks_reads_branch_protection_and_rulesets() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (api_url, handle) = spawn_fake_ci_required_checks_api()?;
+        let args = super::AuditCiArgs {
+            root: temp.path().to_path_buf(),
+            out: temp.path().join("out"),
+            repo: Some("acme/widgets".to_owned()),
+            github_token: Some("test-token".to_owned()),
+            github_api_url: api_url,
+            window_days: 90,
+            audit_cancel_events: None,
+        };
+        let required =
+            super::fetch_ci_required_checks(&args, "acme/widgets", "test-token", temp.path());
+        let requests = handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("fake audit-ci API thread panicked"))??;
+        assert!(requests[0].starts_with("GET /repos/acme/widgets "));
+        assert!(
+            requests[1].contains(
+                "/repos/acme/widgets/branches/release%2F2026/protection/required_status_checks"
+            ),
+            "{}",
+            requests[1]
+        );
+        assert!(
+            requests[2].contains("/repos/acme/widgets/rulesets?includes_parents=true&per_page=100"),
+            "{}",
+            requests[2]
+        );
+        assert_eq!(
+            required.default_source.as_deref(),
+            Some("branch-protection")
+        );
+        assert_eq!(
+            required.contexts.get("fmt").map(String::as_str),
+            Some("branch-protection")
+        );
+        assert_eq!(
+            required.contexts.get("test").map(String::as_str),
+            Some("branch-protection")
+        );
+        assert_eq!(
+            required.contexts.get("End to end").map(String::as_str),
+            Some("ruleset")
+        );
+        assert!(required.evidence_gaps.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn ci_fetch_required_checks_treats_not_found_as_evidence_gap() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let (api_url, handle) = spawn_fake_ci_required_checks_404_api()?;
+        let args = super::AuditCiArgs {
+            root: temp.path().to_path_buf(),
+            out: temp.path().join("out"),
+            repo: Some("acme/widgets".to_owned()),
+            github_token: Some("test-token".to_owned()),
+            github_api_url: api_url,
+            window_days: 90,
+            audit_cancel_events: None,
+        };
+        let required =
+            super::fetch_ci_required_checks(&args, "acme/widgets", "test-token", temp.path());
+        let requests = handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("fake audit-ci 404 API thread panicked"))??;
+        assert_eq!(requests.len(), 3);
+        assert_eq!(required.default_source, None);
+        assert!(required.contexts.is_empty());
+        assert!(
+            required
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("branch-protection required checks unreadable")),
+            "{:?}",
+            required.evidence_gaps
+        );
+        assert!(
+            required
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("ruleset required checks unreadable")),
+            "{:?}",
+            required.evidence_gaps
+        );
+        Ok(())
+    }
+
+    #[test]
     fn ci_percentile_uses_nearest_rank() {
         let values: Vec<u64> = (1..=100).collect();
         assert_eq!(super::ci_percentile(&values, 50.0), Some(50));
@@ -40468,6 +41219,7 @@ jobs:
                 "uses_secrets": [],
                 "required_check": null,
                 "required_check_source": "unknown",
+                "required_check_context": null,
             })
         };
         fs::write(
@@ -40576,7 +41328,8 @@ jobs:
         // Receipts on rendered bullets; refusal instead of an invented
         // branch-protection remove list; accepted command rendered.
         assert!(plan.contains("ci-audit/correlation.json#integration"));
-        assert!(plan.contains("refuses to invent the remove list"));
+        assert!(plan.contains("old required checks unknown"));
+        assert!(plan.contains("refuses to invent it"));
         assert!(plan.contains("accepted; command `cargo test --workspace --locked`"));
         assert!(plan.contains("- none recommended by this audit"));
         // Generated config block: round-trips with zero policy receipts and
@@ -40917,6 +41670,7 @@ jobs:
             runs: ci_fixture_correlation_runs()?,
             pages_fetched: 1,
             truncated: false,
+            required_checks: ci_no_required_checks(),
             evidence_gaps: Vec::new(),
         };
         let artifacts = super::build_ci_audit_artifacts(
@@ -41001,6 +41755,7 @@ jobs:
             "uses_secrets",
             "required_check",
             "required_check_source",
+            "required_check_context",
         ] {
             assert!(
                 first_job.get(field).is_some(),
@@ -41089,6 +41844,146 @@ jobs:
     }
 
     #[test]
+    fn ci_audit_artifacts_record_required_check_receipts_for_setup_ci() -> Result<()> {
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/ci.yml",
+            CI_FIXTURE_WORKFLOW,
+        )];
+        let mut specs: Vec<CiRunSpec<'_>> = Vec::new();
+        for index in 0..25u64 {
+            specs.push((
+                900 + index,
+                vec![
+                    ("fmt", "success", 60),
+                    ("test", "success", 120),
+                    ("e2e", "success", 600),
+                ],
+            ));
+        }
+        let fetch = super::CiAuditFetch {
+            workflows: ci_fixture_workflows(),
+            runs: ci_fixture_runs(&specs)?,
+            pages_fetched: 1,
+            truncated: false,
+            required_checks: ci_required_checks(&[
+                ("fmt", "branch-protection"),
+                ("End to end", "ruleset"),
+            ]),
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            None,
+            super::Utc::now(),
+        );
+
+        let inventory_job = |name: &str| -> Result<&super::CiInventoryJob> {
+            artifacts
+                .inventory
+                .jobs
+                .iter()
+                .find(|job| job.job == name)
+                .with_context(|| format!("{name} inventory job"))
+        };
+        let fmt = inventory_job("fmt")?;
+        assert_eq!(fmt.required_check, Some(true));
+        assert_eq!(fmt.required_check_source, "branch-protection");
+        assert_eq!(fmt.required_check_context.as_deref(), Some("fmt"));
+        let e2e = inventory_job("e2e")?;
+        assert_eq!(e2e.required_check, Some(true));
+        assert_eq!(e2e.required_check_source, "ruleset");
+        assert_eq!(e2e.required_check_context.as_deref(), Some("End to end"));
+        let test = inventory_job("test")?;
+        assert_eq!(test.required_check, Some(false));
+        assert_eq!(test.required_check_source, "branch-protection");
+        assert_eq!(test.required_check_context, None);
+        assert!(
+            !artifacts
+                .inventory
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("required-check status unknown")),
+            "{:?}",
+            artifacts.inventory.evidence_gaps
+        );
+
+        let plan = super::render_setup_ci_migration_plan(
+            &artifacts.inventory,
+            &artifacts.recommendations,
+            &[],
+            "ub-review/gate",
+        );
+        assert!(plan.contains("remove required checks reported by audit-ci receipts"));
+        assert!(plan.contains("`fmt` from `.github/workflows/ci.yml`"));
+        assert!(plan.contains("`End to end` from `.github/workflows/ci.yml`"));
+        assert!(!plan.contains("`e2e` from `.github/workflows/ci.yml`"));
+        assert!(!plan.contains("old required checks unknown"));
+        assert!(plan.contains("setup-ci did not mutate branch protection"));
+        Ok(())
+    }
+
+    #[test]
+    fn setup_ci_refuses_exact_branch_protection_plan_with_unmatched_required_context() -> Result<()>
+    {
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/ci.yml",
+            CI_FIXTURE_WORKFLOW,
+        )];
+        let mut specs: Vec<CiRunSpec<'_>> = Vec::new();
+        for index in 0..25u64 {
+            specs.push((
+                950 + index,
+                vec![
+                    ("fmt", "success", 60),
+                    ("test", "success", 120),
+                    ("e2e", "success", 600),
+                ],
+            ));
+        }
+        let fetch = super::CiAuditFetch {
+            workflows: ci_fixture_workflows(),
+            runs: ci_fixture_runs(&specs)?,
+            pages_fetched: 1,
+            truncated: false,
+            required_checks: ci_required_checks(&[
+                ("fmt", "branch-protection"),
+                ("external/codecov", "branch-protection"),
+            ]),
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            None,
+            super::Utc::now(),
+        );
+        assert!(
+            artifacts
+                .inventory
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("required-check context not matched")),
+            "{:?}",
+            artifacts.inventory.evidence_gaps
+        );
+        let plan = super::render_setup_ci_migration_plan(
+            &artifacts.inventory,
+            &artifacts.recommendations,
+            &[],
+            "ub-review/gate",
+        );
+        assert!(plan.contains("old required checks unknown"));
+        assert!(plan.contains("refuses to invent"));
+        assert!(!plan.contains("remove required checks reported by audit-ci receipts"));
+        Ok(())
+    }
+
+    #[test]
     fn ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs() -> Result<()> {
         let scans = vec![super::scan_workflow_text(
             ".github/workflows/ci.yml",
@@ -41111,6 +42006,7 @@ jobs:
             runs: ci_fixture_runs(&specs)?,
             pages_fetched: 1,
             truncated: false,
+            required_checks: ci_no_required_checks(),
             evidence_gaps: Vec::new(),
         };
         let artifacts = super::build_ci_audit_artifacts(
@@ -41215,6 +42111,7 @@ jobs:
             )?],
             pages_fetched: 1,
             truncated: false,
+            required_checks: ci_no_required_checks(),
             evidence_gaps: Vec::new(),
         };
         let artifacts = super::build_ci_audit_artifacts(
@@ -41261,6 +42158,7 @@ jobs:
             )?],
             pages_fetched: 1,
             truncated: false,
+            required_checks: ci_no_required_checks(),
             evidence_gaps: Vec::new(),
         };
         let artifacts = super::build_ci_audit_artifacts(
@@ -41372,6 +42270,7 @@ jobs:
             runs: ci_fixture_runs(&specs)?,
             pages_fetched: 1,
             truncated: false,
+            required_checks: ci_no_required_checks(),
             evidence_gaps: Vec::new(),
         };
         let artifacts = super::build_ci_audit_artifacts(
