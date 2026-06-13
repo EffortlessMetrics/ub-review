@@ -426,9 +426,10 @@ This spec is docs-only. Open sensor-surface work it routes:
          pins for ripr/unsafe-review, unevaluated-required-gate alarm
 #347     per-finding exposure-gap detail in sensor artifacts so a
          tool-gate block is diagnosable without a local ripr re-run
-#312     proof broker lease edge cases: lease "absent" status,
-         base_patch_failed lane routing, manual-cost allowlist path,
-         shell-token test gap - the lease half of this surface
+#312     proof broker lease edge cases: lease "absent" status is
+         verifier-covered as a skipped proof edge; base_patch_failed
+         routes as missing evidence; manual-cost and shell-token
+         requests remain non-executable broker inputs
 #313     coverage sensor transient-failure tracking (exit 101 on the
          PR #305 red run; stayed advisory by policy)
 #317-321 xtask precommit and sensor-glue honesty: bounded receipt

@@ -3980,7 +3980,7 @@ def expected_lease_statuses_for_proof_result(result: str) -> set[str]:
     if result == "skipped_budget":
         return {"exhausted"}
     if result == "skipped_profile":
-        return {"granted", "skipped_profile"}
+        return {"granted", "skipped_profile", "absent"}
     return {"granted"}
 
 
@@ -6424,7 +6424,7 @@ def require_resource_lease_schema(lease: dict) -> None:
             fail(f"resource lease missing string field {field}: {lease!r}")
     if lease["kind"] not in {"focused-test", "focused-build"}:
         fail(f"resource lease has unsupported kind: {lease!r}")
-    if lease["status"] not in {"granted", "exhausted", "skipped_profile"}:
+    if lease["status"] not in {"granted", "exhausted", "skipped_profile", "absent"}:
         fail(f"resource lease has unsupported status: {lease!r}")
     for field in ["cpu", "memory_mb", "disk_mb", "timeout_sec"]:
         value = lease.get(field)
@@ -7284,6 +7284,62 @@ def self_test_non_discriminating_routes_as_missing_evidence() -> None:
     )
     if status != "missing-evidence":
         fail(f"non_discriminating proof routed as {status!r}, expected missing-evidence")
+
+
+def self_test_absent_resource_lease_contract() -> None:
+    import tempfile
+
+    receipt = {
+        "id": "focused-proof-absent-lease",
+        "kind": "focused-head",
+        "result": "skipped_profile",
+    }
+    lease = {
+        "schema": "ub-review.resource_lease.v1",
+        "id": "lease-focused-proof-absent-lease",
+        "kind": "focused-test",
+        "consumer": receipt["id"],
+        "status": "absent",
+        "reason": "resource broker did not return a lease",
+        "cpu": 0,
+        "memory_mb": 0,
+        "disk_mb": 0,
+        "timeout_sec": 0,
+        "network": False,
+        "scratch": False,
+        "worktree": None,
+        "command": None,
+    }
+
+    def write_root(root: pathlib.Path, resource_lease: dict) -> pathlib.Path:
+        (root / "review").mkdir()
+        (root / "review/resource_leases.json").write_text(
+            json.dumps([resource_lease]), encoding="utf-8"
+        )
+        (root / "resource_leases.ndjson").write_text(
+            json.dumps(resource_lease) + "\n", encoding="utf-8"
+        )
+        (root / "review/resource_plan.md").write_text(
+            "# Resource lease plan\n\n## Focused proof leases\n\n"
+            "- `lease-focused-proof-absent-lease` status=`absent`.\n",
+            encoding="utf-8",
+        )
+        return root
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = write_root(pathlib.Path(temp_dir), lease)
+        require_resource_lease_artifacts(root, [receipt], [lease])
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = write_root(pathlib.Path(temp_dir), lease)
+        expect_self_test_failure(
+            "absent resource lease cannot confirm proof",
+            "lease status does not match receipt result",
+            lambda: require_resource_lease_artifacts(
+                root,
+                [dict(receipt, result="head_passed")],
+                [lease],
+            ),
+        )
 
 
 def self_test_noise_rule_phrase_parity_with_rust() -> None:
@@ -9968,6 +10024,7 @@ def run_self_tests() -> None:
     )
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
+    self_test_absent_resource_lease_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_proof_command_stream_bound_contract()

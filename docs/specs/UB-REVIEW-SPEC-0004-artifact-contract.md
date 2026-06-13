@@ -540,11 +540,10 @@ Honest current-state limits a consumer must know:
   carries the finding id, path/range, exposure-gap class, suppression state,
   threshold contribution, and an artifact pointer so a red ripr gate is
   diagnosable from receipts without a local rerun.
-- Proof receipt and resource lease edge statuses (lease `absent`,
-  `base_patch_failed` routing, manual-cost allowlist path) have named test
-  gaps (#312); treat rare status values in `proof_receipts.json` /
-  `resource_leases.json` as stable in shape but under-exercised in
-  production.
+- Proof receipt and resource lease edge statuses are stable in shape but rare
+  in production. Lease `absent` is verifier-covered as a skipped proof edge,
+  `base_patch_failed` routes as missing evidence, and manual-cost/shell-token
+  proof requests remain non-executable broker inputs (#312).
 - Sensor status receipts are required and shape-pinned, but the quality of
   their `reason` strings still depends on sensor-specific coverage:
   cargo-allow foreign-dialect skips are guarded by the CLI artifact test for
