@@ -11,6 +11,8 @@ use crate::*;
 
 const MUTATION_HEAVY_WITNESS_SKIP_REASON: &str = "Targeted mutation proof is a heavy witness; skipped because this runtime profile does not lease mutation proof. Use a risk-pack/manual-heavy profile to run it.";
 const SANITIZER_HEAVY_WITNESS_SKIP_REASON: &str = "Sanitizer proof is a heavy witness; skipped because this runtime profile does not lease sanitizer proof. Use a risk-pack/manual-heavy profile to run it.";
+const MUTATION_HEAVY_WITNESS_PARKED_REASON: &str = "Targeted mutation proof is leased by this runtime profile, but ub-review has no mutation executor route yet; parked as manual-heavy evidence until executor routing lands.";
+const SANITIZER_HEAVY_WITNESS_PARKED_REASON: &str = "Sanitizer proof is leased by this runtime profile, but ub-review has no sanitizer executor route yet; parked as manual-heavy evidence until executor routing lands.";
 
 pub(crate) fn append_follow_up_proof_requests(
     proof_requests: &mut Vec<ProofRequest>,
@@ -139,13 +141,23 @@ pub(crate) fn proof_planner_skips(diff: &DiffContext, profile: &Profile) -> Vec<
             kind: "actionlint".to_owned(),
             reason: "No workflow files changed.".to_owned(),
         }),
-        (!profile.budgets.mutation).then(|| ProofPlannerSkip {
+        Some(ProofPlannerSkip {
             kind: "mutation".to_owned(),
-            reason: MUTATION_HEAVY_WITNESS_SKIP_REASON.to_owned(),
+            reason: if profile.budgets.mutation {
+                MUTATION_HEAVY_WITNESS_PARKED_REASON
+            } else {
+                MUTATION_HEAVY_WITNESS_SKIP_REASON
+            }
+            .to_owned(),
         }),
-        (!profile.budgets.sanitizer).then(|| ProofPlannerSkip {
+        Some(ProofPlannerSkip {
             kind: "sanitizer".to_owned(),
-            reason: SANITIZER_HEAVY_WITNESS_SKIP_REASON.to_owned(),
+            reason: if profile.budgets.sanitizer {
+                SANITIZER_HEAVY_WITNESS_PARKED_REASON
+            } else {
+                SANITIZER_HEAVY_WITNESS_SKIP_REASON
+            }
+            .to_owned(),
         }),
     ]
     .into_iter()
@@ -946,7 +958,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn proof_planner_keeps_heavy_witnesses_available_when_profile_leases_them() -> Result<()> {
+    fn proof_planner_parks_leased_heavy_witnesses_until_executors_route_them() -> Result<()> {
         let diff = test_diff();
         let mut profile = Profile::default();
         profile.budgets.mutation = true;
@@ -954,9 +966,22 @@ index 1111111..2222222 100644
 
         let output = super::build_proof_planner_output(&diff, &profile, &[])?;
         let skips = output.skip;
+        let mutation = skips
+            .iter()
+            .find(|skip| skip.kind == "mutation")
+            .ok_or_else(|| anyhow::anyhow!("leased mutation skip missing"))?;
+        let sanitizer = skips
+            .iter()
+            .find(|skip| skip.kind == "sanitizer")
+            .ok_or_else(|| anyhow::anyhow!("leased sanitizer skip missing"))?;
 
-        assert!(!skips.iter().any(|skip| skip.kind == "mutation"));
-        assert!(!skips.iter().any(|skip| skip.kind == "sanitizer"));
+        assert_eq!(mutation.reason, super::MUTATION_HEAVY_WITNESS_PARKED_REASON);
+        assert_eq!(
+            sanitizer.reason,
+            super::SANITIZER_HEAVY_WITNESS_PARKED_REASON
+        );
+        assert!(mutation.reason.contains("no mutation executor route yet"));
+        assert!(sanitizer.reason.contains("no sanitizer executor route yet"));
         Ok(())
     }
 
