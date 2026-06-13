@@ -24,11 +24,11 @@ slice                                          spec    issue   proof obligation
 2  end-to-end loop-closure verifier test:      0004    #314    negative self-test proves a
    leaked refuted surface fails                        leaked refuted candidate
    require_final_compiler_input                        surface reds the verifier
-3  [providers] config parsing + per-provider   0006    #310    config keys read with CLI
-   max_concurrency + 429 backpressure                  rest    precedence rule decided and
-   (also resolves the decorative prompt_cache          tested; a rate-limited provider
-   key and the byok default-policy question)           sheds load instead of failing
-                                                       waves
+3  [providers] config parsing + per-provider   0006    #310    DONE: config keys read
+   max_concurrency + 429 backpressure                          with CLI precedence;
+   (prompt_cache/model/env/role config                         a rate-limited provider
+   choices remain separate)                                    sheds load instead of
+                                                               failing waves
 4  xtask precommit: missing tools exit         0005    #320    missing-tool receipt
    distinctly, receipts say how to install,            #321    distinguishable from
    bounded stdout embedding                            #317    relevance skip; ripr.md

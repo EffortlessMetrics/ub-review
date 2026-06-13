@@ -5,9 +5,9 @@ Child of UB-REVIEW-SPEC-0001. Documents the current behavior of model
 provider selection, prompt-prefix caching, and fallback; contract intent is
 marked as intent. Maturity per the umbrella: partial - the CLI-flag surface
 is production (preflight fallback, runtime fallback retry, prompt caching on
-by default); `[providers].policy` and per-provider `max_concurrency` are
-parsed and executed, while provider model/env/role/prompt-cache config and
-429 wave shedding remain open (#310).
+by default); `[providers].policy`, per-provider `max_concurrency`, and
+retryable-failure wave shedding are parsed and executed, while provider
+model/env/role/prompt-cache config remains open.
 
 ## Purpose
 
@@ -114,9 +114,11 @@ budget shared by first attempts and retries (src/cli.rs; src/main.rs wave
 loop). `[providers.minimax].max_concurrency` and
 `[providers.opencode].max_concurrency` cap each provider inside a wave; the
 effective provider cap is also bounded by the global `model-concurrency`.
-Invalid or zero values are stripped with `PolicyError` receipts. There is
-still no 429 wave shedding - a provider that rate-limits one wave may be
-scheduled again later if retries or pending lanes remain (#310 remainder).
+Invalid or zero values are stripped with `PolicyError` receipts. A provider
+that returns `rate_limited`, `timed_out`, or HTTP >= 500 during a lane call
+sheds the next scheduling wave to a healthy fallback for pending lanes where
+one is configured; lanes without fallback still fail terminally as missing
+model evidence instead of spinning.
 
 Partly wired - the `[providers]` config section: `.ub-review.toml` on this
 repo declares `policy = "primary-with-fallback"`,
@@ -177,7 +179,8 @@ cache_creation_input_tokens, cache_read_input_tokens). Caching is ON by
 default because the default MiniMax endpoint kind is `anthropic`; choosing
 `minimax-provider-kind: openai` silently disables it. There is no config
 switch - intent is for `[providers.minimax].prompt_cache` to become that
-switch if prompt-cache config becomes executable (#310 remainder).
+switch if prompt-cache config becomes executable in a future provider-config
+slice.
 
 Fallback mechanics (current behavior):
 
@@ -198,10 +201,17 @@ Fallback mechanics (current behavior):
   or on budget starvation, where the end-of-loop sweep marks the lane
   `skipped` and classifies it as missing evidence (src/main.rs
   `is_model_skipped_evidence_issue`).
+- wave shedding: the same retryable runtime failure marks the attempted
+  provider as backed off for the next wave. Pending first-attempt lanes whose
+  primary provider is backed off run on their preflight-ok fallback instead,
+  with `fallback_from` set and success reason "completed after provider
+  backpressure fallback" (src/main.rs
+  `selected_provider_spec_with_backpressure`). This is a one-wave scheduling
+  nudge, not a gate failure.
 - honest constraint: the retry needs a fallback spec to exist. Under the
   default `minimax-primary` policy only the opposition canary has one, so
-  runtime fallback effectively arms one lane; `primary-with-fallback`
-  extends it to every lane.
+  runtime fallback and wave shedding effectively arm one lane;
+  `primary-with-fallback` extends them to every lane.
 - no fallback anywhere else: the proof-planner lane, follow-up passes, the
   orchestrator, and the refuter all pin `direct_minimax_spec` with no
   provider selection and no fallback - if MiniMax is unavailable they are
@@ -351,11 +361,11 @@ This spec routes the remaining work:
    CLI/env policy is `auto`; explicit CLI/env policy still wins.
 2. DONE: `[providers.minimax].max_concurrency` and
    `[providers.opencode].max_concurrency` cap provider wave slots.
-3. #310 remainder: add 429 backpressure/wave shedding so a rate-limited
-   provider stops receiving full waves, and decide whether provider
-   model/env/role plus `prompt_cache` become executable config or stay
-   descriptive.
-4. Candidate slice, no issue yet: fallback specs for the proof-planner and
+3. DONE: 429/timeout/5xx backpressure sheds the next wave to fallback so a
+   rate-limited provider does not keep receiving full waves.
+4. Remaining provider config decision: decide whether provider model/env/role
+   plus `prompt_cache` become executable config or stay descriptive.
+5. Candidate slice, no issue yet: fallback specs for the proof-planner and
    follow-up passes, which today hard-pin direct MiniMax and fail without
    it.
 
@@ -364,7 +374,7 @@ This spec routes the remaining work:
 ```text
 ub-review runs BYOK model lanes on MiniMax M3 with prompt-prefix caching on
 by default, optional OpenCode fallback at preflight plus one bounded runtime
-retry on transient failures, per-provider wave caps, and full provider
-receipts - every provider
-failure is recorded as missing evidence and can never redden the gate.
+retry on transient failures, per-provider wave caps, one-wave backpressure
+shedding to fallback, and full provider receipts - terminal provider failures
+are recorded as missing evidence and can never redden the gate.
 ```

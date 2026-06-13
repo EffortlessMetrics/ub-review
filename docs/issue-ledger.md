@@ -32,9 +32,10 @@ Tally this pass: 4 closed, 8 narrowed, 15 kept.
                 threshold
 #306  DONE      synchronize_mode removed from config contract; legacy configs
                 receive a deprecation PolicyError receipt
-#310  narrowed  retry (#315), [providers].policy D2 (#351), and
-                per-provider max_concurrency shipped; remainder:
-                429 wave shedding and future provider config choices
+#310  narrowed  retry (#315), [providers].policy D2 (#351),
+                per-provider max_concurrency, and 429/timeout/5xx
+                wave shedding shipped; future provider config choices
+                remain separate
 ```
 
 ## 2. Gate trust and evidence detail (highest-priority implementation bucket)
