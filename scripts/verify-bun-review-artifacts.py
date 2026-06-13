@@ -4569,6 +4569,16 @@ def resolved_candidate_signals(follow_up_outputs: list[dict]) -> list[dict]:
                 }
             )
     for output in follow_up_outputs:
+        evidence = follow_up_covered_evidence(output)
+        if evidence is not None:
+            signals.append(
+                {
+                    "disposition": "dropped",
+                    "reason": f"follow-up task `{output['task_id']}` covered the candidate",
+                    "evidence": evidence,
+                }
+            )
+    for output in follow_up_outputs:
         evidence = follow_up_parked_evidence(output)
         if evidence is not None:
             signals.append(
@@ -4600,6 +4610,12 @@ def follow_up_refuted_evidence(output: dict) -> list[str] | None:
     return None
 
 
+def follow_up_covered_evidence(output: dict) -> list[str] | None:
+    if any(observation_is_covered(observation) for observation in output["observations"]):
+        return [f"Follow-up `{output['task_id']}` emitted a covered/resolved observation"]
+    return None
+
+
 def follow_up_parked_evidence(output: dict) -> list[str] | None:
     if any(observation_is_parked(observation) for observation in output["observations"]):
         return [f"Follow-up `{output['task_id']}` emitted a parked observation"]
@@ -4618,6 +4634,10 @@ def follow_up_dropped_evidence(output: dict) -> list[str] | None:
 
 def observation_is_refuted(observation: dict) -> bool:
     return observation.get("status") == "refuted"
+
+
+def observation_is_covered(observation: dict) -> bool:
+    return observation.get("status") == "covered"
 
 
 def observation_is_parked(observation: dict) -> bool:
@@ -9134,6 +9154,46 @@ def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
     material = dict(polish, severity="medium")
     if candidate_disposition_for_summary_finding(material) != "summary-only":
         fail("material polish control should not be dropped by the low-polish rule")
+    candidate_for_follow_up = {
+        "id": "candidate-covered",
+        "lane": "tests-oracle",
+        "source": "summary-only-finding",
+        "status": "summary-only",
+        "disposition": "summary-only",
+    }
+    covered_output = {
+        "task_id": "follow-covered",
+        "stage": "tertiary",
+        "status": "ok",
+        "observations": [
+            {
+                "claim": "The seeded thread and routed proof already cover this concern.",
+                "kind": "resolved-check",
+                "status": "covered",
+            }
+        ],
+        "summary_only_findings": [],
+    }
+    covered = resolved_candidate_record(candidate_for_follow_up, [covered_output])
+    if covered["resolved_status"] != "resolved" or covered["resolved_disposition"] != "dropped":
+        fail("covered follow-up observation did not drop the original candidate")
+    open_output = dict(
+        covered_output,
+        task_id="follow-open-resolved-check",
+        observations=[
+            {
+                "claim": "The model raised resolved-check language but did not mark it covered.",
+                "kind": "resolved-check",
+                "status": "open",
+            }
+        ],
+    )
+    unresolved = resolved_candidate_record(candidate_for_follow_up, [open_output])
+    if (
+        unresolved["resolved_status"] != "unresolved"
+        or unresolved["resolved_disposition"] != "summary-only"
+    ):
+        fail("open resolved-check control should stay unresolved")
     inline_candidate = {
         "source": "inline-comment",
         "lane": "ub-active-view",
