@@ -189,6 +189,10 @@ inputs:
     description: Maximum PR thread context bytes.
     default: '65536'
     required: false
+  prior-resolved-candidates:
+    description: Optional prior review/resolved_candidates.json receipt to carry resolved candidates across passes.
+    default: ''
+    required: false
   fail-on-post-error:
     description: Fail the action when posting the grouped PR review fails.
     default: 'false'
@@ -545,6 +549,7 @@ runs:
           --ledger-max-bytes "${{ inputs['ledger-max-bytes'] }}" \
           --pr-thread-context "${{ inputs['pr-thread-context'] }}" \
           --pr-thread-context-max-bytes "${{ inputs['pr-thread-context-max-bytes'] }}" \
+          --prior-resolved-candidates "${{ inputs['prior-resolved-candidates'] }}" \
           --review-body-max-bytes "${{ inputs['review-body-max-bytes'] }}" \
           --no-github-summary \
           "${extra[@]}"
