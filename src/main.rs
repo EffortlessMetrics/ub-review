@@ -815,6 +815,8 @@ struct GithubQualityOutcomesArtifact {
     collection_warnings: Vec<GithubQualityCollectionWarning>,
     #[serde(skip_serializing_if = "Option::is_none")]
     comments: Option<Vec<GithubQualityNormalizedComment>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    adopted_generated_tests: Option<Vec<GithubQualityGeneratedTestAdoption>>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -840,6 +842,40 @@ struct GithubQualityNormalizedComment {
     source_author_login: String,
     source_url: String,
     outcome_source: &'static str,
+}
+
+#[derive(Clone, Debug)]
+struct GithubQualityResolvedThreadContext {
+    source_pull_number: u64,
+    source_thread_id: String,
+    source_comment_id: String,
+    source_author_login: String,
+    source_url: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GithubQualityGeneratedTestAdoption {
+    source_pull_number: u64,
+    path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    additions: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deletions: Option<u64>,
+    source_thread_id: String,
+    source_comment_id: String,
+    source_author_login: String,
+    source_url: String,
+    outcome_source: &'static str,
+}
+
+#[derive(Clone, Debug)]
+struct GithubQualityChangedFile {
+    path: String,
+    status: Option<String>,
+    additions: Option<u64>,
+    deletions: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -7208,6 +7244,18 @@ const GITHUB_QUALITY_REVIEW_THREADS_QUERY: &str = r#"query UbReviewQualityReview
     pullRequest(number: $number) {
       number
       mergedAt
+      files(first: 100) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          path
+          additions
+          deletions
+          changeType
+        }
+      }
       reviewThreads(first: 100) {
         pageInfo {
           hasNextPage
@@ -7524,6 +7572,8 @@ fn build_github_quality_outcomes_artifact(
 
     let mut source_artifacts = Vec::new();
     let mut comments = Vec::new();
+    let mut resolved_thread_contexts = Vec::new();
+    let mut changed_files_by_pr: BTreeMap<u64, Vec<GithubQualityChangedFile>> = BTreeMap::new();
     let mut collection_warnings = Vec::new();
     let mut saw_review_thread_query = false;
     let mut saw_review_thread_request = false;
@@ -7562,7 +7612,13 @@ fn build_github_quality_outcomes_artifact(
         };
         saw_review_thread_receipt = true;
         collect_github_quality_pagination_warnings(pr, file_name, &mut collection_warnings);
-        collect_github_quality_thread_comments(pr, author_logins, &mut comments);
+        collect_github_quality_thread_comments(
+            pr,
+            author_logins,
+            &mut comments,
+            &mut resolved_thread_contexts,
+        );
+        collect_github_quality_changed_files(pr, &mut changed_files_by_pr);
     }
     if saw_review_thread_receipt && !saw_review_thread_query {
         collection_warnings.push(GithubQualityCollectionWarning {
@@ -7587,6 +7643,8 @@ fn build_github_quality_outcomes_artifact(
     } else {
         "missing"
     };
+    let adopted_generated_tests =
+        github_quality_adopted_generated_tests(&resolved_thread_contexts, &changed_files_by_pr);
 
     Ok(GithubQualityOutcomesArtifact {
         schema: GITHUB_QUALITY_OUTCOMES_SCHEMA,
@@ -7594,6 +7652,8 @@ fn build_github_quality_outcomes_artifact(
         source_artifacts,
         collection_warnings,
         comments: (collection_status == "complete").then_some(comments),
+        adopted_generated_tests: (collection_status == "complete")
+            .then_some(adopted_generated_tests),
     })
 }
 
@@ -7666,6 +7726,34 @@ fn collect_github_quality_pagination_warnings(
     source_artifact: &str,
     warnings: &mut Vec<GithubQualityCollectionWarning>,
 ) {
+    match pr.pointer("/files/pageInfo/hasNextPage") {
+        Some(value) if value.as_bool() == Some(true) => {
+            warnings.push(GithubQualityCollectionWarning {
+                source_artifact: source_artifact.to_owned(),
+                reason: "pr_files_truncated".to_owned(),
+                detail: "files.pageInfo.hasNextPage=true".to_owned(),
+            });
+        }
+        Some(_) => {}
+        None => warnings.push(GithubQualityCollectionWarning {
+            source_artifact: source_artifact.to_owned(),
+            reason: "pr_files_page_info_missing".to_owned(),
+            detail: "files.pageInfo was absent; generated-test adoption completeness is unknown"
+                .to_owned(),
+        }),
+    }
+    if pr
+        .pointer("/files/nodes")
+        .and_then(serde_json::Value::as_array)
+        .is_none()
+    {
+        warnings.push(GithubQualityCollectionWarning {
+            source_artifact: source_artifact.to_owned(),
+            reason: "pr_files_nodes_missing".to_owned(),
+            detail: "files.nodes was absent; generated-test adoption completeness is unknown"
+                .to_owned(),
+        });
+    }
     match pr.pointer("/reviewThreads/pageInfo/hasNextPage") {
         Some(value) if value.as_bool() == Some(true) => {
             warnings.push(GithubQualityCollectionWarning {
@@ -7711,6 +7799,7 @@ fn collect_github_quality_thread_comments(
     pr: &serde_json::Value,
     author_logins: &BTreeSet<String>,
     comments: &mut Vec<GithubQualityNormalizedComment>,
+    resolved_thread_contexts: &mut Vec<GithubQualityResolvedThreadContext>,
 ) {
     let pull_number = pr.get("number").and_then(serde_json::Value::as_u64);
     let pull_merged = pr
@@ -7745,6 +7834,18 @@ fn collect_github_quality_thread_comments(
             }
             let comment_id = json_non_empty_string(comment.get("id")).unwrap_or("unknown-comment");
             let source_url = json_non_empty_string(comment.get("url")).unwrap_or("");
+            if resolved == Some(true)
+                && pull_merged
+                && let Some(source_pull_number) = pull_number
+            {
+                resolved_thread_contexts.push(GithubQualityResolvedThreadContext {
+                    source_pull_number,
+                    source_thread_id: thread_id.to_owned(),
+                    source_comment_id: comment_id.to_owned(),
+                    source_author_login: author_login.to_owned(),
+                    source_url: source_url.to_owned(),
+                });
+            }
             comments.push(GithubQualityNormalizedComment {
                 posted: true,
                 accepted: resolved,
@@ -7759,6 +7860,80 @@ fn collect_github_quality_thread_comments(
             });
         }
     }
+}
+
+fn collect_github_quality_changed_files(
+    pr: &serde_json::Value,
+    changed_files_by_pr: &mut BTreeMap<u64, Vec<GithubQualityChangedFile>>,
+) {
+    let Some(pull_number) = pr.get("number").and_then(serde_json::Value::as_u64) else {
+        return;
+    };
+    let Some(nodes) = pr
+        .pointer("/files/nodes")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return;
+    };
+    let files = changed_files_by_pr.entry(pull_number).or_default();
+    for file in nodes {
+        let Some(path) = json_non_empty_string(file.get("path")) else {
+            continue;
+        };
+        files.push(GithubQualityChangedFile {
+            path: path.to_owned(),
+            status: json_non_empty_string(file.get("changeType")).map(str::to_owned),
+            additions: file.get("additions").and_then(serde_json::Value::as_u64),
+            deletions: file.get("deletions").and_then(serde_json::Value::as_u64),
+        });
+    }
+}
+
+fn github_quality_adopted_generated_tests(
+    resolved_thread_contexts: &[GithubQualityResolvedThreadContext],
+    changed_files_by_pr: &BTreeMap<u64, Vec<GithubQualityChangedFile>>,
+) -> Vec<GithubQualityGeneratedTestAdoption> {
+    let mut seen = BTreeSet::new();
+    let mut adopted = Vec::new();
+    for context in resolved_thread_contexts {
+        let Some(files) = changed_files_by_pr.get(&context.source_pull_number) else {
+            continue;
+        };
+        for file in files {
+            if !github_quality_test_file_path(&file.path) {
+                continue;
+            }
+            if !seen.insert((context.source_pull_number, file.path.clone())) {
+                continue;
+            }
+            adopted.push(GithubQualityGeneratedTestAdoption {
+                source_pull_number: context.source_pull_number,
+                path: file.path.clone(),
+                status: file.status.clone(),
+                additions: file.additions,
+                deletions: file.deletions,
+                source_thread_id: context.source_thread_id.clone(),
+                source_comment_id: context.source_comment_id.clone(),
+                source_author_login: context.source_author_login.clone(),
+                source_url: context.source_url.clone(),
+                outcome_source: "github.mergedResolvedUbReviewThreadChangedTestFile.v1",
+            });
+        }
+    }
+    adopted
+}
+
+fn github_quality_test_file_path(path: &str) -> bool {
+    let path = path.trim().replace('\\', "/");
+    let Some(file_name) = path.rsplit('/').next() else {
+        return false;
+    };
+    let rust_file = file_name.ends_with(".rs");
+    rust_file
+        && (path.starts_with("tests/")
+            || path.contains("/tests/")
+            || file_name.ends_with("_test.rs")
+            || file_name.ends_with("_tests.rs"))
 }
 
 fn json_non_empty_string(value: Option<&serde_json::Value>) -> Option<&str> {
@@ -34146,6 +34321,23 @@ index 1111111..2222222 100644
                         "pullRequest": {
                             "number": 445,
                             "mergedAt": "2026-06-13T01:29:45Z",
+                            "files": {
+                                "pageInfo": {"hasNextPage": false, "endCursor": null},
+                                "nodes": [
+                                    {
+                                        "path": "tests/generated.rs",
+                                        "additions": 12,
+                                        "deletions": 0,
+                                        "changeType": "ADDED"
+                                    },
+                                    {
+                                        "path": "src/lib.rs",
+                                        "additions": 3,
+                                        "deletions": 1,
+                                        "changeType": "MODIFIED"
+                                    }
+                                ]
+                            },
                             "reviewThreads": {
                                 "pageInfo": {"hasNextPage": false, "endCursor": null},
                                 "nodes": [
@@ -34232,6 +34424,17 @@ index 1111111..2222222 100644
         assert_eq!(comments[1].accepted, Some(true));
         assert_eq!(comments[1].resolved, Some(true));
         assert_eq!(comments[1].reviewer_override, Some(false));
+        let adopted = artifact
+            .adopted_generated_tests
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("adopted_generated_tests missing"))?;
+        assert_eq!(adopted.len(), 1);
+        assert_eq!(adopted[0].path, "tests/generated.rs");
+        assert_eq!(adopted[0].source_comment_id, "comment-c");
+        assert_eq!(
+            adopted[0].outcome_source,
+            "github.mergedResolvedUbReviewThreadChangedTestFile.v1"
+        );
         Ok(())
     }
 
@@ -34249,6 +34452,10 @@ index 1111111..2222222 100644
                         "pullRequest": {
                             "number": 445,
                             "mergedAt": "2026-06-13T01:29:45Z",
+                            "files": {
+                                "pageInfo": {"hasNextPage": false, "endCursor": null},
+                                "nodes": []
+                            },
                             "reviewThreads": {
                                 "pageInfo": {"hasNextPage": false, "endCursor": null},
                                 "nodes": []
@@ -34287,6 +34494,10 @@ index 1111111..2222222 100644
                         "pullRequest": {
                             "number": 445,
                             "mergedAt": "2026-06-13T01:29:45Z",
+                            "files": {
+                                "pageInfo": {"hasNextPage": false, "endCursor": null},
+                                "nodes": []
+                            },
                             "reviewThreads": {
                                 "pageInfo": {"hasNextPage": true, "endCursor": "cursor-100"},
                                 "nodes": [
@@ -34385,6 +34596,8 @@ index 1111111..2222222 100644
         assert!(request.contains("POST /graphql HTTP/1.1"));
         assert!(request.contains(&expected_auth));
         assert!(request.contains("UbReviewQualityReviewThreads"));
+        assert!(request.contains("files(first: 100)"));
+        assert!(request.contains("changeType"));
         assert!(request.contains(r#""owner": "acme""#));
         assert!(request.contains(r#""name": "widgets""#));
         assert!(request.contains(r#""number": 445"#));
@@ -34423,6 +34636,12 @@ index 1111111..2222222 100644
         assert_eq!(comments[0].accepted, Some(true));
         assert_eq!(comments[0].resolved, Some(true));
         assert_eq!(comments[0].reviewer_override, Some(false));
+        let adopted = artifact
+            .adopted_generated_tests
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("adopted_generated_tests missing"))?;
+        assert_eq!(adopted.len(), 1);
+        assert_eq!(adopted[0].path, "tests/generated.rs");
         Ok(())
     }
 
@@ -34575,6 +34794,17 @@ index 1111111..2222222 100644
                     "pullRequest": {
                         "number": 445,
                         "mergedAt": "2026-06-13T01:29:45Z",
+                        "files": {
+                            "pageInfo": {"hasNextPage": false, "endCursor": null},
+                            "nodes": [
+                                {
+                                    "path": "tests/generated.rs",
+                                    "additions": 4,
+                                    "deletions": 0,
+                                    "changeType": "ADDED"
+                                }
+                            ]
+                        },
                         "reviewThreads": {
                             "pageInfo": {"hasNextPage": false, "endCursor": null},
                             "nodes": [

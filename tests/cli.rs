@@ -122,12 +122,23 @@ fn quality_github_outcomes_cli_writes_thread_state_receipt() -> Result<()> {
                     "pullRequest": {
                         "number": 12,
                         "mergedAt": "2026-06-13T01:29:45Z",
+                        "files": {
+                            "pageInfo": {"hasNextPage": false, "endCursor": null},
+                            "nodes": [
+                                {
+                                    "path": "tests/generated.rs",
+                                    "additions": 6,
+                                    "deletions": 0,
+                                    "changeType": "ADDED"
+                                }
+                            ]
+                        },
                         "reviewThreads": {
                             "pageInfo": {"hasNextPage": false, "endCursor": null},
                             "nodes": [
                                 {
                                     "id": "thread-one",
-                                    "isResolved": false,
+                                    "isResolved": true,
                                     "comments": {
                                         "pageInfo": {"hasNextPage": false, "endCursor": null},
                                         "nodes": [
@@ -183,10 +194,15 @@ fn quality_github_outcomes_cli_writes_thread_state_receipt() -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("comments[] missing"))?;
     assert_eq!(comments.len(), 1);
     assert_eq!(comments[0]["posted"], true);
-    assert_eq!(comments[0]["accepted"], false);
-    assert_eq!(comments[0]["resolved"], false);
-    assert_eq!(comments[0]["reviewer_override"], true);
-    assert!(artifact.get("adopted_generated_tests").is_none());
+    assert_eq!(comments[0]["accepted"], true);
+    assert_eq!(comments[0]["resolved"], true);
+    assert_eq!(comments[0]["reviewer_override"], false);
+    let adopted = artifact["adopted_generated_tests"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("adopted_generated_tests missing"))?;
+    assert_eq!(adopted.len(), 1);
+    assert_eq!(adopted[0]["path"], "tests/generated.rs");
+    assert_eq!(adopted[0]["source_pull_number"], 12);
     Ok(())
 }
 
