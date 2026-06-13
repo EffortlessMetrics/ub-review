@@ -346,7 +346,7 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
         "init must refuse to overwrite config or guide without --force:\n{failure}"
     );
 
-    let collision_failure = run_expect_failure(
+    let collision_result = run_capture_with_env(
         &repo,
         bin,
         &[
@@ -356,7 +356,14 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
             "--guide-out",
             "./collision.md",
         ],
-    )?;
+        &[],
+    );
+    let collision_failure = match collision_result {
+        Ok(output) => {
+            bail!("init unexpectedly allowed normalized output path collision:\n{output}")
+        }
+        Err(error) => error.to_string(),
+    };
     assert!(
         collision_failure.contains("--path and --guide-out must name different files"),
         "init must reject normalized output path collisions:\n{collision_failure}"
