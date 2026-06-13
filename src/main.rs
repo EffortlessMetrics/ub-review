@@ -5926,6 +5926,11 @@ fn write_review_artifacts(
                 &mut inline_comments,
                 &mut summary_only_findings,
             )?;
+            append_cross_lane_conflict_observations(
+                &inline_comments,
+                &summary_only_findings,
+                &mut model_observations,
+            );
             finish_run_loop(
                 event_log,
                 run_started,
@@ -9562,6 +9567,241 @@ fn build_observations(review: &ReviewArtifacts) -> Vec<Observation> {
         }));
     }
     observations
+}
+
+const CROSS_LANE_CONFLICT_SOURCE: &str = "cross-lane-conflict-detector";
+const MAX_CROSS_LANE_CONFLICT_OBSERVATIONS: usize = 3;
+
+#[derive(Clone, Debug)]
+struct ConflictSurface {
+    lane: String,
+    claim: String,
+    evidence: String,
+    severity: String,
+    confidence: String,
+    path: Option<String>,
+    line: Option<u32>,
+    surface_key: String,
+}
+
+fn append_cross_lane_conflict_observations(
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+    observations: &mut Vec<Observation>,
+) {
+    let surfaces = conflict_surfaces(inline_comments, summary_only_findings);
+    if surfaces.is_empty() {
+        return;
+    }
+
+    let mut seen = observations
+        .iter()
+        .filter(|observation| observation.source == CROSS_LANE_CONFLICT_SOURCE)
+        .map(|observation| observation.dedupe_key.clone())
+        .collect::<BTreeSet<_>>();
+    let refutations = observations
+        .iter()
+        .filter(|observation| observation_is_cross_lane_refutation(observation))
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut added = 0usize;
+
+    for surface in surfaces {
+        if severity_rank(&surface.severity) < severity_rank("medium") {
+            continue;
+        }
+        for refutation in &refutations {
+            if surface.lane == refutation.lane {
+                continue;
+            }
+            if !surface_conflicts_with_refutation(&surface, refutation) {
+                continue;
+            }
+            let dedupe_key = cross_lane_conflict_dedupe_key(&surface, refutation);
+            if !seen.insert(dedupe_key.clone()) {
+                continue;
+            }
+            observations.push(cross_lane_conflict_observation(
+                observations.len(),
+                &surface,
+                refutation,
+                &dedupe_key,
+            ));
+            added += 1;
+            if added >= MAX_CROSS_LANE_CONFLICT_OBSERVATIONS {
+                return;
+            }
+            break;
+        }
+    }
+}
+
+fn conflict_surfaces(
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+) -> Vec<ConflictSurface> {
+    let mut surfaces = inline_comments
+        .iter()
+        .map(|comment| ConflictSurface {
+            lane: comment.lane.clone(),
+            claim: comment.body.clone(),
+            evidence: comment.evidence.clone(),
+            severity: comment.severity.clone(),
+            confidence: comment.confidence.clone(),
+            path: Some(comment.path.clone()),
+            line: Some(comment.line),
+            surface_key: inline_comment_conflict_key(comment),
+        })
+        .collect::<Vec<_>>();
+    surfaces.extend(summary_only_findings.iter().map(|finding| ConflictSurface {
+        lane: finding.lane.clone(),
+        claim: finding.reason.clone(),
+        evidence: finding.evidence.clone(),
+        severity: finding.severity.clone(),
+        confidence: finding.confidence.clone(),
+        path: None,
+        line: None,
+        surface_key: summary_finding_conflict_key(finding),
+    }));
+    surfaces
+}
+
+fn inline_comment_conflict_key(comment: &ReviewInlineComment) -> String {
+    sha256_hex(
+        format!(
+            "inline\n{}\n{}\n{}\n{}\n{}",
+            comment.lane, comment.path, comment.line, comment.body, comment.evidence
+        )
+        .as_bytes(),
+    )
+}
+
+fn summary_finding_conflict_key(finding: &SummaryOnlyFinding) -> String {
+    sha256_hex(
+        format!(
+            "summary\n{}\n{}\n{}",
+            finding.lane, finding.reason, finding.evidence
+        )
+        .as_bytes(),
+    )
+}
+
+fn observation_is_cross_lane_refutation(observation: &Observation) -> bool {
+    observation.status == "refuted"
+        || matches!(
+            observation.kind.as_str(),
+            "false-premise" | "resolved-check"
+        )
+}
+
+fn surface_conflicts_with_refutation(surface: &ConflictSurface, refutation: &Observation) -> bool {
+    let surface_text = normalized_review_text(&format!("{} {}", surface.claim, surface.evidence));
+    let refutation_text = normalized_review_text(&format!(
+        "{} {}",
+        refutation.claim,
+        refutation.evidence.join(" ")
+    ));
+    if surface_text.chars().count() < 24 || refutation_text.chars().count() < 24 {
+        return false;
+    }
+    if refutation_text.contains(&surface_text) || surface_text.contains(&refutation_text) {
+        return true;
+    }
+
+    let surface_tokens = conflict_tokens(&surface_text);
+    let refutation_tokens = conflict_tokens(&refutation_text);
+    if surface_tokens.len() < 4 || refutation_tokens.len() < 4 {
+        return false;
+    }
+    let shared = surface_tokens.intersection(&refutation_tokens).count();
+    shared >= 4 && shared * 4 >= surface_tokens.len().min(refutation_tokens.len())
+}
+
+fn conflict_tokens(text: &str) -> BTreeSet<String> {
+    const STOP_WORDS: &[&str] = &[
+        "about",
+        "after",
+        "against",
+        "because",
+        "before",
+        "candidate",
+        "claim",
+        "could",
+        "diff",
+        "evidence",
+        "finding",
+        "lane",
+        "model",
+        "refuted",
+        "review",
+        "should",
+        "that",
+        "this",
+        "with",
+        "would",
+    ];
+    text.split_whitespace()
+        .filter(|token| token.len() >= 4 && !STOP_WORDS.contains(token))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn cross_lane_conflict_dedupe_key(surface: &ConflictSurface, refutation: &Observation) -> String {
+    let hash = sha256_hex(format!("{}\n{}", surface.surface_key, refutation.dedupe_key).as_bytes());
+    format!("cross-lane-conflict:{}", &hash[..12])
+}
+
+fn cross_lane_conflict_observation(
+    index: usize,
+    surface: &ConflictSurface,
+    refutation: &Observation,
+    dedupe_key: &str,
+) -> Observation {
+    let claim = format!(
+        "Resolve cross-lane conflict before treating `{}` as confirmed: `{}` reports `{}`, while `{}` refutes the same concern.",
+        surface.lane,
+        surface.lane,
+        truncate_chars(&surface.claim, 220),
+        refutation.lane
+    );
+    let evidence = vec![
+        format!(
+            "finding_key={}; finding_evidence={}",
+            surface.surface_key, surface.evidence
+        ),
+        format!(
+            "refutation_observation={}; refutation_kind={}; refutation_status={}; refutation_evidence={}",
+            refutation.id,
+            refutation.kind,
+            refutation.status,
+            refutation.evidence.join(" | ")
+        ),
+    ];
+    make_observation(ObservationInput {
+        index,
+        lane: "orchestrator-conflict",
+        question: "cross-lane-conflict",
+        claim: &claim,
+        kind: "verification-question",
+        status: "open",
+        severity: "medium",
+        confidence: conflict_confidence(&surface.confidence, &refutation.confidence),
+        path: surface.path.as_ref(),
+        line: surface.line,
+        evidence,
+        dedupe_key: Some(dedupe_key),
+        source: CROSS_LANE_CONFLICT_SOURCE,
+    })
+}
+
+fn conflict_confidence(surface_confidence: &str, refutation_confidence: &str) -> &'static str {
+    if confidence_rank(surface_confidence).max(confidence_rank(refutation_confidence))
+        >= confidence_rank("medium-high")
+    {
+        "medium-high"
+    } else {
+        "medium"
+    }
 }
 
 struct ObservationInput<'a> {
@@ -17898,6 +18138,7 @@ fn render_pull_request_review_body(
     let parked = unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
         !is_pr_body_artifact_only_finding(finding)
             && !is_pr_body_stale_for_current_diff(finding, diff)
+            && !summary_finding_has_cross_lane_conflict(finding, &observation_items)
             && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
             && !diff_structurally_answers_summary_test_witness_question(diff, finding)
             && is_parked_follow_up(finding)
@@ -17907,6 +18148,7 @@ fn render_pull_request_review_body(
         unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
+                && !summary_finding_has_cross_lane_conflict(finding, &observation_items)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && !diff_structurally_answers_summary_test_witness_question(diff, finding)
                 && !is_parked_follow_up(finding)
@@ -17917,6 +18159,7 @@ fn render_pull_request_review_body(
         unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
                 && !is_pr_body_stale_for_current_diff(finding, diff)
+                && !summary_finding_has_cross_lane_conflict(finding, &observation_items)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
                 && !diff_structurally_answers_summary_test_witness_question(diff, finding)
                 && !is_parked_follow_up(finding)
@@ -19013,6 +19256,24 @@ fn summary_finding_matches_observations(
     observations.iter().any(|observation| {
         let claim = normalized_review_text(&observation.claim);
         claim.len() >= 24 && (summary.contains(&claim) || claim.contains(&summary))
+    })
+}
+
+fn summary_finding_has_cross_lane_conflict(
+    finding: &SummaryOnlyFinding,
+    observations: &[ObservationGroup],
+) -> bool {
+    let key = summary_finding_conflict_key(finding);
+    let needle = format!("finding_key={key}");
+    observations.iter().any(|observation| {
+        observation
+            .sources
+            .iter()
+            .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
+            && observation
+                .evidence
+                .iter()
+                .any(|evidence| evidence.contains(&needle))
     })
 }
 
@@ -38308,6 +38569,74 @@ index 1111111..2222222 100644
         assert!(!body.contains("Evidence:"));
         assert!(!body.contains("medium-high"));
         assert!(!body.contains("## Model lanes"));
+        assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn cross_lane_conflict_receipt_suppresses_standalone_summary_finding() {
+        let finding = SummaryOnlyFinding {
+            lane: "correctness".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "Remove the `?? options[key]` fallback; otherwise top-level symbol specs can silently merge into undefined args.".to_owned(),
+            evidence: "Changed TypeScript fallback branch in ffi symbol option handling.".to_owned(),
+        };
+        let mut observations = vec![test_observation(
+            "source-route",
+            "The `?? options[key]` fallback is not a valid top-level symbol route; refuted because the cc signature requires symbols nested under the `symbols` key.",
+            "false-premise",
+            "refuted",
+            "low",
+            "high",
+            "fallback-route-refuted",
+        )];
+
+        super::append_cross_lane_conflict_observations(
+            &[],
+            std::slice::from_ref(&finding),
+            &mut observations,
+        );
+
+        let conflict = observations
+            .iter()
+            .find(|observation| observation.source == super::CROSS_LANE_CONFLICT_SOURCE);
+        assert!(
+            conflict.is_some(),
+            "cross-lane conflict observation missing"
+        );
+        let Some(conflict) = conflict else {
+            return;
+        };
+        assert_eq!(conflict.lane, "orchestrator-conflict");
+        assert_eq!(conflict.kind, "verification-question");
+        assert_eq!(conflict.status, "open");
+        assert!(conflict.dedupe_key.starts_with("cross-lane-conflict:"));
+        assert!(conflict.evidence.iter().any(|evidence| {
+            evidence.contains(&format!(
+                "finding_key={}",
+                super::summary_finding_conflict_key(&finding)
+            ))
+        }));
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            std::slice::from_ref(&finding),
+            &observations,
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.contains("## Decision"));
+        assert!(body.contains("## Verification questions"));
+        assert!(body.contains("cross-lane conflict"));
+        assert!(!body.contains("## Confirmed findings"));
         assert!(!has_standalone_approval_line(&body));
     }
 
