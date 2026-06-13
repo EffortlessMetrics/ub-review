@@ -279,8 +279,8 @@ Honest v0 limits, stated as limits:
 - matrix structure is not extracted from workflow YAML: `matrix_size` is
   inferred from observed API job-name fan-out (default 1), not parsed from a
   `matrix:` block. The v0 line scan does extract literal workflow/job
-  `permissions` and job secret references, and ambiguous/write-scoped
-  permissions or secret usage force `flag-for-human`
+  `permissions` and job secret references, and missing, ambiguous, or
+  write-scoped permissions or secret usage force `flag-for-human`
   (src/main.rs scan_workflow_text, classify_ci_job_tier,
   build_ci_audit_artifacts).
 - branch protection and rulesets are queried when a token is available:
