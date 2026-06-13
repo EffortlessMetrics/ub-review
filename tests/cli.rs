@@ -45,6 +45,17 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
 }
 
 #[test]
+fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
+    let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
+    assert!(action.contains("prior-resolved-candidates:"));
+    assert!(
+        action
+            .contains("--prior-resolved-candidates \"${{ inputs['prior-resolved-candidates'] }}\"")
+    );
+    Ok(())
+}
+
+#[test]
 fn quality_backfill_workflow_is_artifact_only_not_pr_gate_noise() -> Result<()> {
     let workflow = include_str!("../.github/workflows/quality-backfill.yml");
     assert_eq!(workflow.lines().next(), Some("name: Quality Backfill"));
