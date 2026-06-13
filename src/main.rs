@@ -2107,6 +2107,23 @@ struct ModelRunContext<'a> {
     /// `env_value_present`; tests inject a constant so lane scheduling and
     /// runtime fallback can be exercised without mutating process env.
     key_present: fn(&str) -> bool,
+    provider_concurrency: ProviderConcurrencyLimits,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ProviderConcurrencyLimits {
+    minimax: Option<usize>,
+    opencode_go: Option<usize>,
+}
+
+impl ProviderConcurrencyLimits {
+    fn limit_for(self, provider: ModelProvider, global_limit: usize) -> usize {
+        let configured = match provider {
+            ModelProvider::MiniMaxDirect => self.minimax,
+            ModelProvider::OpenCodeGo => self.opencode_go,
+        };
+        configured.unwrap_or(global_limit).min(global_limit).max(1)
+    }
 }
 
 struct RefuterRunContext<'a> {
@@ -5242,6 +5259,7 @@ fn write_review_artifacts(
     fs::create_dir_all(&review_dir)?;
     let pr_thread_context = collect_pr_thread_context(root, args)?;
     let profile = config.selected_profile()?;
+    let provider_concurrency = provider_concurrency_limits(config);
     let mut proof_requests = Vec::new();
     append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
     let shared_context = render_shared_context(
@@ -5342,6 +5360,7 @@ fn write_review_artifacts(
                     args,
                     line_map: &line_map,
                     key_present: env_value_present,
+                    provider_concurrency,
                 },
                 &mut model_lanes,
                 &mut missing_or_failed_model_evidence,
@@ -13530,6 +13549,13 @@ fn resolved_provider_policy(
         .unwrap_or(ModelProviderPolicy::Auto)
 }
 
+fn provider_concurrency_limits(config: &Config) -> ProviderConcurrencyLimits {
+    ProviderConcurrencyLimits {
+        minimax: config.providers.minimax.max_concurrency,
+        opencode_go: config.providers.opencode.max_concurrency,
+    }
+}
+
 fn provider_spec_for_lane_with_key_state(
     lane: &LanePlan,
     args: &RunArgs,
@@ -14009,6 +14035,28 @@ fn run_available_model_lanes(
 /// broker's `_with_runner` seam: production passes `run_model_lane_tasks`;
 /// tests inject deterministic results to exercise scheduling and the runtime
 /// fallback retry path without network or env mutation.
+fn model_wave_has_capacity(
+    wave_len: usize,
+    calls: usize,
+    max_model_calls: usize,
+    global_limit: usize,
+) -> bool {
+    wave_len < global_limit && calls + wave_len < max_model_calls
+}
+
+fn provider_wave_has_capacity(
+    counts: &BTreeMap<ModelProvider, usize>,
+    provider: ModelProvider,
+    limits: ProviderConcurrencyLimits,
+    global_limit: usize,
+) -> bool {
+    counts.get(&provider).copied().unwrap_or(0) < limits.limit_for(provider, global_limit)
+}
+
+fn record_provider_wave_slot(counts: &mut BTreeMap<ModelProvider, usize>, provider: ModelProvider) {
+    *counts.entry(provider).or_insert(0) += 1;
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -14027,7 +14075,8 @@ fn run_available_model_lanes_with_runner(
     let model_dir = context.review_dir.join("model");
     fs::create_dir_all(&model_dir)?;
     let mut calls = 0usize;
-    let mut next_assignment = 0usize;
+    let mut pending_assignments = (0..context.assignments.len()).collect::<VecDeque<_>>();
+    let global_limit = context.args.model_concurrency.max(1);
     // Runtime fallback retry state: a lane whose primary call failed with a
     // retryable class (rate limit, timeout, server error) is queued here with
     // its fallback spec forced, so the next wave re-runs it on the fallback
@@ -14035,44 +14084,70 @@ fn run_available_model_lanes_with_runner(
     // primary. One retry per lane; retries spend the same `max_model_calls`
     // budget as first attempts.
     let mut forced_specs: Vec<Option<ProviderSpec>> = vec![None; context.assignments.len()];
-    let mut retry_queue: Vec<usize> = Vec::new();
+    let mut retry_queue: VecDeque<usize> = VecDeque::new();
     loop {
         if calls >= context.args.max_model_calls
-            || (next_assignment >= context.assignments.len() && retry_queue.is_empty())
+            || (pending_assignments.is_empty() && retry_queue.is_empty())
         {
             break;
         }
 
         let mut wave = Vec::new();
+        let mut provider_counts = BTreeMap::new();
         // Drain fallback retries first: their primary failure is already
         // known, so they are the wave's most valuable slots.
-        while wave.len() < context.args.model_concurrency
-            && calls + wave.len() < context.args.max_model_calls
-            && !retry_queue.is_empty()
-        {
-            let index = retry_queue.remove(0);
+        let retry_scan_count = retry_queue.len();
+        for _ in 0..retry_scan_count {
+            if !model_wave_has_capacity(
+                wave.len(),
+                calls,
+                context.args.max_model_calls,
+                global_limit,
+            ) {
+                break;
+            }
+            let Some(index) = retry_queue.pop_front() else {
+                break;
+            };
             let assignment = &context.assignments[index];
             let receipt = &mut model_lanes[index];
             let Some(spec) = forced_specs[index].clone() else {
                 continue;
             };
+            if !provider_wave_has_capacity(
+                &provider_counts,
+                spec.provider,
+                context.provider_concurrency,
+                global_limit,
+            ) {
+                retry_queue.push_back(index);
+                continue;
+            }
             receipt.fallback_from = Some(assignment.spec.label());
             receipt.provider = spec.provider.key().to_owned();
             receipt.model = spec.model.clone();
             receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             receipt.status = "running".to_owned();
+            record_provider_wave_slot(&mut provider_counts, spec.provider);
             wave.push(ModelLaneTask {
                 index,
                 lane: assignment.lane.clone(),
                 spec,
             });
         }
-        while wave.len() < context.args.model_concurrency
-            && calls + wave.len() < context.args.max_model_calls
-            && next_assignment < context.assignments.len()
-        {
-            let index = next_assignment;
-            next_assignment += 1;
+        let assignment_scan_count = pending_assignments.len();
+        for _ in 0..assignment_scan_count {
+            if !model_wave_has_capacity(
+                wave.len(),
+                calls,
+                context.args.max_model_calls,
+                global_limit,
+            ) {
+                break;
+            }
+            let Some(index) = pending_assignments.pop_front() else {
+                break;
+            };
             let assignment = &context.assignments[index];
             let receipt = &mut model_lanes[index];
             if receipt.status != "planned" {
@@ -14094,12 +14169,12 @@ fn run_available_model_lanes_with_runner(
             if let Some(original) = fallback_from {
                 receipt.fallback_from = Some(original);
             }
-            receipt.provider = spec.provider.key().to_owned();
-            receipt.model = spec.model.clone();
-            receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             let env_name = model_api_key_env(spec.provider);
             if !(context.key_present)(env_name) {
                 let key_label = model_api_key_label(spec.provider);
+                receipt.provider = spec.provider.key().to_owned();
+                receipt.model = spec.model.clone();
+                receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
                 receipt.status = "missing_key".to_owned();
                 receipt.reason = format!(
                     "{key_label} not provided; {} lane output unavailable",
@@ -14108,7 +14183,20 @@ fn run_available_model_lanes_with_runner(
                 missing_or_failed_model_evidence.push(model_issue_from_receipt(receipt));
                 continue;
             }
+            if !provider_wave_has_capacity(
+                &provider_counts,
+                spec.provider,
+                context.provider_concurrency,
+                global_limit,
+            ) {
+                pending_assignments.push_back(index);
+                continue;
+            }
+            receipt.provider = spec.provider.key().to_owned();
+            receipt.model = spec.model.clone();
+            receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
             receipt.status = "running".to_owned();
+            record_provider_wave_slot(&mut provider_counts, spec.provider);
             wave.push(ModelLaneTask {
                 index,
                 lane: lane.clone(),
@@ -14181,7 +14269,7 @@ fn run_available_model_lanes_with_runner(
                         );
                         receipt.http_status = http_status;
                         forced_specs[task_result.index] = Some(fallback);
-                        retry_queue.push(task_result.index);
+                        retry_queue.push_back(task_result.index);
                     } else {
                         receipt.status = status;
                         receipt.reason = format!("{err:#}");
@@ -22483,13 +22571,14 @@ mod tests {
         ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
         Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
         PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
-        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
+        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg,
+        RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs,
+        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
+        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
         append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
@@ -22507,24 +22596,24 @@ mod tests {
         model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
         model_request_payload, model_response_shape, normalize_run_args,
         observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
-        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
-        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
-        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
-        resolved_candidate_records, resolved_provider_policy, review_lanes_for_args,
-        right_side_diff_lines, run_available_model_lanes, run_available_model_lanes_with_runner,
-        run_gate_failure_message, run_refuter_pass, runtime_fallback_retry_spec,
-        runtime_profile_from_toml, runtime_profile_override, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_final_orchestrator_artifact,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
-        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
-        write_proof_request_artifacts, write_resolved_candidate_artifacts,
-        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
-        write_witness_artifacts,
+        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
+        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
+        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
+        render_summary, resolved_candidate_records, resolved_provider_policy,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
+        write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
+        write_sensor_status, write_witness_artifacts,
     };
 
     #[test]
@@ -23545,9 +23634,9 @@ open_cap = 1
     fn providers_policy_config_parses_resolves_and_receipts_invalid_values() -> Result<()> {
         use super::ModelProviderPolicy;
         // Exact-value oracle for the consumed [providers] surface: absent
-        // section reads as unset; an explicit policy round-trips; the
-        // documented-intent sub-table keys parse without error and without
-        // effect.
+        // section reads as unset; an explicit policy round-trips; descriptive
+        // sub-table keys parse without effect, while max_concurrency maps
+        // into the scheduler's provider limit surface.
         let absent: Config = toml::from_str("")?;
         assert_eq!(absent.providers.policy, "");
 
@@ -23559,9 +23648,21 @@ policy = "primary-with-fallback"
 [providers.minimax]
 enabled = true
 max_concurrency = 12
+
+[providers.opencode]
+role = "fallback"
+max_concurrency = 8
 "#,
         )?;
         assert_eq!(explicit.providers.policy, "primary-with-fallback");
+        let limits = provider_concurrency_limits(&explicit);
+        assert_eq!(
+            limits,
+            ProviderConcurrencyLimits {
+                minimax: Some(12),
+                opencode_go: Some(8),
+            }
+        );
 
         // D2 precedence matrix: explicit CLI wins; auto defers to config;
         // auto with no config stays auto (built-in minimax-primary
@@ -27079,6 +27180,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -27107,6 +27209,205 @@ index 1111111..2222222 100644
                 .iter()
                 .all(|issue| !issue.reason.contains("inline comment cap"))
         );
+        Ok(())
+    }
+
+    #[test]
+    fn model_lane_scheduler_honors_provider_max_concurrency() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 3;
+        let spec = direct_minimax_spec(&args);
+        let assignments = ["security", "opposition", "tests-oracle"]
+            .into_iter()
+            .map(|lane| ModelAssignment {
+                lane: lane_plan(lane),
+                spec: spec.clone(),
+                fallback: None,
+            })
+            .collect::<Vec<_>>();
+        let preflights = vec![preflight_ok_receipt(&spec)];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::<Vec<ModelProvider>>::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits {
+                    minimax: Some(1),
+                    opencode_go: None,
+                },
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            &mut issue_candidates,
+            |_context, _model_dir, tasks| {
+                waves.borrow_mut().push(
+                    tasks
+                        .iter()
+                        .map(|task| task.spec.provider)
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| ModelLaneTaskResult {
+                        index: task.index,
+                        result: Ok(ModelCallOutcome {
+                            output: empty_lane_output(),
+                            duration_ms: 5,
+                            http_status: Some(200),
+                            response_shape: "anthropic-messages".to_owned(),
+                            cache_usage: ModelCacheUsage::default(),
+                            degraded: false,
+                        }),
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(calls, 3);
+        assert_eq!(
+            waves.into_inner(),
+            vec![
+                vec![ModelProvider::MiniMaxDirect],
+                vec![ModelProvider::MiniMaxDirect],
+                vec![ModelProvider::MiniMaxDirect],
+            ]
+        );
+        assert!(model_lanes.iter().all(|receipt| receipt.status == "ok"));
+        assert!(missing_or_failed_model_evidence.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn model_lane_scheduler_fills_wave_across_provider_limits() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 3;
+        let minimax = direct_minimax_spec(&args);
+        let opencode = opencode_canary_spec(&args);
+        let assignments = vec![
+            ModelAssignment {
+                lane: lane_plan("security"),
+                spec: minimax.clone(),
+                fallback: None,
+            },
+            ModelAssignment {
+                lane: lane_plan("opposition"),
+                spec: opencode.clone(),
+                fallback: None,
+            },
+            ModelAssignment {
+                lane: lane_plan("spec-honesty"),
+                spec: opencode.clone(),
+                fallback: None,
+            },
+            ModelAssignment {
+                lane: lane_plan("tests-oracle"),
+                spec: minimax.clone(),
+                fallback: None,
+            },
+        ];
+        let preflights = vec![
+            preflight_ok_receipt(&minimax),
+            preflight_ok_receipt(&opencode),
+        ];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::<Vec<ModelProvider>>::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits {
+                    minimax: Some(1),
+                    opencode_go: Some(2),
+                },
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            &mut issue_candidates,
+            |_context, _model_dir, tasks| {
+                waves.borrow_mut().push(
+                    tasks
+                        .iter()
+                        .map(|task| task.spec.provider)
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| ModelLaneTaskResult {
+                        index: task.index,
+                        result: Ok(ModelCallOutcome {
+                            output: empty_lane_output(),
+                            duration_ms: 5,
+                            http_status: Some(200),
+                            response_shape: "anthropic-messages".to_owned(),
+                            cache_usage: ModelCacheUsage::default(),
+                            degraded: false,
+                        }),
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(calls, 4);
+        assert_eq!(
+            waves.into_inner(),
+            vec![
+                vec![
+                    ModelProvider::MiniMaxDirect,
+                    ModelProvider::OpenCodeGo,
+                    ModelProvider::OpenCodeGo,
+                ],
+                vec![ModelProvider::MiniMaxDirect],
+            ]
+        );
+        assert!(model_lanes.iter().all(|receipt| receipt.status == "ok"));
+        assert!(missing_or_failed_model_evidence.is_empty());
         Ok(())
     }
 
@@ -27285,6 +27586,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -27371,6 +27673,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -27436,6 +27739,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,
@@ -27497,6 +27801,7 @@ index 1111111..2222222 100644
                 args: &args,
                 line_map: &line_map,
                 key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
             },
             &mut model_lanes,
             &mut missing_or_failed_model_evidence,

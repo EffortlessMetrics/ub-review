@@ -440,9 +440,9 @@ upstream ripr-swarm#1035-1038, unsafe-review-swarm#1516-1518,
          resolution; local glue changes must link them
 ```
 
-Out of scope here, routed by sibling specs: per-provider concurrency (#310,
-spec 0006). Legacy `[gate].synchronize_mode` is deleted with a deprecation
-receipt in spec 0003 (#306).
+Out of scope here, routed by sibling specs: provider backpressure and cache
+config (#310, spec 0006). Legacy `[gate].synchronize_mode` is deleted with a
+deprecation receipt in spec 0003 (#306).
 
 ## Release note claim
 

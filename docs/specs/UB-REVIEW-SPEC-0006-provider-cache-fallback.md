@@ -5,8 +5,9 @@ Child of UB-REVIEW-SPEC-0001. Documents the current behavior of model
 provider selection, prompt-prefix caching, and fallback; contract intent is
 marked as intent. Maturity per the umbrella: partial - the CLI-flag surface
 is production (preflight fallback, runtime fallback retry, prompt caching on
-by default); the `[providers]` config section is deliberately reserved and
-unparsed, and per-provider concurrency is unenforced (#310).
+by default); `[providers].policy` and per-provider `max_concurrency` are
+parsed and executed, while provider model/env/role/prompt-cache config and
+429 wave shedding remain open (#310).
 
 ## Purpose
 
@@ -110,19 +111,23 @@ opencode-go-wide
 Concurrency and budget inputs: `model-concurrency` (default 8) is a global
 per-wave in-flight cap; `max-model-calls` (default 14) is the total call
 budget shared by first attempts and retries (src/cli.rs; src/main.rs wave
-loop). There is no per-provider concurrency bound and no 429 backpressure -
-a rate-limited provider still receives the whole next wave (#310 remainder).
+loop). `[providers.minimax].max_concurrency` and
+`[providers.opencode].max_concurrency` cap each provider inside a wave; the
+effective provider cap is also bounded by the global `model-concurrency`.
+Invalid or zero values are stripped with `PolicyError` receipts. There is
+still no 429 wave shedding - a provider that rate-limits one wave may be
+scheduled again later if retries or pending lanes remain (#310 remainder).
 
-Reserved, NOT wired - the `[providers]` config section: `.ub-review.toml` on
-this repo declares `policy = "primary-with-fallback"`,
+Partly wired - the `[providers]` config section: `.ub-review.toml` on this
+repo declares `policy = "primary-with-fallback"`,
 `[providers.minimax]` (env, model, role, `prompt_cache =
 "explicit-anthropic"`, `max_concurrency = 12`), and `[providers.opencode]`
-(models, `max_concurrency = 8`). None of it is read. `providers` is in
-`KNOWN_TOP_LEVEL_KEYS` purely so the reserved section is tolerated without a
-policy-error receipt; provider selection comes from CLI flags and env only
-(src/config.rs comment above `KNOWN_TOP_LEVEL_KEYS`; src/main.rs uses
-`args.provider_policy`). In particular `prompt_cache` is decorative: caching
-behavior is hardcoded (next section) and the key changes nothing.
+(models, `max_concurrency = 8`). `policy` is read when CLI/env provider
+policy is `auto`, and each provider's `max_concurrency` is read by the
+model-lane wave scheduler. Descriptive keys (`env`, `model`, `role`,
+`models`, `prompt_cache`) are still documentation of intent. In particular
+`prompt_cache` is decorative: caching behavior is hardcoded (next section)
+and the key changes nothing.
 
 ## Output artifact / user surface
 
@@ -172,7 +177,7 @@ cache_creation_input_tokens, cache_read_input_tokens). Caching is ON by
 default because the default MiniMax endpoint kind is `anthropic`; choosing
 `minimax-provider-kind: openai` silently disables it. There is no config
 switch - intent is for `[providers.minimax].prompt_cache` to become that
-switch when `[providers]` parsing lands (#310 remainder).
+switch if prompt-cache config becomes executable (#310 remainder).
 
 Fallback mechanics (current behavior):
 
@@ -274,9 +279,10 @@ evidence was actually lost.
   anywhere in the packet fail verification
   (scripts/verify-bun-review-artifacts.py).
 - Misconfiguration cannot silently de-fang policy: unknown top-level config
-  sections are stripped with `PolicyError` receipts; `providers` is the one
-  deliberate exception, tolerated without a receipt because it is the
-  documented reserved surface (src/config.rs `KNOWN_TOP_LEVEL_KEYS`).
+  sections are stripped with `PolicyError` receipts; invalid
+  `[providers].policy` and provider `max_concurrency` values are stripped
+  with provider policy receipts. Descriptive provider keys remain tolerated
+  because they are not executable behavior yet.
 
 ## Trust boundary / non-claims
 
@@ -285,7 +291,8 @@ provider receipts describe availability and spend, not review quality
 fallback use is an availability event, not a finding
 prompt caching is a cost optimization with provider-ephemeral lifetime;
   no correctness or determinism claim attaches to a cache hit or miss
-[providers] config keys are documentation of intent, not behavior
+[providers].policy and provider max_concurrency are behavior
+env/model/role/prompt_cache keys remain documentation of intent
 no claim of provider redundancy: default policy arms fallback on one lane,
   and proof-planner/follow-up passes have no fallback at all
 ```
@@ -297,6 +304,7 @@ Rely on:     UB_REVIEW_MINIMAX_API_KEY / UB_REVIEW_OPENCODE_API_KEY env
              contract; the provider-policy lane mapping above; preflight
              receipts before lane spend; one bounded runtime retry on
              rate_limited/timed_out/5xx where a fallback spec exists;
+             per-provider max_concurrency caps within the global wave cap;
              cache_usage token fields in receipts and metrics; provider
              failures recorded as missing evidence.
 Break gate:  nothing on this surface, ever.
@@ -322,6 +330,8 @@ ub-review doctor --profile gh-runner
                       # provider env present/missing before any spend
 cargo test --bin ub-review --locked runtime_fallback_retry
                       # retry guards: transient-only, one per lane
+cargo test --bin ub-review --locked model_lane_scheduler_honors_provider_max_concurrency
+                      # provider max_concurrency caps scheduled waves
 cargo test --bin ub-review --locked provider_preflight_cache_selection
                       # cache mode pinned to minimax+anthropic-messages
 python scripts/verify-bun-review-artifacts.py --self-test
@@ -335,20 +345,17 @@ jq 'select(.kind != "shared_context_prepared")' \
 
 ## Implementation PR slices
 
-This spec is docs-only; it routes the open work:
+This spec routes the remaining work:
 
-1. #310 remainder, config half: parse `[providers]` into the resolved
-   config - provider policy default (closing the byok default-policy
-   question: this repo's `.ub-review.toml` declares `primary-with-fallback`,
-   but the declaration is unread - the gate gets that policy only because
-   the workflow passes the flag explicitly; where no flag or env is set,
-   the CLI default `minimax-primary` wins), per-provider model/env/role,
-   and a real `prompt_cache` switch (closing the decorative-key gap). CLI
-   flags keep precedence over config.
-2. #310 remainder, scheduling half: enforce per-provider `max_concurrency`
-   in the wave builder and add 429 backpressure so a rate-limited provider
-   stops receiving full waves.
-3. Candidate slice, no issue yet: fallback specs for the proof-planner and
+1. DONE: `[providers].policy` parses into resolved provider policy when the
+   CLI/env policy is `auto`; explicit CLI/env policy still wins.
+2. DONE: `[providers.minimax].max_concurrency` and
+   `[providers.opencode].max_concurrency` cap provider wave slots.
+3. #310 remainder: add 429 backpressure/wave shedding so a rate-limited
+   provider stops receiving full waves, and decide whether provider
+   model/env/role plus `prompt_cache` become executable config or stay
+   descriptive.
+4. Candidate slice, no issue yet: fallback specs for the proof-planner and
    follow-up passes, which today hard-pin direct MiniMax and fail without
    it.
 
@@ -357,6 +364,7 @@ This spec is docs-only; it routes the open work:
 ```text
 ub-review runs BYOK model lanes on MiniMax M3 with prompt-prefix caching on
 by default, optional OpenCode fallback at preflight plus one bounded runtime
-retry on transient failures, and full provider receipts - every provider
+retry on transient failures, per-provider wave caps, and full provider
+receipts - every provider
 failure is recorded as missing evidence and can never redden the gate.
 ```
