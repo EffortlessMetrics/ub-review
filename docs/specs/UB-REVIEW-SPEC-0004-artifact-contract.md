@@ -167,7 +167,8 @@ github review-thread source    raw review-threads.graphql,
                                review-threads-<pr>.json, and
                                review-thread-error-<pr>.json receipts
                                written by quality-github-collect; consumed
-                               only through github-quality-outcomes
+                               only through github-quality-outcomes; raw
+                               comment receipts preserve createdAt
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,

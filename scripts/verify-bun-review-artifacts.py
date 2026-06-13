@@ -8169,7 +8169,9 @@ def self_test_quality_backfill_contract() -> None:
             "review/quality-backfill-sources/run-a-receipt.json",
             "review/quality-backfill-sources/run-a-trend.json",
             "review/quality-backfill-sources/github-quality-outcomes.json",
-            "review/quality-backfill-sources/github-review-threads.json",
+            "review/quality-backfill-sources/github-review-threads-graphql.json",
+            "review/quality-backfill-sources/github-review-threads-request-445.json",
+            "review/quality-backfill-sources/github-review-threads-445.json",
             "review/quality-backfill-sources/previous-quality-backfill.json",
         ],
         "comments_prepared": 3,
@@ -8207,7 +8209,14 @@ def self_test_quality_backfill_contract() -> None:
                     {
                         "schema": "ub-review.github_quality_outcomes.v1",
                         "collection_status": "complete",
-                        "source_artifacts": ["review-threads.json"],
+                        "source_artifacts": [
+                            "actions-runs.json",
+                            "pr-state.json",
+                            "pr-numbers.txt",
+                            "review-threads.graphql",
+                            "review-threads-request-445.json",
+                            "review-threads-445.json",
+                        ],
                         "comments": [
                             {
                                 "posted": True,
@@ -8254,11 +8263,29 @@ def self_test_quality_backfill_contract() -> None:
         )
         return root
 
+    def write_root_with_bad_github_outcomes_sources() -> pathlib.Path:
+        root = write_root()
+        write_self_test_json(
+            root / "review/quality-backfill-sources/github-quality-outcomes.json",
+            {
+                "schema": "ub-review.github_quality_outcomes.v1",
+                "collection_status": "complete",
+                "source_artifacts": ["review-threads.graphql", "review-threads-445.json"],
+                "comments": [],
+            },
+        )
+        return root
+
     require_quality_backfill(write_root(), required=True)
     expect_self_test_failure(
         "quality backfill dangling source",
         "source_artifacts[0] missing file",
         lambda: require_quality_backfill(write_root_with_dangling_source(), required=True),
+    )
+    expect_self_test_failure(
+        "quality backfill github outcomes missing request source",
+        "complete collection missing review-threads-request source",
+        lambda: require_quality_backfill(write_root_with_bad_github_outcomes_sources(), required=True),
     )
     expect_self_test_failure(
         "quality backfill acceptance rate overclaim",
@@ -8341,6 +8368,22 @@ def require_github_quality_outcomes_source(path: pathlib.Path) -> None:
         fail(f"{path.name} source_artifacts is not a non-empty array")
     for index, source in enumerate(source_artifacts):
         require_non_empty_string_value(source, f"{path.name} source_artifacts[{index}]")
+    source_names = {pathlib.PurePosixPath(source).name for source in source_artifacts}
+    if collection_status == "complete":
+        if "review-threads.graphql" not in source_names:
+            fail(f"{path.name} complete collection missing review-threads.graphql source")
+        if not any(
+            name.startswith("review-threads-request-") and name.endswith(".json")
+            for name in source_names
+        ):
+            fail(f"{path.name} complete collection missing review-threads-request source")
+        if not any(
+            name.startswith("review-threads-")
+            and name.endswith(".json")
+            and not name.startswith("review-threads-request-")
+            for name in source_names
+        ):
+            fail(f"{path.name} complete collection missing review-threads response source")
     comments = artifact.get("comments")
     if collection_status == "complete" and comments is None:
         fail(f"{path.name} complete collection must include comments")

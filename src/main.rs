@@ -7224,6 +7224,7 @@ const GITHUB_QUALITY_REVIEW_THREADS_QUERY: &str = r#"query UbReviewQualityReview
             nodes {
               id
               body
+              createdAt
               url
               author {
                 login
@@ -7237,24 +7238,7 @@ const GITHUB_QUALITY_REVIEW_THREADS_QUERY: &str = r#"query UbReviewQualityReview
 }"#;
 
 fn cmd_quality_github_collect(args: QualityGithubCollectArgs) -> Result<()> {
-    let token = args
-        .github_token
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            anyhow::anyhow!("quality-github-collect needs --github-token (GITHUB_TOKEN)")
-        })?;
-    let repo = resolve_quality_github_repo(&args)?;
-    let (owner, name) = repo
-        .split_once('/')
-        .ok_or_else(|| anyhow::anyhow!("--repo must be owner/name, got `{repo}`"))?;
     let pull_numbers = quality_github_collect_pull_numbers(&args)?;
-    if pull_numbers.is_empty() {
-        bail!(
-            "quality-github-collect needs at least one --pull-number or --pull-numbers-file entry"
-        );
-    }
     fs::create_dir_all(&args.source_dir)
         .with_context(|| format!("create {}", args.source_dir.display()))?;
     fs::write(
@@ -7271,6 +7255,25 @@ fn cmd_quality_github_collect(args: QualityGithubCollectArgs) -> Result<()> {
             .join("\n"),
     )
     .with_context(|| "write quality PR number receipt")?;
+    if pull_numbers.is_empty() {
+        println!(
+            "quality-github-collect: wrote {} (0 pull requests, 0 incomplete)",
+            args.source_dir.display()
+        );
+        return Ok(());
+    }
+    let token = args
+        .github_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!("quality-github-collect needs --github-token (GITHUB_TOKEN)")
+        })?;
+    let repo = resolve_quality_github_repo(&args)?;
+    let (owner, name) = repo
+        .split_once('/')
+        .ok_or_else(|| anyhow::anyhow!("--repo must be owner/name, got `{repo}`"))?;
     let graphql_url = quality_github_graphql_url(&args);
     let mut failures = 0usize;
     for pull_number in &pull_numbers {
@@ -7522,12 +7525,20 @@ fn build_github_quality_outcomes_artifact(
     let mut source_artifacts = Vec::new();
     let mut comments = Vec::new();
     let mut collection_warnings = Vec::new();
+    let mut saw_review_thread_query = false;
+    let mut saw_review_thread_request = false;
     let mut saw_review_thread_receipt = false;
     for source in source_files {
         let Some(file_name) = source.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
         source_artifacts.push(file_name.to_owned());
+        if file_name == "review-threads.graphql" {
+            saw_review_thread_query = true;
+        }
+        if github_quality_review_thread_request_json(file_name) {
+            saw_review_thread_request = true;
+        }
         if !github_quality_review_thread_json(file_name) {
             continue;
         }
@@ -7552,6 +7563,22 @@ fn build_github_quality_outcomes_artifact(
         saw_review_thread_receipt = true;
         collect_github_quality_pagination_warnings(pr, file_name, &mut collection_warnings);
         collect_github_quality_thread_comments(pr, author_logins, &mut comments);
+    }
+    if saw_review_thread_receipt && !saw_review_thread_query {
+        collection_warnings.push(GithubQualityCollectionWarning {
+            source_artifact: "review-threads.graphql".to_owned(),
+            reason: "missing_review_thread_query".to_owned(),
+            detail: "complete reviewer outcome collection needs the GraphQL query receipt"
+                .to_owned(),
+        });
+    }
+    if saw_review_thread_receipt && !saw_review_thread_request {
+        collection_warnings.push(GithubQualityCollectionWarning {
+            source_artifact: "review-threads-request-<pr>.json".to_owned(),
+            reason: "missing_review_thread_request".to_owned(),
+            detail: "complete reviewer outcome collection needs the GraphQL request receipt"
+                .to_owned(),
+        });
     }
     let collection_status = if !collection_warnings.is_empty() {
         "incomplete"
@@ -34110,6 +34137,7 @@ index 1111111..2222222 100644
         fs::write(source.join("actions-runs.json"), "[]")?;
         fs::write(source.join("pr-state.json"), "[]")?;
         fs::write(source.join("review-threads.graphql"), "query ReviewThreads")?;
+        fs::write(source.join("review-threads-request-445.json"), "{}")?;
         fs::write(
             source.join("review-threads-445.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
@@ -34190,6 +34218,11 @@ index 1111111..2222222 100644
                 .source_artifacts
                 .contains(&"review-threads-445.json".to_owned())
         );
+        assert!(
+            artifact
+                .source_artifacts
+                .contains(&"review-threads-request-445.json".to_owned())
+        );
         assert_eq!(comments.len(), 2);
         assert_eq!(comments[0].source_comment_id, "comment-a");
         assert_eq!(comments[0].accepted, Some(false));
@@ -34199,6 +34232,44 @@ index 1111111..2222222 100644
         assert_eq!(comments[1].accepted, Some(true));
         assert_eq!(comments[1].resolved, Some(true));
         assert_eq!(comments[1].reviewer_override, Some(false));
+        Ok(())
+    }
+
+    #[test]
+    fn github_quality_outcomes_requires_request_source_for_complete_collection() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("review-threads.graphql"), "query ReviewThreads")?;
+        fs::write(
+            source.join("review-threads-445.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "number": 445,
+                            "mergedAt": "2026-06-13T01:29:45Z",
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": false, "endCursor": null},
+                                "nodes": []
+                            }
+                        }
+                    }
+                }
+            }))?,
+        )?;
+
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+
+        assert_eq!(artifact.collection_status, "incomplete");
+        assert!(artifact.comments.is_none());
+        assert!(
+            artifact
+                .collection_warnings
+                .iter()
+                .any(|warning| warning.reason == "missing_review_thread_request")
+        );
         Ok(())
     }
 
@@ -34323,6 +34394,9 @@ index 1111111..2222222 100644
         assert!(source.join("review-threads-request-445.json").is_file());
         assert!(source.join("review-threads-445.json").is_file());
         assert!(!source.join("review-thread-error-445.json").exists());
+        let query = fs::read_to_string(source.join("review-threads.graphql"))?;
+        assert!(query.contains("UbReviewQualityReviewThreads"));
+        assert!(query.contains("createdAt"));
 
         let authors = super::github_quality_author_logins(&[]);
         let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
@@ -34349,6 +34423,41 @@ index 1111111..2222222 100644
         assert_eq!(comments[0].accepted, Some(true));
         assert_eq!(comments[0].resolved, Some(true));
         assert_eq!(comments[0].reviewer_override, Some(false));
+        Ok(())
+    }
+
+    #[test]
+    fn quality_github_collect_allows_empty_pull_list() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        let list = temp.path().join("pulls.txt");
+        fs::write(&list, "# no pull requests in window\n")?;
+
+        super::cmd_quality_github_collect(super::QualityGithubCollectArgs {
+            root: temp.path().to_path_buf(),
+            source_dir: source.clone(),
+            repo: None,
+            pull_numbers: Vec::new(),
+            pull_numbers_file: Some(list),
+            github_token: None,
+            github_api_url: "https://api.github.com".to_owned(),
+            github_graphql_url: None,
+            timeout_sec: 10,
+        })?;
+
+        assert!(source.join("review-threads.graphql").is_file());
+        assert_eq!(fs::read_to_string(source.join("pr-numbers.txt"))?, "");
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+        assert_eq!(artifact.collection_status, "missing");
+        assert!(artifact.comments.is_none());
+        assert_eq!(
+            artifact.source_artifacts,
+            vec![
+                "pr-numbers.txt".to_owned(),
+                "review-threads.graphql".to_owned()
+            ]
+        );
         Ok(())
     }
 
@@ -34478,6 +34587,7 @@ index 1111111..2222222 100644
                                             {
                                                 "id": "comment-a",
                                                 "body": "[tests] generated regression adopted",
+                                                "createdAt": "2026-06-13T01:35:00Z",
                                                 "url": "https://github.example/thread-a",
                                                 "author": {"login": "github-actions"}
                                             }
