@@ -91,7 +91,7 @@ jobs:
       # truth lives in the sensor receipt; the upload is telemetry.
       - name: Upload coverage
         if: always()
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           use_oidc: true
           files: target/ub-review/sensors/coverage/lcov.info
