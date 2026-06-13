@@ -2688,7 +2688,7 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
         "3. Run `ub-review setup-ci --print-pr --out target/ub-review` to inspect the migration without writes.\n",
     );
     text.push_str(
-        "4. Add explicit `--accept <job>=<command>` values only for jobs a maintainer can run and explain.\n",
+        "4. Add explicit `--accept <job>=<command>` values only for audited `adaptive` or `move-to-ub-review-required` jobs a maintainer can run and explain.\n",
     );
     text.push_str(
         "5. Run `ub-review setup-ci --open-pr --out target/ub-review --action-sha <40-hex-sha>` only after reviewing the rendered PR.\n",
@@ -2697,6 +2697,7 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
     text.push_str("\n## Open decisions\n\n");
     text.push_str("- Model key: configure `MINIMAX_API_KEY` for the action or map runner env to `UB_REVIEW_MINIMAX_API_KEY`; keep secret values out of files.\n");
     text.push_str("- Required floor: decide which existing CI jobs become required proof versus adaptive, risk-pack, nightly, or human-reviewed.\n");
+    text.push_str("- Accepted tiers: `move-to-ub-review-required` materializes as required proof; `adaptive` materializes as non-required proof; `keep-required`, `flag-for-human`, risk-pack, nightly, release, deploy, provenance, and compliance jobs remain manual unless a later audited receipt changes the tier.\n");
     text.push_str("- Branch protection: update required checks manually after the advisory PR proves one red run and one quiet-green run.\n");
     text.push_str("- Follow-up capture: route real out-of-scope work into issue candidates with evidence, plan, and acceptance criteria.\n");
 
@@ -2727,7 +2728,7 @@ fn render_init_config_proposal(text: &mut String, inspection: &InitGuideInspecti
     } else {
         text.push_str("- `actionlint`: run for workflow changes after doctor confirms the binary is installed.\n");
     }
-    text.push_str("- Do not materialize any candidate with `setup-ci --accept` until a maintainer has run it locally or audit receipts prove it is runnable and merge-relevant.\n");
+    text.push_str("- Do not materialize any candidate with `setup-ci --accept` until a maintainer has run it locally or audit receipts prove it is runnable and merge-relevant; only audited `adaptive` and `move-to-ub-review-required` recommendations can become generated proof.\n");
 
     text.push_str("\n### Repo-specific lane proposal\n\n");
     if inspection.rust_test_count > 0 {
