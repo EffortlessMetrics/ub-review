@@ -2891,7 +2891,11 @@ def expected_final_orchestrator_plan(
 
 
 def final_follow_up_task_resolved_by_tool_proof(task: dict) -> bool:
-    return task["evidence_need"] == "proof-confirmation" and any(
+    return task["evidence_need"] in {
+        "proof-confirmation",
+        "test-oracle-confirmation",
+        "source-route-confirmation",
+    } and any(
         evidence["kind"] == "proof-receipt" and evidence["status"] == "tool-confirmed"
         for evidence in task["routed_evidence"]
     )
@@ -3239,7 +3243,11 @@ def routed_evidence_for_group(
     proof_receipts: list[dict],
     resource_leases: list[dict],
 ) -> list[dict]:
-    if evidence_need not in {"proof-confirmation", "test-oracle-confirmation"}:
+    if evidence_need not in {
+        "proof-confirmation",
+        "test-oracle-confirmation",
+        "source-route-confirmation",
+    }:
         return []
     routed = []
     for receipt in proof_receipts:
@@ -9741,6 +9749,7 @@ def run_self_tests() -> None:
     plan = expected_orchestrator_plan([], meta_observations, [], [])
     if plan["follow_up_tasks"]:
         fail("artifact-only meta observations created follow-up tasks in self-test")
+    self_test_source_route_late_proof_routes_and_suppresses_task()
     self_test_empty_candidate_artifacts_without_dir()
     self_test_lane_packet_pr_thread_seed_contract()
     expect_self_test_failure(
@@ -9800,6 +9809,34 @@ def run_self_tests() -> None:
         ),
     )
     print("Bun review artifact verifier self-test passed")
+
+
+def self_test_source_route_late_proof_routes_and_suppresses_task() -> None:
+    observations = [
+        self_test_observation(
+            "obsgrp-source-route",
+            "filehandle-write-route",
+            "The changed helper route might bypass the scalar write path.",
+            "source-route-gap",
+        )
+    ]
+    initial = expected_orchestrator_plan([], observations, [], [])
+    if len(initial["follow_up_tasks"]) != 1:
+        fail("source-route self-test did not create an initial follow-up task")
+    if initial["follow_up_tasks"][0]["evidence_need"] != "source-route-confirmation":
+        fail("source-route self-test did not classify the expected evidence need")
+    receipt = {
+        "id": "proof-source-route-late",
+        "requested_by": ["self-test"],
+        "result": "discriminating",
+        "reason": "routed proof confirms the changed helper reaches the patched path",
+    }
+    final = expected_final_orchestrator_plan([], observations, [receipt], [])
+    routed = final["observation_groups"][0]["routed_evidence"]
+    if not routed or routed[0]["id"] != "proof-source-route-late":
+        fail("source-route self-test did not route the proof receipt")
+    if final["follow_up_tasks"]:
+        fail("source-route self-test did not suppress the resolved follow-up task")
 
 
 def self_test_observation(
