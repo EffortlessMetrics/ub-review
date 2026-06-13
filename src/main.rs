@@ -10473,7 +10473,7 @@ fn build_final_orchestrator_plan(
 fn final_follow_up_task_resolved_by_tool_proof(task: &FollowUpQuestionTask) -> bool {
     matches!(
         task.evidence_need.as_str(),
-        "proof-confirmation" | "test-oracle-confirmation"
+        "proof-confirmation" | "test-oracle-confirmation" | "source-route-confirmation"
     ) && task
         .routed_evidence
         .iter()
@@ -11661,7 +11661,7 @@ fn routed_evidence_for_group(
 ) -> Vec<OrchestratorRoutedEvidence> {
     if !matches!(
         evidence_need,
-        "proof-confirmation" | "test-oracle-confirmation"
+        "proof-confirmation" | "test-oracle-confirmation" | "source-route-confirmation"
     ) {
         return Vec::new();
     }
@@ -37123,6 +37123,54 @@ index 1111111..2222222 100644
         assert!(
             final_plan.follow_up_tasks.is_empty(),
             "late routed proof should resolve test-oracle follow-up tasks"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn final_orchestrator_plan_suppresses_source_route_task_when_late_proof_routes() -> Result<()> {
+        let observation = test_observation(
+            "source-route",
+            "The changed helper route might bypass the scalar write path.",
+            "source-route-gap",
+            "confirmed",
+            "medium",
+            "high",
+            "filehandle-write-route",
+        );
+        let observations = observation_summary_artifacts(&[observation]).unique;
+        let initial_plan = build_orchestrator_plan(&[], &observations, &[], &[]);
+        assert_eq!(initial_plan.follow_up_tasks.len(), 1);
+        assert_eq!(
+            initial_plan.follow_up_tasks[0].evidence_need,
+            "source-route-confirmation"
+        );
+        assert!(
+            initial_plan.observation_groups[0]
+                .routed_evidence
+                .is_empty()
+        );
+
+        let mut late_receipt = test_red_green_proof_receipt("discriminating", "failed");
+        late_receipt.id = "proof-source-route-late".to_owned();
+        late_receipt.requested_by = vec!["source-route".to_owned()];
+        late_receipt.request_ids = vec!["proof-source-route-1".to_owned()];
+        late_receipt.reason =
+            "Routed proof confirms the changed helper reaches the patched path.".to_owned();
+
+        let final_plan = build_final_orchestrator_plan(&[], &observations, &[late_receipt], &[]);
+
+        assert_eq!(
+            final_plan.observation_groups[0].routed_evidence[0].id,
+            "proof-source-route-late"
+        );
+        assert_eq!(
+            final_plan.observation_groups[0].routed_evidence[0].status,
+            "tool-confirmed"
+        );
+        assert!(
+            final_plan.follow_up_tasks.is_empty(),
+            "late routed proof should resolve source-route follow-up tasks"
         );
         Ok(())
     }
