@@ -48,10 +48,27 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
 fn action_forwards_prior_resolved_candidates_input() -> Result<()> {
     let action = fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("action.yml"))?;
     assert!(action.contains("prior-resolved-candidates:"));
+    assert!(action.contains("prior-resolved-candidates-artifact:"));
+    assert!(action.contains("name: Resolve prior resolved candidates"));
+    assert!(action.contains("MANUAL_PRIOR_RESOLVED_CANDIDATES"));
+    assert!(action.contains("gh run list"));
     assert!(
         action
-            .contains("--prior-resolved-candidates \"${{ inputs['prior-resolved-candidates'] }}\"")
+            .contains("gh run download \"$run_id\" --name \"$PRIOR_RESOLVED_CANDIDATES_ARTIFACT\"")
     );
+    assert!(action.contains("review/resolved_candidates.json"));
+    assert!(action.contains(".conclusion == \\\"success\\\" or .conclusion == \\\"failure\\\""));
+    assert!(action.contains(
+        "--prior-resolved-candidates \"${{ steps.prior_resolved_candidates.outputs.path }}\""
+    ));
+    Ok(())
+}
+
+#[test]
+fn gate_workflow_grants_actions_read_for_prior_resolved_candidates_lookup() -> Result<()> {
+    let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
+    assert!(workflow.contains("actions: read"));
+    assert!(workflow.contains("uses: ./"));
     Ok(())
 }
 

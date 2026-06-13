@@ -193,6 +193,10 @@ inputs:
     description: Optional prior review/resolved_candidates.json receipt to carry resolved candidates across passes.
     default: ''
     required: false
+  prior-resolved-candidates-artifact:
+    description: Artifact name to scan for review/resolved_candidates.json in the previous completed PR run when prior-resolved-candidates is empty.
+    default: 'ub-review-gate'
+    required: false
   fail-on-post-error:
     description: Fail the action when posting the grouped PR review fails.
     default: 'false'
@@ -478,6 +482,101 @@ runs:
         UB_REVIEW_TOOL_BUNDLE: ${{ inputs['tool-bundle'] }}
       run: bash "$GITHUB_ACTION_PATH/scripts/install-gh-runner-tools.sh"
 
+    - name: Resolve prior resolved candidates
+      id: prior_resolved_candidates
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs['github-token'] }}
+        MANUAL_PRIOR_RESOLVED_CANDIDATES: ${{ inputs['prior-resolved-candidates'] }}
+        PRIOR_RESOLVED_CANDIDATES_ARTIFACT: ${{ inputs['prior-resolved-candidates-artifact'] }}
+        CURRENT_RUN_ID: ${{ github.run_id }}
+        GITHUB_EVENT_NAME_FOR_PRIOR_RECEIPTS: ${{ github.event_name }}
+        GITHUB_HEAD_REF_FOR_PRIOR_RECEIPTS: ${{ github.head_ref }}
+        GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS: ${{ github.workflow }}
+      run: |
+        set -euo pipefail
+
+        write_path_output() {
+          printf 'path=%s\n' "$1" >> "$GITHUB_OUTPUT"
+        }
+
+        if [[ -n "$MANUAL_PRIOR_RESOLVED_CANDIDATES" ]]; then
+          write_path_output "$MANUAL_PRIOR_RESOLVED_CANDIDATES"
+          exit 0
+        fi
+
+        if [[ "$GITHUB_EVENT_NAME_FOR_PRIOR_RECEIPTS" != "pull_request" ]]; then
+          write_path_output ""
+          exit 0
+        fi
+        if [[ -z "$PRIOR_RESOLVED_CANDIDATES_ARTIFACT" ]]; then
+          write_path_output ""
+          exit 0
+        fi
+        if [[ -z "$GH_TOKEN" ]]; then
+          echo "::notice::prior resolved-candidates auto-discovery skipped; github-token is empty"
+          write_path_output ""
+          exit 0
+        fi
+        if [[ -z "$GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS" ]]; then
+          echo "::notice::prior resolved-candidates auto-discovery skipped; workflow name is unavailable"
+          write_path_output ""
+          exit 0
+        fi
+        if ! command -v gh >/dev/null 2>&1; then
+          echo "::notice::prior resolved-candidates auto-discovery skipped; gh is unavailable"
+          write_path_output ""
+          exit 0
+        fi
+
+        prior_dir="${RUNNER_TEMP:-/tmp}/ub-review-prior-resolved-candidates"
+        download_dir="$prior_dir/artifact"
+        rm -rf "$prior_dir"
+        mkdir -p "$download_dir"
+
+        branch_args=()
+        if [[ -n "$GITHUB_HEAD_REF_FOR_PRIOR_RECEIPTS" ]]; then
+          branch_args+=(--branch "$GITHUB_HEAD_REF_FOR_PRIOR_RECEIPTS")
+        fi
+
+        jq_filter=".[] | select((.databaseId | tostring) != \"$CURRENT_RUN_ID\" and (.conclusion == \"success\" or .conclusion == \"failure\")) | .databaseId"
+        if ! run_id="$(gh run list \
+          --workflow "$GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS" \
+          --event pull_request \
+          --status completed \
+          --limit 20 \
+          --json databaseId,conclusion \
+          --jq "$jq_filter" \
+          "${branch_args[@]}" | head -n 1)"; then
+          echo "::notice::prior resolved-candidates auto-discovery skipped; previous runs could not be listed"
+          write_path_output ""
+          exit 0
+        fi
+
+        if [[ -z "$run_id" ]]; then
+          write_path_output ""
+          exit 0
+        fi
+
+        if ! gh run download "$run_id" --name "$PRIOR_RESOLVED_CANDIDATES_ARTIFACT" --dir "$download_dir"; then
+          echo "::notice::prior resolved-candidates auto-discovery skipped; artifact '$PRIOR_RESOLVED_CANDIDATES_ARTIFACT' was unavailable on run $run_id"
+          write_path_output ""
+          exit 0
+        fi
+
+        prior_file="$(find "$download_dir" -path '*/review/resolved_candidates.json' -type f | sort | head -n 1 || true)"
+        if [[ -z "$prior_file" && -f "$download_dir/review/resolved_candidates.json" ]]; then
+          prior_file="$download_dir/review/resolved_candidates.json"
+        fi
+
+        if [[ -z "$prior_file" ]]; then
+          echo "::notice::prior resolved-candidates auto-discovery skipped; artifact '$PRIOR_RESOLVED_CANDIDATES_ARTIFACT' did not contain review/resolved_candidates.json"
+          write_path_output ""
+          exit 0
+        fi
+
+        write_path_output "$prior_file"
+
     - name: Build UB review packet
       shell: bash
       env:
@@ -549,7 +648,7 @@ runs:
           --ledger-max-bytes "${{ inputs['ledger-max-bytes'] }}" \
           --pr-thread-context "${{ inputs['pr-thread-context'] }}" \
           --pr-thread-context-max-bytes "${{ inputs['pr-thread-context-max-bytes'] }}" \
-          --prior-resolved-candidates "${{ inputs['prior-resolved-candidates'] }}" \
+          --prior-resolved-candidates "${{ steps.prior_resolved_candidates.outputs.path }}" \
           --review-body-max-bytes "${{ inputs['review-body-max-bytes'] }}" \
           --no-github-summary \
           "${extra[@]}"
