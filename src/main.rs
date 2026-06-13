@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command as ProcessCommand, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
@@ -2501,6 +2501,17 @@ fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
     total
 }
 
+#[derive(Debug)]
+struct InitGuideInspection {
+    root: PathBuf,
+    build_systems: Vec<String>,
+    workflows: Vec<CiWorkflowScan>,
+    rust_source_count: usize,
+    rust_test_count: usize,
+    unsafe_native_found: bool,
+    cargo_allow_path: Option<String>,
+}
+
 fn cmd_init(args: InitArgs) -> Result<()> {
     if args.path.exists() && !args.force {
         bail!(
@@ -2508,13 +2519,370 @@ fn cmd_init(args: InitArgs) -> Result<()> {
             args.path.display()
         );
     }
+    if !args.no_guide {
+        if init_destination_key(&args.path)? == init_destination_key(&args.guide_out)? {
+            bail!(
+                "--path and --guide-out must name different files ({})",
+                args.path.display()
+            );
+        }
+        if args.guide_out.exists() && !args.force {
+            bail!(
+                "{} already exists; pass --force to overwrite",
+                args.guide_out.display()
+            );
+        }
+        if !args.root.is_dir() {
+            bail!(
+                "{} is not a directory; pass --root <repo> or --no-guide",
+                args.root.display()
+            );
+        }
+    }
     let config = Config {
         profile: args.profile.key().to_owned(),
         ..Config::default()
     };
+    let guide = if args.no_guide {
+        None
+    } else {
+        Some(render_init_guide(&args, &config)?)
+    };
     fs::write(&args.path, toml::to_string_pretty(&config)?)?;
     println!("wrote {}", args.path.display());
+    if let Some(guide) = guide {
+        fs::write(&args.guide_out, guide)?;
+        println!("wrote {}", args.guide_out.display());
+    }
     Ok(())
+}
+
+fn init_destination_key(path: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("resolve current directory for init output paths")?
+            .join(path)
+    };
+    Ok(init_normalize_path_lexically(&absolute))
+}
+
+fn init_normalize_path_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    normalized.push(component.as_os_str());
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
+}
+
+fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
+    let inspection = inspect_init_guide_repo(&args.root)?;
+    let mut text = String::new();
+    text.push_str("# ub-review init guide\n\n");
+    text.push_str("## Decision\n\n");
+    text.push_str(&format!(
+        "- Starter config: `{}` using profile `{}`.\n",
+        args.path.display(),
+        config.profile
+    ));
+    text.push_str(
+        "- Keep setup advisory until one red proof and one quiet-green run are verified.\n",
+    );
+    text.push_str("- `audit-ci` and `setup-ci` own CI migration; `init` only writes the starter config and this handoff.\n\n");
+
+    text.push_str("## Repo inspection\n\n");
+    text.push_str(&format!("- Root: `{}`.\n", inspection.root.display()));
+    if inspection.build_systems.is_empty() {
+        text.push_str("- Build systems: no recognized manifest found; add required proof commands manually.\n");
+    } else {
+        text.push_str(&format!(
+            "- Build systems: {}.\n",
+            inspection.build_systems.join("; ")
+        ));
+    }
+    text.push_str(&format!(
+        "- Rust source scan: {} `.rs` files, {} test-bearing files, unsafe/native markers {}.\n",
+        inspection.rust_source_count,
+        inspection.rust_test_count,
+        if inspection.unsafe_native_found {
+            "found"
+        } else {
+            "not found"
+        }
+    ));
+    if inspection.workflows.is_empty() {
+        text.push_str("- Existing workflows: none under `.github/workflows`.\n");
+    } else {
+        text.push_str("- Existing workflows:\n");
+        for workflow in &inspection.workflows {
+            let triggers = init_join_or_none(&workflow.triggers);
+            let jobs = workflow.yaml_jobs.len();
+            let cancel = if workflow.cancel_in_progress {
+                ", cancels superseded runs"
+            } else {
+                ""
+            };
+            text.push_str(&format!(
+                "  - `{}`: {jobs} jobs, triggers {triggers}{cancel}.\n",
+                workflow.path
+            ));
+        }
+    }
+
+    text.push_str("\n## Sensor receipts\n\n");
+    text.push_str("- `tokmd`: generate the context packet before model lanes.\n");
+    if inspection.workflows.is_empty() {
+        text.push_str("- `actionlint`: not selected until workflows exist or change.\n");
+    } else {
+        text.push_str("- `actionlint`: selected when workflow files change.\n");
+    }
+    if inspection.rust_source_count == 0 {
+        text.push_str(
+            "- `ripr`: no Rust source detected; add only if Rust proof enters the repo.\n",
+        );
+    } else {
+        text.push_str("- `ripr`: selected for Rust behavior or test changes; persist finding details in artifacts.\n");
+    }
+    if inspection.unsafe_native_found {
+        text.push_str("- `unsafe-review`: unsafe/native markers found; keep receipts structured and route posting through ub-review.\n");
+    } else {
+        text.push_str("- `unsafe-review`: no unsafe/native markers found in the bounded scan; enable when unsafe/native risk changes.\n");
+    }
+    match inspection.cargo_allow_path.as_deref() {
+        Some(path) => text.push_str(&format!(
+            "- `cargo-allow`: candidate policy ledger at `{path}`; verify dialect before making it required.\n"
+        )),
+        None => text.push_str(
+            "- `cargo-allow`: no `policy/allow.toml` ledger detected; add only with an owned policy receipt.\n",
+        ),
+    }
+
+    text.push_str("\n## Recommended path\n\n");
+    text.push_str(&format!(
+        "1. Run `ub-review doctor --config {} --root {}` and fix missing tools or provider keys.\n",
+        args.path.display(),
+        args.root.display()
+    ));
+    text.push_str(&format!(
+        "2. Run `ub-review audit-ci --root {} --out target/ub-review` for read-only CI receipts.\n",
+        args.root.display()
+    ));
+    text.push_str(
+        "3. Run `ub-review setup-ci --print-pr --out target/ub-review` to inspect the migration without writes.\n",
+    );
+    text.push_str(
+        "4. Add explicit `--accept <job>=<command>` values only for jobs a maintainer can run and explain.\n",
+    );
+    text.push_str(
+        "5. Run `ub-review setup-ci --open-pr --out target/ub-review --action-sha <40-hex-sha>` only after reviewing the rendered PR.\n",
+    );
+
+    text.push_str("\n## Open decisions\n\n");
+    text.push_str("- Model key: configure `MINIMAX_API_KEY` for the action or map runner env to `UB_REVIEW_MINIMAX_API_KEY`; keep secret values out of files.\n");
+    text.push_str("- Required floor: decide which existing CI jobs become required proof versus adaptive, risk-pack, nightly, or human-reviewed.\n");
+    text.push_str("- Branch protection: update required checks manually after the advisory PR proves one red run and one quiet-green run.\n");
+    text.push_str("- Follow-up capture: route real out-of-scope work into issue candidates with evidence, plan, and acceptance criteria.\n");
+
+    Ok(text)
+}
+
+fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
+    let root = root.to_path_buf();
+    let workflows = scan_local_workflows(&root)?;
+    let rust_files = collect_init_repo_files(&root, is_rust_source_file, 512);
+    let rust_source_count = rust_files.len();
+    let rust_test_count = rust_files
+        .iter()
+        .filter(|path| init_rust_file_has_tests(path))
+        .count();
+    let unsafe_native_found = rust_files
+        .iter()
+        .take(256)
+        .any(|path| init_rust_file_has_unsafe_native(path));
+    let mut build_systems = Vec::new();
+    if root.join("Cargo.toml").is_file() {
+        build_systems.push(init_cargo_manifest_summary(&root));
+    }
+    if root.join("package.json").is_file() {
+        build_systems.push("JavaScript/TypeScript (`package.json`)".to_owned());
+    }
+    if root.join("pyproject.toml").is_file() {
+        build_systems.push("Python (`pyproject.toml`)".to_owned());
+    } else if root.join("requirements.txt").is_file() {
+        build_systems.push("Python (`requirements.txt`)".to_owned());
+    }
+    if root.join("go.mod").is_file() {
+        build_systems.push("Go (`go.mod`)".to_owned());
+    }
+    let cargo_allow_path = root
+        .join("policy")
+        .join("allow.toml")
+        .is_file()
+        .then(|| "policy/allow.toml".to_owned());
+    Ok(InitGuideInspection {
+        root,
+        build_systems,
+        workflows,
+        rust_source_count,
+        rust_test_count,
+        unsafe_native_found,
+        cargo_allow_path,
+    })
+}
+
+fn collect_init_repo_files(
+    root: &Path,
+    predicate: fn(&Path) -> bool,
+    limit: usize,
+) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        let mut paths: Vec<PathBuf> = entries
+            .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+            .collect();
+        paths.sort();
+        for path in paths {
+            if init_skip_repo_dir(&path) {
+                continue;
+            }
+            let Ok(metadata) = fs::symlink_metadata(&path) else {
+                continue;
+            };
+            if metadata.is_dir() {
+                stack.push(path);
+            } else if metadata.is_file() && predicate(&path) {
+                files.push(path);
+                if files.len() >= limit {
+                    return files;
+                }
+            }
+        }
+    }
+    files
+}
+
+fn init_skip_repo_dir(path: &Path) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    matches!(
+        name,
+        ".git" | "target" | ".ub-review" | "node_modules" | ".venv" | "dist" | "build"
+    )
+}
+
+fn is_rust_source_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("rs"))
+}
+
+fn init_rust_file_has_tests(path: &Path) -> bool {
+    path.components().any(|component| {
+        component
+            .as_os_str()
+            .to_str()
+            .is_some_and(|part| part == "tests")
+    }) || fs::read_to_string(path)
+        .map(|text| text.contains("#[test]") || text.contains("#[tokio::test]"))
+        .unwrap_or(false)
+}
+
+fn init_rust_file_has_unsafe_native(path: &Path) -> bool {
+    fs::read_to_string(path)
+        .map(|text| {
+            text.contains("unsafe")
+                || text.contains("extern \"C\"")
+                || text.contains("extern \"system\"")
+                || text.contains("no_mangle")
+        })
+        .unwrap_or(false)
+}
+
+fn init_cargo_manifest_summary(root: &Path) -> String {
+    let manifest = root.join("Cargo.toml");
+    let Ok(text) = fs::read_to_string(&manifest) else {
+        return "Rust (`Cargo.toml`)".to_owned();
+    };
+    let package_name = init_cargo_package_name(&text);
+    let Ok(value) = text.parse::<toml::Value>() else {
+        return package_name
+            .map(|name| format!("Rust package `{name}` (`Cargo.toml`)"))
+            .unwrap_or_else(|| "Rust (`Cargo.toml`)".to_owned());
+    };
+    if let Some(workspace) = value.get("workspace").and_then(toml::Value::as_table) {
+        let members = workspace
+            .get("members")
+            .and_then(toml::Value::as_array)
+            .map_or(0, Vec::len);
+        if members == 0 {
+            return "Rust workspace (`Cargo.toml`)".to_owned();
+        }
+        return format!("Rust workspace (`Cargo.toml`, {members} members)");
+    }
+    if let Some(name) = value
+        .get("package")
+        .and_then(|package| package.get("name"))
+        .and_then(toml::Value::as_str)
+        .map(str::to_owned)
+        .or(package_name)
+    {
+        return format!("Rust package `{name}` (`Cargo.toml`)");
+    }
+    "Rust (`Cargo.toml`)".to_owned()
+}
+
+fn init_cargo_package_name(text: &str) -> Option<String> {
+    let mut in_package = false;
+    for line in text.lines() {
+        let trimmed = line.split('#').next().unwrap_or("").trim();
+        if trimmed.starts_with('[') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if !in_package {
+            continue;
+        }
+        let Some((key, value)) = trimmed.split_once('=') else {
+            continue;
+        };
+        if key.trim() != "name" {
+            continue;
+        }
+        let name = value
+            .trim()
+            .trim_matches('"')
+            .trim_matches('\'')
+            .trim()
+            .to_owned();
+        if !name.is_empty() {
+            return Some(name);
+        }
+    }
+    None
+}
+
+fn init_join_or_none(values: &[String]) -> String {
+    if values.is_empty() {
+        "none detected".to_owned()
+    } else {
+        values.join(", ")
+    }
 }
 
 fn cmd_doctor(args: DoctorArgs) -> Result<()> {

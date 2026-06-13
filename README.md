@@ -30,8 +30,8 @@ Four commands take a repo from curious to one required gate, each with
 receipts and nothing applied without your say-so:
 
 ```bash
-ub-review init --profile gh-runner  # starter config for the hosted runner:
-                                    # bounded lanes and one grouped review
+ub-review init --profile gh-runner  # starter config plus ub-review-init.md:
+                                    # file-driven setup guidance for the repo
 
 ub-review audit-ci                  # read-only CI right-sizing report under
                                     # ci-audit/: which existing jobs actually
