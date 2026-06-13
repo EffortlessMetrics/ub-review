@@ -102,27 +102,35 @@ where
             continue;
         }
         executed_files.insert(task.file.clone());
-        leases.push(focused_test_resource_lease(
+        let lease = focused_test_resource_lease(
             &task,
             budget,
             lease_budget,
             "granted",
             "focused red/green proof lease granted by runtime profile",
-        ));
+        );
         let receipt = match task.mode {
-            FocusedProofMode::HeadOnly => {
-                run_focused_head_proof_task(root, out, diff, &task, task_timeout_sec, &mut runner)?
-            }
+            FocusedProofMode::HeadOnly => run_focused_head_proof_task(
+                root,
+                out,
+                diff,
+                &task,
+                task_timeout_sec,
+                &lease,
+                &mut runner,
+            )?,
             FocusedProofMode::RedGreen => run_focused_red_green_proof_task(
                 root,
                 out,
                 diff,
                 &task,
                 task_timeout_sec,
+                &lease,
                 &mut runner,
                 &mut prepare_base_plus_tests,
             )?,
         };
+        leases.push(lease);
         receipts.push(receipt);
         executed_tasks += 1;
         estimated_seconds = estimated_seconds
@@ -140,6 +148,7 @@ fn run_focused_head_proof_task<F>(
     diff: &DiffContext,
     task: &FocusedTestTask,
     timeout_sec: u64,
+    lease: &ResourceLease,
     runner: &mut F,
 ) -> Result<ProofReceipt>
 where
@@ -153,7 +162,16 @@ where
     ) -> Result<CommandStatus>,
 {
     let head_spec = proof_task_command_spec(task, "head");
-    let head = run_proof_command_receipt(root, out, task, "head", &head_spec, timeout_sec, runner)?;
+    let head = run_proof_command_receipt_for_task(
+        root,
+        out,
+        task,
+        "head",
+        &head_spec,
+        timeout_sec,
+        lease,
+        runner,
+    )?;
     let result = match head.status.as_str() {
         "passed" => "head_passed",
         "failed" => "head_failed",
@@ -170,12 +188,17 @@ where
     ))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "lease is an execution precondition for the proof command; keeping it explicit pins the no-lease-no-command broker contract"
+)]
 pub(crate) fn run_focused_red_green_proof_task<F, G>(
     root: &Path,
     out: &Path,
     diff: &DiffContext,
     task: &FocusedTestTask,
     timeout_sec: u64,
+    lease: &ResourceLease,
     runner: &mut F,
     prepare_base_plus_tests: &mut G,
 ) -> Result<ProofReceipt>
@@ -191,7 +214,16 @@ where
     G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
 {
     let head_spec = proof_task_command_spec(task, "head");
-    let head = run_proof_command_receipt(root, out, task, "head", &head_spec, timeout_sec, runner)?;
+    let head = run_proof_command_receipt_for_task(
+        root,
+        out,
+        task,
+        "head",
+        &head_spec,
+        timeout_sec,
+        lease,
+        runner,
+    )?;
     let head_status = head.status.clone();
     if head_status != "passed" {
         let result = match head_status.as_str() {
@@ -233,13 +265,14 @@ where
         }
     };
     let base_spec = proof_task_command_spec(task, "base-plus-tests");
-    let base = run_proof_command_receipt(
+    let base = run_proof_command_receipt_for_task(
         &base_root,
         out,
         task,
         "base-plus-tests",
         &base_spec,
         timeout_sec,
+        lease,
         runner,
     )?;
     let (result, reason) = match base.status.as_str() {
