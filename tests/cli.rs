@@ -1269,6 +1269,45 @@ fn active_len_tracks_view_after_resize() {
             .any(|entry| entry["kind"] == "proof-skip" && entry["selected"] == false),
         "fill ledger should preserve deterministic skipped proof options"
     );
+    for (check_id, expected_signal) in [
+        (
+            "mutation",
+            "runtime mutation check for targeted test oracle strength",
+        ),
+        (
+            "sanitizer",
+            "sanitizer runtime witness for memory-safety regressions",
+        ),
+    ] {
+        assert!(
+            fill_entries.iter().any(|entry| {
+                entry["check_id"] == check_id
+                    && entry["kind"] == "proof-skip"
+                    && entry["selected"] == false
+                    && entry["expected_signal"] == expected_signal
+                    && entry["selection_reason"]
+                        .as_str()
+                        .is_some_and(|reason| reason.contains("does not lease"))
+            }),
+            "fill ledger should explain skipped {check_id} heavy witness"
+        );
+    }
+    let proof_planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    let planner_skips = proof_planner_output["skip"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("proof planner skip[] absent"))?;
+    for check_id in ["mutation", "sanitizer"] {
+        assert!(
+            planner_skips.iter().any(|skip| {
+                skip["kind"] == check_id
+                    && skip["reason"]
+                        .as_str()
+                        .is_some_and(|reason| reason.contains("risk-pack/manual-heavy profile"))
+            }),
+            "proof planner should receipt skipped {check_id} heavy witness"
+        );
+    }
     let quality: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/quality-receipt.json"))?)?;
     assert_eq!(quality["schema"], "ub-review.quality_receipt.v1");

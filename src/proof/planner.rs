@@ -85,7 +85,7 @@ pub(crate) fn build_proof_planner_output(
                 .map(|plan| focused_build_task_artifact(plan, budget, lease_budget)),
         )
         .collect::<Vec<_>>();
-    let skip = proof_planner_skips(diff);
+    let skip = proof_planner_skips(diff, profile);
     Ok(ProofPlannerOutput {
         schema: PROOF_PLANNER_OUTPUT_SCHEMA,
         lane: "proof-planner",
@@ -126,7 +126,7 @@ pub(crate) fn write_proof_planner_artifacts(
     Ok(())
 }
 
-pub(crate) fn proof_planner_skips(diff: &DiffContext) -> Vec<ProofPlannerSkip> {
+pub(crate) fn proof_planner_skips(diff: &DiffContext, profile: &Profile) -> Vec<ProofPlannerSkip> {
     let mut skip = Vec::new();
     if !diff.flags.unsafe_or_native_risk {
         skip.push(ProofPlannerSkip {
@@ -138,6 +138,18 @@ pub(crate) fn proof_planner_skips(diff: &DiffContext) -> Vec<ProofPlannerSkip> {
         skip.push(ProofPlannerSkip {
             kind: "actionlint".to_owned(),
             reason: "No workflow files changed.".to_owned(),
+        });
+    }
+    if !profile.budgets.mutation {
+        skip.push(ProofPlannerSkip {
+            kind: "mutation".to_owned(),
+            reason: "Targeted mutation proof is a heavy witness; skipped because this runtime profile does not lease mutation proof. Use a risk-pack/manual-heavy profile to run it.".to_owned(),
+        });
+    }
+    if !profile.budgets.sanitizer {
+        skip.push(ProofPlannerSkip {
+            kind: "sanitizer".to_owned(),
+            reason: "Sanitizer proof is a heavy witness; skipped because this runtime profile does not lease sanitizer proof. Use a risk-pack/manual-heavy profile to run it.".to_owned(),
         });
     }
     skip
@@ -889,7 +901,7 @@ index 1111111..2222222 100644
         let mut diff = test_diff();
         diff.flags.workflow_changed = false;
 
-        let skips = super::proof_planner_skips(&diff);
+        let skips = super::proof_planner_skips(&diff, &Profile::default());
 
         assert!(skips.iter().any(|skip| {
             skip.kind == "actionlint" && skip.reason == "No workflow files changed."
@@ -902,9 +914,40 @@ index 1111111..2222222 100644
         diff.flags.workflow_changed = true;
         diff.changed_files = vec![".github/workflows/ci.yml".to_owned()];
 
-        let skips = super::proof_planner_skips(&diff);
+        let skips = super::proof_planner_skips(&diff, &Profile::default());
 
         assert!(!skips.iter().any(|skip| skip.kind == "actionlint"));
+    }
+
+    #[test]
+    fn proof_planner_records_heavy_witness_skips_without_leases() {
+        let diff = test_diff();
+
+        let skips = super::proof_planner_skips(&diff, &Profile::default());
+
+        assert!(skips.iter().any(|skip| {
+            skip.kind == "mutation"
+                && skip.reason.contains("does not lease mutation proof")
+                && skip.reason.contains("risk-pack/manual-heavy profile")
+        }));
+        assert!(skips.iter().any(|skip| {
+            skip.kind == "sanitizer"
+                && skip.reason.contains("does not lease sanitizer proof")
+                && skip.reason.contains("risk-pack/manual-heavy profile")
+        }));
+    }
+
+    #[test]
+    fn proof_planner_keeps_heavy_witnesses_available_when_profile_leases_them() {
+        let diff = test_diff();
+        let mut profile = Profile::default();
+        profile.budgets.mutation = true;
+        profile.budgets.sanitizer = true;
+
+        let skips = super::proof_planner_skips(&diff, &profile);
+
+        assert!(!skips.iter().any(|skip| skip.kind == "mutation"));
+        assert!(!skips.iter().any(|skip| skip.kind == "sanitizer"));
     }
 
     #[test]
