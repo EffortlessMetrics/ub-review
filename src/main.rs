@@ -17345,6 +17345,111 @@ fn dedupe_inline_comments(
         }
     }
     inline_comments.extend(deduped.into_values());
+    dedupe_same_claim_inline_comments(inline_comments, summary_only_findings);
+}
+
+fn dedupe_same_claim_inline_comments(
+    inline_comments: &mut Vec<ReviewInlineComment>,
+    summary_only_findings: &mut Vec<SummaryOnlyFinding>,
+) {
+    let mut deduped = Vec::<ReviewInlineComment>::new();
+    for comment in std::mem::take(inline_comments) {
+        let duplicate_index = deduped
+            .iter()
+            .position(|existing| same_inline_claim(existing, &comment));
+        if let Some(index) = duplicate_index {
+            let dropped = if inline_comment_rank(&comment) > inline_comment_rank(&deduped[index]) {
+                std::mem::replace(&mut deduped[index], comment)
+            } else {
+                comment
+            };
+            let kept = &mut deduped[index];
+            let kept_location = format!("{}:{}", kept.path, kept.line);
+            let dropped_location = format!("{}:{}", dropped.path, dropped.line);
+            merge_duplicate_inline_evidence(kept, &dropped);
+            summary_only_findings.push(SummaryOnlyFinding {
+                lane: dropped.lane,
+                severity: dropped.severity,
+                confidence: dropped.confidence,
+                reason: format!(
+                    "same-claim inline candidate at {dropped_location} merged into {kept_location}"
+                ),
+                evidence: dropped.evidence,
+            });
+        } else {
+            deduped.push(comment);
+        }
+    }
+    inline_comments.extend(deduped);
+}
+
+fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInlineComment) -> bool {
+    if left.path != right.path || left.suggestion.is_some() || right.suggestion.is_some() {
+        return false;
+    }
+    let left_text = normalized_inline_claim_text(left);
+    let right_text = normalized_inline_claim_text(right);
+    if left_text.chars().count() < 32 || right_text.chars().count() < 32 {
+        return false;
+    }
+    if left_text == right_text {
+        return true;
+    }
+    let left_tokens = inline_claim_tokens(&left_text);
+    let right_tokens = inline_claim_tokens(&right_text);
+    if left_tokens.len() < 5 || right_tokens.len() < 5 {
+        return false;
+    }
+    let common = left_tokens.intersection(&right_tokens).count();
+    if common < 5 {
+        return false;
+    }
+    let min_len = left_tokens.len().min(right_tokens.len());
+    let union = left_tokens.union(&right_tokens).count();
+    let min_overlap_percent = common * 100 / min_len;
+    let union_overlap_percent = common * 100 / union;
+    min_overlap_percent >= 60 && (union_overlap_percent >= 35 || common >= 6)
+}
+
+fn normalized_inline_claim_text(comment: &ReviewInlineComment) -> String {
+    normalized_review_text(&reviewer_facing_pr_text(&comment.body))
+}
+
+fn inline_claim_tokens(text: &str) -> BTreeSet<String> {
+    text.split_whitespace()
+        .filter_map(normalize_inline_claim_token)
+        .collect()
+}
+
+fn normalize_inline_claim_token(token: &str) -> Option<String> {
+    const STOP_WORDS: &[&str] = &[
+        "the", "a", "an", "this", "that", "it", "is", "are", "to", "for", "and", "or", "of", "in",
+        "on", "with", "from", "at", "by", "as", "be", "because", "but", "if", "then", "when",
+        "only", "still", "also", "line",
+    ];
+    if token.len() < 3 || STOP_WORDS.contains(&token) {
+        return None;
+    }
+    let normalized = if token.starts_with("assert") {
+        "assert".to_owned()
+    } else if token.contains("discriminat") {
+        "discriminat".to_owned()
+    } else if token.starts_with("throw") {
+        "throw".to_owned()
+    } else if token.ends_with("ions") && token.len() > 7 {
+        token.trim_end_matches("ions").to_owned()
+    } else if token.ends_with("ion") && token.len() > 6 {
+        token.trim_end_matches("ion").to_owned()
+    } else if token.ends_with("ing") && token.len() > 6 {
+        token.trim_end_matches("ing").to_owned()
+    } else if token.ends_with("ed") && token.len() > 5 {
+        token.trim_end_matches("ed").to_owned()
+    } else if token.ends_with('s') && token.len() > 5 {
+        token.trim_end_matches('s').to_owned()
+    } else {
+        token.to_owned()
+    };
+    (normalized.len() >= 3).then_some(normalized)
 }
 
 fn inline_comment_rank(comment: &ReviewInlineComment) -> (u8, u8) {
@@ -27989,6 +28094,90 @@ index 1111111..2222222 100644
                 .reason
                 .contains("duplicate inline candidate merged into src/lib.rs:2")
         );
+    }
+
+    #[test]
+    fn inline_dedupe_merges_same_claim_different_line_candidates() {
+        let mut inline_comments = vec![
+            ReviewInlineComment {
+                lane: "tests-oracle".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "tests/boundary.test.ts".to_owned(),
+                line: 12,
+                side: "RIGHT".to_owned(),
+                body: "[tests-oracle] Bare `.toThrow()` assertion is non-discriminating; assert the error type or message."
+                    .to_owned(),
+                evidence: "tests-oracle saw a bare throw assertion on line 12".to_owned(),
+                suggestion: None,
+            },
+            ReviewInlineComment {
+                lane: "tests-red-green".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "tests/boundary.test.ts".to_owned(),
+                line: 30,
+                side: "RIGHT".to_owned(),
+                body: "[tests-red-green] The `.toThrow()` check does not discriminate the thrown error; assert type or message."
+                    .to_owned(),
+                evidence: "red/green lane saw the same weak oracle on line 30".to_owned(),
+                suggestion: None,
+            },
+        ];
+        let mut summary_only_findings = Vec::new();
+
+        dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+
+        assert_eq!(inline_comments.len(), 1);
+        assert_eq!(inline_comments[0].lane, "tests-red-green");
+        assert_eq!(inline_comments[0].line, 30);
+        assert!(inline_comments[0].evidence.contains("line 30"));
+        assert!(inline_comments[0].evidence.contains("line 12"));
+        assert_eq!(summary_only_findings.len(), 1);
+        assert_eq!(summary_only_findings[0].lane, "tests-oracle");
+        assert!(
+            summary_only_findings[0]
+                .reason
+                .contains("same-claim inline candidate at tests/boundary.test.ts:12 merged into tests/boundary.test.ts:30")
+        );
+    }
+
+    #[test]
+    fn inline_dedupe_keeps_suggestions_line_specific() {
+        let mut inline_comments = vec![
+            ReviewInlineComment {
+                lane: "unsafe-review".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/native.rs".to_owned(),
+                line: 10,
+                side: "RIGHT".to_owned(),
+                body: "[unsafe-review] The unsafe precondition is missing the caller-owned length invariant."
+                    .to_owned(),
+                evidence: "unsafe-review comment-plan candidate 1".to_owned(),
+                suggestion: Some("// SAFETY: len is caller-owned and bounded.".to_owned()),
+            },
+            ReviewInlineComment {
+                lane: "unsafe-review".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/native.rs".to_owned(),
+                line: 18,
+                side: "RIGHT".to_owned(),
+                body: "[unsafe-review] The unsafe precondition is missing the caller-owned length invariant."
+                    .to_owned(),
+                evidence: "unsafe-review comment-plan candidate 2".to_owned(),
+                suggestion: Some("// SAFETY: len is caller-owned for this slice.".to_owned()),
+            },
+        ];
+        let mut summary_only_findings = Vec::new();
+
+        dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
+
+        assert_eq!(inline_comments.len(), 2);
+        assert!(summary_only_findings.is_empty());
+        assert_eq!(inline_comments[0].line, 10);
+        assert_eq!(inline_comments[1].line, 18);
     }
 
     #[test]
