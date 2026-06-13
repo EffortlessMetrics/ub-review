@@ -11188,6 +11188,15 @@ fn resolved_candidate_signals(
         }
     }
     for output in follow_up_outputs {
+        if let Some(evidence) = follow_up_covered_evidence(output) {
+            signals.push(ResolvedCandidateSignal {
+                disposition: "dropped",
+                reason: format!("follow-up task `{}` covered the candidate", output.task_id),
+                evidence,
+            });
+        }
+    }
+    for output in follow_up_outputs {
         if let Some(evidence) = follow_up_parked_evidence(output) {
             signals.push(ResolvedCandidateSignal {
                 disposition: "parked-follow-up",
@@ -11222,6 +11231,16 @@ fn follow_up_refuted_evidence(output: &FollowUpOutputRecord) -> Option<Vec<Strin
         .map(|finding| vec![format!("Follow-up summary: {}", finding.reason)])
 }
 
+fn follow_up_covered_evidence(output: &FollowUpOutputRecord) -> Option<Vec<String>> {
+    if output.observations.iter().any(observation_is_covered) {
+        return Some(vec![format!(
+            "Follow-up `{}` emitted a covered/resolved observation",
+            output.task_id
+        )]);
+    }
+    None
+}
+
 fn follow_up_parked_evidence(output: &FollowUpOutputRecord) -> Option<Vec<String>> {
     if output.observations.iter().any(observation_is_parked) {
         return Some(vec![format!(
@@ -11246,6 +11265,10 @@ fn follow_up_dropped_evidence(output: &FollowUpOutputRecord) -> Option<Vec<Strin
 
 fn observation_is_refuted(observation: &Observation) -> bool {
     observation.status == "refuted"
+}
+
+fn observation_is_covered(observation: &Observation) -> bool {
+    observation.status == "covered"
 }
 
 fn observation_is_parked(observation: &Observation) -> bool {
@@ -37471,6 +37494,7 @@ index 1111111..2222222 100644
             test_candidate_record("candidate-resolved-kind-open"),
             test_candidate_record("candidate-parked-kind-open"),
             test_candidate_record("candidate-polish-dropped"),
+            test_candidate_record("candidate-covered-dropped"),
         ];
         let outputs = vec![
             test_follow_up_output_for_candidate(
@@ -37605,6 +37629,21 @@ index 1111111..2222222 100644
                         .to_owned(),
                 }],
             ),
+            test_follow_up_output_for_candidate(
+                "follow-covered-dropped",
+                &candidates[10].id,
+                "ok",
+                vec![test_observation(
+                    "orchestrator-follow-up-follow-covered-dropped",
+                    "The seeded thread and routed proof already cover this concern.",
+                    "resolved-check",
+                    "covered",
+                    "low",
+                    "high",
+                    "candidate-covered-dropped",
+                )],
+                Vec::new(),
+            ),
         ];
         let results = outputs
             .iter()
@@ -37640,6 +37679,8 @@ index 1111111..2222222 100644
         assert_eq!(records[8].resolved_disposition, "summary-only");
         assert_eq!(records[9].resolved_status, "resolved");
         assert_eq!(records[9].resolved_disposition, "dropped");
+        assert_eq!(records[10].resolved_status, "resolved");
+        assert_eq!(records[10].resolved_disposition, "dropped");
         assert_eq!(
             records[6].source_artifacts,
             vec![
