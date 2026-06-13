@@ -45,6 +45,40 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
 }
 
 #[test]
+fn quality_backfill_workflow_is_artifact_only_not_pr_gate_noise() -> Result<()> {
+    let workflow = include_str!("../.github/workflows/quality-backfill.yml");
+    assert_eq!(workflow.lines().next(), Some("name: Quality Backfill"));
+    assert_eq!(workflow.matches("schedule:").count(), 1);
+    assert_eq!(workflow.matches("workflow_dispatch:").count(), 1);
+    assert_eq!(workflow.matches("pull_request:").count(), 0);
+    assert_eq!(workflow.matches("pull-requests: read").count(), 1);
+    assert_eq!(workflow.matches("pull-requests: write").count(), 0);
+    assert_eq!(
+        workflow
+            .matches("UB_REVIEW_QUALITY_WINDOW_DAYS: 30")
+            .count(),
+        1
+    );
+    assert_eq!(workflow.matches("created >= cutoff").count(), 1);
+    assert_eq!(workflow.matches("ub-review quality-backfill").count(), 1);
+    assert_eq!(
+        workflow
+            .matches("Download previous quality backfill")
+            .count(),
+        1
+    );
+    assert_eq!(
+        workflow
+            .matches("previous=(--previous \"$previous_file\")")
+            .count(),
+        1
+    );
+    assert_eq!(workflow.matches("actions/upload-artifact@v7").count(), 1);
+    assert_eq!(workflow.matches("ub-review post").count(), 0);
+    Ok(())
+}
+
+#[test]
 fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -80,6 +114,129 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let run_a = temp.path().join("run-a");
+    let run_b = temp.path().join("run-b");
+    for (dir, run_id, comments, fills_with_signal, fills_total, llm_events) in [
+        (&run_a, "run-a", 2_u64, 1_u64, 2_u64, 0_u64),
+        (&run_b, "run-b", 1_u64, 1_u64, 1_u64, 1_u64),
+    ] {
+        let review_dir = dir.join("review");
+        fs::create_dir_all(&review_dir)?;
+        fs::write(
+            review_dir.join("quality-receipt.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.quality_receipt.v1",
+                "run_id": run_id,
+                "comments_prepared": comments,
+                "fills_with_signal": fills_with_signal,
+                "fills_total": fills_total,
+                "llm_unavailable_events": llm_events
+            }))?,
+        )?;
+        fs::write(
+            review_dir.join("quality-trend.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.quality_trend.v1"
+            }))?,
+        )?;
+    }
+    let gh_dir = temp.path().join("github");
+    fs::create_dir_all(&gh_dir)?;
+    fs::write(
+        gh_dir.join("review-threads.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "query": "reviewThreads",
+            "nodes": []
+        }))?,
+    )?;
+    let outcomes = gh_dir.join("github-quality-outcomes.json");
+    fs::write(
+        &outcomes,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.github_quality_outcomes.v1",
+            "source_artifacts": ["review-threads.json"],
+            "comments": [
+                {"posted": true, "accepted": true, "resolved": true, "reviewer_override": false},
+                {"posted": true, "accepted": false, "resolved": true, "reviewer_override": true}
+            ],
+            "adopted_generated_tests": [{"path": "tests/generated.rs"}]
+        }))?,
+    )?;
+    let previous = temp.path().join("previous-quality-backfill.json");
+    fs::write(
+        &previous,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.quality_backfill.v1",
+            "comment_acceptance_rate": 0.25,
+            "fills_signal_rate": 0.5,
+            "llm_unavailable_rate": 0.25,
+            "reviewer_override_rate": 0.0
+        }))?,
+    )?;
+
+    let out = temp.path().join("out");
+    let output = Command::new(bin)
+        .arg("quality-backfill")
+        .arg("--out")
+        .arg(&out)
+        .arg("--run-dir")
+        .arg(&run_a)
+        .arg("--run-dir")
+        .arg(&run_b)
+        .arg("--github-outcomes")
+        .arg(&outcomes)
+        .arg("--previous")
+        .arg(&previous)
+        .arg("--window-days")
+        .arg("30")
+        .output()?;
+    assert!(
+        output.status.success(),
+        "quality-backfill failed\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let artifact: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/quality-backfill.json"))?)?;
+
+    assert_eq!(artifact["schema"], "ub-review.quality_backfill.v1");
+    assert_eq!(artifact["window_scope"], "rolling_v1");
+    assert_eq!(artifact["window_runs"], 2);
+    assert_eq!(artifact["comments_prepared"], 3);
+    assert_eq!(artifact["comments_posted"], 2);
+    assert_eq!(artifact["comments_accepted"], 1);
+    assert_eq!(artifact["comments_resolved"], 2);
+    assert_eq!(artifact["comment_acceptance_rate"], 0.5);
+    assert_eq!(artifact["comment_resolution_rate"], 1.0);
+    assert_eq!(artifact["reviewer_overrides"], 1);
+    assert_eq!(artifact["reviewer_override_rate"], 0.5);
+    assert_eq!(artifact["adopted_generated_tests"], 1);
+    assert_eq!(artifact["trend"]["comment_acceptance_rate_delta"], 0.25);
+    assert_eq!(artifact["trend"]["llm_unavailable_rate_delta"], 0.25);
+    let sources = artifact["source_artifacts"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("source_artifacts is not an array"))?;
+    assert!(
+        sources.len() >= 7,
+        "expected run, GitHub, raw, and previous sources"
+    );
+    for source in sources {
+        let source = source
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("source_artifacts entry is not a string"))?;
+        assert!(
+            out.join(source).is_file(),
+            "source artifact was not copied into the backfill tree: {source}"
+        );
+    }
     Ok(())
 }
 
@@ -509,17 +666,27 @@ fn active_len_tracks_view_after_resize() {
     let tool_status: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/tool-status.json"))?)?;
     assert_eq!(tool_status["schema"], "ub-review.tool_status.v1");
-    assert!(tool_status["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| {
-            tool["id"] == "ripr"
-                && tool["planned_run"] == true
-                && tool["timeout_sec"].as_u64().is_some()
-                && tool["artifact_budget_mb"].as_u64().is_some()
-                && tool["requires_lease"].as_bool().is_some()
-                && tool["status"] == "skipped"
-                && tool["reason"] == "dry-run; sensor not executed"
-        })
-    }));
+    let ripr_status = tool_status["tools"]
+        .as_array()
+        .and_then(|tools| tools.iter().find(|tool| tool["id"] == "ripr"))
+        .ok_or_else(|| anyhow::anyhow!("ripr tool status missing"))?;
+    assert!(ripr_status["timeout_sec"].as_u64().is_some());
+    assert!(ripr_status["artifact_budget_mb"].as_u64().is_some());
+    assert!(ripr_status["requires_lease"].as_bool().is_some());
+    assert_eq!(
+        ripr_status["status"], "skipped",
+        "dry-run must not execute ripr: {ripr_status}"
+    );
+    if ripr_status["planned_run"].as_bool() == Some(true) {
+        assert_eq!(ripr_status["reason"], "dry-run; sensor not executed");
+    } else {
+        assert!(
+            ripr_status["reason"]
+                .as_str()
+                .is_some_and(|reason| !reason.is_empty()),
+            "unplanned dry-run ripr status must explain why it skipped: {ripr_status}"
+        );
+    }
     let cargo_allow_status = tool_status["tools"]
         .as_array()
         .and_then(|tools| tools.iter().find(|tool| tool["id"] == "cargo-allow"))

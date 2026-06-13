@@ -63,6 +63,7 @@ fn main() -> Result<()> {
         Command::Post(args) => cmd_post(args),
         Command::AuditCi(args) => cmd_audit_ci(args),
         Command::SetupCi(args) => cmd_setup_ci(args),
+        Command::QualityBackfill(args) => cmd_quality_backfill(args),
         Command::GateCheck(args) => cmd_gate_check(args),
     }
 }
@@ -705,7 +706,45 @@ struct QualityTrendSummary {
 }
 
 #[derive(Clone, Debug, Serialize)]
+struct QualityBackfillArtifact {
+    schema: &'static str,
+    as_of: String,
+    window_scope: &'static str,
+    window_days: u32,
+    window_runs: usize,
+    source_artifacts: Vec<String>,
+    comments_prepared: usize,
+    comments_posted: Option<usize>,
+    comments_accepted: Option<usize>,
+    comments_resolved: Option<usize>,
+    comment_acceptance_rate: Option<f64>,
+    comment_resolution_rate: Option<f64>,
+    fills_signal_rate: Option<f64>,
+    llm_unavailable_rate: Option<f64>,
+    reviewer_overrides: Option<usize>,
+    reviewer_override_rate: Option<f64>,
+    adopted_generated_tests: Option<usize>,
+    trend: QualityBackfillTrendSummary,
+    missing: Vec<QualityBackfillMissingInput>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct QualityBackfillTrendSummary {
+    comment_acceptance_rate_delta: Option<f64>,
+    fills_signal_rate_delta: Option<f64>,
+    llm_unavailable_rate_delta: Option<f64>,
+    reviewer_override_rate_delta: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
 struct QualityTrendMissingInput {
+    field: String,
+    reason: String,
+    source_artifact: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct QualityBackfillMissingInput {
     field: String,
     reason: String,
     source_artifact: String,
@@ -715,6 +754,74 @@ struct QualityTrendMissingInput {
 struct QualityMissingInput {
     field: String,
     reason: String,
+    source_artifact: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct QualityReceiptSeed {
+    schema: String,
+    run_id: String,
+    comments_prepared: usize,
+    fills_with_signal: usize,
+    fills_total: usize,
+    llm_unavailable_events: usize,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct QualityTrendSeed {
+    schema: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubQualityOutcomes {
+    #[serde(default)]
+    schema: Option<String>,
+    #[serde(default)]
+    source_artifacts: Vec<String>,
+    #[serde(default)]
+    comments: Vec<GithubQualityCommentOutcome>,
+    #[serde(default)]
+    adopted_generated_tests: Vec<serde_json::Value>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct GithubQualityCommentOutcome {
+    #[serde(default)]
+    posted: Option<bool>,
+    #[serde(default)]
+    accepted: Option<bool>,
+    #[serde(default)]
+    resolved: Option<bool>,
+    #[serde(default)]
+    reviewer_override: Option<bool>,
+}
+
+struct LoadedGithubQualityOutcomes {
+    outcomes: GithubQualityOutcomes,
+    has_comments: bool,
+    has_adopted_generated_tests: bool,
+    source_artifact: String,
+    raw_source_artifacts: Vec<String>,
+}
+
+#[derive(Clone)]
+struct QualityBackfillRun {
+    receipt: QualityReceiptSeed,
+    receipt_source: String,
+    trend_source: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct PreviousQualityBackfill {
+    schema: String,
+    comment_acceptance_rate: Option<f64>,
+    fills_signal_rate: Option<f64>,
+    llm_unavailable_rate: Option<f64>,
+    reviewer_override_rate: Option<f64>,
+}
+
+struct LoadedPreviousQualityBackfill {
+    artifact: PreviousQualityBackfill,
     source_artifact: String,
 }
 
@@ -7036,6 +7143,493 @@ fn quality_trend_missing(
         reason: reason.to_owned(),
         source_artifact: source_artifact.to_owned(),
     }
+}
+
+fn cmd_quality_backfill(args: QualityBackfillArgs) -> Result<()> {
+    let review_dir = args.out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    let runs = load_quality_backfill_runs(&args)?;
+    let outcomes = load_github_quality_outcomes(&args)?;
+    let previous = load_previous_quality_backfill(&args)?;
+    let artifact = build_quality_backfill_artifact(
+        args.window_days,
+        &runs,
+        outcomes.as_ref(),
+        previous.as_ref(),
+    );
+    fs::write(
+        review_dir.join("quality-backfill.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
+    println!(
+        "quality-backfill: wrote {}/quality-backfill.json ({} runs)",
+        review_dir.display(),
+        artifact.window_runs
+    );
+    Ok(())
+}
+
+fn load_quality_backfill_runs(args: &QualityBackfillArgs) -> Result<Vec<QualityBackfillRun>> {
+    let mut runs = Vec::new();
+    let mut seen = BTreeSet::new();
+    for run_dir in &args.run_dirs {
+        let receipt_path = run_dir.join("review").join("quality-receipt.json");
+        let trend_path = run_dir.join("review").join("quality-trend.json");
+        let receipt: QualityReceiptSeed = read_json_file(&receipt_path)?;
+        if receipt.schema != QUALITY_RECEIPT_SCHEMA {
+            bail!(
+                "{} schema invalid: expected {}, got {}",
+                receipt_path.display(),
+                QUALITY_RECEIPT_SCHEMA,
+                receipt.schema
+            );
+        }
+        let trend: QualityTrendSeed = read_json_file(&trend_path)?;
+        if trend.schema != QUALITY_TREND_SCHEMA {
+            bail!(
+                "{} schema invalid: expected {}, got {}",
+                trend_path.display(),
+                QUALITY_TREND_SCHEMA,
+                trend.schema
+            );
+        }
+        if !seen.insert(receipt.run_id.clone()) {
+            bail!(
+                "duplicate quality run_id `{}` in {}",
+                receipt.run_id,
+                run_dir.display()
+            );
+        }
+        let label = sanitize_artifact_name(&format!("run-{}", receipt.run_id));
+        let receipt_source =
+            copy_quality_backfill_source(&args.out, &receipt_path, &format!("{label}-receipt"))?;
+        let trend_source =
+            copy_quality_backfill_source(&args.out, &trend_path, &format!("{label}-trend"))?;
+        runs.push(QualityBackfillRun {
+            receipt,
+            receipt_source,
+            trend_source,
+        });
+    }
+    Ok(runs)
+}
+
+fn load_github_quality_outcomes(
+    args: &QualityBackfillArgs,
+) -> Result<Option<LoadedGithubQualityOutcomes>> {
+    let Some(path) = &args.github_outcomes else {
+        return Ok(None);
+    };
+    let value: serde_json::Value = read_json_file(path)?;
+    let has_comments = value.get("comments").is_some();
+    let has_adopted_generated_tests = value.get("adopted_generated_tests").is_some();
+    let outcomes: GithubQualityOutcomes =
+        serde_json::from_value(value).with_context(|| format!("parse {}", path.display()))?;
+    let schema = outcomes.schema.as_deref().unwrap_or("");
+    if schema != GITHUB_QUALITY_OUTCOMES_SCHEMA {
+        bail!(
+            "{} schema invalid: expected {}, got {}",
+            path.display(),
+            GITHUB_QUALITY_OUTCOMES_SCHEMA,
+            schema
+        );
+    }
+    let source_artifact = copy_quality_backfill_source(&args.out, path, "github-quality-outcomes")?;
+    let base = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut raw_source_artifacts = Vec::new();
+    for source in &outcomes.source_artifacts {
+        let source_path = if Path::new(source).is_absolute() {
+            PathBuf::from(source)
+        } else {
+            base.join(source)
+        };
+        raw_source_artifacts.push(copy_quality_backfill_source(
+            &args.out,
+            &source_path,
+            source,
+        )?);
+    }
+    Ok(Some(LoadedGithubQualityOutcomes {
+        outcomes,
+        has_comments,
+        has_adopted_generated_tests,
+        source_artifact,
+        raw_source_artifacts,
+    }))
+}
+
+fn load_previous_quality_backfill(
+    args: &QualityBackfillArgs,
+) -> Result<Option<LoadedPreviousQualityBackfill>> {
+    let Some(path) = &args.previous else {
+        return Ok(None);
+    };
+    let artifact: PreviousQualityBackfill = read_json_file(path)?;
+    if artifact.schema != QUALITY_BACKFILL_SCHEMA {
+        bail!(
+            "{} schema invalid: expected {}, got {}",
+            path.display(),
+            QUALITY_BACKFILL_SCHEMA,
+            artifact.schema
+        );
+    }
+    let source_artifact =
+        copy_quality_backfill_source(&args.out, path, "previous-quality-backfill")?;
+    Ok(Some(LoadedPreviousQualityBackfill {
+        artifact,
+        source_artifact,
+    }))
+}
+
+fn build_quality_backfill_artifact(
+    window_days: u32,
+    runs: &[QualityBackfillRun],
+    outcomes: Option<&LoadedGithubQualityOutcomes>,
+    previous: Option<&LoadedPreviousQualityBackfill>,
+) -> QualityBackfillArtifact {
+    let mut missing = Vec::new();
+    let mut source_artifacts = Vec::new();
+    for run in runs {
+        quality_backfill_push_source(&mut source_artifacts, run.receipt_source.clone());
+        quality_backfill_push_source(&mut source_artifacts, run.trend_source.clone());
+    }
+    if let Some(outcomes) = outcomes {
+        quality_backfill_push_source(&mut source_artifacts, outcomes.source_artifact.clone());
+        for source in &outcomes.raw_source_artifacts {
+            quality_backfill_push_source(&mut source_artifacts, source.clone());
+        }
+    }
+    if let Some(previous) = previous {
+        quality_backfill_push_source(&mut source_artifacts, previous.source_artifact.clone());
+    }
+
+    let window_runs = runs.len();
+    let comments_prepared = runs
+        .iter()
+        .map(|run| run.receipt.comments_prepared)
+        .sum::<usize>();
+    let fills_total = runs
+        .iter()
+        .map(|run| run.receipt.fills_total)
+        .sum::<usize>();
+    let fills_with_signal = runs
+        .iter()
+        .map(|run| run.receipt.fills_with_signal)
+        .sum::<usize>();
+    let runs_with_llm_unavailable = runs
+        .iter()
+        .filter(|run| run.receipt.llm_unavailable_events > 0)
+        .count();
+    let fills_signal_rate = if fills_total == 0 {
+        missing.push(quality_backfill_missing(
+            "fills_signal_rate",
+            "fill signal rate requires at least one selected optional fill in the backfill window",
+            "review/quality-backfill.json",
+        ));
+        None
+    } else {
+        Some(fills_with_signal as f64 / fills_total as f64)
+    };
+    let llm_unavailable_rate = if window_runs == 0 {
+        missing.push(quality_backfill_missing(
+            "llm_unavailable_rate",
+            "LLM unavailable rate requires at least one quality run receipt",
+            "review/quality-backfill.json",
+        ));
+        None
+    } else {
+        Some(runs_with_llm_unavailable as f64 / window_runs as f64)
+    };
+
+    let (comments_posted, comments_accepted, comments_resolved, reviewer_overrides) =
+        quality_backfill_comment_counts(outcomes, &mut missing);
+    let outcome_source = outcomes
+        .map(|outcome| outcome.source_artifact.as_str())
+        .unwrap_or("github-api-review-threads");
+    let comment_acceptance_rate = quality_backfill_rate(
+        comments_accepted,
+        comments_posted,
+        "comment_acceptance_rate",
+        "comment acceptance rate requires posted comments and accepted-state receipts",
+        outcome_source,
+        &mut missing,
+    );
+    let comment_resolution_rate = quality_backfill_rate(
+        comments_resolved,
+        comments_posted,
+        "comment_resolution_rate",
+        "comment resolution rate requires posted comments and resolved-state receipts",
+        outcome_source,
+        &mut missing,
+    );
+    let reviewer_override_rate = quality_backfill_rate(
+        reviewer_overrides,
+        comments_posted,
+        "reviewer_override_rate",
+        "reviewer override rate requires posted comments and reviewer override receipts",
+        outcome_source,
+        &mut missing,
+    );
+    let adopted_generated_tests = match outcomes {
+        Some(outcome) if outcome.has_adopted_generated_tests => {
+            Some(outcome.outcomes.adopted_generated_tests.len())
+        }
+        Some(outcome) => {
+            missing.push(quality_backfill_missing(
+                "adopted_generated_tests",
+                "GitHub commit receipt did not include adopted_generated_tests",
+                &outcome.source_artifact,
+            ));
+            None
+        }
+        None => {
+            missing.push(quality_backfill_missing(
+                "adopted_generated_tests",
+                "adopted generated-test counts require GitHub commit backfill receipts",
+                "github-api-commits",
+            ));
+            None
+        }
+    };
+
+    let trend = QualityBackfillTrendSummary {
+        comment_acceptance_rate_delta: quality_backfill_delta(
+            "trend.comment_acceptance_rate_delta",
+            comment_acceptance_rate,
+            previous.and_then(|previous| previous.artifact.comment_acceptance_rate),
+            previous.map(|previous| previous.source_artifact.as_str()),
+            &mut missing,
+        ),
+        fills_signal_rate_delta: quality_backfill_delta(
+            "trend.fills_signal_rate_delta",
+            fills_signal_rate,
+            previous.and_then(|previous| previous.artifact.fills_signal_rate),
+            previous.map(|previous| previous.source_artifact.as_str()),
+            &mut missing,
+        ),
+        llm_unavailable_rate_delta: quality_backfill_delta(
+            "trend.llm_unavailable_rate_delta",
+            llm_unavailable_rate,
+            previous.and_then(|previous| previous.artifact.llm_unavailable_rate),
+            previous.map(|previous| previous.source_artifact.as_str()),
+            &mut missing,
+        ),
+        reviewer_override_rate_delta: quality_backfill_delta(
+            "trend.reviewer_override_rate_delta",
+            reviewer_override_rate,
+            previous.and_then(|previous| previous.artifact.reviewer_override_rate),
+            previous.map(|previous| previous.source_artifact.as_str()),
+            &mut missing,
+        ),
+    };
+
+    QualityBackfillArtifact {
+        schema: QUALITY_BACKFILL_SCHEMA,
+        as_of: Utc::now().date_naive().to_string(),
+        window_scope: "rolling_v1",
+        window_days,
+        window_runs,
+        source_artifacts,
+        comments_prepared,
+        comments_posted,
+        comments_accepted,
+        comments_resolved,
+        comment_acceptance_rate,
+        comment_resolution_rate,
+        fills_signal_rate,
+        llm_unavailable_rate,
+        reviewer_overrides,
+        reviewer_override_rate,
+        adopted_generated_tests,
+        trend,
+        missing,
+    }
+}
+
+fn quality_backfill_comment_counts(
+    outcomes: Option<&LoadedGithubQualityOutcomes>,
+    missing: &mut Vec<QualityBackfillMissingInput>,
+) -> (Option<usize>, Option<usize>, Option<usize>, Option<usize>) {
+    let Some(outcome) = outcomes else {
+        for field in [
+            "comments_posted",
+            "comments_accepted",
+            "comments_resolved",
+            "reviewer_overrides",
+        ] {
+            missing.push(quality_backfill_missing(
+                field,
+                "reviewer outcome telemetry requires GitHub review-thread receipts",
+                "github-api-review-threads",
+            ));
+        }
+        return (None, None, None, None);
+    };
+    if !outcome.has_comments {
+        for field in [
+            "comments_posted",
+            "comments_accepted",
+            "comments_resolved",
+            "reviewer_overrides",
+        ] {
+            missing.push(quality_backfill_missing(
+                field,
+                "GitHub outcome receipt did not include comments[]",
+                &outcome.source_artifact,
+            ));
+        }
+        return (None, None, None, None);
+    }
+
+    let posted_comments: Vec<&GithubQualityCommentOutcome> = outcome
+        .outcomes
+        .comments
+        .iter()
+        .filter(|comment| comment.posted.unwrap_or(true))
+        .collect();
+    let comments_posted = Some(posted_comments.len());
+    let comments_accepted = quality_backfill_bool_count(
+        &posted_comments,
+        |comment| comment.accepted,
+        "comments_accepted",
+        "accepted-state receipts are missing for at least one posted comment",
+        &outcome.source_artifact,
+        missing,
+    );
+    let comments_resolved = quality_backfill_bool_count(
+        &posted_comments,
+        |comment| comment.resolved,
+        "comments_resolved",
+        "resolved-state receipts are missing for at least one posted comment",
+        &outcome.source_artifact,
+        missing,
+    );
+    let reviewer_overrides = quality_backfill_bool_count(
+        &posted_comments,
+        |comment| comment.reviewer_override,
+        "reviewer_overrides",
+        "reviewer override receipts are missing for at least one posted comment",
+        &outcome.source_artifact,
+        missing,
+    );
+    (
+        comments_posted,
+        comments_accepted,
+        comments_resolved,
+        reviewer_overrides,
+    )
+}
+
+fn quality_backfill_bool_count<F>(
+    comments: &[&GithubQualityCommentOutcome],
+    value: F,
+    field: &str,
+    reason: &str,
+    source_artifact: &str,
+    missing: &mut Vec<QualityBackfillMissingInput>,
+) -> Option<usize>
+where
+    F: Fn(&GithubQualityCommentOutcome) -> Option<bool>,
+{
+    if comments.iter().any(|comment| value(comment).is_none()) {
+        missing.push(quality_backfill_missing(field, reason, source_artifact));
+        return None;
+    }
+    Some(
+        comments
+            .iter()
+            .filter(|comment| value(comment).unwrap_or(false))
+            .count(),
+    )
+}
+
+fn quality_backfill_rate(
+    numerator: Option<usize>,
+    denominator: Option<usize>,
+    field: &str,
+    reason: &str,
+    source_artifact: &str,
+    missing: &mut Vec<QualityBackfillMissingInput>,
+) -> Option<f64> {
+    let Some(numerator) = numerator else {
+        missing.push(quality_backfill_missing(field, reason, source_artifact));
+        return None;
+    };
+    let Some(denominator) = denominator else {
+        missing.push(quality_backfill_missing(field, reason, source_artifact));
+        return None;
+    };
+    if denominator == 0 {
+        missing.push(quality_backfill_missing(field, reason, source_artifact));
+        return None;
+    }
+    Some(numerator as f64 / denominator as f64)
+}
+
+fn quality_backfill_delta(
+    field: &str,
+    current: Option<f64>,
+    previous: Option<f64>,
+    previous_source_artifact: Option<&str>,
+    missing: &mut Vec<QualityBackfillMissingInput>,
+) -> Option<f64> {
+    let source_artifact = previous_source_artifact.unwrap_or("previous-quality-backfill.json");
+    match (current, previous) {
+        (Some(current), Some(previous)) => Some(current - previous),
+        _ => {
+            missing.push(quality_backfill_missing(
+                field,
+                "trend delta requires current and previous backfill values",
+                source_artifact,
+            ));
+            None
+        }
+    }
+}
+
+fn copy_quality_backfill_source(out: &Path, source: &Path, label: &str) -> Result<String> {
+    let bytes = fs::read(source).with_context(|| format!("read {}", source.display()))?;
+    let digest = sha256_hex(&bytes);
+    let file_name = source
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("source.json");
+    let stem = sanitize_artifact_name(&format!("{label}-{file_name}"));
+    let relative = format!(
+        "review/quality-backfill-sources/{}-{}.json",
+        stem,
+        &digest[..16]
+    );
+    let destination = out.join(&relative);
+    let parent = destination
+        .parent()
+        .ok_or_else(|| anyhow::anyhow!("quality backfill destination has no parent"))?;
+    fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    fs::write(&destination, bytes).with_context(|| format!("write {}", destination.display()))?;
+    Ok(relative)
+}
+
+fn quality_backfill_push_source(sources: &mut Vec<String>, source: String) {
+    if !sources.contains(&source) {
+        sources.push(source);
+    }
+}
+
+fn quality_backfill_missing(
+    field: &str,
+    reason: &str,
+    source_artifact: &str,
+) -> QualityBackfillMissingInput {
+    QualityBackfillMissingInput {
+        field: field.to_owned(),
+        reason: reason.to_owned(),
+        source_artifact: source_artifact.to_owned(),
+    }
+}
+
+fn read_json_file<T: DeserializeOwned>(path: &Path) -> Result<T> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    serde_json::from_slice(&bytes).with_context(|| format!("parse {}", path.display()))
 }
 
 fn quality_llm_unavailable_events(review: &ReviewArtifacts) -> usize {
@@ -32072,6 +32666,213 @@ index 1111111..2222222 100644
         assert!(missing_fields.contains("trend.llm_unavailable_rate_delta"));
         assert!(missing_fields.contains("trend.reviewer_override_rate_delta"));
         assert!(!missing_fields.contains("fills_signal_rate"));
+    }
+
+    #[test]
+    fn quality_backfill_aggregates_github_outcomes_and_previous_deltas() {
+        let runs = vec![
+            super::QualityBackfillRun {
+                receipt: super::QualityReceiptSeed {
+                    schema: super::QUALITY_RECEIPT_SCHEMA.to_owned(),
+                    run_id: "run-a".to_owned(),
+                    comments_prepared: 2,
+                    fills_with_signal: 1,
+                    fills_total: 2,
+                    llm_unavailable_events: 0,
+                },
+                receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
+                trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+            },
+            super::QualityBackfillRun {
+                receipt: super::QualityReceiptSeed {
+                    schema: super::QUALITY_RECEIPT_SCHEMA.to_owned(),
+                    run_id: "run-b".to_owned(),
+                    comments_prepared: 1,
+                    fills_with_signal: 1,
+                    fills_total: 1,
+                    llm_unavailable_events: 1,
+                },
+                receipt_source: "review/quality-backfill-sources/run-b-receipt.json".to_owned(),
+                trend_source: "review/quality-backfill-sources/run-b-trend.json".to_owned(),
+            },
+        ];
+        let outcomes = super::LoadedGithubQualityOutcomes {
+            outcomes: super::GithubQualityOutcomes {
+                schema: Some(super::GITHUB_QUALITY_OUTCOMES_SCHEMA.to_owned()),
+                source_artifacts: Vec::new(),
+                comments: vec![
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(true),
+                        accepted: Some(true),
+                        resolved: Some(true),
+                        reviewer_override: Some(false),
+                    },
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(true),
+                        accepted: Some(false),
+                        resolved: Some(true),
+                        reviewer_override: Some(true),
+                    },
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(false),
+                        accepted: Some(true),
+                        resolved: Some(true),
+                        reviewer_override: Some(true),
+                    },
+                ],
+                adopted_generated_tests: vec![serde_json::json!({"path": "tests/generated.rs"})],
+            },
+            has_comments: true,
+            has_adopted_generated_tests: true,
+            source_artifact: "review/quality-backfill-sources/github-quality-outcomes.json"
+                .to_owned(),
+            raw_source_artifacts: Vec::new(),
+        };
+        let previous = super::LoadedPreviousQualityBackfill {
+            artifact: super::PreviousQualityBackfill {
+                schema: super::QUALITY_BACKFILL_SCHEMA.to_owned(),
+                comment_acceptance_rate: Some(0.25),
+                fills_signal_rate: Some(0.5),
+                llm_unavailable_rate: Some(0.25),
+                reviewer_override_rate: Some(0.0),
+            },
+            source_artifact: "review/quality-backfill-sources/previous-quality-backfill.json"
+                .to_owned(),
+        };
+
+        let artifact =
+            super::build_quality_backfill_artifact(30, &runs, Some(&outcomes), Some(&previous));
+
+        assert_eq!(artifact.schema, super::QUALITY_BACKFILL_SCHEMA);
+        assert_eq!(artifact.window_scope, "rolling_v1");
+        assert_eq!(artifact.window_runs, 2);
+        assert_eq!(artifact.comments_prepared, 3);
+        assert_eq!(artifact.comments_posted, Some(2));
+        assert_eq!(artifact.comments_accepted, Some(1));
+        assert_eq!(artifact.comments_resolved, Some(2));
+        assert_eq!(artifact.comment_acceptance_rate, Some(0.5));
+        assert_eq!(artifact.comment_resolution_rate, Some(1.0));
+        assert_eq!(artifact.fills_signal_rate, Some(2.0 / 3.0));
+        assert_eq!(artifact.llm_unavailable_rate, Some(0.5));
+        assert_eq!(artifact.reviewer_overrides, Some(1));
+        assert_eq!(artifact.reviewer_override_rate, Some(0.5));
+        assert_eq!(artifact.adopted_generated_tests, Some(1));
+        assert_eq!(artifact.trend.comment_acceptance_rate_delta, Some(0.25));
+        assert_eq!(
+            artifact.trend.fills_signal_rate_delta,
+            Some((2.0 / 3.0) - 0.5)
+        );
+        assert_eq!(artifact.trend.llm_unavailable_rate_delta, Some(0.25));
+        assert_eq!(artifact.trend.reviewer_override_rate_delta, Some(0.5));
+        assert!(artifact.missing.is_empty());
+        assert!(
+            artifact.source_artifacts.contains(
+                &"review/quality-backfill-sources/github-quality-outcomes.json".to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn quality_backfill_reviewer_override_rate_uses_posted_comment_denominator() {
+        let runs = vec![super::QualityBackfillRun {
+            receipt: super::QualityReceiptSeed {
+                schema: super::QUALITY_RECEIPT_SCHEMA.to_owned(),
+                run_id: "run-a".to_owned(),
+                comments_prepared: 2,
+                fills_with_signal: 0,
+                fills_total: 1,
+                llm_unavailable_events: 0,
+            },
+            receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
+            trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+        }];
+        let outcomes = super::LoadedGithubQualityOutcomes {
+            outcomes: super::GithubQualityOutcomes {
+                schema: Some(super::GITHUB_QUALITY_OUTCOMES_SCHEMA.to_owned()),
+                source_artifacts: Vec::new(),
+                comments: vec![
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(true),
+                        accepted: Some(true),
+                        resolved: Some(true),
+                        reviewer_override: Some(true),
+                    },
+                    super::GithubQualityCommentOutcome {
+                        posted: Some(true),
+                        accepted: Some(false),
+                        resolved: Some(false),
+                        reviewer_override: Some(true),
+                    },
+                ],
+                adopted_generated_tests: Vec::new(),
+            },
+            has_comments: true,
+            has_adopted_generated_tests: true,
+            source_artifact: "review/quality-backfill-sources/github-quality-outcomes.json"
+                .to_owned(),
+            raw_source_artifacts: Vec::new(),
+        };
+
+        let artifact = super::build_quality_backfill_artifact(30, &runs, Some(&outcomes), None);
+        let missing_fields = artifact
+            .missing
+            .iter()
+            .map(|entry| entry.field.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(artifact.window_runs, 1);
+        assert_eq!(artifact.comments_posted, Some(2));
+        assert_eq!(artifact.reviewer_overrides, Some(2));
+        assert_eq!(artifact.reviewer_override_rate, Some(1.0));
+        assert!(
+            !missing_fields.contains("reviewer_override_rate"),
+            "posted-comment denominator keeps reviewer_override_rate inside verifier bounds"
+        );
+    }
+
+    #[test]
+    fn quality_backfill_keeps_reviewer_rates_missing_without_github_receipts() {
+        let runs = vec![super::QualityBackfillRun {
+            receipt: super::QualityReceiptSeed {
+                schema: super::QUALITY_RECEIPT_SCHEMA.to_owned(),
+                run_id: "run-a".to_owned(),
+                comments_prepared: 1,
+                fills_with_signal: 0,
+                fills_total: 1,
+                llm_unavailable_events: 0,
+            },
+            receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
+            trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+        }];
+
+        let artifact = super::build_quality_backfill_artifact(30, &runs, None, None);
+        let missing_fields = artifact
+            .missing
+            .iter()
+            .map(|entry| entry.field.as_str())
+            .collect::<BTreeSet<_>>();
+
+        assert_eq!(artifact.comments_posted, None);
+        assert_eq!(artifact.comment_acceptance_rate, None);
+        assert_eq!(artifact.comment_resolution_rate, None);
+        assert_eq!(artifact.reviewer_override_rate, None);
+        assert_eq!(artifact.adopted_generated_tests, None);
+        for field in [
+            "comments_posted",
+            "comments_accepted",
+            "comments_resolved",
+            "comment_acceptance_rate",
+            "comment_resolution_rate",
+            "reviewer_overrides",
+            "reviewer_override_rate",
+            "adopted_generated_tests",
+            "trend.comment_acceptance_rate_delta",
+            "trend.fills_signal_rate_delta",
+            "trend.llm_unavailable_rate_delta",
+            "trend.reviewer_override_rate_delta",
+        ] {
+            assert!(missing_fields.contains(field), "missing field {field}");
+        }
     }
 
     #[test]

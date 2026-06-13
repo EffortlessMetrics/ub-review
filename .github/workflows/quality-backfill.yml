@@ -1,0 +1,170 @@
+name: Quality Backfill
+
+# Artifact-only telemetry lane: aggregates recent gate receipts and GitHub
+# reviewer-state receipts. It never posts reviews or mutates repository state.
+on:
+  schedule:
+    - cron: '17 8 * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: quality-backfill-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Quality telemetry backfill
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      UB_REVIEW_QUALITY_WINDOW_DAYS: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+
+      - name: Build ub-review
+        run: cargo build --locked --bin ub-review
+
+      - name: Collect GitHub receipts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/ub-review-quality/source/github
+          gh run list \
+            --workflow ub-review-gate.yml \
+            --event pull_request \
+            --limit 100 \
+            --json databaseId,headSha,conclusion,createdAt,displayTitle,url \
+            > target/ub-review-quality/source/github/actions-runs.json
+          gh pr list \
+            --state all \
+            --limit 100 \
+            --json number,title,state,isDraft,mergedAt,reviewDecision,headRefOid,comments,reviews,url \
+            > target/ub-review-quality/source/github/pr-state.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = Path("target/ub-review-quality/source/github")
+          # v1 records that the API query receipts were captured. Per-comment
+          # accepted/resolved booleans are normalized by future GitHub thread
+          # collection; until then the backfill command keeps rate fields
+          # missing instead of inventing values from PR summaries.
+          receipt = {
+              "schema": "ub-review.github_quality_outcomes.v1",
+              "source_artifacts": ["actions-runs.json", "pr-state.json"],
+          }
+          (source / "github-quality-outcomes.json").write_text(
+              json.dumps(receipt, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Download recent gate artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/ub-review-quality/source/runs
+          python - <<'PY' > target/ub-review-quality/source/run-ids.txt
+          import json
+          import os
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+
+          runs = json.loads(Path("target/ub-review-quality/source/github/actions-runs.json").read_text())
+          window_days = int(os.environ["UB_REVIEW_QUALITY_WINDOW_DAYS"])
+          cutoff = datetime.now(timezone.utc) - timedelta(days=window_days)
+          for run in runs:
+              created_at = run.get("createdAt")
+              if not created_at:
+                  continue
+              created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+              if (
+                  created >= cutoff
+                  and run.get("conclusion") in {"success", "failure"}
+                  and run.get("databaseId")
+              ):
+                  print(run["databaseId"])
+          PY
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            mkdir -p "target/ub-review-quality/source/runs/$run_id"
+            gh run download "$run_id" \
+              --name ub-review-gate \
+              --dir "target/ub-review-quality/source/runs/$run_id" || true
+          done < target/ub-review-quality/source/run-ids.txt
+
+      - name: Download previous quality backfill
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/ub-review-quality/source/previous
+          gh run list \
+            --workflow quality-backfill.yml \
+            --status success \
+            --limit 5 \
+            --json databaseId \
+            > target/ub-review-quality/source/previous/previous-quality-runs.json
+          previous_run="$(
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          current = os.environ.get("GITHUB_RUN_ID")
+          runs = json.loads(Path("target/ub-review-quality/source/previous/previous-quality-runs.json").read_text())
+          for run in runs:
+              run_id = str(run.get("databaseId") or "")
+              if run_id and run_id != current:
+                  print(run_id)
+                  break
+          PY
+          )"
+          if [[ -n "$previous_run" ]]; then
+            gh run download "$previous_run" \
+              --name ub-review-quality-backfill \
+              --dir target/ub-review-quality/source/previous || true
+          fi
+
+      - name: Build quality backfill
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r receipt; do
+            run_dir="${receipt%/review/quality-receipt.json}"
+            args+=(--run-dir "$run_dir")
+          done < <(find target/ub-review-quality/source/runs -path '*/review/quality-receipt.json' -type f | sort)
+          previous=()
+          previous_file="$(find target/ub-review-quality/source/previous -path '*/review/quality-backfill.json' -type f | sort | head -n 1 || true)"
+          if [[ -n "$previous_file" ]]; then
+            previous=(--previous "$previous_file")
+          fi
+          target/debug/ub-review quality-backfill \
+            --out target/ub-review-quality \
+            --github-outcomes target/ub-review-quality/source/github/github-quality-outcomes.json \
+            --window-days "$UB_REVIEW_QUALITY_WINDOW_DAYS" \
+            "${previous[@]}" \
+            "${args[@]}"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ub-review-quality-backfill
+          path: target/ub-review-quality
+          if-no-files-found: error
+          retention-days: 30
