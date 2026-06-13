@@ -23188,6 +23188,9 @@ struct CiTierEvidence {
     uses_secrets: Vec<String>,
     triggers: Vec<String>,
     path_filters: Vec<String>,
+    required_check: Option<bool>,
+    required_check_source: String,
+    required_check_context: Option<String>,
     history_available: bool,
     runs: usize,
     independent_failures: usize,
@@ -23208,8 +23211,8 @@ struct CiTierDecision {
 
 /// Deterministic v0 tier rules (docs/CI_AUDIT_WIZARD.md). Conservative:
 /// security-sensitive jobs are always flag-for-human, insufficient history is
-/// never auto-right-sized, nothing right-sizes below adaptive, and absence of
-/// failures alone caps confidence at low.
+/// never auto-right-sized, nothing becomes optional below adaptive, and
+/// absence of failures alone caps confidence at low.
 fn classify_ci_job_tier(
     evidence: &CiTierEvidence,
     sibling_has_independent_signal: bool,
@@ -23289,6 +23292,7 @@ fn classify_ci_job_tier(
             proposed_policy: "human decision required; duration receipts incomplete".to_owned(),
         };
     };
+    let proven_required_check = ci_proven_required_check(evidence);
     if evidence.independent_failures > 0 {
         let confidence =
             if p50 < CI_AUDIT_CHEAP_P50_SEC && evidence.runs >= CI_AUDIT_MEDIUM_VOLUME_RUNS {
@@ -23296,6 +23300,23 @@ fn classify_ci_job_tier(
             } else {
                 "medium"
             };
+        if proven_required_check {
+            return CiTierDecision {
+                tier: "move-to-ub-review-required",
+                confidence,
+                reason: format!(
+                    "{} independent failures in {} runs; already required as `{}` so fold into ub-review/gate without weakening the gate",
+                    evidence.independent_failures,
+                    evidence.runs,
+                    evidence.required_check_context.as_deref().unwrap_or(&evidence.job)
+                ),
+                report_note: "already required; fold into ub-review/gate as required proof"
+                    .to_owned(),
+                proposed_policy:
+                    "[[proof.required]] inside ub-review/gate with required = true; remove the old required context only after red/green proof"
+                        .to_owned(),
+            };
+        }
         return CiTierDecision {
             tier: "keep-required",
             confidence,
@@ -23338,6 +23359,22 @@ fn classify_ci_job_tier(
                     .to_owned(),
         };
     }
+    if proven_required_check {
+        return CiTierDecision {
+            tier: "move-to-ub-review-required",
+            confidence: "low",
+            reason: format!(
+                "cheap (p50 {} < 5m) with 0 independent failures in {} runs; already required as `{}` so fold into ub-review/gate without weakening the gate",
+                format_ci_duration(p50),
+                evidence.runs,
+                evidence.required_check_context.as_deref().unwrap_or(&evidence.job)
+            ),
+            report_note: "already required; fold into ub-review/gate as required proof".to_owned(),
+            proposed_policy:
+                "[[proof.required]] inside ub-review/gate with required = true; remove the old required context only after red/green proof"
+                    .to_owned(),
+        };
+    }
     CiTierDecision {
         tier: "keep-required",
         confidence: "low",
@@ -23351,6 +23388,12 @@ fn classify_ci_job_tier(
                 .to_owned(),
         proposed_policy: "keep as a standalone required check".to_owned(),
     }
+}
+
+fn ci_proven_required_check(evidence: &CiTierEvidence) -> bool {
+    evidence.required_check == Some(true)
+        && evidence.required_check_source != "unknown"
+        && evidence.required_check_context.is_some()
 }
 
 fn ci_positioned_to_catch(evidence: &CiTierEvidence) -> String {
@@ -23710,8 +23753,8 @@ fn build_ci_audit_artifacts(
             permissions: permissions.clone(),
             uses_secrets: uses_secrets.clone(),
             required_check,
-            required_check_source,
-            required_check_context,
+            required_check_source: required_check_source.clone(),
+            required_check_context: required_check_context.clone(),
         });
         if let Some(stat) = seed.stats {
             history_jobs.push(CiHistoryJob {
@@ -23762,6 +23805,9 @@ fn build_ci_audit_artifacts(
             uses_secrets,
             triggers,
             path_filters,
+            required_check,
+            required_check_source: required_check_source.clone(),
+            required_check_context: required_check_context.clone(),
             history_available,
             runs: seed.stats.map(|stat| stat.runs).unwrap_or(0),
             independent_failures: seed
@@ -23782,7 +23828,7 @@ fn build_ci_audit_artifacts(
         } else {
             "unknown: no run history".to_owned()
         };
-        let receipts = if seed.stats.is_some() {
+        let mut receipts = if seed.stats.is_some() {
             vec![
                 format!("ci-audit/correlation.json#{}", seed.job),
                 format!("ci-audit/costs.json#{}", seed.job),
@@ -23791,6 +23837,12 @@ fn build_ci_audit_artifacts(
         } else {
             vec![format!("ci-audit/inventory.json#{}", seed.job)]
         };
+        if decision.tier == "move-to-ub-review-required" {
+            let inventory_receipt = format!("ci-audit/inventory.json#{}", seed.job);
+            if !receipts.contains(&inventory_receipt) {
+                receipts.push(inventory_receipt);
+            }
+        }
         recommendations.push(CiRecommendation {
             job: seed.job.clone(),
             workflow: seed.workflow_path.clone(),
@@ -40914,6 +40966,9 @@ jobs:
             uses_secrets: Vec::new(),
             triggers: vec!["pull_request".to_owned()],
             path_filters: Vec::new(),
+            required_check: Some(false),
+            required_check_source: "branch-protection".to_owned(),
+            required_check_context: None,
             history_available: true,
             runs,
             independent_failures: independent,
@@ -41349,6 +41404,43 @@ jobs:
             super::classify_ci_job_tier(&ci_tier_evidence("fmt", 200, 4, Some(45)), false);
         assert_eq!(decision.tier, "keep-required");
         assert_eq!(decision.confidence, "high");
+    }
+
+    #[test]
+    fn ci_proven_required_jobs_move_inside_ub_review_gate() {
+        let mut evidence = ci_tier_evidence("fmt", 200, 4, Some(45));
+        evidence.required_check = Some(true);
+        evidence.required_check_source = "branch-protection".to_owned();
+        evidence.required_check_context = Some("fmt".to_owned());
+        let decision = super::classify_ci_job_tier(&evidence, false);
+        assert_eq!(decision.tier, "move-to-ub-review-required");
+        assert_eq!(decision.confidence, "high");
+        assert!(decision.reason.contains("already required as `fmt`"));
+        assert!(decision.proposed_policy.contains("required = true"));
+
+        let mut quiet = ci_tier_evidence("unit", 200, 0, Some(60));
+        quiet.required_check = Some(true);
+        quiet.required_check_source = "ruleset".to_owned();
+        quiet.required_check_context = Some("Unit tests".to_owned());
+        let decision = super::classify_ci_job_tier(&quiet, false);
+        assert_eq!(decision.tier, "move-to-ub-review-required");
+        assert_eq!(decision.confidence, "low");
+        assert!(decision.reason.contains("Unit tests"));
+    }
+
+    #[test]
+    fn ci_required_move_tier_needs_exact_required_check_context() {
+        let mut evidence = ci_tier_evidence("fmt", 200, 4, Some(45));
+        evidence.required_check = Some(true);
+        evidence.required_check_source = "unknown".to_owned();
+        evidence.required_check_context = Some("fmt".to_owned());
+        let decision = super::classify_ci_job_tier(&evidence, false);
+        assert_eq!(decision.tier, "keep-required");
+
+        evidence.required_check_source = "branch-protection".to_owned();
+        evidence.required_check_context = None;
+        let decision = super::classify_ci_job_tier(&evidence, false);
+        assert_eq!(decision.tier, "keep-required");
     }
 
     #[test]
@@ -42197,6 +42289,28 @@ jobs:
         assert_eq!(test.required_check, Some(false));
         assert_eq!(test.required_check_source, "branch-protection");
         assert_eq!(test.required_check_context, None);
+        let recommendation = |name: &str| -> Result<&super::CiRecommendation> {
+            artifacts
+                .recommendations
+                .jobs
+                .iter()
+                .find(|job| job.job == name)
+                .with_context(|| format!("{name} recommendation"))
+        };
+        let fmt_recommendation = recommendation("fmt")?;
+        assert_eq!(fmt_recommendation.tier, "move-to-ub-review-required");
+        assert!(
+            fmt_recommendation
+                .receipts
+                .iter()
+                .any(|receipt| receipt == "ci-audit/inventory.json#fmt"),
+            "{:?}",
+            fmt_recommendation.receipts
+        );
+        let e2e_recommendation = recommendation("e2e")?;
+        assert_eq!(e2e_recommendation.tier, "adaptive");
+        let test_recommendation = recommendation("test")?;
+        assert_eq!(test_recommendation.tier, "keep-required");
         assert!(
             !artifacts
                 .inventory
