@@ -37,6 +37,9 @@ pub(crate) enum Command {
     /// Aggregate prior gate artifacts and GitHub reviewer-state receipts into
     /// rolling quality telemetry. Artifact-only; never posts or edits GitHub.
     QualityBackfill(QualityBackfillArgs),
+    /// Normalize raw GitHub review-thread receipts for quality-backfill.
+    /// Artifact-only; never posts or edits GitHub.
+    QualityGithubOutcomes(QualityGithubOutcomesArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
     GateCheck(GateCheckArgs),
@@ -728,4 +731,25 @@ pub(crate) struct QualityBackfillArgs {
     /// Rolling window in days.
     #[arg(long = "window-days", default_value_t = 30)]
     pub(crate) window_days: u32,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct QualityGithubOutcomesArgs {
+    /// Directory containing raw GitHub API receipts such as `pr-state.json` and
+    /// `review-threads-<number>.json`.
+    #[arg(
+        long = "source-dir",
+        default_value = "target/ub-review-quality/source/github"
+    )]
+    pub(crate) source_dir: PathBuf,
+    /// Output normalized github_quality_outcomes receipt.
+    #[arg(
+        long,
+        default_value = "target/ub-review-quality/source/github/github-quality-outcomes.json"
+    )]
+    pub(crate) out: PathBuf,
+    /// Review-thread author login to treat as ub-review output. Repeatable.
+    /// Defaults to the GitHub Actions bot logins used by the gate workflow.
+    #[arg(long = "author-login")]
+    pub(crate) author_logins: Vec<String>,
 }
