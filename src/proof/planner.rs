@@ -130,32 +130,27 @@ pub(crate) fn write_proof_planner_artifacts(
 }
 
 pub(crate) fn proof_planner_skips(diff: &DiffContext, profile: &Profile) -> Vec<ProofPlannerSkip> {
-    let mut skip = Vec::new();
-    if !diff.flags.unsafe_or_native_risk {
-        skip.push(ProofPlannerSkip {
+    [
+        (!diff.flags.unsafe_or_native_risk).then(|| ProofPlannerSkip {
             kind: "miri".to_owned(),
             reason: "No new unsafe/native aliasing surface was detected; cheaper focused proof is preferred when available.".to_owned(),
-        });
-    }
-    if !diff.flags.workflow_changed {
-        skip.push(ProofPlannerSkip {
+        }),
+        (!diff.flags.workflow_changed).then(|| ProofPlannerSkip {
             kind: "actionlint".to_owned(),
             reason: "No workflow files changed.".to_owned(),
-        });
-    }
-    if !profile.budgets.mutation {
-        skip.push(ProofPlannerSkip {
+        }),
+        (!profile.budgets.mutation).then(|| ProofPlannerSkip {
             kind: "mutation".to_owned(),
             reason: MUTATION_HEAVY_WITNESS_SKIP_REASON.to_owned(),
-        });
-    }
-    if !profile.budgets.sanitizer {
-        skip.push(ProofPlannerSkip {
+        }),
+        (!profile.budgets.sanitizer).then(|| ProofPlannerSkip {
             kind: "sanitizer".to_owned(),
             reason: SANITIZER_HEAVY_WITNESS_SKIP_REASON.to_owned(),
-        });
-    }
-    skip
+        }),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 pub(crate) fn write_proof_request_artifacts(
@@ -923,10 +918,11 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn proof_planner_records_heavy_witness_skips_without_leases() {
+    fn proof_planner_records_heavy_witness_skips_without_leases() -> Result<()> {
         let diff = test_diff();
 
-        let skips = super::proof_planner_skips(&diff, &Profile::default());
+        let output = super::build_proof_planner_output(&diff, &Profile::default(), &[])?;
+        let skips = output.skip;
         let mutation_skips = skips
             .iter()
             .filter(|skip| skip.kind == "mutation")
@@ -946,19 +942,22 @@ index 1111111..2222222 100644
             sanitizer_skips[0].reason,
             super::SANITIZER_HEAVY_WITNESS_SKIP_REASON
         );
+        Ok(())
     }
 
     #[test]
-    fn proof_planner_keeps_heavy_witnesses_available_when_profile_leases_them() {
+    fn proof_planner_keeps_heavy_witnesses_available_when_profile_leases_them() -> Result<()> {
         let diff = test_diff();
         let mut profile = Profile::default();
         profile.budgets.mutation = true;
         profile.budgets.sanitizer = true;
 
-        let skips = super::proof_planner_skips(&diff, &profile);
+        let output = super::build_proof_planner_output(&diff, &profile, &[])?;
+        let skips = output.skip;
 
         assert!(!skips.iter().any(|skip| skip.kind == "mutation"));
         assert!(!skips.iter().any(|skip| skip.kind == "sanitizer"));
+        Ok(())
     }
 
     #[test]
