@@ -3,8 +3,9 @@
 Status: authored 2026-06-06 (release surface spec wave, docs-only).
 Child of UB-REVIEW-SPEC-0001. Documents the current behavior of
 `ub-review audit-ci`; contract intent is marked as intent. Maturity per the
-umbrella: v0 - deterministic judgment only; permissions/secrets/matrix
-extraction and the branch-protection query are not yet implemented. Contract
+umbrella: v0 - deterministic judgment only; local permissions/secrets
+receipts are implemented; matrix extraction and the branch-protection query
+are not yet implemented. Contract
 docs: docs/CI_AUDIT_WIZARD.md and docs/adr/0002-single-gate-and-ci-audit-wizard.md;
 roadmap item 25 (docs/ROADMAP.md) is delivered in its deterministic v0 form
 (#299) - the model-lane acceptance bullet is not yet exercised (lane
@@ -274,11 +275,13 @@ Honest v0 limits, stated as limits:
   deterministic receipts only; that lane is not wired (src/main.rs audit-ci
   section comment and CiRecommendation construction;
   docs/CI_AUDIT_WIZARD.md rules; docs/adr/0002).
-- permissions, secrets, and matrix structure are not extracted from
-  workflow YAML: `permissions` is always null, `uses_secrets` always empty,
-  and `matrix_size` is inferred from observed API job-name fan-out (default
-  1), not parsed from a `matrix:` block. Recorded verbatim as an inventory
-  evidence-gap line (src/main.rs build_ci_audit_artifacts).
+- matrix structure is not extracted from workflow YAML: `matrix_size` is
+  inferred from observed API job-name fan-out (default 1), not parsed from a
+  `matrix:` block. The v0 line scan does extract literal workflow/job
+  `permissions` and job secret references, and ambiguous/write-scoped
+  permissions or secret usage force `flag-for-human`
+  (src/main.rs scan_workflow_text, classify_ci_job_tier,
+  build_ci_audit_artifacts).
 - branch protection and rulesets are not queried: `required_check` is
   always null and `required_check_source` always "unknown", also recorded
   as an inventory evidence-gap line (src/main.rs). The contract example
@@ -337,8 +340,8 @@ This spec is docs-only; delivered work is cited, remaining work is routed:
 2. Branch-protection/rulesets query: populate `required_check` and
    `required_check_source` when token scope allows; until then the inventory
    gap line stays. No open issue yet; tracked here and in the artifact gaps.
-3. Workflow YAML extraction: permissions, secrets, and matrix structure
-   (replacing the line scan or extending it honestly). No open issue yet.
+3. Workflow YAML extraction: matrix structure and any deeper YAML semantics
+   beyond the current literal permissions/secrets line scan. No open issue yet.
 4. Bounded model judgment lane: classify over deterministic receipts only,
    emit `judgment: model-assisted`, never invent facts
    (docs/CI_AUDIT_WIZARD.md rules; docs/adr/0002 judgment split). Off by

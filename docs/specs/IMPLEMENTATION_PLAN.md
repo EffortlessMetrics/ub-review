@@ -52,8 +52,8 @@ slice                                          spec    issue   proof obligation
    multi-repo onboarding                               ~10 lines of TOML, zero model
                                                        keys, one required check
 11 audit-ci v1: model-assisted judgment,       0007    -       judgment field earns values
-   permissions/secrets extraction,                     beyond "deterministic";
-   branch-protection query                             required_check_source resolved
+   branch-protection query                             beyond "deterministic";
+                                                   required_check_source resolved
 12 coverage flake trend: close or diagnose     0005    #313    second occurrence captures
                                                        llvm-cov stderr, or issue closed
 ```
