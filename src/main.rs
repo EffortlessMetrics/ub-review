@@ -4403,7 +4403,6 @@ fn unsafe_review_comment_plan_candidates(
 fn apply_unsafe_review_comment_plan_candidates(
     sensor_dir: &Path,
     line_map: &BTreeSet<(String, u32)>,
-    max_inline: usize,
     sinks: ModelOutputSinks<'_>,
 ) {
     let (candidates, skips) = unsafe_review_comment_plan_candidates(sensor_dir);
@@ -4423,7 +4422,7 @@ fn apply_unsafe_review_comment_plan_candidates(
         issue_candidates: Vec::new(),
         degraded: false,
     };
-    apply_model_output(&lane, output, line_map, max_inline, sinks);
+    apply_model_output(&lane, output, line_map, sinks);
 }
 
 fn resolved_plan_artifact(
@@ -5877,7 +5876,6 @@ fn write_review_artifacts(
             apply_unsafe_review_comment_plan_candidates(
                 &out.join("sensors").join("unsafe-review"),
                 &line_map,
-                args.max_inline_comments,
                 ModelOutputSinks {
                     inline_comments: &mut inline_comments,
                     summary_only_findings: &mut summary_only_findings,
@@ -6548,6 +6546,12 @@ fn pass_policy_permits_review_post(
 }
 
 fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledReviewSurface> {
+    let ranked_inline_comments = ranked_inline_comments(input.inline_comments);
+    let pr_inline_candidates = ranked_inline_comments
+        .iter()
+        .take(input.args.max_inline_comments)
+        .cloned()
+        .collect::<Vec<_>>();
     let artifact_body = render_review_body(
         input.shared_context_id,
         input.plan,
@@ -6555,7 +6559,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.model_lanes,
         input.missing_or_failed_sensor_evidence,
         input.missing_or_failed_model_evidence,
-        input.inline_comments,
+        &ranked_inline_comments,
         input.summary_only_findings,
         input.observations,
         input.proof_receipts,
@@ -6569,7 +6573,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
         input.model_lanes,
         input.missing_or_failed_sensor_evidence,
         input.missing_or_failed_model_evidence,
-        input.inline_comments,
+        &pr_inline_candidates,
         input.summary_only_findings,
         input.observations,
         input.proof_receipts,
@@ -6638,7 +6642,7 @@ fn compile_review_surface(input: ReviewCompilerInput<'_>) -> Result<CompiledRevi
     let pr_inline_comments: &[ReviewInlineComment] = if suppressed_artifact_only_pr_body {
         &[]
     } else {
-        input.inline_comments
+        &pr_inline_candidates
     };
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
@@ -15202,7 +15206,6 @@ fn run_available_model_lanes_with_runner(
                         lane,
                         outcome.output,
                         context.line_map,
-                        context.args.max_inline_comments,
                         ModelOutputSinks {
                             inline_comments,
                             summary_only_findings,
@@ -15483,7 +15486,6 @@ fn run_follow_up_model_pass(
                     reason,
                     outcome.output,
                     context.line_map,
-                    context.args.max_inline_comments,
                 );
                 let mut result = follow_up_result(
                     task,
@@ -15609,7 +15611,6 @@ fn follow_up_output_record(
     reason: &str,
     output: LaneModelOutput,
     line_map: &BTreeSet<(String, u32)>,
-    max_inline: usize,
 ) -> FollowUpOutputRecord {
     let lane = follow_up_lane(task, model_lane);
     let mut inline_comments = Vec::new();
@@ -15623,7 +15624,6 @@ fn follow_up_output_record(
         &lane,
         output,
         line_map,
-        max_inline,
         ModelOutputSinks {
             inline_comments: &mut inline_comments,
             summary_only_findings: &mut summary_only_findings,
@@ -16141,7 +16141,6 @@ fn apply_proof_planner_model_output(
         lane,
         advisory_output,
         line_map,
-        0,
         ModelOutputSinks {
             inline_comments: &mut ignored_inline_comments,
             summary_only_findings: &mut ignored_summary_only_findings,
@@ -16639,7 +16638,6 @@ fn apply_model_output(
     lane: &LanePlan,
     output: LaneModelOutput,
     line_map: &BTreeSet<(String, u32)>,
-    max_inline: usize,
     sinks: ModelOutputSinks<'_>,
 ) {
     let ModelOutputSinks {
@@ -16755,19 +16753,6 @@ fn apply_model_output(
                 confidence: candidate.confidence,
                 reason: format!(
                     "candidate-only lane emitted inline candidate for {}:{}; kept summary-only",
-                    candidate.path, candidate.line
-                ),
-                evidence: candidate.evidence,
-            });
-            continue;
-        }
-        if inline_comments.len() >= max_inline {
-            summary_only_findings.push(SummaryOnlyFinding {
-                lane: lane.id.clone(),
-                severity: candidate.severity,
-                confidence: candidate.confidence,
-                reason: format!(
-                    "inline budget exhausted for {}:{}; kept as summary-only",
                     candidate.path, candidate.line
                 ),
                 evidence: candidate.evidence,
@@ -17367,6 +17352,19 @@ fn inline_comment_rank(comment: &ReviewInlineComment) -> (u8, u8) {
         severity_rank(&comment.severity),
         confidence_rank(&comment.confidence),
     )
+}
+
+fn ranked_inline_comments(inline_comments: &[ReviewInlineComment]) -> Vec<ReviewInlineComment> {
+    let mut ranked = inline_comments.to_vec();
+    ranked.sort_by(|left, right| {
+        inline_comment_rank(right)
+            .cmp(&inline_comment_rank(left))
+            .then_with(|| left.path.cmp(&right.path))
+            .then_with(|| left.line.cmp(&right.line))
+            .then_with(|| left.lane.cmp(&right.lane))
+            .then_with(|| left.body.cmp(&right.body))
+    });
+    ranked
 }
 
 fn severity_rank(value: &str) -> u8 {
@@ -25754,7 +25752,6 @@ max_new_unsuppressed_findings = 0
             &lane,
             output,
             &BTreeSet::new(),
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -26022,7 +26019,6 @@ index 1111111..2222222 100644
             &lane,
             output,
             &line_map,
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -26117,7 +26113,6 @@ index 1111111..2222222 100644
             &lane,
             output,
             &line_map,
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -26225,7 +26220,6 @@ index 1111111..2222222 100644
             &lane,
             output,
             &BTreeSet::new(),
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -26277,7 +26271,6 @@ index 1111111..2222222 100644
             &lane,
             output,
             &BTreeSet::new(),
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -27809,7 +27802,6 @@ index 1111111..2222222 100644
             &lane,
             output,
             &line_map,
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -27869,7 +27861,6 @@ index 1111111..2222222 100644
             &lane,
             output,
             &BTreeSet::new(),
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -27927,7 +27918,6 @@ index 1111111..2222222 100644
                 &lane,
                 output,
                 &BTreeSet::new(),
-                8,
                 ModelOutputSinks {
                     inline_comments: &mut inline_comments,
                     summary_only_findings: &mut summary_only_findings,
@@ -31795,24 +31785,37 @@ required_proof_unprooven = true
     }
 
     #[test]
-    fn compiler_surface_suppressed_pr_body_drops_inline_comments_for_posting() -> Result<()> {
-        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+    fn compiler_surface_caps_inline_comments_after_value_ranking() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.max_inline_comments = 1;
         let plan = test_plan(Vec::new());
         let diff = test_diff();
         let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
-        let inline_comments = (0..13)
-            .map(|index| ReviewInlineComment {
+        let inline_comments = vec![
+            ReviewInlineComment {
                 lane: "tests-oracle".to_owned(),
-                severity: "medium".to_owned(),
+                severity: "low".to_owned(),
+                confidence: "medium".to_owned(),
+                path: "src/main.rs".to_owned(),
+                line: 100,
+                side: "RIGHT".to_owned(),
+                body: "[tests-oracle] Low-value candidate arrived first.".to_owned(),
+                evidence: "arrival-order fixture".to_owned(),
+                suggestion: None,
+            },
+            ReviewInlineComment {
+                lane: "security".to_owned(),
+                severity: "high".to_owned(),
                 confidence: "high".to_owned(),
                 path: "src/main.rs".to_owned(),
-                line: 100 + index,
+                line: 101,
                 side: "RIGHT".to_owned(),
-                body: format!("Confirm concise-review guard boundary {index}."),
-                evidence: "generated regression fixture".to_owned(),
+                body: "[security] High-value candidate arrived after the cap would have filled."
+                    .to_owned(),
+                evidence: "ranking fixture".to_owned(),
                 suggestion: None,
-            })
-            .collect::<Vec<_>>();
+            },
+        ];
 
         let surface = compile_review_surface(ReviewCompilerInput {
             shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -31833,16 +31836,22 @@ required_proof_unprooven = true
             suggested_issues: &[],
         })?;
 
-        assert!(!surface.should_prepare_github_review);
-        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
-        assert_eq!(surface.terminal_state.status, "sufficient");
-        assert!(!surface.terminal_state.reviewer_value_present);
-        assert!(surface.github_review.body.is_empty());
-        assert!(surface.github_review.comments.is_empty());
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "prepared");
+        assert_eq!(surface.terminal_state.status, "needs-reviewer-attention");
+        assert_eq!(surface.github_review.comments.len(), 1);
+        assert_eq!(surface.github_review.comments[0].line, 101);
+        assert!(surface.github_review.body.contains("High-value candidate"));
+        assert!(!surface.github_review.body.contains("Low-value candidate"));
         assert!(
             surface
                 .artifact_body
-                .contains("Confirm concise-review guard boundary 0")
+                .contains("High-value candidate arrived after the cap")
+        );
+        assert!(
+            surface
+                .artifact_body
+                .contains("Low-value candidate arrived first")
         );
         Ok(())
     }
@@ -32004,15 +32013,15 @@ required_proof_unprooven = true
     }
 
     #[test]
-    fn summary_only_body_post_all_keeps_suppressing_without_summary_findings() -> Result<()> {
-        // 13 inline comments trip the conciseness suppressor with zero
-        // summary-only findings; the knob is scoped to summary-only bodies,
-        // so post_all must not resurrect this body.
-        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+    fn summary_only_body_post_all_does_not_create_payload_without_summary_findings() -> Result<()> {
+        // A zero inline cap leaves no PR-facing comments and no summary-only
+        // findings; the summary-only knob must not create reviewer content.
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.max_inline_comments = 0;
         let plan = test_plan(Vec::new());
         let diff = test_diff();
         let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
-        let inline_comments = (0..13)
+        let inline_comments = (0..3)
             .map(|index| ReviewInlineComment {
                 lane: "tests-oracle".to_owned(),
                 severity: "medium".to_owned(),
@@ -32051,7 +32060,9 @@ required_proof_unprooven = true
 
         assert!(!surface.should_prepare_github_review);
         assert!(!surface.summary_only_policy_posted);
-        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert_eq!(surface.review_payload_status, "skipped_empty_smoke");
+        assert!(surface.github_review.body.is_empty());
+        assert!(surface.github_review.comments.is_empty());
         Ok(())
     }
 
@@ -36506,7 +36517,7 @@ index 1111111..2222222 100644
         )?;
 
         let record =
-            follow_up_output_record(&task, &model_lane, "ok", "completed", output, &line_map, 4);
+            follow_up_output_record(&task, &model_lane, "ok", "completed", output, &line_map);
 
         assert_eq!(record.schema, "ub-review.follow_up_output.v1");
         assert_eq!(record.task_id, task.id);
@@ -40185,7 +40196,6 @@ jobs:
         super::apply_unsafe_review_comment_plan_candidates(
             &sensor_dir,
             &line_map,
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -40256,7 +40266,6 @@ jobs:
         super::apply_unsafe_review_comment_plan_candidates(
             &sensor_dir,
             &line_map,
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
@@ -40303,7 +40312,6 @@ jobs:
         super::apply_unsafe_review_comment_plan_candidates(
             &sensor_dir,
             &line_map,
-            8,
             ModelOutputSinks {
                 inline_comments: &mut inline_comments,
                 summary_only_findings: &mut summary_only_findings,
