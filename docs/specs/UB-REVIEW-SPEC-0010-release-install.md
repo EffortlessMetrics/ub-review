@@ -8,10 +8,9 @@ pin is a commit SHA, which always builds from source), and the release-asset
 fast path is implemented but unexercised - the repository has published zero
 GitHub releases as of this writing. Tags `v0` and `v0.1` predate the release
 workflow (added in PR #90, .github/workflows/release-binary.yml) and never
-triggered it; no `v*` tag has been pushed since. The umbrella's "production -
-release binary with source-build fallback" line should be read with that
-nuance: the fallback is the proven path, the release binary is the unproven
-fast path.
+triggered it; no `v*` tag has been pushed since. The umbrella maturity row
+therefore marks this surface partial: the fallback is the proven path, while
+the release binary remains the unpublished fast path.
 
 ## Purpose
 
