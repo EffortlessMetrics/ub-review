@@ -683,9 +683,11 @@ pub(crate) struct SetupCiArgs {
     /// Run directory containing a prior audit-ci run's `ci-audit/` receipts.
     #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
     pub(crate) out: PathBuf,
-    /// Render the full migration PR contents (file blocks + PR body) to
-    /// stdout and `<out>/ci-audit/migration-plan.md` without repo writes,
-    /// network calls, GitHub calls, or branch-protection changes.
+    /// Render the migration PR body to stdout and
+    /// `<out>/ci-audit/migration-plan.md` without repo writes, network calls,
+    /// GitHub calls, or branch-protection changes. With accepted jobs plus
+    /// --action-sha, also writes no-network preview files under
+    /// `<out>/ci-audit/preview/`.
     #[arg(long = "print-pr")]
     pub(crate) print_pr: bool,
     /// Accept an audited job into the generated gate policy, as
@@ -699,10 +701,11 @@ pub(crate) struct SetupCiArgs {
     #[arg(long, default_value = ".ub-review.toml", env = "UB_REVIEW_CONFIG")]
     pub(crate) config: PathBuf,
     /// Open the migration PR on GitHub: create a branch, add the generated
-    /// files (.ub-review.toml, the gate workflow, docs/ci/ub-review-migration.md),
-    /// and open one PR whose body is the migration plan. Never touches
-    /// branch protection. Requires --action-sha plus a token, and refuses
-    /// to edit a repo that already has a .ub-review.toml.
+    /// files (.ub-review.toml, the gate workflow, docs/ci/ub-review-migration.md,
+    /// docs/ci/branch-protection-change.md), and open one PR whose body is
+    /// the migration plan. Never touches branch protection. Requires
+    /// --action-sha plus a token, and refuses to edit a repo that already has
+    /// a .ub-review.toml.
     #[arg(long = "open-pr")]
     pub(crate) open_pr: bool,
     /// Target owner/repo for --open-pr.
@@ -720,8 +723,8 @@ pub(crate) struct SetupCiArgs {
     )]
     pub(crate) github_api_url: String,
     /// Full 40-hex commit SHA of EffortlessMetrics/ub-review to pin in the
-    /// generated gate workflow. Required for --open-pr: the generator
-    /// refuses to invent a pin.
+    /// generated gate workflow. Required for --open-pr and for print-pr
+    /// preview files: the generator refuses to invent a pin.
     #[arg(long = "action-sha")]
     pub(crate) action_sha: Option<String>,
     /// Branch name the migration PR is opened from.
