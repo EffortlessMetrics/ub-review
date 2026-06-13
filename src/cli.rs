@@ -500,6 +500,13 @@ pub(crate) struct RunArgs {
         env = "UB_REVIEW_PR_THREAD_CONTEXT_MAX_BYTES"
     )]
     pub(crate) pr_thread_context_max_bytes: usize,
+    /// Optional prior review/resolved_candidates.json receipt from an earlier pass.
+    #[arg(
+        long = "prior-resolved-candidates",
+        default_value = "",
+        env = "UB_REVIEW_PRIOR_RESOLVED_CANDIDATES"
+    )]
+    pub(crate) prior_resolved_candidates: String,
     /// GitHub credential used only to fetch bounded PR-thread context during `run`.
     #[arg(long = "github-token", env = "UB_REVIEW_PR_THREAD_AUTH")]
     pub(crate) pr_thread_auth: Option<String>,

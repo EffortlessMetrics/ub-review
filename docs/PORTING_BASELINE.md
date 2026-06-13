@@ -117,6 +117,7 @@ target/ub-review/
     follow_up_results.json
     follow_up_outputs.json
     resolved_candidates.json
+    prior_resolved_candidates.json
     proof_requests.json
     proof_receipts.json
     receipt_routes.json

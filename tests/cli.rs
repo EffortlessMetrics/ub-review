@@ -668,6 +668,7 @@ fn active_len_tracks_view_after_resize() {
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
         "review/resolved_candidates.json",
+        "review/prior_resolved_candidates.json",
         "review/witnesses.json",
         "review/witness_registry.json",
         "review/proof_requests.json",
@@ -2454,6 +2455,33 @@ path = "src/lib.rs"
         &thread,
         "Author reply: ASAN bad-free receipt attached; old base fails. This tail should be truncated away.",
     )?;
+    let prior_resolved = temp.path().join("prior-resolved-candidates.json");
+    write_file(
+        &prior_resolved,
+        &serde_json::to_string_pretty(&serde_json::json!([
+            {
+                "schema": "ub-review.resolved_candidate.v1",
+                "candidate_id": "candidate-0001-deadbeef1234",
+                "lane": "tests-oracle",
+                "source": "summary-only-finding",
+                "original_status": "summary-only",
+                "original_disposition": "summary-only",
+                "resolved_status": "resolved",
+                "resolved_disposition": "dropped",
+                "resolution_source": "orchestrator-follow-up",
+                "source_artifacts": [
+                    "review/candidates.json",
+                    "review/follow_up_results.json",
+                    "review/follow_up_outputs.json"
+                ],
+                "reason": "prior follow-up found this below materiality",
+                "follow_up_task_ids": ["follow-prior"],
+                "follow_up_stages": ["tertiary"],
+                "follow_up_statuses": ["ok"],
+                "evidence": ["Prior pass dropped the same candidate surface."]
+            }
+        ]))?,
+    )?;
     let out = temp.path().join("packet");
     let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
     let bin = env!("CARGO_BIN_EXE_ub-review");
@@ -2477,6 +2505,8 @@ path = "src/lib.rs"
             path_str(&thread)?,
             "--pr-thread-context-max-bytes",
             "64",
+            "--prior-resolved-candidates",
+            path_str(&prior_resolved)?,
             "--model-mode",
             "off",
             "--no-github-summary",
@@ -2506,6 +2536,11 @@ path = "src/lib.rs"
     let review: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
     assert_eq!(review["pr_thread_context"], pr_thread_context);
+    let copied_prior_resolved_path = out.join("review/prior_resolved_candidates.json");
+    assert!(
+        copied_prior_resolved_path.is_file(),
+        "run should copy the configured prior resolved-candidates receipt"
+    );
     let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
     assert!(shared_context.contains("## PR Thread Context"));
     assert!(shared_context.contains("### Prior Review Thread"));
