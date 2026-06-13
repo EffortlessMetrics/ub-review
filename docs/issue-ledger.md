@@ -108,7 +108,6 @@ no invented quality score.
                 slices: diff-class lane routing, PR-thread seed packet
 #147  narrowed  refuter covers part of contradiction; remaining: cross-lane
                 conflict surfacing (lane-gating half folds into #76)
-#178  narrowed  file:line dedup shipped (dedupe_inline_comments,
-                duplicate_count); remaining: same-claim-different-line
-                dedup + value-ranked body
+#178  done      file:line dedup, same-claim-different-line dedup,
+                and value-ranked body/inline cap shipped in the compiler
 ```
