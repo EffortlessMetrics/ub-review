@@ -69,6 +69,18 @@ fn gate_workflow_grants_actions_read_for_prior_resolved_candidates_lookup() -> R
     let workflow = include_str!("../.github/workflows/ub-review-gate.yml");
     assert!(workflow.contains("actions: read"));
     assert!(workflow.contains("uses: ./"));
+    assert!(
+        workflow.contains("id-token: write"),
+        "coverage upload must retain OIDC permission"
+    );
+    assert!(
+        workflow.contains("codecov/codecov-action@v7"),
+        "self gate should use Codecov's Node 24-backed action line"
+    );
+    assert!(
+        !workflow.contains("codecov/codecov-action@v5"),
+        "Codecov v5 pulls actions/github-script on Node 20 and reintroduces hosted-runner deprecation noise"
+    );
     Ok(())
 }
 
