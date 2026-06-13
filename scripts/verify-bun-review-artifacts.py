@@ -5484,6 +5484,10 @@ def require_witness_schema(witness: dict) -> None:
 ROUTED_RECEIPT_STDERR_TAIL_BYTES = 1200
 ROUTED_RECEIPT_STDOUT_TAIL_BYTES = 600
 
+# Full proof command stream artifacts are capped at the receipt boundary; must
+# match PROOF_COMMAND_STREAM_MAX_BYTES in src/proof/command.rs.
+PROOF_COMMAND_STREAM_MAX_BYTES = 256 * 1024
+
 
 def rust_option_i32(value) -> str:
     """Mirror Rust's `{:?}` formatting of Option<i32>."""
@@ -6284,6 +6288,12 @@ def require_proof_command_receipt_schema(
             )
         if not (root / path).is_file():
             fail(f"proof command {field} artifact missing: {path}")
+        size = (root / path).stat().st_size
+        if size > PROOF_COMMAND_STREAM_MAX_BYTES:
+            fail(
+                f"proof command {field} artifact exceeds "
+                f"{PROOF_COMMAND_STREAM_MAX_BYTES} bytes: {path}"
+            )
 
 
 def require_resource_lease_schema(lease: dict) -> None:
@@ -9003,6 +9013,41 @@ def self_test_routed_receipt_excerpt_matches_rust_contract() -> None:
             fail("non-receipt evidence must not produce an excerpt")
 
 
+def self_test_proof_command_stream_bound_contract() -> None:
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = pathlib.Path(tmp)
+        proof_dir = root / "proof" / "proof-loud" / "head"
+        proof_dir.mkdir(parents=True)
+        (proof_dir / "stdout.txt").write_bytes(b"ok\n")
+        (proof_dir / "stderr.txt").write_bytes(
+            b"x" * (PROOF_COMMAND_STREAM_MAX_BYTES + 1)
+        )
+        command = {
+            "side": "head",
+            "command": "cargo test loud_case",
+            "env": {},
+            "status": "failed",
+            "exit_code": 101,
+            "timed_out": False,
+            "timeout_sec": 60,
+            "duration_ms": 42,
+            "stdout": "proof/proof-loud/head/stdout.txt",
+            "stderr": "proof/proof-loud/head/stderr.txt",
+            "reason": "exit code Some(101)",
+        }
+        expect_self_test_failure(
+            "oversized proof command stderr artifact",
+            "artifact exceeds",
+            lambda root=root, command=command: require_proof_command_receipt_schema(
+                root, "proof-loud", command
+            ),
+        )
+        (proof_dir / "stderr.txt").write_bytes(b"x" * PROOF_COMMAND_STREAM_MAX_BYTES)
+        require_proof_command_receipt_schema(root, "proof-loud", command)
+
+
 def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
     resolved = [
         {
@@ -9707,6 +9752,7 @@ def run_self_tests() -> None:
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_routed_receipt_excerpt_matches_rust_contract()
+    self_test_proof_command_stream_bound_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
     self_test_ci_audit_runner_cancellations_contract()
