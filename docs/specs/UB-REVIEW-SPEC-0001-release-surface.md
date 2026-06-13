@@ -62,7 +62,7 @@ Corollaries the specs hold everywhere:
 | 6 | `audit-ci` | 0007 | Which CI should stay required, become adaptive, or move? | v0 — deterministic judgment only; local permissions/secrets receipts implemented; branch-protection/ruleset required-check receipts populate when readable |
 | 7 | `setup-ci` | 0008 | Can ub-review open the migration PR? | partial — `--print-pr` renders the plan from audit receipts, including exact required-check remove instructions only when audit-ci proved them; `--open-pr` opens the new-files-only migration PR (config + pinned workflow + plan doc; refuses repos with an existing config). Existing-CI edits and branch-protection mutation remain contract intent |
 | 8 | `bun-ub` preset | 0009 | How does the Bun UB hunt use this gate? | production at the pinned SHA; consumer contract live |
-| 9 | Release binary / Action install | 0010 | How do I install this without rebuilding the world? | production — release binary with source-build fallback, doctor pins |
+| 9 | Release binary / Action install | 0010 | How do I install this without rebuilding the world? | partial - source-build fallback and doctor pins are production; release binary fast path is implemented but awaits the first published archive (#343) |
 
 ## Claims
 
