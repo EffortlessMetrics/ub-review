@@ -2508,6 +2508,7 @@ struct InitGuideInspection {
     workflows: Vec<CiWorkflowScan>,
     rust_source_count: usize,
     rust_test_count: usize,
+    docs_or_specs_count: usize,
     unsafe_native_found: bool,
     cargo_allow_path: Option<String>,
 }
@@ -2668,6 +2669,8 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
         ),
     }
 
+    render_init_config_proposal(&mut text, &inspection);
+
     text.push_str("\n## Recommended path\n\n");
     text.push_str(&format!(
         "1. Run `ub-review doctor --config {} --root {}` and fix missing tools or provider keys.\n",
@@ -2697,6 +2700,66 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
     Ok(text)
 }
 
+fn render_init_config_proposal(text: &mut String, inspection: &InitGuideInspection) {
+    text.push_str("\n## File-driven config proposal\n\n");
+    text.push_str(
+        "Use this section as a handoff for Codex, Claude, or the maintainer. It is not branch protection and it should not be pasted into policy until the command has run in this repo.\n\n",
+    );
+
+    text.push_str("### Required proof candidates\n\n");
+    if init_inspection_has_cargo(inspection) {
+        text.push_str("- `cargo-fmt`: `cargo fmt --all --check` - Rust formatting floor.\n");
+        text.push_str("- `cargo-check`: `cargo check --workspace --all-targets --locked` - fast compile floor.\n");
+        text.push_str("- `cargo-test`: `cargo test --workspace --locked` - repo test floor; split or narrow only when audit receipts show the full suite is too costly.\n");
+        text.push_str("- `cargo-clippy`: `cargo clippy --workspace --all-targets --locked -- -D warnings` - lint floor when the repo already treats clippy as merge-relevant.\n");
+        text.push_str("- `cargo-doc`: `cargo doc --workspace --no-deps --locked` - documentation/API surface floor for public Rust crates.\n");
+        if inspection.docs_or_specs_count > 0 {
+            text.push_str("- Repo policy verifier: keep any existing `cargo xtask policy-check` or artifact-verifier command if audit-ci receipts prove it runs and fails independently.\n");
+        }
+    } else {
+        text.push_str("- No root Cargo manifest detected; derive required proof from `audit-ci` receipts and maintainer-supplied `--accept <job>=<command>` values.\n");
+    }
+    if inspection.workflows.is_empty() {
+        text.push_str("- `actionlint`: wait until workflow files exist or change.\n");
+    } else {
+        text.push_str("- `actionlint`: run for workflow changes after doctor confirms the binary is installed.\n");
+    }
+    text.push_str("- Do not materialize any candidate with `setup-ci --accept` until a maintainer has run it locally or audit receipts prove it is runnable and merge-relevant.\n");
+
+    text.push_str("\n### Repo-specific lane proposal\n\n");
+    if inspection.rust_test_count > 0 {
+        text.push_str("- `tests`: review oracle strength and request focused red/green proof for changed tests or behavior.\n");
+    } else {
+        text.push_str(
+            "- `tests`: keep narrow; enable when test files or behavior claims change.\n",
+        );
+    }
+    if inspection.rust_source_count > 0 {
+        text.push_str(
+            "- `source-route`: trace changed Rust routes, public callers, and sibling paths.\n",
+        );
+    }
+    if inspection.unsafe_native_found {
+        text.push_str("- `ub`: route unsafe/native changes through unsafe-review receipts; do not treat missing receipts as safety evidence.\n");
+    }
+    if !inspection.workflows.is_empty() {
+        text.push_str("- `gate-semantics`: route workflow and gate-policy changes here so red/green/quiet behavior stays honest.\n");
+    }
+    if inspection.docs_or_specs_count > 0 {
+        text.push_str("- `spec-honesty`: route docs/spec claims here so implemented behavior is not overstated.\n");
+    }
+    text.push_str(
+        "- Keep diff-irrelevant lanes artifact-only; do not run every lane on every PR.\n",
+    );
+}
+
+fn init_inspection_has_cargo(inspection: &InitGuideInspection) -> bool {
+    inspection
+        .build_systems
+        .iter()
+        .any(|system| system.starts_with("Rust "))
+}
+
 fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
     let root = root.to_path_buf();
     let workflows = scan_local_workflows(&root)?;
@@ -2710,6 +2773,7 @@ fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
         .iter()
         .take(256)
         .any(|path| init_rust_file_has_unsafe_native(path));
+    let docs_or_specs_count = collect_init_repo_files(&root, is_init_docs_or_spec_file, 256).len();
     let mut build_systems = Vec::new();
     if root.join("Cargo.toml").is_file() {
         build_systems.push(init_cargo_manifest_summary(&root));
@@ -2736,6 +2800,7 @@ fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
         workflows,
         rust_source_count,
         rust_test_count,
+        docs_or_specs_count,
         unsafe_native_found,
         cargo_allow_path,
     })
@@ -2790,6 +2855,23 @@ fn is_rust_source_file(path: &Path) -> bool {
     path.extension()
         .and_then(|ext| ext.to_str())
         .is_some_and(|ext| ext.eq_ignore_ascii_case("rs"))
+}
+
+fn is_init_docs_or_spec_file(path: &Path) -> bool {
+    let Some(ext) = path.extension().and_then(|ext| ext.to_str()) else {
+        return false;
+    };
+    if !matches!(ext.to_ascii_lowercase().as_str(), "md" | "adoc" | "rst") {
+        return false;
+    }
+    path.components().any(|component| {
+        component.as_os_str().to_str().is_some_and(|part| {
+            part.eq_ignore_ascii_case("docs") || part.eq_ignore_ascii_case("specs")
+        })
+    }) || path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("README.md"))
 }
 
 fn init_rust_file_has_tests(path: &Path) -> bool {
