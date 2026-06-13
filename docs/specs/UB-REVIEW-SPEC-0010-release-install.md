@@ -188,10 +188,11 @@ Cargo.toml). Registry publication is unstated intent, not a plan.
   duplicated as a 14-day workflow artifact. Tag names must match
   `^v[0-9][A-Za-z0-9._-]*$` or the workflow errors.
 - `ub-review doctor` stdout (src/main.rs `cmd_doctor`): profile name, box
-  summary, limits, cache root, profile hash, base cache hit/miss, one line
-  per configured tool (found/missing, `--version` output, rule-cache
-  hit/miss), and one line per provider showing the env var name and
-  `present`/`missing` - values are never printed.
+  summary, limits, cache root, binary path, install status (on PATH, shadowed,
+  or explicit-path fix), profile hash, base cache hit/miss, one line per
+  configured tool (found/missing, `--version` output, rule-cache hit/miss),
+  and one line per provider showing the env var name and `present`/`missing` -
+  values are never printed.
 - `ub-review cache warm` artifacts (src/main.rs `cmd_cache_warm`):
   `<cache-root>/bases/<base-tree-sha>/manifest.json`, per-tool
   `bases/<base-tree-sha>/<tool>/manifest.json` and
