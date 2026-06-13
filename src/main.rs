@@ -24170,9 +24170,9 @@ mod tests {
         ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
         Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
         PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
-        ProofReceipt, ProofRequest, ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg,
-        RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderConcurrencyLimits,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
+        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
         ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
         ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
         STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
@@ -28142,6 +28142,27 @@ index 3333333..4444444 100644
         Ok(())
     }
 
+    fn test_focused_test_lease(task: &super::FocusedTestTask) -> ResourceLease {
+        super::focused_test_resource_lease(
+            task,
+            ProofBudget {
+                max_focused_test_files: 3,
+                max_focused_tests: 3,
+                per_command_timeout_sec: 300,
+                max_total_seconds: 900,
+            },
+            ProofLeaseBudget {
+                cpu: 1,
+                memory_mb: 512,
+                disk_mb: 64,
+                network: false,
+                scratch: true,
+            },
+            "granted",
+            "focused proof lease granted by test fixture",
+        )
+    }
+
     #[test]
     fn proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating() -> Result<()> {
         let temp = tempfile::tempdir()?;
@@ -28154,6 +28175,7 @@ index 3333333..4444444 100644
             Some("snapshots input".to_owned()),
             &[] as &[ProofRequestGroup],
         );
+        let lease = test_focused_test_lease(&task);
         let mut runner_calls = 0;
         let mut prepare_calls = 0;
         let mut runner = |_root: &Path,
@@ -28186,6 +28208,7 @@ index 3333333..4444444 100644
             &diff,
             &task,
             300,
+            &lease,
             &mut runner,
             &mut prepare,
         )?;
@@ -28210,6 +28233,7 @@ index 3333333..4444444 100644
             Some("snapshots input".to_owned()),
             &[] as &[ProofRequestGroup],
         );
+        let lease = test_focused_test_lease(&task);
         let mut prepare_calls = 0;
         let mut runner = |_root: &Path,
                           _argv: &[String],
@@ -28239,6 +28263,7 @@ index 3333333..4444444 100644
             &diff,
             &task,
             300,
+            &lease,
             &mut runner,
             &mut prepare,
         )?;
@@ -28260,6 +28285,7 @@ index 3333333..4444444 100644
             Some("snapshots input".to_owned()),
             &[] as &[ProofRequestGroup],
         );
+        let lease = test_focused_test_lease(&task);
         let mut runner = |_root: &Path,
                           _argv: &[String],
                           _env: &BTreeMap<String, String>,
@@ -28287,6 +28313,7 @@ index 3333333..4444444 100644
             &diff,
             &task,
             300,
+            &lease,
             &mut runner,
             &mut prepare,
         )?;

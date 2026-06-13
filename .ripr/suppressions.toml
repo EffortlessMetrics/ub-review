@@ -947,3 +947,52 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:1369:side_effect"
 owner = "ub-review/core"
 reason = "Probe on #[cfg(test)] activation fixture setup (ripr-swarm#1055): synchronize_mode insertion is required to exercise the deprecated-key branch. Mutating it is caught by exact receipt assertions and raw-table key removal. Line-keyed CI ripr 0.8.0 id; re-verify after edits near the test."
+
+# Proof-command lease guard (#75 proof broker hardening):
+# proof command execution now takes a granted ResourceLease at the command
+# boundary. CI ripr reports medium weak-oracle probes on the new lease-guarded
+# call sites and cfg(test) error paths even though the command-level tests assert
+# the runner is not called for non-granted or mismatched leases, and the broker
+# tests assert the granted focused-test/focused-build execution paths.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_build.rs:164:error_path"
+owner = "ub-review/proof-broker"
+reason = "Reachable-unrevealed false-negative on lease-guarded focused-build command invocation. proof_broker_v0_executes_allowlisted_focused_build_request asserts granted focused-build execution and focused_build_request_skips_when_profile_disables_build_leases asserts no runner execution without a build lease; command-level lease rejection is pinned by proof_command_receipt_refuses_non_granted_lease_without_running and proof_command_receipt_refuses_lease_for_different_consumer. Line-keyed id; re-verify after edits near run_focused_build_proof_task."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:490:error_path"
+owner = "ub-review/proof-broker"
+reason = "Probe on cfg(test) no-granted-lease guard assertion. The test's own ? operator failing is a test failure, while proof_command_receipt_refuses_non_granted_lease_without_running asserts runner_called is false, status is skipped, timeout_sec is zero, and stdout/stderr artifacts are empty. Line-keyed id; re-verify after edits near the proof command lease tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_command.rs:538:error_path"
+owner = "ub-review/proof-broker"
+reason = "Probe on cfg(test) mismatched-consumer lease guard assertion. The test's own ? operator failing is a test failure, while proof_command_receipt_refuses_lease_for_different_consumer asserts runner_called is false and the skipped receipt names both the lease consumer and requested receipt. Line-keyed id; re-verify after edits near the proof command lease tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:121:error_path"
+owner = "ub-review/proof-broker"
+reason = "Reachable-unrevealed false-negative on lease-threaded focused HEAD proof invocation. proof_broker_v0_runs_budgeted_focused_red_green_targets_and_writes_receipts asserts granted focused-test leases and receipt consumers, while proof_command_receipt_refuses_non_granted_lease_without_running and proof_command_receipt_refuses_lease_for_different_consumer pin the command boundary rejection. Line-keyed id; re-verify after edits near run_focused_red_green_proof_tasks_with_runner."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:171:call_deletion"
+owner = "ub-review/proof-broker"
+reason = "No-static-path false-negative on timeout forwarding through the lease-guarded focused HEAD command invocation. proof_broker_v0 focused proof tests assert the emitted receipt and lease fields through the public broker, and proof command lease tests assert non-granted or mismatched leases skip without runner execution. Line-keyed id; re-verify after edits near run_focused_head_proof_task."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:174:error_path"
+owner = "ub-review/proof-broker"
+reason = "Reachable-unrevealed false-negative on the lease-guarded focused HEAD command result propagation. The public broker tests cover executed and skipped focused proof outcomes, while proof_command_receipt_refuses_non_granted_lease_without_running and proof_command_receipt_refuses_lease_for_different_consumer pin that the command is not executed without the matching granted lease. Line-keyed id; re-verify after edits near run_focused_head_proof_task."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:226:error_path"
+owner = "ub-review/proof-broker"
+reason = "Reachable-unrevealed false-negative on the lease-guarded red/green HEAD command result propagation. proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating, proof_broker_v0_skips_base_plus_tests_when_head_fails, and proof_broker_v0_records_base_patch_failed_as_missing_proof assert red/green receipt outcomes, while command-level lease tests assert no runner execution without the matching granted lease. Line-keyed id; re-verify after edits near run_focused_red_green_proof_task."

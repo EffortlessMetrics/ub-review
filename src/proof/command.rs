@@ -23,6 +23,16 @@ pub(crate) struct ProofCommandSpec {
     pub(crate) env: BTreeMap<String, String>,
 }
 
+pub(crate) struct ProofCommandInvocation<'a> {
+    pub(crate) command_root: &'a Path,
+    pub(crate) out: &'a Path,
+    pub(crate) receipt_id: &'a str,
+    pub(crate) side: &'a str,
+    pub(crate) spec: &'a ProofCommandSpec,
+    pub(crate) timeout_sec: u64,
+    pub(crate) lease: &'a ResourceLease,
+}
+
 #[derive(Default)]
 pub(crate) struct ProofBrokerResult {
     pub(crate) proof_receipts: Vec<ProofReceipt>,
@@ -30,12 +40,7 @@ pub(crate) struct ProofBrokerResult {
 }
 
 pub(crate) fn run_proof_command_receipt<F>(
-    command_root: &Path,
-    out: &Path,
-    task: &FocusedTestTask,
-    side: &str,
-    spec: &ProofCommandSpec,
-    timeout_sec: u64,
+    invocation: ProofCommandInvocation<'_>,
     runner: &mut F,
 ) -> Result<ProofCommandReceipt>
 where
@@ -48,28 +53,32 @@ where
         &Path,
     ) -> Result<CommandStatus>,
 {
-    run_proof_command_receipt_for_id(command_root, out, &task.id, side, spec, timeout_sec, runner)
-}
+    let ProofCommandInvocation {
+        command_root,
+        out,
+        receipt_id,
+        side,
+        spec,
+        timeout_sec,
+        lease,
+    } = invocation;
+    if lease.status != "granted" || lease.consumer != receipt_id {
+        let reason = if lease.status != "granted" {
+            format!(
+                "proof command blocked: resource lease `{}` status `{}` is not granted",
+                lease.id, lease.status
+            )
+        } else {
+            format!(
+                "proof command blocked: resource lease `{}` is assigned to `{}`, not `{}`",
+                lease.id, lease.consumer, receipt_id
+            )
+        };
+        return skipped_proof_command_receipt_for_id(
+            out, receipt_id, side, spec, "skipped", reason,
+        );
+    }
 
-pub(crate) fn run_proof_command_receipt_for_id<F>(
-    command_root: &Path,
-    out: &Path,
-    receipt_id: &str,
-    side: &str,
-    spec: &ProofCommandSpec,
-    timeout_sec: u64,
-    runner: &mut F,
-) -> Result<ProofCommandReceipt>
-where
-    F: FnMut(
-        &Path,
-        &[String],
-        &BTreeMap<String, String>,
-        u64,
-        &Path,
-        &Path,
-    ) -> Result<CommandStatus>,
-{
     let paths = proof_command_paths(out, receipt_id, side)?;
     let command = command_display_with_env(&spec.env, &spec.argv);
     let status = runner(
@@ -124,6 +133,44 @@ where
         stderr: paths.stderr_rel,
         reason,
     })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "task, side, timeout, and lease are the proof-command execution contract; the helper centralizes invocation construction in the command module"
+)]
+pub(crate) fn run_proof_command_receipt_for_task<F>(
+    command_root: &Path,
+    out: &Path,
+    task: &FocusedTestTask,
+    side: &str,
+    spec: &ProofCommandSpec,
+    timeout_sec: u64,
+    lease: &ResourceLease,
+    runner: &mut F,
+) -> Result<ProofCommandReceipt>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+{
+    run_proof_command_receipt(
+        ProofCommandInvocation {
+            command_root,
+            out,
+            receipt_id: &task.id,
+            side,
+            spec,
+            timeout_sec,
+            lease,
+        },
+        runner,
+    )
 }
 
 fn bound_proof_command_streams(paths: &ProofCommandPaths) -> Result<()> {
@@ -335,6 +382,25 @@ fn proof_command_paths(out: &Path, receipt_id: &str, side: &str) -> Result<Proof
 mod tests {
     use super::*;
 
+    fn granted_lease(id: &str) -> ResourceLease {
+        ResourceLease {
+            schema: RESOURCE_LEASE_SCHEMA.to_owned(),
+            id: id.to_owned(),
+            kind: "focused-test".to_owned(),
+            consumer: id.strip_prefix("lease-").unwrap_or(id).to_owned(),
+            status: "granted".to_owned(),
+            reason: "test lease granted".to_owned(),
+            cpu: 1,
+            memory_mb: 512,
+            disk_mb: 64,
+            timeout_sec: 60,
+            network: false,
+            scratch: false,
+            worktree: None,
+            command: Some("head: cargo test focused_case --locked".to_owned()),
+        }
+    }
+
     #[test]
     fn proof_command_receipt_records_timeout_and_artifact_paths() -> Result<()> {
         let temp = tempfile::tempdir()?;
@@ -348,13 +414,16 @@ mod tests {
             env: BTreeMap::new(),
         };
 
-        let receipt = run_proof_command_receipt_for_id(
-            temp.path(),
-            &out,
-            "proof-command-001",
-            "head",
-            &spec,
-            7,
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: "proof-command-001",
+                side: "head",
+                spec: &spec,
+                timeout_sec: 7,
+                lease: &granted_lease("lease-proof-command-001"),
+            },
             &mut |_root, _argv, _env, timeout, stdout, stderr| {
                 fs::write(stdout, b"started\n")?;
                 fs::write(stderr, b"timed out\n")?;
@@ -382,6 +451,103 @@ mod tests {
     }
 
     #[test]
+    fn proof_command_receipt_refuses_non_granted_lease_without_running() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let spec = ProofCommandSpec {
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "focused_case".to_owned(),
+            ],
+            env: BTreeMap::new(),
+        };
+        let mut lease = granted_lease("lease-proof-command-skipped");
+        lease.status = "exhausted".to_owned();
+        lease.reason = "profile budget exhausted".to_owned();
+        let mut runner_called = false;
+
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: "proof-command-skipped",
+                side: "head",
+                spec: &spec,
+                timeout_sec: 60,
+                lease: &lease,
+            },
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                runner_called = true;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "should not run".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )?;
+
+        assert!(!runner_called, "proof command ran without a granted lease");
+        assert_eq!(receipt.status, "skipped");
+        assert_eq!(receipt.timeout_sec, 0);
+        assert!(receipt.reason.contains("lease-proof-command-skipped"));
+        assert!(receipt.reason.contains("exhausted"));
+        assert_eq!(fs::read_to_string(out.join(&receipt.stdout))?, "");
+        assert_eq!(fs::read_to_string(out.join(&receipt.stderr))?, "");
+        Ok(())
+    }
+
+    #[test]
+    fn proof_command_receipt_refuses_lease_for_different_consumer() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let spec = ProofCommandSpec {
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "focused_case".to_owned(),
+            ],
+            env: BTreeMap::new(),
+        };
+        let mut lease = granted_lease("lease-other-proof");
+        lease.consumer = "other-proof".to_owned();
+        let mut runner_called = false;
+
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: "proof-command-needs-own-lease",
+                side: "head",
+                spec: &spec,
+                timeout_sec: 60,
+                lease: &lease,
+            },
+            &mut |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                runner_called = true;
+                Ok(CommandStatus {
+                    exit_code: Some(0),
+                    timed_out: false,
+                    success: true,
+                    reason: "should not run".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+        )?;
+
+        assert!(
+            !runner_called,
+            "proof command ran with another consumer's lease"
+        );
+        assert_eq!(receipt.status, "skipped");
+        assert!(receipt.reason.contains("other-proof"));
+        assert!(receipt.reason.contains("proof-command-needs-own-lease"));
+        Ok(())
+    }
+
+    #[test]
     fn proof_command_receipt_bounds_stdout_and_stderr_artifacts() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -396,13 +562,16 @@ mod tests {
         let loud_stdout = vec![b'o'; PROOF_COMMAND_STREAM_MAX_BYTES + 4096];
         let loud_stderr = vec![b'e'; PROOF_COMMAND_STREAM_MAX_BYTES + 8192];
 
-        let receipt = run_proof_command_receipt_for_id(
-            temp.path(),
-            &out,
-            "proof-command-loud",
-            "head",
-            &spec,
-            60,
+        let receipt = run_proof_command_receipt(
+            ProofCommandInvocation {
+                command_root: temp.path(),
+                out: &out,
+                receipt_id: "proof-command-loud",
+                side: "head",
+                spec: &spec,
+                timeout_sec: 60,
+                lease: &granted_lease("lease-proof-command-loud"),
+            },
             &mut |_root, _argv, _env, _timeout, stdout, stderr| {
                 fs::write(stdout, &loud_stdout)?;
                 fs::write(stderr, &loud_stderr)?;

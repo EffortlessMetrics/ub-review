@@ -94,21 +94,23 @@ where
             )?);
             continue;
         }
-        leases.push(focused_build_resource_lease(
+        let lease = focused_build_resource_lease(
             &task,
             budget,
             lease_budget,
             "granted",
             "focused build proof lease granted by runtime profile",
-        ));
+        );
         receipts.push(run_focused_build_proof_task(
             root,
             out,
             diff,
             &task,
             task_timeout_sec,
+            &lease,
             &mut runner,
         )?);
+        leases.push(lease);
         executed_tasks += 1;
         estimated_seconds = estimated_seconds.saturating_add(task_timeout_sec);
     }
@@ -134,6 +136,7 @@ fn run_focused_build_proof_task<F>(
     diff: &DiffContext,
     task: &FocusedBuildTask,
     timeout_sec: u64,
+    lease: &ResourceLease,
     runner: &mut F,
 ) -> Result<ProofReceipt>
 where
@@ -147,8 +150,18 @@ where
     ) -> Result<CommandStatus>,
 {
     let spec = focused_build_command_spec_for_task(task);
-    let head =
-        run_proof_command_receipt_for_id(root, out, &task.id, "head", &spec, timeout_sec, runner)?;
+    let head = run_proof_command_receipt(
+        ProofCommandInvocation {
+            command_root: root,
+            out,
+            receipt_id: &task.id,
+            side: "head",
+            spec: &spec,
+            timeout_sec,
+            lease,
+        },
+        runner,
+    )?;
     let result = match head.status.as_str() {
         "passed" => "head_passed",
         "failed" => "head_failed",
