@@ -276,6 +276,10 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
             ".github/workflows/ci.yml",
             "name: CI\non: [pull_request]\nconcurrency:\n  cancel-in-progress: true\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
         ),
+        (
+            "docs/specs/adoption.md",
+            "# Adoption contract\n\nThis repo keeps docs claims tied to executable behavior.\n",
+        ),
         ("policy/allow.toml", "# owner receipt placeholder\n"),
     ];
     for (relative, contents) in fixture_files {
@@ -317,6 +321,12 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
         ".github/workflows/ci.yml",
         "unsafe-review",
         "cargo-allow",
+        "## File-driven config proposal",
+        "cargo check --workspace --all-targets --locked",
+        "Do not materialize any candidate with `setup-ci --accept`",
+        "`tests`: review oracle strength",
+        "`gate-semantics`",
+        "`spec-honesty`",
         "ub-review audit-ci --root",
         "ub-review setup-ci --print-pr",
         "--accept <job>=<command>",
