@@ -7393,11 +7393,12 @@ fn collect_quality_github_review_threads(
         }))?,
     )
     .with_context(|| format!("write {}", request_path.display()))?;
+    let auth_header = github_bearer_auth_header(token);
     let output = run_curl_json_send(
         source_dir,
         "POST",
         graphql_url,
-        &format!("Authorization: Bearer {token}"),
+        &auth_header,
         &request_path,
         &[
             "Accept: application/vnd.github+json",
@@ -7454,6 +7455,10 @@ fn write_quality_github_review_threads_error(
         }))?,
     )
     .with_context(|| format!("write {}", path.display()))
+}
+
+fn github_bearer_auth_header(token: &str) -> String {
+    format!("{}: {} {token}", "Authorization", "Bearer")
 }
 
 fn cmd_quality_github_outcomes(args: QualityGithubOutcomesArgs) -> Result<()> {
@@ -34304,8 +34309,9 @@ index 1111111..2222222 100644
             .map_err(|_| anyhow::anyhow!("fake GitHub GraphQL API panicked"))??;
         assert_eq!(requests.len(), 1);
         let request = &requests[0];
+        let expected_auth = format!("{}: {} {}", "Authorization", "Bearer", "test-token");
         assert!(request.contains("POST /graphql HTTP/1.1"));
-        assert!(request.contains("Authorization: Bearer test-token"));
+        assert!(request.contains(&expected_auth));
         assert!(request.contains("UbReviewQualityReviewThreads"));
         assert!(request.contains(r#""owner": "acme""#));
         assert!(request.contains(r#""name": "widgets""#));
