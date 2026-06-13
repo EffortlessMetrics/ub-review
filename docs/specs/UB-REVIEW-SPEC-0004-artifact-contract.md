@@ -210,6 +210,10 @@ merged_observations.json       lane-scoped merged summary
 dropped_observations.json      suppressed-boilerplate summary
 candidates.json                ub-review.candidate.v1 records
 resolved_candidates.json       ub-review.resolved_candidate.v1 records
+prior_resolved_candidates.json prior pass ub-review.resolved_candidate.v1
+                               records copied from
+                               --prior-resolved-candidates; empty array when
+                               no prior receipt is configured
 orchestrator_plan.json         ub-review.orchestrator_plan.v1
 final_orchestrator_plan.json   ub-review.orchestrator_plan.v1
 follow_up_results.json         follow-up lane results
@@ -292,7 +296,8 @@ breaking shape change; the live example is
 `ub-review.final_compiler_input.v2` (PR #309), which added
 `follow_up_resolved_candidate_ids` and changed the meaning of
 `inline_comments`/`summary_only_findings` to exclude candidates the
-follow-up pass resolved as refuted or dropped
+follow-up pass, and later prior resolved-candidate receipts, resolved as
+refuted or dropped
 (scripts/verify-bun-review-artifacts.py `require_final_compiler_input`;
 src/main.rs). Consumers must match schema strings exactly and treat an
 unknown version as unreadable, the same way the verifier does.
@@ -613,7 +618,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
 | review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |
 | review/observations.json + unique/merged/dropped_observations.json | stable | per-record fields, grouped records | downstream automation | required (require_metrics, require_observation_schema, require_observation_summary_artifacts) |
-| review/candidates.json + resolved_candidates.json | stable | candidate.v1, resolved_candidate.v1 | downstream automation | required (require_candidate_artifacts, require_resolved_candidate_artifacts) |
+| review/candidates.json + resolved_candidates.json + prior_resolved_candidates.json | stable | candidate.v1, resolved_candidate.v1 | downstream automation | required (require_candidate_artifacts, require_resolved_candidate_artifacts) |
 | review/orchestrator_plan.json + final_orchestrator_plan.json | stable | orchestrator_plan.v1 | downstream automation | required (require_orchestrator_plan, expected_final_orchestrator_plan) |
 | review/follow_up_results.json + follow_up_outputs.json + follow_up_evidence.json | stable | per-record fields | downstream automation | required (require_follow_up_results/_outputs/_evidence + schema checks) |
 | review/model_stages.json | stable | model_stage.v1 records | downstream automation | required (require_model_stage_artifacts) |

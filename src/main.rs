@@ -44,6 +44,7 @@ const DEFAULT_REVIEW_PROFILE: &str = "bun-ub-v0";
 const TOKMD_ANALYZE_PRESET: &str = "bun-ub";
 const DEFAULT_INITIAL_PACKET_DEADLINE_SEC: u64 = 60;
 const DEFAULT_FOLLOW_UP_PACKET_DEADLINE_SEC: u64 = 300;
+const PRIOR_RESOLVED_CANDIDATES_ARTIFACT: &str = "review/prior_resolved_candidates.json";
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
@@ -1385,7 +1386,7 @@ struct IssueBrokerResult {
     error: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct ResolvedCandidateRecord {
     schema: String,
     candidate_id: String,
@@ -5789,6 +5790,7 @@ fn write_review_artifacts(
         review_dir.join("pr_thread_context.json"),
         serde_json::to_vec_pretty(&pr_thread_context)?,
     )?;
+    let prior_resolved_candidates = load_prior_resolved_candidates(root, out, args)?;
     let shared_context_id = sha256_hex(shared_context.as_bytes());
     let line_map = right_side_diff_lines(&diff.patch);
     let assignments = model_assignments(plan, args)?;
@@ -6144,8 +6146,12 @@ fn write_review_artifacts(
     )?;
     write_follow_up_result_artifacts(out, &follow_up_results)?;
     write_follow_up_output_artifacts(out, &follow_up_outputs)?;
-    let resolved_candidates =
-        resolved_candidate_records(&candidates, &follow_up_results, &follow_up_outputs);
+    let resolved_candidates = resolved_candidate_records(
+        &candidates,
+        &follow_up_results,
+        &follow_up_outputs,
+        &prior_resolved_candidates,
+    );
     write_resolved_candidate_artifacts(out, &resolved_candidates)?;
     // The late receipt turn exists to change candidate dispositions, so the
     // final compiler must honor those changes: candidates the follow-up pass
@@ -6266,6 +6272,7 @@ fn write_review_artifacts(
                 "review/review.json",
                 "review/follow_up_evidence.json",
                 "review/resolved_candidates.json",
+                PRIOR_RESOLVED_CANDIDATES_ARTIFACT,
                 "review/proof_receipts.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
@@ -10974,10 +10981,48 @@ fn write_issue_broker_plan(out: &Path, plan: &[IssueBrokerPlanEntry]) -> Result<
     Ok(())
 }
 
+fn load_prior_resolved_candidates(
+    root: &Path,
+    out: &Path,
+    args: &RunArgs,
+) -> Result<Vec<ResolvedCandidateRecord>> {
+    let configured = args.prior_resolved_candidates.trim();
+    let records = if configured.is_empty() {
+        Vec::new()
+    } else {
+        let configured_path = PathBuf::from(configured);
+        let path = if configured_path.is_absolute() {
+            configured_path
+        } else {
+            root.join(configured_path)
+        };
+        serde_json::from_slice(
+            &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+        )
+        .with_context(|| format!("parse {}", path.display()))?
+    };
+    write_prior_resolved_candidate_artifact(out, &records)?;
+    Ok(records)
+}
+
+fn write_prior_resolved_candidate_artifact(
+    out: &Path,
+    records: &[ResolvedCandidateRecord],
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("prior_resolved_candidates.json"),
+        serde_json::to_vec_pretty(records)?,
+    )?;
+    Ok(())
+}
+
 fn resolved_candidate_records(
     candidates: &[CandidateRecord],
     follow_up_results: &[FollowUpResult],
     follow_up_outputs: &[FollowUpOutputRecord],
+    prior_resolved_candidates: &[ResolvedCandidateRecord],
 ) -> Vec<ResolvedCandidateRecord> {
     let follow_up_result_task_ids = follow_up_results
         .iter()
@@ -10993,7 +11038,7 @@ fn resolved_candidate_records(
                         && output.candidate_ids.iter().any(|id| id == &candidate.id)
                 })
                 .collect::<Vec<_>>();
-            resolved_candidate_record(candidate, &linked_outputs)
+            resolved_candidate_record(candidate, &linked_outputs, prior_resolved_candidates)
         })
         .collect()
 }
@@ -11048,12 +11093,21 @@ fn candidate_matches_summary_finding(
 fn resolved_candidate_record(
     candidate: &CandidateRecord,
     follow_up_outputs: &[&FollowUpOutputRecord],
+    prior_resolved_candidates: &[ResolvedCandidateRecord],
 ) -> ResolvedCandidateRecord {
     let follow_up_task_ids = unique_follow_up_values(follow_up_outputs, |output| &output.task_id);
     let follow_up_stages = unique_follow_up_values(follow_up_outputs, |output| &output.stage);
     let follow_up_statuses = unique_follow_up_values(follow_up_outputs, |output| &output.status);
     let (resolved_status, resolved_disposition, resolution_source, reason, evidence) =
-        resolve_candidate_from_follow_ups(candidate, follow_up_outputs);
+        resolve_candidate_from_follow_ups(candidate, follow_up_outputs, prior_resolved_candidates);
+    let mut source_artifacts = vec![
+        "review/candidates.json".to_owned(),
+        "review/follow_up_results.json".to_owned(),
+        "review/follow_up_outputs.json".to_owned(),
+    ];
+    if resolution_source == "prior-resolved-candidates" {
+        source_artifacts.push(PRIOR_RESOLVED_CANDIDATES_ARTIFACT.to_owned());
+    }
     ResolvedCandidateRecord {
         schema: RESOLVED_CANDIDATE_SCHEMA.to_owned(),
         candidate_id: candidate.id.clone(),
@@ -11064,11 +11118,7 @@ fn resolved_candidate_record(
         resolved_status,
         resolved_disposition,
         resolution_source,
-        source_artifacts: vec![
-            "review/candidates.json".to_owned(),
-            "review/follow_up_results.json".to_owned(),
-            "review/follow_up_outputs.json".to_owned(),
-        ],
+        source_artifacts,
         reason,
         follow_up_task_ids,
         follow_up_stages,
@@ -11094,20 +11144,8 @@ where
 fn resolve_candidate_from_follow_ups(
     candidate: &CandidateRecord,
     follow_up_outputs: &[&FollowUpOutputRecord],
+    prior_resolved_candidates: &[ResolvedCandidateRecord],
 ) -> (String, String, String, String, Vec<String>) {
-    if follow_up_outputs.is_empty() {
-        return (
-            "unchanged".to_owned(),
-            candidate.disposition.clone(),
-            "candidate".to_owned(),
-            "no candidate-targeted follow-up output".to_owned(),
-            vec![format!(
-                "Original candidate disposition `{}`",
-                candidate.disposition
-            )],
-        );
-    }
-
     let mut signals = resolved_candidate_signals(follow_up_outputs);
     if !signals.is_empty() {
         let dispositions = signals
@@ -11133,6 +11171,36 @@ fn resolve_candidate_from_follow_ups(
             "orchestrator-follow-up".to_owned(),
             signal.reason,
             signal.evidence,
+        );
+    }
+
+    if let Some(prior) =
+        prior_resolved_candidate_for_candidate(candidate, prior_resolved_candidates)
+    {
+        let mut evidence = vec![format!(
+            "Prior resolved candidate `{}` had disposition `{}`",
+            prior.candidate_id, prior.resolved_disposition
+        )];
+        evidence.extend(prior.evidence.clone());
+        return (
+            "resolved".to_owned(),
+            prior.resolved_disposition.clone(),
+            "prior-resolved-candidates".to_owned(),
+            "prior pass resolved the same candidate surface".to_owned(),
+            evidence,
+        );
+    }
+
+    if follow_up_outputs.is_empty() {
+        return (
+            "unchanged".to_owned(),
+            candidate.disposition.clone(),
+            "candidate".to_owned(),
+            "no candidate-targeted follow-up output".to_owned(),
+            vec![format!(
+                "Original candidate disposition `{}`",
+                candidate.disposition
+            )],
         );
     }
 
@@ -11165,6 +11233,30 @@ fn resolve_candidate_from_follow_ups(
             "candidate-targeted follow-up did not produce usable model output".to_owned(),
             evidence,
         )
+    }
+}
+
+fn prior_resolved_candidate_for_candidate<'a>(
+    candidate: &CandidateRecord,
+    prior_resolved_candidates: &'a [ResolvedCandidateRecord],
+) -> Option<&'a ResolvedCandidateRecord> {
+    let candidate_fingerprint = candidate_id_fingerprint(&candidate.id)?;
+    prior_resolved_candidates.iter().find(|prior| {
+        prior.resolved_status == "resolved"
+            && matches!(prior.resolved_disposition.as_str(), "refuted" | "dropped")
+            && prior.lane == candidate.lane
+            && prior.source == candidate.source
+            && prior.original_status == candidate.status
+            && candidate_id_fingerprint(&prior.candidate_id) == Some(candidate_fingerprint)
+    })
+}
+
+fn candidate_id_fingerprint(id: &str) -> Option<&str> {
+    let (_, suffix) = id.rsplit_once('-')?;
+    if suffix.len() == 12 && suffix.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        Some(suffix)
+    } else {
+        None
     }
 }
 
@@ -36997,6 +37089,7 @@ index 1111111..2222222 100644
                     "review/review.json",
                     "review/follow_up_evidence.json",
                     "review/resolved_candidates.json",
+                    "review/prior_resolved_candidates.json",
                     "review/proof_receipts.json",
                     "review/receipt_routes.json",
                     "review/final_orchestrator_plan.json",
@@ -37031,6 +37124,7 @@ index 1111111..2222222 100644
                 "review/review.json",
                 "review/follow_up_evidence.json",
                 "review/resolved_candidates.json",
+                "review/prior_resolved_candidates.json",
                 "review/proof_receipts.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json"
@@ -37659,7 +37753,7 @@ index 1111111..2222222 100644
             })
             .collect::<Vec<_>>();
 
-        let records = resolved_candidate_records(&candidates, &results, &outputs);
+        let records = resolved_candidate_records(&candidates, &results, &outputs, &[]);
         assert_eq!(records.len(), candidates.len());
         assert_eq!(records[0].resolved_status, "unchanged");
         assert_eq!(records[0].resolution_source, "candidate");
@@ -38199,7 +38293,7 @@ index 1111111..2222222 100644
             })
             .collect::<Vec<_>>();
 
-        let records = resolved_candidate_records(&candidates, &results, &outputs);
+        let records = resolved_candidate_records(&candidates, &results, &outputs, &[]);
         let resolved_away = follow_up_resolved_away_candidate_ids(&records);
         assert_eq!(
             resolved_away,
@@ -38211,6 +38305,54 @@ index 1111111..2222222 100644
             "parked-follow-up resolutions keep their surface for the parked section"
         );
         assert!(!resolved_away.contains(&candidates[0].id));
+    }
+
+    #[test]
+    fn prior_resolved_candidates_drop_matching_candidate_by_hash_suffix() {
+        let mut current = test_candidate_record("candidate-0007-deadbeef1234");
+        current.claim = "The new test may also pass on base.".to_owned();
+        current.evidence = "test proof receipt".to_owned();
+        let control = test_candidate_record("candidate-0008-cafebabe1234");
+        let prior = super::ResolvedCandidateRecord {
+            schema: "ub-review.resolved_candidate.v1".to_owned(),
+            candidate_id: "candidate-0001-deadbeef1234".to_owned(),
+            lane: current.lane.clone(),
+            source: current.source.clone(),
+            original_status: current.status.clone(),
+            original_disposition: current.disposition.clone(),
+            resolved_status: "resolved".to_owned(),
+            resolved_disposition: "dropped".to_owned(),
+            resolution_source: "orchestrator-follow-up".to_owned(),
+            source_artifacts: vec![
+                "review/candidates.json".to_owned(),
+                "review/follow_up_results.json".to_owned(),
+                "review/follow_up_outputs.json".to_owned(),
+            ],
+            reason: "prior follow-up found this below materiality".to_owned(),
+            follow_up_task_ids: vec!["follow-prior".to_owned()],
+            follow_up_stages: vec!["tertiary".to_owned()],
+            follow_up_statuses: vec!["ok".to_owned()],
+            evidence: vec!["Prior pass dropped the same candidate surface.".to_owned()],
+        };
+
+        let records =
+            resolved_candidate_records(&[current.clone(), control.clone()], &[], &[], &[prior]);
+
+        assert_eq!(records[0].candidate_id, current.id);
+        assert_eq!(records[0].resolved_status, "resolved");
+        assert_eq!(records[0].resolved_disposition, "dropped");
+        assert_eq!(records[0].resolution_source, "prior-resolved-candidates");
+        assert!(
+            records[0]
+                .source_artifacts
+                .contains(&"review/prior_resolved_candidates.json".to_owned())
+        );
+        assert_eq!(records[1].candidate_id, control.id);
+        assert_eq!(records[1].resolved_status, "unchanged");
+        assert_eq!(
+            follow_up_resolved_away_candidate_ids(&records),
+            vec![current.id]
+        );
     }
 
     #[test]
@@ -39407,6 +39549,7 @@ index 1111111..2222222 100644
             ledger_max_bytes: 65_536,
             pr_thread_context: String::new(),
             pr_thread_context_max_bytes: 65_536,
+            prior_resolved_candidates: String::new(),
             pr_thread_auth: None,
             github_repo: None,
             github_pull_number: None,

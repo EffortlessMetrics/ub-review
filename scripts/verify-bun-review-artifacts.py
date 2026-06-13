@@ -1048,6 +1048,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/follow_up_outputs.json",
         "review/follow_up_evidence.json",
         "review/resolved_candidates.json",
+        "review/prior_resolved_candidates.json",
         "review/final_compiler_input.json",
         "review/witnesses.json",
         "review/witness_registry.json",
@@ -4426,11 +4427,15 @@ def require_resolved_candidate_artifacts(
     resolved = load_json(root / "review/resolved_candidates.json")
     if not isinstance(resolved, list):
         fail("review/resolved_candidates.json is not an array")
+    prior_resolved = require_prior_resolved_candidate_artifact(root)
     expected = expected_resolved_candidate_records(
-        candidates, follow_up_results, follow_up_outputs
+        candidates, follow_up_results, follow_up_outputs, prior_resolved
     )
     if resolved != expected:
-        fail("review/resolved_candidates.json does not match candidates plus follow-up outputs")
+        fail(
+            "review/resolved_candidates.json does not match candidates plus "
+            "follow-up outputs and prior resolved candidates"
+        )
     lines = [
         line
         for line in read_text(root / "resolved_candidates.ndjson").splitlines()
@@ -4448,8 +4453,20 @@ def require_resolved_candidate_artifacts(
         require_resolved_candidate_schema(parsed)
 
 
+def require_prior_resolved_candidate_artifact(root: pathlib.Path) -> list[dict]:
+    prior = load_json(root / "review/prior_resolved_candidates.json")
+    if not isinstance(prior, list):
+        fail("review/prior_resolved_candidates.json is not an array")
+    for record in prior:
+        require_resolved_candidate_schema(record)
+    return prior
+
+
 def expected_resolved_candidate_records(
-    candidates: list[dict], follow_up_results: list[dict], follow_up_outputs: list[dict]
+    candidates: list[dict],
+    follow_up_results: list[dict],
+    follow_up_outputs: list[dict],
+    prior_resolved_candidates: list[dict],
 ) -> list[dict]:
     result_task_ids = {result["task_id"] for result in follow_up_results}
     records = []
@@ -4460,15 +4477,30 @@ def expected_resolved_candidate_records(
             if output["task_id"] in result_task_ids
             and candidate["id"] in output.get("candidate_ids", [])
         ]
-        record = resolved_candidate_record(candidate, linked)
+        record = resolved_candidate_record(candidate, linked, prior_resolved_candidates)
         records.append(record)
     return records
 
 
-def resolved_candidate_record(candidate: dict, follow_up_outputs: list[dict]) -> dict:
+def resolved_candidate_record(
+    candidate: dict,
+    follow_up_outputs: list[dict],
+    prior_resolved_candidates: list[dict] | None = None,
+) -> dict:
+    if prior_resolved_candidates is None:
+        prior_resolved_candidates = []
     resolved_status, resolved_disposition, resolution_source, reason, evidence = (
-        resolve_candidate_from_follow_ups(candidate, follow_up_outputs)
+        resolve_candidate_from_follow_ups(
+            candidate, follow_up_outputs, prior_resolved_candidates
+        )
     )
+    source_artifacts = [
+        "review/candidates.json",
+        "review/follow_up_results.json",
+        "review/follow_up_outputs.json",
+    ]
+    if resolution_source == "prior-resolved-candidates":
+        source_artifacts.append("review/prior_resolved_candidates.json")
     return {
         "schema": "ub-review.resolved_candidate.v1",
         "candidate_id": candidate["id"],
@@ -4479,11 +4511,7 @@ def resolved_candidate_record(candidate: dict, follow_up_outputs: list[dict]) ->
         "resolved_status": resolved_status,
         "resolved_disposition": resolved_disposition,
         "resolution_source": resolution_source,
-        "source_artifacts": [
-            "review/candidates.json",
-            "review/follow_up_results.json",
-            "review/follow_up_outputs.json",
-        ],
+        "source_artifacts": source_artifacts,
         "reason": reason,
         "follow_up_task_ids": unique_output_values(follow_up_outputs, "task_id"),
         "follow_up_stages": unique_output_values(follow_up_outputs, "stage"),
@@ -4502,16 +4530,10 @@ def unique_output_values(outputs: list[dict], field: str) -> list[str]:
 
 
 def resolve_candidate_from_follow_ups(
-    candidate: dict, follow_up_outputs: list[dict]
+    candidate: dict,
+    follow_up_outputs: list[dict],
+    prior_resolved_candidates: list[dict],
 ) -> tuple[str, str, str, str, list[str]]:
-    if not follow_up_outputs:
-        return (
-            "unchanged",
-            candidate["disposition"],
-            "candidate",
-            "no candidate-targeted follow-up output",
-            [f"Original candidate disposition `{candidate['disposition']}`"],
-        )
     signals = resolved_candidate_signals(follow_up_outputs)
     if signals:
         dispositions = {signal["disposition"] for signal in signals}
@@ -4535,6 +4557,26 @@ def resolve_candidate_from_follow_ups(
             signal["reason"],
             signal["evidence"],
         )
+    prior = prior_resolved_candidate_for_candidate(candidate, prior_resolved_candidates)
+    if prior is not None:
+        return (
+            "resolved",
+            prior["resolved_disposition"],
+            "prior-resolved-candidates",
+            "prior pass resolved the same candidate surface",
+            [
+                f"Prior resolved candidate `{prior['candidate_id']}` had disposition `{prior['resolved_disposition']}`",
+                *prior.get("evidence", []),
+            ],
+        )
+    if not follow_up_outputs:
+        return (
+            "unchanged",
+            candidate["disposition"],
+            "candidate",
+            "no candidate-targeted follow-up output",
+            [f"Original candidate disposition `{candidate['disposition']}`"],
+        )
     evidence = [
         f"Follow-up task `{output['task_id']}` stage `{output['stage']}` status `{output['status']}`"
         for output in follow_up_outputs
@@ -4554,6 +4596,32 @@ def resolve_candidate_from_follow_ups(
         "candidate-targeted follow-up did not produce usable model output",
         evidence,
     )
+
+
+def prior_resolved_candidate_for_candidate(
+    candidate: dict, prior_resolved_candidates: list[dict]
+) -> dict | None:
+    fingerprint = candidate_id_fingerprint(candidate.get("id", ""))
+    if fingerprint is None:
+        return None
+    for prior in prior_resolved_candidates:
+        if (
+            prior.get("resolved_status") == "resolved"
+            and prior.get("resolved_disposition") in {"refuted", "dropped"}
+            and prior.get("lane") == candidate.get("lane")
+            and prior.get("source") == candidate.get("source")
+            and prior.get("original_status") == candidate.get("status")
+            and candidate_id_fingerprint(prior.get("candidate_id", "")) == fingerprint
+        ):
+            return prior
+    return None
+
+
+def candidate_id_fingerprint(candidate_id: str) -> str | None:
+    suffix = candidate_id.rsplit("-", 1)[-1]
+    if len(suffix) == 12 and all(ch in "0123456789abcdefABCDEF" for ch in suffix):
+        return suffix
+    return None
 
 
 def resolved_candidate_signals(follow_up_outputs: list[dict]) -> list[dict]:
@@ -4676,13 +4744,20 @@ def require_resolved_candidate_schema(record: dict) -> None:
         "dropped",
     }:
         fail(f"resolved candidate disposition is unsupported: {record!r}")
-    if record["resolution_source"] not in {"candidate", "orchestrator-follow-up"}:
+    if record["resolution_source"] not in {
+        "candidate",
+        "orchestrator-follow-up",
+        "prior-resolved-candidates",
+    }:
         fail(f"resolved candidate source is unsupported: {record!r}")
-    if record.get("source_artifacts") != [
+    expected_source_artifacts = [
         "review/candidates.json",
         "review/follow_up_results.json",
         "review/follow_up_outputs.json",
-    ]:
+    ]
+    if record["resolution_source"] == "prior-resolved-candidates":
+        expected_source_artifacts.append("review/prior_resolved_candidates.json")
+    if record.get("source_artifacts") != expected_source_artifacts:
         fail(f"resolved candidate source_artifacts are unsupported: {record!r}")
     for field in [
         "follow_up_task_ids",
@@ -4749,6 +4824,7 @@ def require_final_compiler_input(
         "review/review.json",
         "review/follow_up_evidence.json",
         "review/resolved_candidates.json",
+        "review/prior_resolved_candidates.json",
         "review/proof_receipts.json",
         "review/receipt_routes.json",
         "review/final_orchestrator_plan.json",
@@ -4785,6 +4861,7 @@ def require_final_compiler_input(
     resolved_candidates = load_json(root / "review/resolved_candidates.json")
     if not isinstance(resolved_candidates, list):
         fail("review/resolved_candidates.json is not an array")
+    require_prior_resolved_candidate_artifact(root)
     expected_resolved_away = follow_up_resolved_away_candidate_ids(resolved_candidates)
     if final_input.get("follow_up_resolved_candidate_ids") != expected_resolved_away:
         fail(
@@ -8918,6 +8995,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 "review/review.json",
                 "review/follow_up_evidence.json",
                 "review/resolved_candidates.json",
+                "review/prior_resolved_candidates.json",
                 "review/proof_receipts.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
@@ -8972,6 +9050,9 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
             )
             (review_dir / "resolved_candidates.json").write_text(
                 json.dumps(resolved), encoding="utf-8"
+            )
+            (review_dir / "prior_resolved_candidates.json").write_text(
+                "[]", encoding="utf-8"
             )
             (review_dir / "proof_receipts.json").write_text("[]", encoding="utf-8")
             leak = final_input(overrides)
@@ -9194,6 +9275,47 @@ def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
         or unresolved["resolved_disposition"] != "summary-only"
     ):
         fail("open resolved-check control should stay unresolved")
+    current_candidate = {
+        "id": "candidate-0007-deadbeef1234",
+        "lane": "tests-oracle",
+        "source": "summary-only-finding",
+        "status": "summary-only",
+        "disposition": "summary-only",
+    }
+    prior_resolved = {
+        "schema": "ub-review.resolved_candidate.v1",
+        "candidate_id": "candidate-0001-deadbeef1234",
+        "lane": "tests-oracle",
+        "source": "summary-only-finding",
+        "original_status": "summary-only",
+        "original_disposition": "summary-only",
+        "resolved_status": "resolved",
+        "resolved_disposition": "dropped",
+        "resolution_source": "orchestrator-follow-up",
+        "source_artifacts": [
+            "review/candidates.json",
+            "review/follow_up_results.json",
+            "review/follow_up_outputs.json",
+        ],
+        "reason": "prior follow-up found this below materiality",
+        "follow_up_task_ids": ["follow-prior"],
+        "follow_up_stages": ["tertiary"],
+        "follow_up_statuses": ["ok"],
+        "evidence": ["Prior pass dropped the same candidate surface."],
+    }
+    prior_matched = resolved_candidate_record(current_candidate, [], [prior_resolved])
+    if (
+        prior_matched["resolved_status"] != "resolved"
+        or prior_matched["resolved_disposition"] != "dropped"
+        or prior_matched["resolution_source"] != "prior-resolved-candidates"
+        or "review/prior_resolved_candidates.json"
+        not in prior_matched["source_artifacts"]
+    ):
+        fail("prior resolved candidate did not drop matching hash-suffix candidate")
+    control_candidate = dict(current_candidate, id="candidate-0008-cafebabe1234")
+    control = resolved_candidate_record(control_candidate, [], [prior_resolved])
+    if control["resolved_status"] != "unchanged":
+        fail("prior resolved candidate matched a different hash suffix")
     inline_candidate = {
         "source": "inline-comment",
         "lane": "ub-active-view",
