@@ -9,6 +9,9 @@ use anyhow::{Context, Result};
 
 use crate::*;
 
+const MUTATION_HEAVY_WITNESS_SKIP_REASON: &str = "Targeted mutation proof is a heavy witness; skipped because this runtime profile does not lease mutation proof. Use a risk-pack/manual-heavy profile to run it.";
+const SANITIZER_HEAVY_WITNESS_SKIP_REASON: &str = "Sanitizer proof is a heavy witness; skipped because this runtime profile does not lease sanitizer proof. Use a risk-pack/manual-heavy profile to run it.";
+
 pub(crate) fn append_follow_up_proof_requests(
     proof_requests: &mut Vec<ProofRequest>,
     evidence: &FollowUpEvidenceArtifact,
@@ -143,13 +146,13 @@ pub(crate) fn proof_planner_skips(diff: &DiffContext, profile: &Profile) -> Vec<
     if !profile.budgets.mutation {
         skip.push(ProofPlannerSkip {
             kind: "mutation".to_owned(),
-            reason: "Targeted mutation proof is a heavy witness; skipped because this runtime profile does not lease mutation proof. Use a risk-pack/manual-heavy profile to run it.".to_owned(),
+            reason: MUTATION_HEAVY_WITNESS_SKIP_REASON.to_owned(),
         });
     }
     if !profile.budgets.sanitizer {
         skip.push(ProofPlannerSkip {
             kind: "sanitizer".to_owned(),
-            reason: "Sanitizer proof is a heavy witness; skipped because this runtime profile does not lease sanitizer proof. Use a risk-pack/manual-heavy profile to run it.".to_owned(),
+            reason: SANITIZER_HEAVY_WITNESS_SKIP_REASON.to_owned(),
         });
     }
     skip
@@ -924,17 +927,25 @@ index 1111111..2222222 100644
         let diff = test_diff();
 
         let skips = super::proof_planner_skips(&diff, &Profile::default());
+        let mutation_skips = skips
+            .iter()
+            .filter(|skip| skip.kind == "mutation")
+            .collect::<Vec<_>>();
+        let sanitizer_skips = skips
+            .iter()
+            .filter(|skip| skip.kind == "sanitizer")
+            .collect::<Vec<_>>();
 
-        assert!(skips.iter().any(|skip| {
-            skip.kind == "mutation"
-                && skip.reason.contains("does not lease mutation proof")
-                && skip.reason.contains("risk-pack/manual-heavy profile")
-        }));
-        assert!(skips.iter().any(|skip| {
-            skip.kind == "sanitizer"
-                && skip.reason.contains("does not lease sanitizer proof")
-                && skip.reason.contains("risk-pack/manual-heavy profile")
-        }));
+        assert_eq!(mutation_skips.len(), 1);
+        assert_eq!(sanitizer_skips.len(), 1);
+        assert_eq!(
+            mutation_skips[0].reason,
+            super::MUTATION_HEAVY_WITNESS_SKIP_REASON
+        );
+        assert_eq!(
+            sanitizer_skips[0].reason,
+            super::SANITIZER_HEAVY_WITNESS_SKIP_REASON
+        );
     }
 
     #[test]
