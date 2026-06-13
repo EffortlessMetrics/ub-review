@@ -127,12 +127,11 @@ bound what setup-ci can generate until fixed (spec 0007 carries these):
   rulesets query is not implemented, so audit-ci does not know which checks
   are actually required today. setup-ci cannot write the exact "remove
   required: <old checks>" list without this. Hard prerequisite.
-- `permissions` is never extracted and `uses_secrets` is always empty; the
-  v0 line scan covers triggers, path filters, timeout-minutes, and `uses`
-  only (src/main.rs workflow scan). Security classification therefore rests
-  on name patterns (`CI_AUDIT_SECURITY_PATTERNS`), not on observed
-  permissions or secret usage. setup-ci must treat this as a reason for
-  conservatism, not a license.
+- audit-ci extracts literal workflow/job `permissions` and job secret
+  references from local workflow YAML, then forces write-scoped or ambiguous
+  permissions and secret usage to `flag-for-human`. The line scan is still not
+  a complete YAML semantics engine, so setup-ci must treat missing or
+  ambiguous security context as a reason for conservatism, not a license.
 - `judgment` is always `deterministic` in v0 (src/main.rs); tokenless runs
   degrade every recommendation to `flag-for-human`. A setup-ci run over a
   tokenless audit has nothing to implement and must say so rather than
@@ -379,8 +378,8 @@ prereq A  audit-ci branch-protection / rulesets query: populate
           unknown). Without this, branch-protection-change.md cannot name
           the old required checks. Lands in the audit-ci surface
           (spec 0007).
-prereq B  audit-ci permissions + uses_secrets extraction from workflow
-          YAML, hardening the security flag beyond name patterns
+prereq B  delivered: audit-ci permissions + uses_secrets extraction from
+          workflow YAML hardens the security flag beyond name patterns
           (spec 0007).
 prereq C  item 27 calibration: the rust-test-proof rollout produces the
           multi-repo receipts ADR 0002 says setup-ci is calibrated on.

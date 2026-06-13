@@ -21711,6 +21711,7 @@ const CI_AUDIT_MEDIUM_VOLUME_RUNS: usize = 50;
 const CI_AUDIT_INDEPENDENT_FAILURE_RULE: &str = "a job counts an independent failure when it \
 fails on a pull_request run while every cheaper job (lower duration p50 within the same \
 workflow run) passed; skipped cheaper jobs count as passed";
+const CI_AUDIT_DYNAMIC_SECRET_REF: &str = "dynamic-secret-reference";
 
 #[derive(Debug, Clone, Serialize)]
 struct CiWorkflowScan {
@@ -21719,6 +21720,8 @@ struct CiWorkflowScan {
     path_filters: Vec<String>,
     path_ignore_filters: Vec<String>,
     cancel_in_progress: bool,
+    permissions: Option<serde_json::Value>,
+    uses_secrets: Vec<String>,
     yaml_jobs: Vec<CiWorkflowYamlJob>,
 }
 
@@ -21729,6 +21732,8 @@ struct CiWorkflowYamlJob {
     runs_on: Vec<String>,
     timeout_minutes: Option<u64>,
     uses: Vec<String>,
+    permissions: Option<serde_json::Value>,
+    uses_secrets: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -22106,6 +22111,147 @@ fn ci_yaml_inline_list(value: &str) -> Option<Vec<String>> {
     )
 }
 
+fn ci_yaml_scalar_json(value: &str) -> serde_json::Value {
+    let unquoted = ci_yaml_unquote(value);
+    match unquoted.to_ascii_lowercase().as_str() {
+        "null" | "~" => serde_json::Value::Null,
+        "true" => serde_json::Value::Bool(true),
+        "false" => serde_json::Value::Bool(false),
+        _ => serde_json::Value::String(unquoted),
+    }
+}
+
+fn ci_yaml_inline_mapping(value: &str) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let trimmed = value.trim();
+    let inner = trimmed.strip_prefix('{')?.strip_suffix('}')?.trim();
+    let mut map = serde_json::Map::new();
+    if inner.is_empty() {
+        return Some(map);
+    }
+    for item in inner.split(',') {
+        let (key, value) = item.split_once(':')?;
+        let key = ci_yaml_unquote(key);
+        if key.is_empty() {
+            return None;
+        }
+        map.insert(key, ci_yaml_scalar_json(value));
+    }
+    Some(map)
+}
+
+fn ci_yaml_permissions_at(
+    lines: &[(usize, String)],
+    key_index: usize,
+    key_indent: usize,
+    inline_value: &str,
+) -> (Option<serde_json::Value>, usize) {
+    let inline = inline_value.trim();
+    if !inline.is_empty() {
+        let value = ci_yaml_inline_mapping(inline)
+            .map(serde_json::Value::Object)
+            .unwrap_or_else(|| ci_yaml_scalar_json(inline));
+        return (Some(value), key_index + 1);
+    }
+
+    let mut map = serde_json::Map::new();
+    let mut saw_child = false;
+    let mut index = key_index + 1;
+    while index < lines.len() {
+        let (indent, content) = &lines[index];
+        if *indent <= key_indent {
+            break;
+        }
+        saw_child = true;
+        let body = content.strip_prefix("- ").unwrap_or(content);
+        if let Some((key, value)) = body.split_once(':') {
+            let key = ci_yaml_unquote(key);
+            if !key.is_empty() {
+                let value = value.trim();
+                map.insert(
+                    key,
+                    if value.is_empty() {
+                        serde_json::Value::String("unparsed nested permission".to_owned())
+                    } else {
+                        ci_yaml_scalar_json(value)
+                    },
+                );
+            }
+        }
+        index += 1;
+    }
+
+    let value = if !map.is_empty() {
+        serde_json::Value::Object(map)
+    } else if saw_child {
+        serde_json::Value::String("unparsed permissions block".to_owned())
+    } else {
+        serde_json::Value::String("empty permissions block".to_owned())
+    };
+    (Some(value), index)
+}
+
+fn ci_collect_secret_refs(text: &str, out: &mut BTreeSet<String>) {
+    let mut offset = 0;
+    while let Some(relative) = text[offset..].find("secrets.") {
+        let start = offset + relative + "secrets.".len();
+        let mut end = start;
+        for (index, character) in text[start..].char_indices() {
+            if character.is_ascii_alphanumeric() || character == '_' {
+                end = start + index + character.len_utf8();
+            } else {
+                break;
+            }
+        }
+        if end > start {
+            out.insert(text[start..end].to_owned());
+            offset = end;
+        } else {
+            offset = start;
+        }
+    }
+
+    let mut offset = 0;
+    while let Some(relative) = text[offset..].find("secrets[") {
+        let start = offset + relative + "secrets[".len();
+        let rest = text[start..].trim_start();
+        if let Some(quote) = rest
+            .chars()
+            .next()
+            .filter(|quote| *quote == '\'' || *quote == '"')
+        {
+            let name_start = start + text[start..].len() - rest.len() + quote.len_utf8();
+            let mut end = name_start;
+            let mut valid = true;
+            for (index, character) in text[name_start..].char_indices() {
+                if character == quote {
+                    break;
+                }
+                if character.is_ascii_alphanumeric() || character == '_' {
+                    end = name_start + index + character.len_utf8();
+                } else {
+                    valid = false;
+                    break;
+                }
+            }
+            if valid && end > name_start {
+                out.insert(text[name_start..end].to_owned());
+                offset = end;
+                continue;
+            }
+        }
+        out.insert(CI_AUDIT_DYNAMIC_SECRET_REF.to_owned());
+        offset = start;
+    }
+}
+
+fn ci_workflow_permissions_value(indent: usize, content: &str) -> Option<&str> {
+    if indent == 0 {
+        content.strip_prefix("permissions:")
+    } else {
+        None
+    }
+}
+
 /// Collect a YAML list value: inline `[a, b]`, inline scalar, or dash items on
 /// following deeper-indented lines. Returns the items and the next line index.
 fn ci_yaml_list_at(
@@ -22147,7 +22293,8 @@ fn ci_yaml_list_at(
 
 /// Targeted line-scan of a workflow file. This is intentionally not a YAML
 /// parser: it extracts only `on:` triggers (with branch refinement), workflow
-/// level `paths`/`paths-ignore`, workflow cancellation concurrency, and per-job
+/// level `paths`/`paths-ignore`, workflow cancellation concurrency,
+/// workflow/job `permissions`, per-job secret references, and per-job
 /// `runs-on`, `timeout-minutes`, `name`, and `uses` references. Everything else
 /// is an explicit evidence gap.
 fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
@@ -22166,15 +22313,24 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
     let mut triggers = Vec::new();
     let mut path_filters = Vec::new();
     let mut path_ignore_filters = Vec::new();
+    let mut workflow_uses_secrets = BTreeSet::new();
     let cancel_in_progress = lines.iter().any(|(_, content)| {
         content
             .strip_prefix("cancel-in-progress:")
             .is_some_and(|rest| ci_yaml_unquote(rest).eq_ignore_ascii_case("true"))
     });
+    let mut workflow_permissions = None;
     let mut yaml_jobs = Vec::new();
     let mut index = 0;
     while index < lines.len() {
         let (indent, content) = &lines[index];
+        ci_collect_secret_refs(content, &mut workflow_uses_secrets);
+        if let Some(rest) = ci_workflow_permissions_value(*indent, content) {
+            let (permissions, next) = ci_yaml_permissions_at(&lines, index, *indent, rest);
+            workflow_permissions = permissions.or(workflow_permissions);
+            index = next;
+            continue;
+        }
         let is_on_key = *indent == 0
             && (content == "on:"
                 || content.starts_with("on: ")
@@ -22262,10 +22418,13 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                 let mut runs_on = Vec::new();
                 let mut timeout_minutes = None;
                 let mut uses = Vec::new();
+                let mut permissions = None;
+                let mut uses_secrets = BTreeSet::new();
                 let mut cursor = index + 1;
                 while cursor < lines.len() && lines[cursor].0 > expected {
                     let body = lines[cursor].1.as_str();
                     let body = body.strip_prefix("- ").unwrap_or(body);
+                    ci_collect_secret_refs(body, &mut uses_secrets);
                     if let Some(rest) = body.strip_prefix("runs-on:") {
                         let (items, next) = ci_yaml_list_at(&lines, cursor, lines[cursor].0, rest);
                         runs_on.extend(items);
@@ -22278,6 +22437,16 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                         if !reference.is_empty() {
                             uses.push(reference);
                         }
+                    } else if let Some(rest) = body.strip_prefix("permissions:") {
+                        let (value, next) =
+                            ci_yaml_permissions_at(&lines, cursor, lines[cursor].0, rest);
+                        permissions = value.or(permissions);
+                        cursor = next;
+                        continue;
+                    } else if let Some(rest) = body.strip_prefix("secrets:")
+                        && ci_yaml_unquote(rest).eq_ignore_ascii_case("inherit")
+                    {
+                        uses_secrets.insert("inherit".to_owned());
                     } else if name.is_none()
                         && lines[cursor].1.starts_with("name:")
                         && let Some(rest) = body.strip_prefix("name:")
@@ -22295,6 +22464,8 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                     runs_on,
                     timeout_minutes,
                     uses,
+                    permissions,
+                    uses_secrets: uses_secrets.into_iter().collect(),
                 });
                 index = cursor;
             }
@@ -22308,6 +22479,8 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
         path_filters,
         path_ignore_filters,
         cancel_in_progress,
+        permissions: workflow_permissions,
+        uses_secrets: workflow_uses_secrets.into_iter().collect(),
         yaml_jobs,
     }
 }
@@ -22711,12 +22884,54 @@ fn ci_security_pattern_match(candidates: &[&str]) -> Option<String> {
     None
 }
 
+fn ci_permissions_risk(permissions: Option<&serde_json::Value>) -> Option<&'static str> {
+    let value = permissions?;
+    match value {
+        serde_json::Value::Null => Some("ambiguous permissions"),
+        serde_json::Value::String(value) => {
+            let lower = value.trim().to_ascii_lowercase();
+            match lower.as_str() {
+                "read-all" | "none" => None,
+                "write-all" => Some("write-scoped permissions"),
+                "" => Some("ambiguous permissions"),
+                _ if lower.contains("write") => Some("write-scoped permissions"),
+                _ => Some("ambiguous permissions"),
+            }
+        }
+        serde_json::Value::Object(map) => {
+            let mut ambiguous = false;
+            for value in map.values() {
+                match value {
+                    serde_json::Value::String(scope) => {
+                        let lower = scope.trim().to_ascii_lowercase();
+                        match lower.as_str() {
+                            "read" | "none" => {}
+                            "write" => return Some("write-scoped permissions"),
+                            "" => ambiguous = true,
+                            _ if lower.contains("write") => {
+                                return Some("write-scoped permissions");
+                            }
+                            _ => ambiguous = true,
+                        }
+                    }
+                    serde_json::Value::Null => {}
+                    _ => ambiguous = true,
+                }
+            }
+            ambiguous.then_some("ambiguous permissions")
+        }
+        _ => Some("ambiguous permissions"),
+    }
+}
+
 #[derive(Debug)]
 struct CiTierEvidence {
     job: String,
     workflow_path: String,
     workflow_name: String,
     uses: Vec<String>,
+    permissions: Option<serde_json::Value>,
+    uses_secrets: Vec<String>,
     triggers: Vec<String>,
     path_filters: Vec<String>,
     history_available: bool,
@@ -22758,6 +22973,31 @@ fn classify_ci_job_tier(
             report_note: format!(
                 "security-sensitive (matched `{pattern}`); never auto-right-sized"
             ),
+            proposed_policy: "human decision required; not auto-right-sized".to_owned(),
+        };
+    }
+    if let Some(permission_risk) = ci_permissions_risk(evidence.permissions.as_ref()) {
+        return CiTierDecision {
+            tier: "flag-for-human",
+            confidence: "high",
+            reason: format!("{permission_risk}; never auto-right-sized"),
+            report_note: format!("{permission_risk}; never auto-right-sized"),
+            proposed_policy: "human decision required; not auto-right-sized".to_owned(),
+        };
+    }
+    if !evidence.uses_secrets.is_empty() {
+        let summary = evidence
+            .uses_secrets
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ");
+        return CiTierDecision {
+            tier: "flag-for-human",
+            confidence: "high",
+            reason: format!("uses workflow secret reference(s): {summary}; never auto-right-sized"),
+            report_note: "uses workflow secrets; never auto-right-sized".to_owned(),
             proposed_policy: "human decision required; not auto-right-sized".to_owned(),
         };
     }
@@ -23016,7 +23256,7 @@ fn build_ci_audit_artifacts(
         .map(|fetch| compute_ci_job_stats(&fetch.workflows, &fetch.runs))
         .unwrap_or_default();
     let mut inventory_gaps: Vec<String> = vec![
-        "permissions, secrets, and matrix structure not extracted from workflow YAML (v0 line-scan covers triggers, paths, runs-on, timeout-minutes, uses)"
+        "matrix structure not extracted from workflow YAML (v0 line-scan covers triggers, paths, permissions, secrets, runs-on, timeout-minutes, uses)"
             .to_owned(),
         "required-check status unknown: branch protection and rulesets not queried in v0"
             .to_owned(),
@@ -23146,6 +23386,17 @@ fn build_ci_audit_artifacts(
             (None, Some(yaml_job)) => yaml_job.name.clone().unwrap_or_else(|| seed.job.clone()),
             _ => seed.job.clone(),
         };
+        let permissions = seed
+            .yaml
+            .and_then(|yaml_job| yaml_job.permissions.clone())
+            .or_else(|| scan.and_then(|scan| scan.permissions.clone()));
+        let mut uses_secret_set: BTreeSet<String> = scan
+            .map(|scan| scan.uses_secrets.iter().cloned().collect())
+            .unwrap_or_default();
+        if let Some(yaml_job) = seed.yaml {
+            uses_secret_set.extend(yaml_job.uses_secrets.iter().cloned());
+        }
+        let uses_secrets: Vec<String> = uses_secret_set.into_iter().collect();
         inventory_jobs.push(CiInventoryJob {
             workflow: seed.workflow_path.clone(),
             job: seed.job.clone(),
@@ -23154,8 +23405,8 @@ fn build_ci_audit_artifacts(
             path_filters: path_filters.clone(),
             matrix_size,
             timeout_minutes: seed.yaml.and_then(|yaml_job| yaml_job.timeout_minutes),
-            permissions: None,
-            uses_secrets: Vec::new(),
+            permissions: permissions.clone(),
+            uses_secrets: uses_secrets.clone(),
             required_check: None,
             required_check_source: "unknown".to_owned(),
         });
@@ -23204,6 +23455,8 @@ fn build_ci_audit_artifacts(
                 .yaml
                 .map(|yaml_job| yaml_job.uses.clone())
                 .unwrap_or_default(),
+            permissions,
+            uses_secrets,
             triggers,
             path_filters,
             history_available,
@@ -39764,6 +40017,40 @@ jobs:
       - run: ./scripts/e2e.sh
 "#;
 
+    const CI_SENSITIVE_WORKFLOW: &str = r#"name: Sensitive CI
+
+on: [pull_request]
+
+permissions:
+  contents: read
+
+env:
+  GLOBAL_TOKEN: ${{ secrets['GLOBAL_TOKEN'] }}
+
+jobs:
+  wide:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - run: echo "${{ secrets.DEPLOY_TOKEN }}"
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "${{ secrets[env.NOTIFY_SECRET] }}"
+  docs:
+    runs-on: ubuntu-latest
+    permissions: { contents: read }
+    steps:
+      - run: cargo test --doc
+  nullperms:
+    runs-on: ubuntu-latest
+    permissions: null
+    steps:
+      - run: cargo check
+"#;
+
     fn ci_api_job_value(name: &str, conclusion: &str, seconds: u64) -> serde_json::Value {
         serde_json::json!({
             "name": name,
@@ -39888,6 +40175,8 @@ jobs:
             workflow_path: ".github/workflows/ci.yml".to_owned(),
             workflow_name: "CI".to_owned(),
             uses: Vec::new(),
+            permissions: None,
+            uses_secrets: Vec::new(),
             triggers: vec!["pull_request".to_owned()],
             path_filters: Vec::new(),
             history_available: true,
@@ -39919,6 +40208,73 @@ jobs:
         assert_eq!(e2e.name.as_deref(), Some("End to end"));
         assert_eq!(e2e.timeout_minutes, Some(45));
         Ok(())
+    }
+
+    #[test]
+    fn ci_workflow_scan_extracts_permissions_and_secret_refs() -> Result<()> {
+        let scan = super::scan_workflow_text(".github/workflows/ci.yml", CI_SENSITIVE_WORKFLOW);
+        assert_eq!(
+            scan.permissions,
+            Some(serde_json::json!({"contents": "read"}))
+        );
+        assert_eq!(scan.uses_secrets, vec!["GLOBAL_TOKEN".to_owned()]);
+        let wide = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "wide")
+            .context("wide job")?;
+        assert_eq!(
+            wide.permissions,
+            Some(serde_json::json!({"contents": "write", "id-token": "write"}))
+        );
+        assert_eq!(wide.uses_secrets, vec!["DEPLOY_TOKEN".to_owned()]);
+
+        let notify = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "notify")
+            .context("notify job")?;
+        assert_eq!(notify.permissions, None);
+        assert_eq!(
+            notify.uses_secrets,
+            vec![super::CI_AUDIT_DYNAMIC_SECRET_REF.to_owned()]
+        );
+
+        let docs = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "docs")
+            .context("docs job")?;
+        assert_eq!(
+            docs.permissions,
+            Some(serde_json::json!({"contents": "read"}))
+        );
+        assert!(docs.uses_secrets.is_empty());
+
+        let nullperms = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "nullperms")
+            .context("nullperms job")?;
+        assert_eq!(nullperms.permissions, Some(serde_json::Value::Null));
+        Ok(())
+    }
+
+    #[test]
+    fn ci_workflow_permissions_key_requires_top_level_indent() {
+        assert_eq!(
+            super::ci_workflow_permissions_value(0, "permissions:"),
+            Some("")
+        );
+        assert_eq!(
+            super::ci_workflow_permissions_value(0, "permissions: write-all"),
+            Some(" write-all")
+        );
+        assert_eq!(
+            super::ci_workflow_permissions_value(2, "permissions: write-all"),
+            None
+        );
+        assert_eq!(super::ci_workflow_permissions_value(0, "jobs:"), None);
     }
 
     #[test]
@@ -40016,6 +40372,38 @@ jobs:
                 decision.reason
             );
         }
+    }
+
+    #[test]
+    fn ci_permissions_and_secrets_flag_for_human() {
+        let mut evidence = ci_tier_evidence("integration", 500, 40, Some(60));
+        evidence.permissions = Some(serde_json::json!({"contents": "write"}));
+        let decision = super::classify_ci_job_tier(&evidence, true);
+        assert_eq!(decision.tier, "flag-for-human");
+        assert!(decision.reason.contains("write-scoped permissions"));
+
+        let mut evidence = ci_tier_evidence("integration", 500, 40, Some(60));
+        evidence.permissions = Some(serde_json::json!({"contents": "${{ inputs.scope }}"}));
+        let decision = super::classify_ci_job_tier(&evidence, true);
+        assert_eq!(decision.tier, "flag-for-human");
+        assert!(decision.reason.contains("ambiguous permissions"));
+
+        let mut evidence = ci_tier_evidence("integration", 500, 40, Some(60));
+        evidence.permissions = Some(serde_json::Value::Null);
+        let decision = super::classify_ci_job_tier(&evidence, true);
+        assert_eq!(decision.tier, "flag-for-human");
+        assert!(decision.reason.contains("ambiguous permissions"));
+
+        let mut evidence = ci_tier_evidence("integration", 500, 40, Some(60));
+        evidence.uses_secrets = vec!["DEPLOY_TOKEN".to_owned()];
+        let decision = super::classify_ci_job_tier(&evidence, true);
+        assert_eq!(decision.tier, "flag-for-human");
+        assert!(decision.reason.contains("DEPLOY_TOKEN"));
+
+        let mut evidence = ci_tier_evidence("fmt", 200, 4, Some(45));
+        evidence.permissions = Some(serde_json::json!({"contents": "read"}));
+        let decision = super::classify_ci_job_tier(&evidence, false);
+        assert_eq!(decision.tier, "keep-required");
     }
 
     #[test]
@@ -40697,6 +41085,119 @@ jobs:
         }
         let report = fs::read_to_string(temp.path().join("audit-report.md"))?;
         assert!(report.contains("# CI audit: acme/widgets"));
+        Ok(())
+    }
+
+    #[test]
+    fn ci_audit_artifacts_record_permissions_secrets_and_flag_sensitive_jobs() -> Result<()> {
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/ci.yml",
+            CI_SENSITIVE_WORKFLOW,
+        )];
+        let mut specs: Vec<CiRunSpec<'_>> = Vec::new();
+        for index in 0..25u64 {
+            specs.push((
+                700 + index,
+                vec![
+                    ("wide", "success", 60),
+                    ("notify", "success", 60),
+                    ("docs", "success", 60),
+                    ("nullperms", "success", 60),
+                ],
+            ));
+        }
+        let fetch = super::CiAuditFetch {
+            workflows: ci_fixture_workflows(),
+            runs: ci_fixture_runs(&specs)?,
+            pages_fetched: 1,
+            truncated: false,
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            None,
+            super::Utc::now(),
+        );
+
+        let wide = artifacts
+            .inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == "wide")
+            .context("wide inventory job")?;
+        assert_eq!(
+            wide.permissions.as_ref(),
+            Some(&serde_json::json!({"contents": "write", "id-token": "write"}))
+        );
+        assert_eq!(
+            wide.uses_secrets,
+            vec!["DEPLOY_TOKEN".to_owned(), "GLOBAL_TOKEN".to_owned()]
+        );
+
+        let notify = artifacts
+            .inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == "notify")
+            .context("notify inventory job")?;
+        assert_eq!(
+            notify.permissions.as_ref(),
+            Some(&serde_json::json!({"contents": "read"}))
+        );
+        assert_eq!(
+            notify.uses_secrets,
+            vec![
+                "GLOBAL_TOKEN".to_owned(),
+                super::CI_AUDIT_DYNAMIC_SECRET_REF.to_owned()
+            ]
+        );
+
+        let docs = artifacts
+            .inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == "docs")
+            .context("docs inventory job")?;
+        assert_eq!(
+            docs.permissions.as_ref(),
+            Some(&serde_json::json!({"contents": "read"}))
+        );
+        assert_eq!(docs.uses_secrets, vec!["GLOBAL_TOKEN".to_owned()]);
+
+        let nullperms = artifacts
+            .inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == "nullperms")
+            .context("nullperms inventory job")?;
+        assert_eq!(
+            nullperms.permissions.as_ref(),
+            Some(&serde_json::Value::Null)
+        );
+
+        let recommendation = |job: &str| -> Result<&super::CiRecommendation> {
+            artifacts
+                .recommendations
+                .jobs
+                .iter()
+                .find(|recommendation| recommendation.job == job)
+                .with_context(|| format!("{job} recommendation"))
+        };
+        let wide = recommendation("wide")?;
+        assert_eq!(wide.tier, "flag-for-human");
+        assert!(wide.reason.contains("write-scoped permissions"));
+        let notify = recommendation("notify")?;
+        assert_eq!(notify.tier, "flag-for-human");
+        assert!(notify.reason.contains(super::CI_AUDIT_DYNAMIC_SECRET_REF));
+        let docs = recommendation("docs")?;
+        assert_eq!(docs.tier, "flag-for-human");
+        assert!(docs.reason.contains("GLOBAL_TOKEN"));
+        let nullperms = recommendation("nullperms")?;
+        assert_eq!(nullperms.tier, "flag-for-human");
+        assert!(nullperms.reason.contains("ambiguous permissions"));
         Ok(())
     }
 
