@@ -169,6 +169,10 @@ Rules:
   record and a `positioned_to_catch` statement plausibly covered by a
   `keep-required`/`move-to-ub-review-required` job or an adaptive trigger;
   absence of failures alone caps at `confidence: low`;
+- `move-to-ub-review-required` is emitted only when inventory proves the job
+  is already required with an exact context and the deterministic classifier
+  would otherwise keep it required; that recommendation must cite
+  `ci-audit/inventory.json#<job>`;
 - every recommendation carries at least one receipt pointer; no recommendation
   without a receipt;
 - with `model-mode: off`, all recommendations are deterministic and

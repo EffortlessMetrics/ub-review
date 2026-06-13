@@ -171,11 +171,11 @@ flag-for-human               security, secrets, compliance, signing, deploy,
                              provenance, or unclear ownership
 ```
 
-Honest v0 note: the deterministic classifier emits only three of the seven
-tiers - flag-for-human, keep-required, and adaptive (src/main.rs
-classify_ci_job_tier). The other four are contract taxonomy, reserved for the
-model judgment lane and the setup-ci policy mapping; nothing in v0 produces
-them.
+Honest v0 note: the deterministic classifier emits four of the seven tiers -
+flag-for-human, move-to-ub-review-required, keep-required, and adaptive
+(src/main.rs classify_ci_job_tier). The remaining three are contract
+taxonomy, reserved for the model judgment lane and later setup-ci policy
+mapping.
 
 The deterministic v0 decision ladder, in order (src/main.rs
 classify_ci_job_tier and the CI_AUDIT_* constants):
@@ -187,6 +187,8 @@ fewer than 20 runs in window      flag-for-human, confidence low
 duration evidence missing         flag-for-human, confidence low
 independent failures > 0          keep-required (high confidence only when
                                   p50 < 300s and runs >= 50, else medium)
+already required + keep-required  move-to-ub-review-required when required
+                                  check context is proven in inventory
 p50 >= 300s, 0 independent fails  adaptive (medium only when runs >= 100 and
                                   a sibling job in the same workflow has
                                   proven independent signal, else low)
@@ -213,7 +215,7 @@ IO error (src/main.rs cmd_audit_ci, resolve_ci_audit_repo,
 ci_github_get_json).
 
 Conservatism rules the deterministic tier output (docs/CI_AUDIT_WIZARD.md;
-enforced in classify_ci_job_tier): nothing right-sizes below adaptive,
+enforced in classify_ci_job_tier): nothing becomes optional below adaptive,
 absence of failures alone caps confidence at low, and ambiguity resolves to
 flag-for-human.
 
@@ -293,9 +295,11 @@ Honest v0 limits, stated as limits:
   do not match audited workflow jobs stay explicit inventory evidence gaps;
   setup-ci must not invent a remove list from those partial receipts
   (src/main.rs).
-- the deterministic classifier emits three of seven tiers (above); the
+- the deterministic classifier emits four of seven tiers (above); the
   contract's survivorship rule is implemented only in its conservative
-  direction (sibling-signal check caps adaptive confidence).
+  direction (sibling-signal check caps adaptive confidence), and
+  move-to-ub-review-required is emitted only when inventory proves the current
+  required-check context that setup-ci can later remove manually.
 
 None of the open release issues (#306, #310, #312, #313, #317-#321, #347;
 #314 and #316 are closed) touch this surface; the audit-ci v0 gaps are
@@ -353,10 +357,12 @@ This spec is docs-only; delivered work is cited, remaining work is routed:
    emit `judgment: model-assisted`, never invent facts
    (docs/CI_AUDIT_WIZARD.md rules; docs/adr/0002 judgment split). Off by
    default; deterministic mode remains the supported floor.
-5. Remaining tiers (move-to-ub-review-required, label-gated,
-   nightly-release, advisory) become emittable only alongside the setup-ci
-   policy mapping (spec 0008; roadmap item 28) - a tier the wizard cannot
-   turn into a concrete policy line is not worth emitting.
+5. Delivered for setup-ci policy mapping: `move-to-ub-review-required` is
+   emittable only when inventory proves the job is already required and the
+   deterministic classifier would otherwise keep it required. Remaining tiers
+   (label-gated, nightly-release, advisory) stay reserved for later policy
+   mapping - a tier the wizard cannot turn into a concrete policy line is not
+   worth emitting.
 
 ## Release note claim
 
