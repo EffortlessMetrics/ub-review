@@ -313,6 +313,15 @@ pub(crate) struct InitArgs {
     /// Config file path to write.
     #[arg(long, default_value = ".ub-review.toml")]
     pub(crate) path: PathBuf,
+    /// Repository root to inspect for the file-driven init guide.
+    #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
+    pub(crate) root: PathBuf,
+    /// Markdown handoff guide for agents or maintainers finishing setup.
+    #[arg(long = "guide-out", default_value = "ub-review-init.md")]
+    pub(crate) guide_out: PathBuf,
+    /// Write only the starter config, without the file-driven setup guide.
+    #[arg(long = "no-guide")]
+    pub(crate) no_guide: bool,
     /// Profile to write into the config.
     #[arg(long, value_enum, default_value = "gh-runner")]
     pub(crate) profile: ProfileArg,

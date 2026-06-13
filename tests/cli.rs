@@ -218,6 +218,14 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
         "init help should advertise the supported profile selector:\n{init_help}"
     );
     assert!(
+        init_help.contains("--guide-out <GUIDE_OUT>"),
+        "init help should advertise the file-driven setup guide:\n{init_help}"
+    );
+    assert!(
+        init_help.contains("--no-guide"),
+        "init help should advertise the explicit guide opt-out:\n{init_help}"
+    );
+    assert!(
         !init_help.contains("--mode"),
         "init help must not advertise unsupported onboarding mode flags:\n{init_help}"
     );
@@ -242,6 +250,92 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+#[test]
+fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    write_file(
+        &repo.join("Cargo.toml"),
+        "[package]\nname = \"init-guide-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+    )?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        "#[no_mangle]\npub extern \"C\" fn exported() -> usize {\n    unsafe { 42 }\n}\n",
+    )?;
+    write_file(
+        &repo.join("tests/smoke.rs"),
+        "#[test]\nfn smoke() {\n    assert_eq!(2 + 2, 4);\n}\n",
+    )?;
+    write_file(
+        &repo.join(".github/workflows/ci.yml"),
+        "name: CI\non: [pull_request]\nconcurrency:\n  cancel-in-progress: true\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+    )?;
+    write_file(
+        &repo.join("policy/allow.toml"),
+        "# owner receipt placeholder\n",
+    )?;
+
+    let config = repo.join(".ub-review.toml");
+    let guide = repo.join("ub-review-init.md");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "init",
+            "--root",
+            path_str(&repo)?,
+            "--path",
+            path_str(&config)?,
+            "--guide-out",
+            path_str(&guide)?,
+        ],
+    )?;
+
+    let config_text = fs::read_to_string(&config)?;
+    assert!(
+        config_text.contains("profile = \"gh-runner\""),
+        "init should still write the starter config:\n{config_text}"
+    );
+    let guide_text = fs::read_to_string(&guide)?;
+    for expected in [
+        "# ub-review init guide",
+        "Rust package `init-guide-fixture`",
+        ".github/workflows/ci.yml",
+        "unsafe-review",
+        "cargo-allow",
+        "ub-review audit-ci --root",
+        "ub-review setup-ci --print-pr",
+        "--accept <job>=<command>",
+        "Branch protection",
+    ] {
+        assert!(
+            guide_text.contains(expected),
+            "init guide missing `{expected}`:\n{guide_text}"
+        );
+    }
+
+    let failure = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "init",
+            "--root",
+            path_str(&repo)?,
+            "--path",
+            path_str(&config)?,
+            "--guide-out",
+            path_str(&guide)?,
+        ],
+    )?;
+    assert!(
+        failure.contains("already exists; pass --force"),
+        "init must refuse to overwrite config or guide without --force:\n{failure}"
+    );
     Ok(())
 }
 
