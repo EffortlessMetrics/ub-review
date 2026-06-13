@@ -259,26 +259,35 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let repo = temp.path().join("repo");
     let bin = env!("CARGO_BIN_EXE_ub-review");
-    write_file(
-        &repo.join("Cargo.toml"),
-        "[package]\nname = \"init-guide-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
-    )?;
-    write_file(
-        &repo.join("src/lib.rs"),
-        "#[no_mangle]\npub extern \"C\" fn exported() -> usize {\n    unsafe { 42 }\n}\n",
-    )?;
-    write_file(
-        &repo.join("tests/smoke.rs"),
-        "#[test]\nfn smoke() {\n    assert_eq!(2 + 2, 4);\n}\n",
-    )?;
-    write_file(
-        &repo.join(".github/workflows/ci.yml"),
-        "name: CI\non: [pull_request]\nconcurrency:\n  cancel-in-progress: true\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
-    )?;
-    write_file(
-        &repo.join("policy/allow.toml"),
-        "# owner receipt placeholder\n",
-    )?;
+    let fixture_files = [
+        (
+            "Cargo.toml",
+            "[package]\nname = \"init-guide-fixture\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        ),
+        (
+            "src/lib.rs",
+            "#[no_mangle]\npub extern \"C\" fn exported() -> usize {\n    unsafe { 42 }\n}\n",
+        ),
+        (
+            "tests/smoke.rs",
+            "#[test]\nfn smoke() {\n    assert_eq!(2 + 2, 4);\n}\n",
+        ),
+        (
+            ".github/workflows/ci.yml",
+            "name: CI\non: [pull_request]\nconcurrency:\n  cancel-in-progress: true\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n",
+        ),
+        ("policy/allow.toml", "# owner receipt placeholder\n"),
+    ];
+    for (relative, contents) in fixture_files {
+        write_file(&repo.join(relative), contents)?;
+    }
+    for (relative, contents) in fixture_files {
+        let actual = fs::read_to_string(repo.join(relative))?;
+        assert_eq!(
+            actual, contents,
+            "fixture file `{relative}` must be written exactly before init runs"
+        );
+    }
 
     let config = repo.join(".ub-review.toml");
     let guide = repo.join("ub-review-init.md");
@@ -335,6 +344,26 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
     assert!(
         failure.contains("already exists; pass --force"),
         "init must refuse to overwrite config or guide without --force:\n{failure}"
+    );
+
+    let collision_failure = run_expect_failure(
+        &repo,
+        bin,
+        &[
+            "init",
+            "--path",
+            "collision.md",
+            "--guide-out",
+            "./collision.md",
+        ],
+    )?;
+    assert!(
+        collision_failure.contains("--path and --guide-out must name different files"),
+        "init must reject normalized output path collisions:\n{collision_failure}"
+    );
+    assert!(
+        !repo.join("collision.md").exists(),
+        "collision preflight must not write either output"
     );
     Ok(())
 }

@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command as ProcessCommand, ExitStatus, Stdio};
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
@@ -2520,7 +2520,7 @@ fn cmd_init(args: InitArgs) -> Result<()> {
         );
     }
     if !args.no_guide {
-        if args.path == args.guide_out {
+        if init_destination_key(&args.path)? == init_destination_key(&args.guide_out)? {
             bail!(
                 "--path and --guide-out must name different files ({})",
                 args.path.display()
@@ -2555,6 +2555,35 @@ fn cmd_init(args: InitArgs) -> Result<()> {
         println!("wrote {}", args.guide_out.display());
     }
     Ok(())
+}
+
+fn init_destination_key(path: &Path) -> Result<PathBuf> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .context("resolve current directory for init output paths")?
+            .join(path)
+    };
+    Ok(init_normalize_path_lexically(&absolute))
+}
+
+fn init_normalize_path_lexically(path: &Path) -> PathBuf {
+    let mut normalized = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                if !normalized.pop() {
+                    normalized.push(component.as_os_str());
+                }
+            }
+            Component::Normal(part) => normalized.push(part),
+            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
+            Component::RootDir => normalized.push(component.as_os_str()),
+        }
+    }
+    normalized
 }
 
 fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
