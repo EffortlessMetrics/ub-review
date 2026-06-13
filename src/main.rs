@@ -9054,17 +9054,28 @@ fn fill_proof_request_entry(
 }
 
 fn fill_proof_planner_skip_entry(skip: ProofPlannerSkip) -> FillLedgerEntry {
+    let expected_signal = proof_skip_expected_signal(&skip.kind).map(str::to_owned);
     FillLedgerEntry {
         check_id: skip.kind,
         kind: "proof-skip".to_owned(),
         selected: false,
         selection_reason: skip.reason,
-        expected_signal: None,
+        expected_signal,
         actual_signal: None,
         time_spent_sec: 0.0,
         artifact_path: None,
         affected_merge: None,
         source_artifacts: vec!["review/proof_planner_output.json".to_owned()],
+    }
+}
+
+fn proof_skip_expected_signal(skip_kind: &str) -> Option<&'static str> {
+    match skip_kind {
+        "miri" => Some("Rust UB witness for unsafe/native execution paths"),
+        "mutation" => Some("runtime mutation check for targeted test oracle strength"),
+        "sanitizer" => Some("sanitizer runtime witness for memory-safety regressions"),
+        "actionlint" => Some("workflow syntax and action composition signal"),
+        _ => None,
     }
 }
 
@@ -34766,6 +34777,33 @@ index 1111111..2222222 100644
             receipt
                 .source_artifacts
                 .contains(&"review/github-review.json".to_owned())
+        );
+    }
+
+    #[test]
+    fn fill_ledger_skip_entries_record_heavy_witness_expected_signal() {
+        let mutation = super::fill_proof_planner_skip_entry(super::ProofPlannerSkip {
+            kind: "mutation".to_owned(),
+            reason: "profile does not lease mutation proof".to_owned(),
+        });
+        let sanitizer = super::fill_proof_planner_skip_entry(super::ProofPlannerSkip {
+            kind: "sanitizer".to_owned(),
+            reason: "profile does not lease sanitizer proof".to_owned(),
+        });
+
+        assert_eq!(mutation.kind, "proof-skip");
+        assert!(!mutation.selected);
+        assert_eq!(
+            mutation.expected_signal.as_deref(),
+            Some("runtime mutation check for targeted test oracle strength")
+        );
+        assert_eq!(
+            sanitizer.expected_signal.as_deref(),
+            Some("sanitizer runtime witness for memory-safety regressions")
+        );
+        assert_eq!(
+            mutation.source_artifacts,
+            vec!["review/proof_planner_output.json".to_owned()]
         );
     }
 
