@@ -27836,6 +27836,125 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn model_lane_rate_limited_retry_provider_sheds_next_wave_to_fallback() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 1;
+        let minimax = direct_minimax_spec(&args);
+        let opencode = opencode_canary_spec(&args);
+        let assignments = vec![
+            ModelAssignment {
+                lane: lane_plan("security"),
+                spec: minimax.clone(),
+                fallback: Some(opencode.clone()),
+            },
+            ModelAssignment {
+                lane: lane_plan("opencode-canary"),
+                spec: opencode.clone(),
+                fallback: Some(minimax.clone()),
+            },
+        ];
+        let preflights = vec![
+            preflight_ok_receipt(&minimax),
+            preflight_ok_receipt(&opencode),
+        ];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::<Vec<ModelProvider>>::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            &mut issue_candidates,
+            |_context, _model_dir, tasks| {
+                let mut waves = waves.borrow_mut();
+                let wave_index = waves.len();
+                waves.push(
+                    tasks
+                        .iter()
+                        .map(|task| task.spec.provider)
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let result = match (wave_index, task.spec.provider) {
+                            (0, ModelProvider::MiniMaxDirect) => Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            )),
+                            (1, ModelProvider::OpenCodeGo) => Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            )),
+                            (_, ModelProvider::MiniMaxDirect) => Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            }),
+                            (_, ModelProvider::OpenCodeGo) => Err(anyhow::anyhow!(
+                                "unexpected OpenCode call after retry-provider backpressure"
+                            )),
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(
+            waves.into_inner(),
+            vec![
+                vec![ModelProvider::MiniMaxDirect],
+                vec![ModelProvider::OpenCodeGo],
+                vec![ModelProvider::MiniMaxDirect],
+            ]
+        );
+        assert_eq!(calls, 3);
+        assert_eq!(model_lanes[0].status, "rate_limited");
+        assert_eq!(model_lanes[0].provider, opencode.provider.key());
+        assert_eq!(model_lanes[0].fallback_from, Some(minimax.label()));
+        assert_eq!(model_lanes[1].status, "ok");
+        assert_eq!(model_lanes[1].provider, minimax.provider.key());
+        assert_eq!(model_lanes[1].fallback_from, Some(opencode.label()));
+        assert_eq!(
+            model_lanes[1].reason,
+            "completed after provider backpressure fallback"
+        );
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
+        Ok(())
+    }
+
+    #[test]
     fn provider_backpressure_only_tracks_transient_provider_failures() {
         for (status, http_status) in [
             ("rate_limited", Some(429)),

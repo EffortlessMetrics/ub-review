@@ -34,8 +34,8 @@ Tally this pass: 4 closed, 8 narrowed, 15 kept.
                 receive a deprecation PolicyError receipt
 #310  narrowed  retry (#315), [providers].policy D2 (#351),
                 per-provider max_concurrency, and 429/timeout/5xx
-                wave shedding shipped; future provider config choices
-                remain separate
+                wave shedding (`model_error_triggers_provider_backpressure`)
+                shipped; future provider config choices remain separate
 ```
 
 ## 2. Gate trust and evidence detail (highest-priority implementation bucket)
