@@ -18,18 +18,20 @@ that evidence is complete, the plan renders the exact remove list with
 `.ub-review.toml` block through the config loader - any `PolicyError` receipt
 aborts as a generator failure. It makes no repo writes, network calls, GitHub
 calls, or branch-protection changes; output is byte-identical across runs
-over the same receipts. `--open-pr` opens the migration PR in its
+over the same receipts. When `--action-sha` is supplied with accepted jobs,
+`--print-pr` also writes `<out>/ci-audit/preview/...` files matching the
+four files `--open-pr` would create. `--open-pr` opens the migration PR in its
 new-files-only v0: it requires `--action-sha` (the generator refuses to
 invent the workflow pin), refuses any repo that already carries a
-`.ub-review.toml`, creates one branch plus exactly three new files (the
+`.ub-review.toml`, creates one branch plus exactly four new files (the
 generated config, the SHA-pinned zero-key gate workflow, the migration
-plan under docs/ci/), opens one PR whose body is the plan, never touches
-branch protection, and writes `setup-pr-result.json` /
+plan under docs/ci/, and `docs/ci/branch-protection-change.md` with the
+manual required-check change), opens one PR whose body is the plan, never
+touches branch protection, and writes `setup-pr-result.json` /
 `setup-pr-error.json` receipts under `<out>/ci-audit/`. Still contract
 intent: edits to existing workflows or configs (right-sizing diffs), a
-branch-protection remove list (prereq A), and
-`--apply-branch-protection`; sections below say which side of the line
-they are on.
+branch-protection API mutation, and `--apply-branch-protection`; sections
+below say which side of the line they are on.
 
 ## Purpose
 
@@ -158,9 +160,11 @@ adds      .github/workflows/ub-review-gate.yml  the gate workflow, action
                                                 (consumer contract, README
                                                 Bun setup)
 adds      docs/ci/ub-review-migration.md        the migration plan
-adds      docs/ci/branch-protection-change.md   the exact required-checks
-                                                change
-edits     .github/workflows/*.yml               right-sized jobs become
+adds      docs/ci/branch-protection-change.md   exact required-checks change
+                                                when receipts prove it;
+                                                otherwise an unknown-check
+                                                refusal
+future    .github/workflows/*.yml               right-sized jobs become
                                                 non-required / label-gated /
                                                 nightly where file-based;
                                                 minimal edits implementing
@@ -172,8 +176,9 @@ writes    <out>/ci-audit/migration-plan.md      run artifact copy of the plan
 Delivery modes:
 
 ```text
-setup-ci --print-pr     renders the full PR contents (file diffs + PR body)
-                        without opening anything; no network, no token
+setup-ci --print-pr     renders the PR body; with accepted jobs plus
+                        --action-sha, also writes generated-file previews;
+                        no network, no token
 setup-ci --open-pr      opens one PR on a new branch; no force-push
 ```
 
@@ -210,7 +215,8 @@ diff class, risk class, or policy reason - receipt pointers of the form
 them. No recommendation without a receipt; no vibes
 (docs/CI_AUDIT_WIZARD.md rules).
 
-`docs/ci/branch-protection-change.md` must state the exact change:
+`docs/ci/branch-protection-change.md` must state the exact change when
+audit-ci proved every old required-check context:
 
 ```text
 remove required: <the old check contexts, by exact name>
@@ -218,14 +224,15 @@ add required:    ub-review/gate
 ```
 
 plus where to apply it (branch protection or ruleset, as discovered by the
-audit) and the rollback inverse. The required-check name comes from
-`[gate].required_check`, default `ub-review/gate` (src/config.rs
-`GateConfig`).
+audit) and the rollback inverse. When audit-ci did not prove the full remove
+list, the file must say the old required checks are unknown and must not
+invent removals. The required-check name comes from `[gate].required_check`,
+default `ub-review/gate` (src/config.rs `GateConfig`).
 
-The Rollback section must be complete: reverting the migration PR restores
-prior CI behavior entirely, and the branch-protection rollback names the
-exact contexts to re-add (roadmap item 28 acceptance; the live precedent is
-roadmap item 26's recorded rollback for this repo).
+The Rollback section must be complete for the proof state it has: reverting
+the migration PR restores repo files, and the branch-protection rollback
+names exact contexts to re-add only when receipts proved them. Unknown
+required-check state remains a manual settings review.
 
 The generated `.ub-review.toml` must:
 
@@ -350,22 +357,24 @@ Slice-1 validations, runnable today:
 ub-review audit-ci --out target/ub-review     # the input side
 ub-review setup-ci --print-pr --out target/ub-review
   # renders the migration plan; byte-identical on repeat runs over the same
-  # receipts; only file write is <out>/ci-audit/migration-plan.md; zero
-  # network calls
-ub-review setup-ci 2>&1 | head -2   # names the unimplemented PR-opening
-                                    # slice and says to pass --print-pr
+  # receipts; writes <out>/ci-audit/migration-plan.md; zero network calls
+ub-review setup-ci --print-pr --out target/ub-review \
+  --accept test="cargo test --workspace --locked" --action-sha <40hex>
+  # also writes <out>/ci-audit/preview/... with the four generated files
+ub-review setup-ci 2>&1 | head -2   # says to pass --print-pr or --open-pr
 cargo test --bin ub-review --locked setup_ci  # fail-closed paths + the
                                               # round-trip oracle
 cargo xtask policy-check            # this spec is a governed docs surface
 ```
 
-Future acceptance commands, runnable only once the later slices land (the
-acceptance criteria of roadmap item 28 turned into commands):
+Open-PR acceptance command:
 
 ```bash
-ub-review setup-ci --out target/ub-review --accept <ids>
-  # opens exactly one PR; git diff against the branch touches only the
-  # contract-listed files; security-pattern workflows untouched
+ub-review setup-ci --open-pr --out target/ub-review \
+  --accept test="cargo test --workspace --locked" --action-sha <40hex> \
+  --repo owner/name --github-token <token>
+  # opens exactly one PR with the four contract-listed files; existing
+  # security-pattern workflows remain untouched in the new-files-only v0
 # generated-config round-trip: load the emitted .ub-review.toml and assert
 # zero PolicyError receipts (inline test, not a shell command)
 # CI proof: the opened migration PR goes green under the repo's
@@ -427,30 +436,29 @@ slice 6   setup-ci --apply-branch-protection (separate, later). Admin
 
 ## Release note claim
 
-Today: nothing. A release must not name `setup-ci` as a command, and the
-umbrella claim "ub-review can fold required CI checks into one gate" is
-backed today by the manual dogfood fold (roadmap item 26), not by this
-surface.
-
-After slices 1-5 land and the acceptance run on a real repo is green, the
-claimable sentence is:
+Current claimable sentence:
 
 ```text
-ub-review setup-ci opens one migration PR - config, gate workflow, minimal
-right-sizing edits, and the exact branch-protection change spelled out -
-with every recommendation citing an audit receipt. It never touches branch
+ub-review setup-ci renders or opens a new-files-only migration PR - config,
+a pinned zero-key gate workflow, a migration plan, and a manual
+branch-protection instruction file - with every generated proof command
+coming from an explicit maintainer `--accept <job>=<command>` value and
+every recommendation citing an audit receipt. It never touches branch
 protection itself.
 ```
+
+Still future tense: minimal edits to existing workflow files and automatic
+branch-protection application remain separate slices.
 
 Still never claimable, at any maturity: "auto-downgrades CI safely".
 
 ## The six reliance questions
 
 What can a user rely on?
-Today: only the contract in this spec, docs/CI_AUDIT_WIZARD.md, and roadmap
-item 28 - the file list, the PR body order, the guardrails, and the promise
-that branch protection is never auto-mutated. There is no behavior to rely
-on; relying on the command existing is an error until the slices land.
+Today: `setup-ci --print-pr` renders the migration plan from audit receipts,
+and `setup-ci --open-pr` opens one new-files-only migration PR when given
+accepted adaptive jobs, a token, repo slug, and full action SHA. The command
+does not edit existing workflows or branch protection.
 
 What can break the gate?
 Nothing in this surface. setup-ci output is inert until a human merges the
@@ -466,20 +474,18 @@ become edits at all.
 
 What is visible in the PR?
 The migration PR is the entire user surface: receipt-cited body sections
-from Decision through Rollback, the four added files, and minimal workflow
-diffs. `--print-pr` shows the identical content with nothing opened.
+from Decision through Rollback and the four added files. Existing-workflow
+diffs remain future work. `--print-pr` shows the plan with nothing opened.
 
 What is artifact-only?
-`<out>/ci-audit/migration-plan.md` (the run-artifact copy of the plan) and
-the upstream audit receipts it was built from.
+`<out>/ci-audit/migration-plan.md` (the run-artifact copy of the plan),
+`<out>/ci-audit/preview/...` when `--action-sha` is supplied for a
+no-network generated-file preview, and the upstream audit receipts they were
+built from.
 
 What does success look like in ten minutes?
-Future tense, by contract: run `audit-ci` with a token, read the report,
-run `setup-ci --print-pr`, see a PR whose every bullet carries a receipt
-pointer you can open, whose workflow diffs touch only the jobs you
-accepted, and whose branch-protection doc names the exact checks to remove
-and the one check to add. Accept, open, watch the repo's own old CI go
-green on the PR that retires it. Today, the ten-minute version is: run
-`audit-ci`, read the report, and write that PR yourself - which is exactly
-what this repository did (roadmap item 26), and why the contract above is
-written from receipts rather than hope.
+Run `audit-ci` with a token, read the report, run `setup-ci --print-pr`,
+then pass `--accept <job>=<command>` for each adaptive job the maintainer
+can actually run. `setup-ci --open-pr` opens a migration PR with the config,
+gate workflow, migration plan, and branch-protection instructions. The
+repo still applies branch protection manually after the PR proves itself.

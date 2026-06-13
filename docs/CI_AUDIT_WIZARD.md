@@ -207,8 +207,9 @@ records the gap and avoids claiming audit-log proof.
 
 ## setup-ci migration PR contract
 
-`setup-ci` emits one PR (or prints it with `--print-pr`). Repo-file changes
-only:
+`setup-ci` emits one PR (or prints it with `--print-pr`). Current v0
+creates new files only; existing workflow edits are the later right-sizing
+slice. Repo-file changes:
 
 ```text
 adds      .ub-review.toml                       required proof + tool gates +
@@ -216,10 +217,16 @@ adds      .ub-review.toml                       required proof + tool gates +
 adds      .github/workflows/ub-review-gate.yml
 adds      docs/ci/ub-review-migration.md        the migration plan
 adds      docs/ci/branch-protection-change.md   exact required-checks change
-edits     .github/workflows/*.yml               right-sized jobs become
+                                                when receipts prove it;
+                                                otherwise a fail-closed
+                                                unknown-required-check note
+future    .github/workflows/*.yml               right-sized jobs become
                                                 non-required / label-gated /
                                                 nightly where file-based
 writes    <out>/ci-audit/migration-plan.md      run artifact copy of the plan
+writes    <out>/ci-audit/preview/...            no-network preview of the
+                                                four PR files when
+                                                --action-sha is supplied
 ```
 
 PR body structure (the PR is a product demo — every bullet cites a receipt:
@@ -249,12 +256,13 @@ Move this repo toward `ub-review/gate` as the single PR gate.
 Constraints:
 
 - one PR, no force-push, no branch-protection mutation by the PR;
-- `docs/ci/branch-protection-change.md` states the exact change
-  (remove required: `<old checks>`; add required: `ub-review/gate`);
-- no broad workflow rewrites in the first migration PR — minimal edits that
-  implement the accepted recommendations only;
-- the rollback section names the exact revert (reverting the PR restores
-  prior CI behavior completely);
+- `docs/ci/branch-protection-change.md` states the exact remove/add change
+  only when audit-ci proved every required-check context; otherwise it says
+  the old required checks are unknown and refuses to invent a remove list;
+- no broad workflow rewrites in the current new-files-only migration PR;
+  existing-workflow edits are a later right-sizing slice;
+- the rollback section names the exact revert when receipts prove it; unknown
+  required-check state remains a manual settings review;
 - the migration PR must pass the repo's existing CI as it stands before any
   branch-protection change is applied — the old gate approves its successor.
 
