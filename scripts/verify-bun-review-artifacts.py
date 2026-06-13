@@ -3412,9 +3412,24 @@ def candidate_disposition_for_summary_finding(finding: dict) -> str:
     if (
         "duplicate inline candidate merged" in reason
         or "summary-only guard rejected candidate" in reason
+        or is_submaterial_polish_finding(finding)
     ):
         return "dropped"
     return "summary-only"
+
+
+def is_submaterial_polish_finding(finding: dict) -> bool:
+    if finding.get("severity") != "low":
+        return False
+    text = f"{finding.get('reason', '')}\n{finding.get('evidence', '')}".lower()
+    return (
+        "submaterial polish" in text
+        or "sub-material polish" in text
+        or "below materiality" in text
+        or "below the materiality" in text
+        or "polish suggestion" in text
+        or "style/polish" in text
+    )
 
 
 def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict]) -> None:
@@ -9107,6 +9122,18 @@ def self_test_follow_up_resolved_away_filter_matches_rust_contract() -> None:
         candidate, dict(finding, reason="The new test proves the patch.")
     ):
         fail("summary candidate matcher matched a reworded finding")
+    polish = {
+        "lane": "tests-oracle",
+        "severity": "low",
+        "confidence": "medium",
+        "reason": "Submaterial polish below materiality: also assert pointer identity.",
+        "evidence": "The test is already red/green-correct; this is a polish suggestion.",
+    }
+    if candidate_disposition_for_summary_finding(polish) != "dropped":
+        fail("submaterial polish finding did not resolve as dropped")
+    material = dict(polish, severity="medium")
+    if candidate_disposition_for_summary_finding(material) != "summary-only":
+        fail("material polish control should not be dropped by the low-polish rule")
     inline_candidate = {
         "source": "inline-comment",
         "lane": "ub-active-view",
