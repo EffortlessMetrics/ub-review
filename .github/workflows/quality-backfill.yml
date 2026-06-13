@@ -37,6 +37,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -62,69 +63,10 @@ jobs:
               if isinstance(number, int):
                   print(number)
           PY
-          cat > target/ub-review-quality/source/github/review-threads.graphql <<'GRAPHQL'
-          query($owner:String!,$repo:String!,$number:Int!) {
-            repository(owner:$owner, name:$repo) {
-              pullRequest(number:$number) {
-                number
-                mergedAt
-                reviewThreads(first: 100) {
-                  pageInfo {
-                    hasNextPage
-                    endCursor
-                  }
-                  nodes {
-                    id
-                    isResolved
-                    comments(first: 50) {
-                      pageInfo {
-                        hasNextPage
-                        endCursor
-                      }
-                      nodes {
-                        id
-                        body
-                        createdAt
-                        url
-                        author { login }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          GRAPHQL
-          owner="${GH_REPO%%/*}"
-          repo="${GH_REPO#*/}"
-          while IFS= read -r number; do
-            [[ -n "$number" ]] || continue
-            stderr_path="target/ub-review-quality/source/github/review-threads-${number}.stderr"
-            if ! gh api graphql \
-              -F owner="$owner" \
-              -F repo="$repo" \
-              -F number="$number" \
-              -f query="$(cat target/ub-review-quality/source/github/review-threads.graphql)" \
-              > "target/ub-review-quality/source/github/review-threads-${number}.json" \
-              2> "$stderr_path"; then
-              python - "$number" "$stderr_path" > "target/ub-review-quality/source/github/review-thread-error-${number}.json" <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          number = sys.argv[1]
-          stderr = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
-          print(json.dumps({
-              "schema": "ub-review.github_review_threads_error.v1",
-              "pull_number": int(number),
-              "error": stderr.strip(),
-          }, indent=2))
-          PY
-              rm -f "target/ub-review-quality/source/github/review-threads-${number}.json"
-            else
-              rm -f "$stderr_path"
-            fi
-          done < target/ub-review-quality/source/github/pr-numbers.txt
+          target/debug/ub-review quality-github-collect \
+            --repo "$GH_REPO" \
+            --source-dir target/ub-review-quality/source/github \
+            --pull-numbers-file target/ub-review-quality/source/github/pr-numbers.txt
           target/debug/ub-review quality-github-outcomes \
             --source-dir target/ub-review-quality/source/github \
             --out target/ub-review-quality/source/github/github-quality-outcomes.json

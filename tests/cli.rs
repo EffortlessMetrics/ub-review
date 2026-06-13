@@ -60,15 +60,24 @@ fn quality_backfill_workflow_is_artifact_only_not_pr_gate_noise() -> Result<()> 
         1
     );
     assert_eq!(workflow.matches("created >= cutoff").count(), 1);
-    assert_eq!(workflow.matches("review-threads.graphql").count(), 2);
-    assert_eq!(workflow.matches("review-threads-${number}.json").count(), 2);
     assert_eq!(
         workflow
-            .matches("review-thread-error-${number}.json")
+            .matches("GITHUB_TOKEN: ${{ github.token }}")
             .count(),
         1
     );
-    assert_eq!(workflow.matches("hasNextPage").count(), 2);
+    assert_eq!(
+        workflow.matches("ub-review quality-github-collect").count(),
+        1
+    );
+    assert_eq!(
+        workflow
+            .matches("--pull-numbers-file target/ub-review-quality/source/github/pr-numbers.txt")
+            .count(),
+        1
+    );
+    assert_eq!(workflow.matches("gh api graphql").count(), 0);
+    assert_eq!(workflow.matches("review-threads-${number}.json").count(), 0);
     assert_eq!(
         workflow
             .matches("ub-review quality-github-outcomes")

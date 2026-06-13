@@ -65,6 +65,7 @@ fn main() -> Result<()> {
         Command::SetupCi(args) => cmd_setup_ci(args),
         Command::QualityBackfill(args) => cmd_quality_backfill(args),
         Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
+        Command::QualityGithubCollect(args) => cmd_quality_github_collect(args),
         Command::GateCheck(args) => cmd_gate_check(args),
     }
 }
@@ -7202,6 +7203,258 @@ fn quality_trend_missing(
 }
 
 const DEFAULT_GITHUB_QUALITY_AUTHOR_LOGINS: &[&str] = &["github-actions", "github-actions[bot]"];
+const GITHUB_QUALITY_REVIEW_THREADS_QUERY: &str = r#"query UbReviewQualityReviewThreads($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      number
+      mergedAt
+      reviewThreads(first: 100) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          isResolved
+          comments(first: 100) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              body
+              url
+              author {
+                login
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}"#;
+
+fn cmd_quality_github_collect(args: QualityGithubCollectArgs) -> Result<()> {
+    let token = args
+        .github_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            anyhow::anyhow!("quality-github-collect needs --github-token (GITHUB_TOKEN)")
+        })?;
+    let repo = resolve_quality_github_repo(&args)?;
+    let (owner, name) = repo
+        .split_once('/')
+        .ok_or_else(|| anyhow::anyhow!("--repo must be owner/name, got `{repo}`"))?;
+    let pull_numbers = quality_github_collect_pull_numbers(&args)?;
+    if pull_numbers.is_empty() {
+        bail!(
+            "quality-github-collect needs at least one --pull-number or --pull-numbers-file entry"
+        );
+    }
+    fs::create_dir_all(&args.source_dir)
+        .with_context(|| format!("create {}", args.source_dir.display()))?;
+    fs::write(
+        args.source_dir.join("review-threads.graphql"),
+        GITHUB_QUALITY_REVIEW_THREADS_QUERY,
+    )
+    .with_context(|| "write quality review-thread GraphQL query")?;
+    fs::write(
+        args.source_dir.join("pr-numbers.txt"),
+        pull_numbers
+            .iter()
+            .map(u64::to_string)
+            .collect::<Vec<_>>()
+            .join("\n"),
+    )
+    .with_context(|| "write quality PR number receipt")?;
+    let graphql_url = quality_github_graphql_url(&args);
+    let mut failures = 0usize;
+    for pull_number in &pull_numbers {
+        if !collect_quality_github_review_threads(
+            &args.source_dir,
+            &graphql_url,
+            token,
+            owner,
+            name,
+            *pull_number,
+            args.timeout_sec.max(1),
+        )? {
+            failures += 1;
+        }
+    }
+    println!(
+        "quality-github-collect: wrote {} ({} pull requests, {} incomplete)",
+        args.source_dir.display(),
+        pull_numbers.len(),
+        failures
+    );
+    Ok(())
+}
+
+fn resolve_quality_github_repo(args: &QualityGithubCollectArgs) -> Result<String> {
+    if let Some(repo) = &args.repo {
+        let trimmed = repo.trim();
+        if !trimmed.is_empty() {
+            if is_valid_repo_slug(trimmed) {
+                return Ok(trimmed.to_owned());
+            }
+            bail!("--repo must be a valid owner/name slug, got `{repo}`");
+        }
+    }
+    let url = git_text(&args.root, &["remote", "get-url", "origin"])
+        .with_context(|| "derive owner/repo from git remote origin")?;
+    ci_repo_slug_from_remote_url(url.trim())
+        .ok_or_else(|| anyhow::anyhow!("cannot derive owner/repo from origin url `{}`", url.trim()))
+}
+
+fn quality_github_collect_pull_numbers(args: &QualityGithubCollectArgs) -> Result<Vec<u64>> {
+    let mut pull_numbers = args.pull_numbers.iter().copied().collect::<BTreeSet<_>>();
+    if let Some(path) = &args.pull_numbers_file {
+        let content =
+            fs::read_to_string(path).with_context(|| format!("read {}", path.display()))?;
+        for (line_index, line) in content.lines().enumerate() {
+            let line = line.split('#').next().unwrap_or("").trim();
+            if line.is_empty() {
+                continue;
+            }
+            for token in line.split(|ch: char| ch.is_ascii_whitespace() || ch == ',') {
+                let token = token.trim();
+                if token.is_empty() {
+                    continue;
+                }
+                let number = token.parse::<u64>().with_context(|| {
+                    format!(
+                        "parse pull number `{token}` on {}:{}",
+                        path.display(),
+                        line_index + 1
+                    )
+                })?;
+                if number == 0 {
+                    bail!(
+                        "pull number must be positive on {}:{}",
+                        path.display(),
+                        line_index + 1
+                    );
+                }
+                pull_numbers.insert(number);
+            }
+        }
+    }
+    if pull_numbers.contains(&0) {
+        bail!("pull number must be positive");
+    }
+    Ok(pull_numbers.into_iter().collect())
+}
+
+fn quality_github_graphql_url(args: &QualityGithubCollectArgs) -> String {
+    if let Some(url) = args
+        .github_graphql_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return url.trim_end_matches('/').to_owned();
+    }
+    let rest = args.github_api_url.trim_end_matches('/');
+    if let Some(prefix) = rest.strip_suffix("/api/v3") {
+        format!("{prefix}/api/graphql")
+    } else {
+        format!("{rest}/graphql")
+    }
+}
+
+fn collect_quality_github_review_threads(
+    source_dir: &Path,
+    graphql_url: &str,
+    token: &str,
+    owner: &str,
+    name: &str,
+    pull_number: u64,
+    timeout_sec: u64,
+) -> Result<bool> {
+    let request_path = source_dir.join(format!("review-threads-request-{pull_number}.json"));
+    let response_path = source_dir.join(format!("review-threads-{pull_number}.json"));
+    let error_path = source_dir.join(format!("review-thread-error-{pull_number}.json"));
+    let _ = fs::remove_file(&response_path);
+    let _ = fs::remove_file(&error_path);
+    fs::write(
+        &request_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "query": GITHUB_QUALITY_REVIEW_THREADS_QUERY,
+            "variables": {
+                "owner": owner,
+                "name": name,
+                "number": pull_number,
+            },
+        }))?,
+    )
+    .with_context(|| format!("write {}", request_path.display()))?;
+    let output = run_curl_json_send(
+        source_dir,
+        "POST",
+        graphql_url,
+        &format!("Authorization: Bearer {token}"),
+        &request_path,
+        &[
+            "Accept: application/vnd.github+json",
+            "Content-Type: application/json",
+        ],
+        timeout_sec,
+    )
+    .with_context(|| format!("query GitHub review threads for PR #{pull_number}"))?;
+    if !output.status.success() {
+        write_quality_github_review_threads_error(
+            source_dir,
+            pull_number,
+            output.http_status,
+            format!(
+                "GitHub GraphQL request failed: {}",
+                truncate_chars(&String::from_utf8_lossy(&output.stderr), 1_000)
+            ),
+        )?;
+        return Ok(false);
+    }
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout)
+        .with_context(|| format!("parse GitHub review-thread response for PR #{pull_number}"))?;
+    if let Some(errors) = value.get("errors") {
+        write_quality_github_review_threads_error(
+            source_dir,
+            pull_number,
+            output.http_status,
+            format!(
+                "GitHub GraphQL response contained errors: {}",
+                truncate_chars(&errors.to_string(), 1_000)
+            ),
+        )?;
+        return Ok(false);
+    }
+    fs::write(&response_path, serde_json::to_vec_pretty(&value)?)
+        .with_context(|| format!("write {}", response_path.display()))?;
+    Ok(true)
+}
+
+fn write_quality_github_review_threads_error(
+    source_dir: &Path,
+    pull_number: u64,
+    http_status: Option<u16>,
+    error: String,
+) -> Result<()> {
+    let path = source_dir.join(format!("review-thread-error-{pull_number}.json"));
+    fs::write(
+        &path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.github_review_threads_error.v1",
+            "pull_number": pull_number,
+            "http_status": http_status,
+            "error": error,
+        }))?,
+    )
+    .with_context(|| format!("write {}", path.display()))
+}
 
 fn cmd_quality_github_outcomes(args: QualityGithubOutcomesArgs) -> Result<()> {
     let author_logins = github_quality_author_logins(&args.author_logins);
@@ -7330,7 +7583,8 @@ fn github_quality_source_files(source_dir: &Path) -> Result<Vec<PathBuf>> {
         if matches!(
             file_name,
             "actions-runs.json" | "pr-state.json" | "pr-numbers.txt" | "review-threads.graphql"
-        ) || github_quality_review_thread_json(file_name)
+        ) || github_quality_review_thread_request_json(file_name)
+            || github_quality_review_thread_json(file_name)
         {
             files.push(path);
         }
@@ -7343,10 +7597,15 @@ fn github_quality_source_files(source_dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+fn github_quality_review_thread_request_json(file_name: &str) -> bool {
+    file_name.starts_with("review-threads-request-") && file_name.ends_with(".json")
+}
+
 fn github_quality_review_thread_json(file_name: &str) -> bool {
     ((file_name.starts_with("review-threads-") && file_name.ends_with(".json"))
         || (file_name.starts_with("review-thread-error-") && file_name.ends_with(".json")))
         && file_name != "github-quality-outcomes.json"
+        && !github_quality_review_thread_request_json(file_name)
 }
 
 fn github_quality_error_receipt(value: &serde_json::Value) -> Option<String> {
@@ -34021,6 +34280,96 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn quality_github_collect_writes_raw_receipts_for_outcomes() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("review-thread-error-445.json"), "{}")?;
+        let (graphql_url, handle) = spawn_fake_quality_github_graphql_api(1)?;
+
+        super::cmd_quality_github_collect(super::QualityGithubCollectArgs {
+            root: temp.path().to_path_buf(),
+            source_dir: source.clone(),
+            repo: Some("acme/widgets".to_owned()),
+            pull_numbers: vec![445],
+            pull_numbers_file: None,
+            github_token: Some("test-token".to_owned()),
+            github_api_url: "https://api.github.com".to_owned(),
+            github_graphql_url: Some(graphql_url),
+            timeout_sec: 10,
+        })?;
+
+        let requests = handle
+            .join()
+            .map_err(|_| anyhow::anyhow!("fake GitHub GraphQL API panicked"))??;
+        assert_eq!(requests.len(), 1);
+        let request = &requests[0];
+        assert!(request.contains("POST /graphql HTTP/1.1"));
+        assert!(request.contains("Authorization: Bearer test-token"));
+        assert!(request.contains("UbReviewQualityReviewThreads"));
+        assert!(request.contains(r#""owner": "acme""#));
+        assert!(request.contains(r#""name": "widgets""#));
+        assert!(request.contains(r#""number": 445"#));
+
+        assert!(source.join("review-threads.graphql").is_file());
+        assert!(source.join("pr-numbers.txt").is_file());
+        assert!(source.join("review-threads-request-445.json").is_file());
+        assert!(source.join("review-threads-445.json").is_file());
+        assert!(!source.join("review-thread-error-445.json").exists());
+
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+        let comments = artifact
+            .comments
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("comments[] missing"))?;
+
+        assert_eq!(artifact.schema, super::GITHUB_QUALITY_OUTCOMES_SCHEMA);
+        assert_eq!(artifact.collection_status, "complete");
+        assert!(artifact.collection_warnings.is_empty());
+        assert!(
+            artifact
+                .source_artifacts
+                .contains(&"review-threads-request-445.json".to_owned())
+        );
+        assert!(
+            artifact
+                .source_artifacts
+                .contains(&"review-threads-445.json".to_owned())
+        );
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].source_comment_id, "comment-a");
+        assert_eq!(comments[0].accepted, Some(true));
+        assert_eq!(comments[0].resolved, Some(true));
+        assert_eq!(comments[0].reviewer_override, Some(false));
+        Ok(())
+    }
+
+    #[test]
+    fn quality_github_collect_pull_numbers_dedupes_file_and_cli() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let list = temp.path().join("pulls.txt");
+        fs::write(&list, "445\n# comment\n446, 445\n")?;
+        let args = super::QualityGithubCollectArgs {
+            root: temp.path().to_path_buf(),
+            source_dir: temp.path().join("github"),
+            repo: Some("acme/widgets".to_owned()),
+            pull_numbers: vec![444, 445],
+            pull_numbers_file: Some(list),
+            github_token: Some("test-token".to_owned()),
+            github_api_url: "https://api.github.com".to_owned(),
+            github_graphql_url: None,
+            timeout_sec: 10,
+        };
+
+        assert_eq!(
+            super::quality_github_collect_pull_numbers(&args)?,
+            vec![444, 445, 446]
+        );
+        Ok(())
+    }
+
+    #[test]
     fn github_quality_outcomes_keeps_comments_absent_without_thread_receipts() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let source = temp.path().join("github");
@@ -34039,6 +34388,108 @@ index 1111111..2222222 100644
             vec!["actions-runs.json".to_owned(), "pr-state.json".to_owned()]
         );
         Ok(())
+    }
+
+    fn spawn_fake_quality_github_graphql_api(
+        expected_requests: usize,
+    ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+        let listener = TcpListener::bind("127.0.0.1:0")?;
+        listener.set_nonblocking(true)?;
+        let url = format!("http://{}/graphql", listener.local_addr()?);
+        let handle = thread::spawn(move || -> Result<Vec<String>> {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let mut requests = Vec::new();
+            while requests.len() < expected_requests {
+                match listener.accept() {
+                    Ok((stream, _addr)) => {
+                        requests.push(handle_fake_quality_github_graphql_request(stream)?);
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        if Instant::now() >= deadline {
+                            bail!(
+                                "fake GitHub GraphQL API received {} of {} requests",
+                                requests.len(),
+                                expected_requests
+                            );
+                        }
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            Ok(requests)
+        });
+        Ok((url, handle))
+    }
+
+    fn handle_fake_quality_github_graphql_request(mut stream: TcpStream) -> Result<String> {
+        stream.set_nonblocking(false)?;
+        stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+        stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+        let mut reader = BufReader::new(stream.try_clone()?);
+        let mut headers = String::new();
+        loop {
+            let mut line = String::new();
+            let bytes = reader.read_line(&mut line)?;
+            if bytes == 0 {
+                bail!("fake GitHub GraphQL request ended before headers finished");
+            }
+            headers.push_str(&line);
+            if line == "\r\n" || line == "\n" {
+                break;
+            }
+        }
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                line.to_ascii_lowercase()
+                    .strip_prefix("content-length:")
+                    .and_then(|value| value.trim().parse::<usize>().ok())
+            })
+            .unwrap_or(0);
+        let mut body = vec![0; content_length];
+        {
+            use std::io::Read as _;
+            reader.read_exact(&mut body)?;
+        }
+        let request_body = String::from_utf8_lossy(&body);
+        let response_body = serde_json::to_vec(&serde_json::json!({
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "number": 445,
+                        "mergedAt": "2026-06-13T01:29:45Z",
+                        "reviewThreads": {
+                            "pageInfo": {"hasNextPage": false, "endCursor": null},
+                            "nodes": [
+                                {
+                                    "id": "thread-a",
+                                    "isResolved": true,
+                                    "comments": {
+                                        "pageInfo": {"hasNextPage": false, "endCursor": null},
+                                        "nodes": [
+                                            {
+                                                "id": "comment-a",
+                                                "body": "[tests] generated regression adopted",
+                                                "url": "https://github.example/thread-a",
+                                                "author": {"login": "github-actions"}
+                                            }
+                                        ]
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        }))?;
+        write!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+        stream.write_all(&response_body)?;
+        Ok(format!("{headers}\n{request_body}"))
     }
 
     #[test]

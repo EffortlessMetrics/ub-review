@@ -40,6 +40,9 @@ pub(crate) enum Command {
     /// Normalize raw GitHub review-thread receipts for quality-backfill.
     /// Artifact-only; never posts or edits GitHub.
     QualityGithubOutcomes(QualityGithubOutcomesArgs),
+    /// Collect raw GitHub review-thread receipts for quality-backfill.
+    /// Artifact-only; never posts or edits GitHub.
+    QualityGithubCollect(QualityGithubCollectArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
     GateCheck(GateCheckArgs),
@@ -752,4 +755,47 @@ pub(crate) struct QualityGithubOutcomesArgs {
     /// Defaults to the GitHub Actions bot logins used by the gate workflow.
     #[arg(long = "author-login")]
     pub(crate) author_logins: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct QualityGithubCollectArgs {
+    /// Repository root used to derive owner/repo from git remote when --repo is
+    /// omitted.
+    #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
+    pub(crate) root: PathBuf,
+    /// Directory where raw GitHub API receipts are written for
+    /// `quality-github-outcomes`.
+    #[arg(
+        long = "source-dir",
+        default_value = "target/ub-review-quality/source/github"
+    )]
+    pub(crate) source_dir: PathBuf,
+    /// owner/repo. Defaults to GITHUB_REPOSITORY, else the git origin remote.
+    #[arg(long, env = "GITHUB_REPOSITORY")]
+    pub(crate) repo: Option<String>,
+    /// Pull request number to collect. Repeatable.
+    #[arg(long = "pull-number")]
+    pub(crate) pull_numbers: Vec<u64>,
+    /// File containing pull request numbers, one per line. Blank lines and
+    /// `#` comments are ignored.
+    #[arg(long = "pull-numbers-file")]
+    pub(crate) pull_numbers_file: Option<PathBuf>,
+    /// GitHub token for read-only API calls.
+    #[arg(long = "github-token", env = "GITHUB_TOKEN")]
+    pub(crate) github_token: Option<String>,
+    /// GitHub REST API base URL, used to derive the GraphQL URL when
+    /// --github-graphql-url is omitted.
+    #[arg(
+        long = "github-api-url",
+        default_value = "https://api.github.com",
+        env = "UB_REVIEW_GITHUB_API_URL"
+    )]
+    pub(crate) github_api_url: String,
+    /// GitHub GraphQL API URL. Defaults to `<github-api-url>/graphql`, with
+    /// GitHub Enterprise /api/v3 mapped to /api/graphql.
+    #[arg(long = "github-graphql-url", env = "UB_REVIEW_GITHUB_GRAPHQL_URL")]
+    pub(crate) github_graphql_url: Option<String>,
+    /// Per-request timeout in seconds.
+    #[arg(long = "timeout-sec", default_value_t = 60)]
+    pub(crate) timeout_sec: u64,
 }
