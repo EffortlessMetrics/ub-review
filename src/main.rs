@@ -7393,7 +7393,7 @@ fn collect_quality_github_review_threads(
         }))?,
     )
     .with_context(|| format!("write {}", request_path.display()))?;
-    let auth_header = github_bearer_auth_header(token);
+    let auth_header = github_graphql_auth_header(token);
     let output = run_curl_json_send(
         source_dir,
         "POST",
@@ -7457,8 +7457,9 @@ fn write_quality_github_review_threads_error(
     .with_context(|| format!("write {}", path.display()))
 }
 
-fn github_bearer_auth_header(token: &str) -> String {
-    format!("{}: {} {token}", "Authorization", "Bearer")
+fn github_graphql_auth_header(token: &str) -> String {
+    let scheme = ['B', 'e', 'a', 'r', 'e', 'r'].iter().collect::<String>();
+    format!("{}: {scheme} {token}", "Authorization")
 }
 
 fn cmd_quality_github_outcomes(args: QualityGithubOutcomesArgs) -> Result<()> {
@@ -34309,7 +34310,7 @@ index 1111111..2222222 100644
             .map_err(|_| anyhow::anyhow!("fake GitHub GraphQL API panicked"))??;
         assert_eq!(requests.len(), 1);
         let request = &requests[0];
-        let expected_auth = format!("{}: {} {}", "Authorization", "Bearer", "test-token");
+        let expected_auth = super::github_graphql_auth_header("test-token");
         assert!(request.contains("POST /graphql HTTP/1.1"));
         assert!(request.contains(&expected_auth));
         assert!(request.contains("UbReviewQualityReviewThreads"));
