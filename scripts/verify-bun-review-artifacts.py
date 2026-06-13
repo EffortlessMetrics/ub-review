@@ -8241,6 +8241,20 @@ def self_test_quality_backfill_contract() -> None:
                                 "outcome_source": "github.reviewThreads.isResolved.v1",
                             },
                         ],
+                        "adopted_generated_tests": [
+                            {
+                                "source_pull_number": 445,
+                                "path": "tests/generated.rs",
+                                "status": "ADDED",
+                                "additions": 4,
+                                "deletions": 0,
+                                "source_thread_id": "thread-b",
+                                "source_comment_id": "comment-b",
+                                "source_author_login": "github-actions",
+                                "source_url": "https://github.example/comment-b",
+                                "outcome_source": "github.mergedResolvedUbReviewThreadChangedTestFile.v1",
+                            }
+                        ],
                     },
                 )
             else:
@@ -8276,6 +8290,14 @@ def self_test_quality_backfill_contract() -> None:
         )
         return root
 
+    def write_root_with_missing_adoptions() -> pathlib.Path:
+        root = write_root()
+        outcomes_path = root / "review/quality-backfill-sources/github-quality-outcomes.json"
+        outcomes = load_json(outcomes_path)
+        outcomes.pop("adopted_generated_tests", None)
+        write_self_test_json(outcomes_path, outcomes)
+        return root
+
     require_quality_backfill(write_root(), required=True)
     expect_self_test_failure(
         "quality backfill dangling source",
@@ -8286,6 +8308,11 @@ def self_test_quality_backfill_contract() -> None:
         "quality backfill github outcomes missing request source",
         "complete collection missing review-threads-request source",
         lambda: require_quality_backfill(write_root_with_bad_github_outcomes_sources(), required=True),
+    )
+    expect_self_test_failure(
+        "quality backfill github outcomes missing adoptions",
+        "complete collection must include adopted_generated_tests",
+        lambda: require_quality_backfill(write_root_with_missing_adoptions(), required=True),
     )
     expect_self_test_failure(
         "quality backfill acceptance rate overclaim",
@@ -8413,8 +8440,49 @@ def require_github_quality_outcomes_source(path: pathlib.Path) -> None:
                     comment.get(field), f"{path.name} comments[{index}].{field}"
                 )
     adopted_generated_tests = artifact.get("adopted_generated_tests")
+    if collection_status == "complete" and adopted_generated_tests is None:
+        fail(f"{path.name} complete collection must include adopted_generated_tests")
+    if collection_status != "complete" and adopted_generated_tests is not None:
+        fail(f"{path.name} incomplete/missing collection must not include adopted_generated_tests")
     if adopted_generated_tests is not None and not isinstance(adopted_generated_tests, list):
         fail(f"{path.name} adopted_generated_tests is not an array")
+    if isinstance(adopted_generated_tests, list):
+        for index, adoption in enumerate(adopted_generated_tests):
+            if not isinstance(adoption, dict):
+                fail(f"{path.name} adopted_generated_tests[{index}] is not an object")
+            require_non_negative_int(
+                adoption,
+                f"{path.name} adopted_generated_tests[{index}].source_pull_number",
+                "source_pull_number",
+            )
+            test_path = require_non_empty_string_value(
+                adoption.get("path"), f"{path.name} adopted_generated_tests[{index}].path"
+            )
+            normalized_path = test_path.replace("\\", "/")
+            file_name = normalized_path.rsplit("/", 1)[-1]
+            if not (
+                file_name.endswith(".rs")
+                and (
+                    normalized_path.startswith("tests/")
+                    or "/tests/" in normalized_path
+                    or file_name.endswith("_test.rs")
+                    or file_name.endswith("_tests.rs")
+                )
+            ):
+                fail(f"{path.name} adopted_generated_tests[{index}].path is not a Rust test path")
+            for field in ["status", "source_thread_id", "source_comment_id", "source_author_login", "source_url", "outcome_source"]:
+                if field == "status" and adoption.get(field) is None:
+                    continue
+                require_non_empty_string_value(
+                    adoption.get(field), f"{path.name} adopted_generated_tests[{index}].{field}"
+                )
+            for field in ["additions", "deletions"]:
+                if adoption.get(field) is not None:
+                    require_non_negative_int(
+                        adoption,
+                        f"{path.name} adopted_generated_tests[{index}].{field}",
+                        field,
+                    )
 
 
 def self_test_ci_audit_runner_cancellations_contract() -> None:

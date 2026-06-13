@@ -157,18 +157,20 @@ quality-backfill.json          ub-review.quality_backfill.v1; rolling
                                no quality score
 github-quality-outcomes.json   ub-review.github_quality_outcomes.v1; normalized
                                quality-backfill source receipt produced from
-                               raw GitHub review-thread API receipts; copied
-                               into quality-backfill-sources, never posted;
+                               raw GitHub review-thread and changed-file API
+                               receipts; copied into
+                               quality-backfill-sources, never posted;
                                collection_status is complete only when
                                pagination/error receipts prove the comment
-                               set is complete
+                               and changed-file sets are complete
 github review-thread source    raw review-threads.graphql,
                                review-threads-request-<pr>.json,
                                review-threads-<pr>.json, and
                                review-thread-error-<pr>.json receipts
                                written by quality-github-collect; consumed
                                only through github-quality-outcomes; raw
-                               comment receipts preserve createdAt
+                               comment receipts preserve createdAt and PR file
+                               receipt fields used for generated-test adoption
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,
@@ -601,7 +603,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/quality-receipt.json | stable | quality_receipt.v1; run-completion telemetry with reviewer outcome fields null in v1 | downstream automation (quality/usefulness telemetry) | required (require_quality_receipt, #339) |
 | review/quality-trend.json | stable | quality_trend.v1; window_scope single_run_v1 | downstream automation (quality/usefulness telemetry seed) | required (require_quality_trend, #339) |
 | review/quality-backfill.json | stable | quality_backfill.v1; window_scope rolling_v1 | downstream automation (GitHub-backed quality/usefulness telemetry) | optional full-tree / required backfill verifier path (require_quality_backfill, #441) |
-| review/quality-backfill-sources/*github-quality-outcomes*.json | stable | github_quality_outcomes.v1; normalized GitHub review-thread outcomes copied with raw API receipts | quality-backfill source trail | required when present (require_github_quality_outcomes_source, #441) |
+| review/quality-backfill-sources/*github-quality-outcomes*.json | stable | github_quality_outcomes.v1; normalized GitHub review-thread outcomes plus receipt-backed adopted_generated_tests copied with raw API receipts | quality-backfill source trail | required when present (require_github_quality_outcomes_source, #441) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
 | review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |
 | review/review.md | stable | seven required headings | humans | required (require_review) |
