@@ -693,8 +693,8 @@ pub(crate) struct SetupCiArgs {
     /// Accept an audited job into the generated gate policy, as
     /// `<job>=<command>`. Repeatable. The audit receipts record triggers and
     /// timings, never the runnable command, so the maintainer supplies it -
-    /// the generator must not invent one. Only `adaptive`-tier
-    /// recommendations are acceptable.
+    /// the generator must not invent one. Only `adaptive` and
+    /// `move-to-ub-review-required` recommendations are acceptable.
     #[arg(long = "accept")]
     pub(crate) accept: Vec<String>,
     /// Existing repo config, consulted only for \[gate].required_check.
