@@ -143,9 +143,10 @@ which classifies validated inline candidates before the final compile and
 demotes inline candidates when it is unavailable. Honest routing caveats:
 
 - The ten-lane roster applies to `SourceUb` diffs. Other diff classes route
-  to smaller rosters (`source_general_lanes`, `tests_only_lanes`,
-  `workflow_tooling_lanes`); docs-only and artifact-only-smoke diffs get zero
-  model lanes (src/main.rs `review_lanes_for_width`). The Bun workflow's
+  to smaller rosters (`source_general_lanes`, `tests_only_lanes`, and
+  workflow/tooling rosters selected by changed surface); docs-only and
+  artifact-only-smoke diffs get zero model lanes (src/main.rs
+  `review_lanes_for_width`). The Bun workflow's
   `paths-ignore` keeps docs-only PRs out entirely.
 - The six-lane set in src/builtin.rs (`ub`, `source-route`, `tests`, `arch`,
   `opposition`, `security`) is the width-6 default, not the Bun v0 roster.

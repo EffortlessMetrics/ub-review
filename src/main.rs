@@ -248,6 +248,8 @@ struct Plan {
     #[serde(default = "default_diff_class")]
     diff_class: DiffClass,
     changed_files: Vec<String>,
+    #[serde(default)]
+    language_mix: LanguageMix,
     sensors: Vec<SensorPlan>,
     lanes: Vec<LanePlan>,
     /// Repo-declared `[[lanes]]` whose diff_classes matched this run,
@@ -4442,15 +4444,14 @@ fn resolved_plan_artifact(
     let run_pass = run_args
         .map(|args| resolved_run_pass(args.run_pass).key())
         .unwrap_or("plan-default");
-    let language_mix = classify_language_mix(&diff.changed_files);
     serde_json::json!({
         "schema": RESOLVED_PLAN_SCHEMA,
         "base": &plan.base,
         "head": &plan.head,
         "run_pass": run_pass,
         "diff_class": diff.diff_class.key(),
-        "language_mix": &language_mix,
-        "proof_policy": resolved_proof_policy_artifact(config, diff, &language_mix),
+        "language_mix": &plan.language_mix,
+        "proof_policy": resolved_proof_policy_artifact(config, diff, &plan.language_mix),
         "review_profile": &config.review_profile,
         "profile_name": &plan.profile_name,
         "runtime_profile": &profile.name,
@@ -5037,6 +5038,7 @@ fn build_plan(
 ) -> Plan {
     let mut notes = Vec::new();
     let guard_ok = guard_ok(profile, box_state, &mut notes);
+    let language_mix = classify_language_mix(&diff.changed_files);
     let mut sensors = config
         .tools
         .values()
@@ -5068,9 +5070,10 @@ fn build_plan(
         profile_name: profile.name.clone(),
         diff_class: diff.diff_class,
         changed_files: diff.changed_files.clone(),
+        language_mix: language_mix.clone(),
         sensors,
         lanes: if config.review.enable_default_lanes {
-            default_lanes_for_diff_class(diff.diff_class)
+            default_lanes_for_diff_context(diff.diff_class, &language_mix)
         } else {
             Vec::new()
         },
@@ -14075,7 +14078,7 @@ fn review_lanes_for_width(width: usize, plan: &Plan) -> Vec<LanePlan> {
         },
         DiffClass::SourceGeneral => source_general_lanes(),
         DiffClass::TestsOnly => tests_only_lanes(),
-        DiffClass::WorkflowTooling => workflow_tooling_lanes(),
+        DiffClass::WorkflowTooling => workflow_tooling_lanes_for_mix(&plan.language_mix),
         DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => Vec::new(),
     }
 }
@@ -14169,6 +14172,40 @@ fn workflow_tooling_lanes() -> Vec<LanePlan> {
             "Strongest workflow/tooling objection review",
             &["tokmd", "actionlint", "zizmor"],
             "Try to disprove the workflow/tooling change across permissions, triggers, pinning, checkout, fork-only behavior, and reviewer-value claims.",
+        ),
+    ]
+}
+
+fn workflow_tooling_lanes_for_mix(language_mix: &LanguageMix) -> Vec<LanePlan> {
+    let has_workflow_surface = language_mix
+        .surfaces
+        .iter()
+        .any(|surface| matches!(surface.as_str(), "workflow" | "action"));
+    if has_workflow_surface || language_mix.surfaces.is_empty() {
+        return workflow_tooling_lanes();
+    }
+    tooling_support_lanes()
+}
+
+fn tooling_support_lanes() -> Vec<LanePlan> {
+    vec![
+        model_lane(
+            "tooling-script-proof",
+            "Tooling script proof review",
+            &["tokmd", "ripr", "ast-grep"],
+            "Check changed scripts, config, or repo tooling behavior, command compatibility, focused self-test proof, and fixture coverage.",
+        ),
+        model_lane(
+            "tooling-policy",
+            "Repo tooling policy review",
+            &["tokmd", "cargo-allow", "ast-grep"],
+            "Check whether tooling changes preserve repo policy, exception ledgers, generated-artifact boundaries, and setup instructions.",
+        ),
+        model_lane(
+            "tooling-opposition",
+            "Strongest tooling objection review",
+            &["tokmd", "ripr", "ast-grep"],
+            "Try to disprove the tooling change across portability, path handling, command behavior, missing proof, and reviewer-value claims.",
         ),
     ]
 }
@@ -21164,12 +21201,15 @@ fn detect_disk_free_mb() -> Option<u64> {
     Some(available_kb / 1024)
 }
 
-fn default_lanes_for_diff_class(diff_class: DiffClass) -> Vec<LanePlan> {
+fn default_lanes_for_diff_context(
+    diff_class: DiffClass,
+    language_mix: &LanguageMix,
+) -> Vec<LanePlan> {
     match diff_class {
         DiffClass::SourceUb => default_lanes(),
         DiffClass::SourceGeneral => source_general_lanes(),
         DiffClass::TestsOnly => tests_only_lanes(),
-        DiffClass::WorkflowTooling => workflow_tooling_lanes(),
+        DiffClass::WorkflowTooling => workflow_tooling_lanes_for_mix(language_mix),
         DiffClass::DocsOnly | DiffClass::ArtifactOnlySmoke => Vec::new(),
     }
 }
@@ -23732,8 +23772,8 @@ mod tests {
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
         FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
         GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
-        LaneModelOutput, LanePlan, Limits, ModelAssignment, ModelCacheUsage, ModelCallOutcome,
-        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        LaneModelOutput, LanePlan, LanguageMix, Limits, ModelAssignment, ModelCacheUsage,
+        ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
         ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelLaneTaskResult, ModelMode,
         ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
         Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
@@ -23942,7 +23982,10 @@ mod tests {
 
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_class(DiffClass::WorkflowTooling);
+        plan.changed_files = files.clone();
+        plan.language_mix = super::classify_language_mix(&files);
+        plan.lanes =
+            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -23956,6 +23999,49 @@ mod tests {
             lane.focus.contains("ArrayBuffer")
                 || lane.focus.contains("worker handoff")
                 || lane.role.contains("undefined-behavior")
+        }));
+    }
+
+    #[test]
+    fn scripts_only_tooling_diff_routes_to_tooling_lanes_not_workflow_lanes() {
+        let files = vec!["scripts/verify-bun-review-artifacts.py".to_owned()];
+        let flags = classify_diff(&files, "+import tempfile\n");
+        assert!(flags.source_changed);
+        assert!(flags.shell_changed);
+        assert_eq!(
+            classify_diff_class(&files, &flags),
+            DiffClass::WorkflowTooling
+        );
+
+        let mut plan = test_plan(Vec::new());
+        plan.diff_class = DiffClass::WorkflowTooling;
+        plan.changed_files = files.clone();
+        plan.language_mix = super::classify_language_mix(&files);
+        plan.lanes =
+            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        let mut args = test_run_args(std::path::PathBuf::from("out"));
+        args.lane_width = 10;
+        let lanes = review_lanes_for_args(&plan, &args);
+        let lane_ids = lanes
+            .iter()
+            .map(|lane| lane.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            lane_ids,
+            vec![
+                "tooling-script-proof",
+                "tooling-policy",
+                "tooling-opposition"
+            ]
+        );
+        assert!(lanes.iter().all(|lane| {
+            !lane.id.starts_with("workflow-")
+                && !lane.focus.contains("pull_request_target")
+                && !lane.focus.contains("action pinning")
+        }));
+        assert!(lanes.iter().any(|lane| {
+            lane.focus.contains("scripts") && lane.focus.contains("focused self-test proof")
         }));
     }
 
@@ -32691,7 +32777,10 @@ required_proof_unprooven = true
     fn workflow_pr_body_uses_workflow_route_language() {
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_class(DiffClass::WorkflowTooling);
+        plan.lanes = super::default_lanes_for_diff_context(
+            DiffClass::WorkflowTooling,
+            &LanguageMix::default(),
+        );
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -32734,7 +32823,10 @@ required_proof_unprooven = true
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_class(DiffClass::WorkflowTooling);
+        plan.lanes = super::default_lanes_for_diff_context(
+            DiffClass::WorkflowTooling,
+            &LanguageMix::default(),
+        );
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -38706,6 +38798,10 @@ index 1111111..2222222 100644
             profile_name: "gh-runner".to_owned(),
             diff_class: DiffClass::SourceUb,
             changed_files: vec!["src/lib.rs".to_owned(), "tests/lib.rs".to_owned()],
+            language_mix: super::classify_language_mix(&[
+                "src/lib.rs".to_owned(),
+                "tests/lib.rs".to_owned(),
+            ]),
             sensors,
             lanes: vec![LanePlan {
                 id: "tests".to_owned(),
