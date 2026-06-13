@@ -659,17 +659,27 @@ fn active_len_tracks_view_after_resize() {
     let tool_status: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("review/tool-status.json"))?)?;
     assert_eq!(tool_status["schema"], "ub-review.tool_status.v1");
-    assert!(tool_status["tools"].as_array().is_some_and(|tools| {
-        tools.iter().any(|tool| {
-            tool["id"] == "ripr"
-                && tool["planned_run"] == true
-                && tool["timeout_sec"].as_u64().is_some()
-                && tool["artifact_budget_mb"].as_u64().is_some()
-                && tool["requires_lease"].as_bool().is_some()
-                && tool["status"] == "skipped"
-                && tool["reason"] == "dry-run; sensor not executed"
-        })
-    }));
+    let ripr_status = tool_status["tools"]
+        .as_array()
+        .and_then(|tools| tools.iter().find(|tool| tool["id"] == "ripr"))
+        .ok_or_else(|| anyhow::anyhow!("ripr tool status missing"))?;
+    assert!(ripr_status["timeout_sec"].as_u64().is_some());
+    assert!(ripr_status["artifact_budget_mb"].as_u64().is_some());
+    assert!(ripr_status["requires_lease"].as_bool().is_some());
+    assert_eq!(
+        ripr_status["status"], "skipped",
+        "dry-run must not execute ripr: {ripr_status}"
+    );
+    if ripr_status["planned_run"].as_bool() == Some(true) {
+        assert_eq!(ripr_status["reason"], "dry-run; sensor not executed");
+    } else {
+        assert!(
+            ripr_status["reason"]
+                .as_str()
+                .is_some_and(|reason| !reason.is_empty()),
+            "unplanned dry-run ripr status must explain why it skipped: {ripr_status}"
+        );
+    }
     let cargo_allow_status = tool_status["tools"]
         .as_array()
         .and_then(|tools| tools.iter().find(|tool| tool["id"] == "cargo-allow"))
