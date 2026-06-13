@@ -358,6 +358,10 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
         "ub-review audit-ci --root",
         "ub-review setup-ci --print-pr",
         "--accept <job>=<command>",
+        "only audited `adaptive` and `move-to-ub-review-required` recommendations can become generated proof",
+        "`move-to-ub-review-required` materializes as required proof",
+        "`adaptive` materializes as non-required proof",
+        "`keep-required`, `flag-for-human`, risk-pack, nightly, release, deploy, provenance, and compliance jobs remain manual",
         "Branch protection",
     ] {
         assert!(
