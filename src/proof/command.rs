@@ -15,6 +15,8 @@ struct ProofCommandPaths {
     stderr_rel: String,
 }
 
+const PROOF_COMMAND_STREAM_MAX_BYTES: usize = 256 * 1024;
+
 #[derive(Clone, Debug)]
 pub(crate) struct ProofCommandSpec {
     pub(crate) argv: Vec<String>,
@@ -78,6 +80,7 @@ where
         &paths.stdout_path,
         &paths.stderr_path,
     );
+    bound_proof_command_streams(&paths)?;
     let (command_status, reason, exit_code, timed_out, duration_ms) = match status {
         Ok(status) if status.timed_out => (
             "timed_out".to_owned(),
@@ -121,6 +124,31 @@ where
         stderr: paths.stderr_rel,
         reason,
     })
+}
+
+fn bound_proof_command_streams(paths: &ProofCommandPaths) -> Result<()> {
+    bound_proof_command_stream(&paths.stdout_path)?;
+    bound_proof_command_stream(&paths.stderr_path)?;
+    Ok(())
+}
+
+fn bound_proof_command_stream(path: &Path) -> Result<()> {
+    let bytes = fs::read(path).with_context(|| format!("read {}", path.display()))?;
+    if bytes.len() <= PROOF_COMMAND_STREAM_MAX_BYTES {
+        return Ok(());
+    }
+    let marker = format!(
+        "[ub-review truncated proof command stream: capped at {cap} bytes from {total}]\n",
+        cap = PROOF_COMMAND_STREAM_MAX_BYTES,
+        total = bytes.len()
+    );
+    let tail_budget = PROOF_COMMAND_STREAM_MAX_BYTES.saturating_sub(marker.len());
+    let tail_start = bytes.len().saturating_sub(tail_budget);
+    let mut bounded = Vec::with_capacity(PROOF_COMMAND_STREAM_MAX_BYTES);
+    bounded.extend_from_slice(marker.as_bytes());
+    bounded.extend_from_slice(&bytes[tail_start..]);
+    fs::write(path, bounded).with_context(|| format!("truncate {}", path.display()))?;
+    Ok(())
 }
 
 pub(crate) fn skipped_proof_command_receipt(
@@ -350,6 +378,54 @@ mod tests {
             fs::read_to_string(out.join(&receipt.stderr))?,
             "timed out\n"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn proof_command_receipt_bounds_stdout_and_stderr_artifacts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let spec = ProofCommandSpec {
+            argv: vec![
+                "cargo".to_owned(),
+                "test".to_owned(),
+                "loud_case".to_owned(),
+            ],
+            env: BTreeMap::new(),
+        };
+        let loud_stdout = vec![b'o'; PROOF_COMMAND_STREAM_MAX_BYTES + 4096];
+        let loud_stderr = vec![b'e'; PROOF_COMMAND_STREAM_MAX_BYTES + 8192];
+
+        let receipt = run_proof_command_receipt_for_id(
+            temp.path(),
+            &out,
+            "proof-command-loud",
+            "head",
+            &spec,
+            60,
+            &mut |_root, _argv, _env, _timeout, stdout, stderr| {
+                fs::write(stdout, &loud_stdout)?;
+                fs::write(stderr, &loud_stderr)?;
+                Ok(CommandStatus {
+                    exit_code: Some(1),
+                    timed_out: false,
+                    success: false,
+                    reason: "exit code Some(1)".to_owned(),
+                    duration_ms: 42,
+                })
+            },
+        )?;
+
+        let bounded_stdout = fs::read(out.join(&receipt.stdout))?;
+        let bounded_stderr = fs::read(out.join(&receipt.stderr))?;
+        assert!(bounded_stdout.len() <= PROOF_COMMAND_STREAM_MAX_BYTES);
+        assert!(bounded_stderr.len() <= PROOF_COMMAND_STREAM_MAX_BYTES);
+        let stdout_text = String::from_utf8_lossy(&bounded_stdout);
+        let stderr_text = String::from_utf8_lossy(&bounded_stderr);
+        assert!(stdout_text.starts_with("[ub-review truncated proof command stream:"));
+        assert!(stderr_text.starts_with("[ub-review truncated proof command stream:"));
+        assert!(bounded_stdout.ends_with(&[b'o'; 32]));
+        assert!(bounded_stderr.ends_with(&[b'e'; 32]));
         Ok(())
     }
 }
