@@ -2429,6 +2429,219 @@ def require_quality_trend_missing_field(missing: list, field: str) -> None:
         fail(f"quality-trend.json missing[] does not receipt {field}")
 
 
+def require_quality_backfill(root: pathlib.Path, required: bool = False) -> None:
+    path = root / "review/quality-backfill.json"
+    if not path.is_file():
+        if required:
+            fail("review/quality-backfill.json is missing")
+        return
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail("review/quality-backfill.json is not an object")
+    if artifact.get("schema") != "ub-review.quality_backfill.v1":
+        fail(f"quality-backfill.json schema invalid: {artifact.get('schema')!r}")
+    as_of = artifact.get("as_of")
+    if not isinstance(as_of, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", as_of):
+        fail(f"quality-backfill.json as_of is not YYYY-MM-DD: {as_of!r}")
+    if artifact.get("window_scope") != "rolling_v1":
+        fail(f"quality-backfill.json window_scope invalid: {artifact.get('window_scope')!r}")
+    require_non_negative_int(artifact, "quality-backfill.json window_days", "window_days")
+    window_runs = require_non_negative_int(
+        artifact, "quality-backfill.json window_runs", "window_runs"
+    )
+    require_non_negative_int(
+        artifact, "quality-backfill.json comments_prepared", "comments_prepared"
+    )
+
+    source_artifacts = artifact.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail("quality-backfill.json source_artifacts is not a non-empty array")
+    for index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(source, f"quality-backfill.json source_artifacts[{index}]")
+        if not (root / source).is_file():
+            fail(f"quality-backfill.json source_artifacts[{index}] missing file: {source}")
+
+    missing = artifact.get("missing")
+    if not isinstance(missing, list):
+        fail("quality-backfill.json missing is not an array")
+    missing_fields = set()
+    for index, entry in enumerate(missing):
+        if not isinstance(entry, dict):
+            fail(f"quality-backfill.json missing[{index}] is not an object")
+        field = require_non_empty_string_value(
+            entry.get("field"), f"quality-backfill.json missing[{index}].field"
+        )
+        missing_fields.add(field)
+        require_non_empty_string_value(
+            entry.get("reason"), f"quality-backfill.json missing[{index}].reason"
+        )
+        source = require_non_empty_string_value(
+            entry.get("source_artifact"),
+            f"quality-backfill.json missing[{index}].source_artifact",
+        )
+        if source.startswith("review/") and not (root / source).is_file():
+            fail(f"quality-backfill.json missing[{index}].source_artifact missing file: {source}")
+
+    counts = {
+        "comments_posted": optional_non_negative_int(
+            artifact.get("comments_posted"), "quality-backfill.json comments_posted"
+        ),
+        "comments_accepted": optional_non_negative_int(
+            artifact.get("comments_accepted"), "quality-backfill.json comments_accepted"
+        ),
+        "comments_resolved": optional_non_negative_int(
+            artifact.get("comments_resolved"), "quality-backfill.json comments_resolved"
+        ),
+        "reviewer_overrides": optional_non_negative_int(
+            artifact.get("reviewer_overrides"), "quality-backfill.json reviewer_overrides"
+        ),
+        "adopted_generated_tests": optional_non_negative_int(
+            artifact.get("adopted_generated_tests"),
+            "quality-backfill.json adopted_generated_tests",
+        ),
+    }
+    rates = {
+        "comment_acceptance_rate": require_optional_rate(
+            artifact, "quality-backfill.json comment_acceptance_rate", "comment_acceptance_rate"
+        ),
+        "comment_resolution_rate": require_optional_rate(
+            artifact, "quality-backfill.json comment_resolution_rate", "comment_resolution_rate"
+        ),
+        "fills_signal_rate": require_optional_rate(
+            artifact, "quality-backfill.json fills_signal_rate", "fills_signal_rate"
+        ),
+        "llm_unavailable_rate": require_optional_rate(
+            artifact, "quality-backfill.json llm_unavailable_rate", "llm_unavailable_rate"
+        ),
+        "reviewer_override_rate": require_optional_rate(
+            artifact, "quality-backfill.json reviewer_override_rate", "reviewer_override_rate"
+        ),
+    }
+    for field, value in {**counts, **rates}.items():
+        if value is None:
+            if field not in missing_fields:
+                fail(f"quality-backfill.json missing[] does not receipt {field}")
+        elif field in missing_fields:
+            fail(f"quality-backfill.json {field} has a value but is still listed in missing[]")
+
+    posted = counts["comments_posted"]
+    accepted = counts["comments_accepted"]
+    resolved = counts["comments_resolved"]
+    overrides = counts["reviewer_overrides"]
+    if accepted is not None and posted is not None and accepted > posted:
+        fail("quality-backfill.json comments_accepted exceeds comments_posted")
+    if resolved is not None and posted is not None and resolved > posted:
+        fail("quality-backfill.json comments_resolved exceeds comments_posted")
+    require_rate_matches_counts(
+        rates["comment_acceptance_rate"],
+        accepted,
+        posted,
+        "quality-backfill.json comment_acceptance_rate",
+    )
+    require_rate_matches_counts(
+        rates["comment_resolution_rate"],
+        resolved,
+        posted,
+        "quality-backfill.json comment_resolution_rate",
+    )
+    require_rate_matches_counts(
+        rates["reviewer_override_rate"],
+        overrides,
+        window_runs,
+        "quality-backfill.json reviewer_override_rate",
+    )
+
+    trend = artifact.get("trend")
+    if not isinstance(trend, dict):
+        fail("quality-backfill.json trend is not an object")
+    previous = load_previous_quality_backfill_from_sources(root, source_artifacts)
+    for field, current_field, previous_field in [
+        (
+            "trend.comment_acceptance_rate_delta",
+            "comment_acceptance_rate",
+            "comment_acceptance_rate",
+        ),
+        ("trend.fills_signal_rate_delta", "fills_signal_rate", "fills_signal_rate"),
+        (
+            "trend.llm_unavailable_rate_delta",
+            "llm_unavailable_rate",
+            "llm_unavailable_rate",
+        ),
+        (
+            "trend.reviewer_override_rate_delta",
+            "reviewer_override_rate",
+            "reviewer_override_rate",
+        ),
+    ]:
+        key = field.rsplit(".", 1)[1]
+        delta = optional_finite_number(trend.get(key), f"quality-backfill.json {field}")
+        if delta is None:
+            if field not in missing_fields:
+                fail(f"quality-backfill.json missing[] does not receipt {field}")
+            continue
+        if field in missing_fields:
+            fail(f"quality-backfill.json {field} has a value but is still listed in missing[]")
+        if previous is None:
+            fail(f"quality-backfill.json {field} has value without previous backfill source")
+        current = rates[current_field]
+        prior = previous.get(previous_field) if isinstance(previous, dict) else None
+        if current is None or prior is None:
+            fail(f"quality-backfill.json {field} has value without current and previous rates")
+        expected = current - float(prior)
+        if abs(delta - expected) > 0.000001:
+            fail(f"quality-backfill.json {field} does not match current minus previous")
+
+
+def optional_non_negative_int(value: Any, label: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        fail(f"{label} is not null or a non-negative integer: {value!r}")
+    return value
+
+
+def optional_finite_number(value: Any, label: str) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+        fail(f"{label} is not null or a finite number: {value!r}")
+    return float(value)
+
+
+def require_optional_rate(container: dict, label: str, field: str) -> float | None:
+    value = require_optional_non_negative_number(container, label, field)
+    if value is not None and value > 1.0:
+        fail(f"{label} is greater than 1.0: {value!r}")
+    return value
+
+
+def require_rate_matches_counts(
+    rate: float | None, numerator: int | None, denominator: int | None, label: str
+) -> None:
+    if rate is None:
+        return
+    if numerator is None or denominator is None or denominator == 0:
+        fail(f"{label} has value without numerator and non-zero denominator")
+    expected = numerator / denominator
+    if abs(rate - expected) > 0.000001:
+        fail(f"{label} does not match numerator divided by denominator")
+
+
+def load_previous_quality_backfill_from_sources(
+    root: pathlib.Path, source_artifacts: list
+) -> dict | None:
+    for source in source_artifacts:
+        if not isinstance(source, str) or "previous-quality-backfill" not in source:
+            continue
+        candidate = load_json(root / source)
+        if not isinstance(candidate, dict):
+            fail(f"previous quality backfill source is not an object: {source}")
+        if candidate.get("schema") != "ub-review.quality_backfill.v1":
+            fail(f"previous quality backfill source schema invalid: {source}")
+        return candidate
+    return None
+
+
 def quality_llm_unavailable_events(review: dict) -> int:
     events = 0
     for receipt in review.get("provider_preflights", []):
@@ -7933,6 +8146,113 @@ def self_test_quality_trend_contract() -> None:
     )
 
 
+def self_test_quality_backfill_contract() -> None:
+    import copy
+    import tempfile
+
+    previous = {
+        "schema": "ub-review.quality_backfill.v1",
+        "comment_acceptance_rate": 0.25,
+        "fills_signal_rate": 0.5,
+        "llm_unavailable_rate": 0.25,
+        "reviewer_override_rate": 0.0,
+    }
+    artifact = {
+        "schema": "ub-review.quality_backfill.v1",
+        "as_of": "2026-06-12",
+        "window_scope": "rolling_v1",
+        "window_days": 30,
+        "window_runs": 2,
+        "source_artifacts": [
+            "review/quality-backfill-sources/run-a-receipt.json",
+            "review/quality-backfill-sources/run-a-trend.json",
+            "review/quality-backfill-sources/github-quality-outcomes.json",
+            "review/quality-backfill-sources/github-review-threads.json",
+            "review/quality-backfill-sources/previous-quality-backfill.json",
+        ],
+        "comments_prepared": 3,
+        "comments_posted": 2,
+        "comments_accepted": 1,
+        "comments_resolved": 2,
+        "comment_acceptance_rate": 0.5,
+        "comment_resolution_rate": 1.0,
+        "fills_signal_rate": 0.75,
+        "llm_unavailable_rate": 0.5,
+        "reviewer_overrides": 1,
+        "reviewer_override_rate": 0.5,
+        "adopted_generated_tests": 1,
+        "trend": {
+            "comment_acceptance_rate_delta": 0.25,
+            "fills_signal_rate_delta": 0.25,
+            "llm_unavailable_rate_delta": 0.25,
+            "reviewer_override_rate_delta": 0.5,
+        },
+        "missing": [],
+    }
+
+    def write_root(overrides: dict | None = None) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        candidate = copy.deepcopy(artifact)
+        if overrides:
+            candidate.update(overrides)
+        write_self_test_json(root / "review/quality-backfill.json", candidate)
+        for source in candidate.get("source_artifacts", []):
+            if source == "review/quality-backfill-sources/previous-quality-backfill.json":
+                write_self_test_json(root / source, previous)
+            else:
+                write_self_test_json(root / source, {"status": "self-test"})
+        return root
+
+    def write_root_with_dangling_source() -> pathlib.Path:
+        root = write_root()
+        (root / "review/quality-backfill-sources/run-a-receipt.json").unlink()
+        return root
+
+    require_quality_backfill(write_root(), required=True)
+    expect_self_test_failure(
+        "quality backfill dangling source",
+        "source_artifacts[0] missing file",
+        lambda: require_quality_backfill(write_root_with_dangling_source(), required=True),
+    )
+    expect_self_test_failure(
+        "quality backfill acceptance rate overclaim",
+        "comment_acceptance_rate has value without numerator",
+        lambda: require_quality_backfill(
+            write_root(
+                {
+                    "comments_accepted": None,
+                    "missing": [
+                        {
+                            "field": "comments_accepted",
+                            "reason": "accepted-state receipt missing",
+                            "source_artifact": "review/quality-backfill-sources/github-quality-outcomes.json",
+                        }
+                    ],
+                }
+            ),
+            required=True,
+        ),
+    )
+    expect_self_test_failure(
+        "quality backfill value still marked missing",
+        "has a value but is still listed in missing",
+        lambda: require_quality_backfill(
+            write_root(
+                {
+                    "missing": [
+                        {
+                            "field": "comment_acceptance_rate",
+                            "reason": "stale gap",
+                            "source_artifact": "review/quality-backfill.json",
+                        }
+                    ]
+                }
+            ),
+            required=True,
+        ),
+    )
+
+
 def self_test_ci_audit_runner_cancellations_contract() -> None:
     import tempfile
 
@@ -9128,6 +9448,7 @@ def run_self_tests() -> None:
     self_test_fill_ledger_contract()
     self_test_quality_receipt_contract()
     self_test_quality_trend_contract()
+    self_test_quality_backfill_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
     expect_self_test_failure(
@@ -9235,6 +9556,7 @@ def main(argv: list[str]) -> int:
     require_fill_ledger(root)
     require_quality_receipt(root, metrics, review)
     require_quality_trend(root)
+    require_quality_backfill(root)
     require_model_receipts(review, metrics, args.min_ok_model_lanes)
     if args.require_no_model_evidence_failures:
         require_no_model_evidence_failures(review)

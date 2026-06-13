@@ -34,6 +34,9 @@ pub(crate) enum Command {
     /// Render or open the CI migration PR from a prior audit-ci run.
     /// `--print-pr` is local-only; `--open-pr` creates the migration branch and PR.
     SetupCi(SetupCiArgs),
+    /// Aggregate prior gate artifacts and GitHub reviewer-state receipts into
+    /// rolling quality telemetry. Artifact-only; never posts or edits GitHub.
+    QualityBackfill(QualityBackfillArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
     GateCheck(GateCheckArgs),
@@ -702,4 +705,27 @@ pub(crate) struct SetupCiArgs {
     /// Branch name the migration PR is opened from.
     #[arg(long, default_value = "ub-review/setup-ci-migration")]
     pub(crate) branch: String,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct QualityBackfillArgs {
+    /// Output run directory. The artifact lands at
+    /// `<out>/review/quality-backfill.json`.
+    #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_OUT")]
+    pub(crate) out: PathBuf,
+    /// Extracted ub-review gate artifact root containing
+    /// `review/quality-receipt.json`. Repeat for each run in the window.
+    #[arg(long = "run-dir")]
+    pub(crate) run_dirs: Vec<PathBuf>,
+    /// Normalized GitHub reviewer-state receipt. The receipt may name raw API
+    /// query receipts in `source_artifacts`; they are copied into the output
+    /// tree so the backfill artifact is self-contained.
+    #[arg(long = "github-outcomes", env = "UB_REVIEW_GITHUB_QUALITY_OUTCOMES")]
+    pub(crate) github_outcomes: Option<PathBuf>,
+    /// Previous `quality-backfill.json` to compute deltas against.
+    #[arg(long = "previous", env = "UB_REVIEW_PREVIOUS_QUALITY_BACKFILL")]
+    pub(crate) previous: Option<PathBuf>,
+    /// Rolling window in days.
+    #[arg(long = "window-days", default_value_t = 30)]
+    pub(crate) window_days: u32,
 }
