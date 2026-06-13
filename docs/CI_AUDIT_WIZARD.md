@@ -159,8 +159,9 @@ flag-for-human               security, secrets, compliance, release signing,
 Rules:
 
 - security-sensitive jobs (CodeQL, secret scanning, provenance, signing,
-  deploy gates, permission checks) are always `flag-for-human`; no automatic
-  right-sizing, ever, unless the repo opts into an explicit written policy;
+  deploy gates, missing/ambiguous/write-scoped permission context, permission
+  checks) are always `flag-for-human`; no automatic right-sizing, ever, unless
+  the repo opts into an explicit written policy;
 - the model lane classifies **only over deterministic receipts**; it must not
   invent facts, and every model-assisted tier carries
   `judgment: model-assisted`;

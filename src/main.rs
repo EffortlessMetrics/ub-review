@@ -23136,7 +23136,9 @@ fn ci_security_pattern_match(candidates: &[&str]) -> Option<String> {
 }
 
 fn ci_permissions_risk(permissions: Option<&serde_json::Value>) -> Option<&'static str> {
-    let value = permissions?;
+    let Some(value) = permissions else {
+        return Some("missing permissions");
+    };
     match value {
         serde_json::Value::Null => Some("ambiguous permissions"),
         serde_json::Value::String(value) => {
@@ -40371,6 +40373,8 @@ on:
       - "Cargo.toml"
   workflow_dispatch:
 
+permissions: read-all
+
 jobs:
   fmt:
     runs-on: ubuntu-latest
@@ -40424,6 +40428,17 @@ jobs:
     permissions: null
     steps:
       - run: cargo check
+"#;
+
+    const CI_MISSING_PERMISSIONS_WORKFLOW: &str = r#"name: Missing permissions CI
+
+on: [pull_request]
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - run: cargo test --workspace
 "#;
 
     fn ci_api_job_value(name: &str, conclusion: &str, seconds: u64) -> serde_json::Value {
@@ -40730,7 +40745,7 @@ jobs:
             workflow_path: ".github/workflows/ci.yml".to_owned(),
             workflow_name: "CI".to_owned(),
             uses: Vec::new(),
-            permissions: None,
+            permissions: Some(serde_json::json!({"contents": "read"})),
             uses_secrets: Vec::new(),
             triggers: vec!["pull_request".to_owned()],
             path_filters: Vec::new(),
@@ -41127,6 +41142,12 @@ jobs:
 
     #[test]
     fn ci_permissions_and_secrets_flag_for_human() {
+        let mut evidence = ci_tier_evidence("integration", 500, 40, Some(60));
+        evidence.permissions = None;
+        let decision = super::classify_ci_job_tier(&evidence, true);
+        assert_eq!(decision.tier, "flag-for-human");
+        assert!(decision.reason.contains("missing permissions"));
+
         let mut evidence = ci_tier_evidence("integration", 500, 40, Some(60));
         evidence.permissions = Some(serde_json::json!({"contents": "write"}));
         let decision = super::classify_ci_job_tier(&evidence, true);
@@ -42094,6 +42115,55 @@ jobs:
         let nullperms = recommendation("nullperms")?;
         assert_eq!(nullperms.tier, "flag-for-human");
         assert!(nullperms.reason.contains("ambiguous permissions"));
+        Ok(())
+    }
+
+    #[test]
+    fn ci_audit_artifacts_flag_missing_permissions_as_human_review() -> Result<()> {
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/ci.yml",
+            CI_MISSING_PERMISSIONS_WORKFLOW,
+        )];
+        let mut specs: Vec<CiRunSpec<'_>> = Vec::new();
+        for index in 0..25u64 {
+            specs.push((900 + index, vec![("integration", "success", 60)]));
+        }
+        let fetch = super::CiAuditFetch {
+            workflows: ci_fixture_workflows(),
+            runs: ci_fixture_runs(&specs)?,
+            pages_fetched: 1,
+            truncated: false,
+            required_checks: ci_no_required_checks(),
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            None,
+            super::Utc::now(),
+        );
+        let inventory = artifacts
+            .inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == "integration")
+            .context("integration inventory job")?;
+        assert_eq!(inventory.permissions, None);
+        let recommendation = artifacts
+            .recommendations
+            .jobs
+            .iter()
+            .find(|recommendation| recommendation.job == "integration")
+            .context("integration recommendation")?;
+        assert_eq!(recommendation.tier, "flag-for-human");
+        assert!(recommendation.reason.contains("missing permissions"));
+        assert!(
+            recommendation
+                .proposed_policy
+                .contains("human decision required")
+        );
         Ok(())
     }
 

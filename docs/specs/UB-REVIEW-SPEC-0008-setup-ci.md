@@ -133,10 +133,10 @@ bound what setup-ci can generate until fixed (spec 0007 carries these):
   or unmatched required contexts keep the branch-protection remove list in
   "refuse to invent it" mode.
 - audit-ci extracts literal workflow/job `permissions` and job secret
-  references from local workflow YAML, then forces write-scoped or ambiguous
-  permissions and secret usage to `flag-for-human`. The line scan is still not
-  a complete YAML semantics engine, so setup-ci must treat missing or
-  ambiguous security context as a reason for conservatism, not a license.
+  references from local workflow YAML, then forces missing, write-scoped, or
+  ambiguous permissions and secret usage to `flag-for-human`. The line scan is
+  still not a complete YAML semantics engine, so setup-ci must treat missing
+  or ambiguous security context as a reason for conservatism, not a license.
 - `judgment` is always `deterministic` in v0 (src/main.rs); tokenless runs
   degrade every recommendation to `flag-for-human`. A setup-ci run over a
   tokenless audit has nothing to implement and must say so rather than
