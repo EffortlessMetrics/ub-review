@@ -441,7 +441,7 @@ cache_manifest.events_path                     "review/cache_events.ndjson"
 `require_run_loop_metrics`, `require_scheduler_artifact`.) The cache
 provider/endpoint hardcoding mirrors `model_cache_mode` being implemented
 only for MiniMax over anthropic-messages; the provider surface that would
-generalize it is spec 0006 territory (#310 remainder).
+generalize it is future spec 0006 provider-config territory.
 
 ## Advisory vs blocking behavior
 
@@ -664,7 +664,7 @@ This spec is docs-only. Open contract-surface work it routes:
        statuses are exercised, not just shaped
 0007   give ci-audit/* its own contract spec before anyone builds on it
 0006   provider/cache surface that would un-hardcode the cache manifest
-       provider fields (#310 remainder)
+       provider fields
 ```
 
 Rule for all future artifact changes: a shape change ships in the same PR as

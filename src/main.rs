@@ -14057,6 +14057,25 @@ fn record_provider_wave_slot(counts: &mut BTreeMap<ModelProvider, usize>, provid
     *counts.entry(provider).or_insert(0) += 1;
 }
 
+#[derive(Clone, Debug)]
+struct ProviderBackpressure {
+    status: String,
+    http_status: Option<u16>,
+}
+
+fn model_error_triggers_provider_backpressure(status: &str, http_status: Option<u16>) -> bool {
+    matches!(status, "rate_limited" | "timed_out")
+        || (status == "failed" && http_status.is_some_and(|code| code >= 500))
+}
+
+fn provider_backpressure_label(backpressure: &ProviderBackpressure) -> String {
+    if let Some(http_status) = backpressure.http_status {
+        format!("{} http {}", backpressure.status, http_status)
+    } else {
+        backpressure.status.clone()
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -14085,6 +14104,7 @@ fn run_available_model_lanes_with_runner(
     // budget as first attempts.
     let mut forced_specs: Vec<Option<ProviderSpec>> = vec![None; context.assignments.len()];
     let mut retry_queue: VecDeque<usize> = VecDeque::new();
+    let mut provider_backpressure = BTreeMap::<ModelProvider, ProviderBackpressure>::new();
     loop {
         if calls >= context.args.max_model_calls
             || (pending_assignments.is_empty() && retry_queue.is_empty())
@@ -14092,6 +14112,7 @@ fn run_available_model_lanes_with_runner(
             break;
         }
 
+        let active_provider_backpressure = std::mem::take(&mut provider_backpressure);
         let mut wave = Vec::new();
         let mut provider_counts = BTreeMap::new();
         // Drain fallback retries first: their primary failure is already
@@ -14155,7 +14176,11 @@ fn run_available_model_lanes_with_runner(
             }
             let lane = &assignment.lane;
             let Some((spec, fallback_from, preflight_reason)) =
-                selected_provider_spec(assignment, context.provider_preflights)
+                selected_provider_spec_with_backpressure(
+                    assignment,
+                    context.provider_preflights,
+                    &active_provider_backpressure,
+                )
             else {
                 receipt.status = "preflight_failed".to_owned();
                 receipt.reason =
@@ -14208,6 +14233,10 @@ fn run_available_model_lanes_with_runner(
             continue;
         }
 
+        let attempted_specs = wave
+            .iter()
+            .map(|task| (task.index, task.spec.clone()))
+            .collect::<BTreeMap<_, _>>();
         calls += wave.len();
         let mut results = runner(&context, &model_dir, wave)?;
         results.sort_by_key(|result| result.index);
@@ -14224,6 +14253,10 @@ fn run_available_model_lanes_with_runner(
                         receipt.status = "ok".to_owned();
                         receipt.reason = if forced_specs[task_result.index].is_some() {
                             "completed after runtime fallback retry".to_owned()
+                        } else if receipt.fallback_from.is_some()
+                            && receipt.reason.contains("provider backed off")
+                        {
+                            "completed after provider backpressure fallback".to_owned()
                         } else {
                             "completed".to_owned()
                         };
@@ -14249,6 +14282,17 @@ fn run_available_model_lanes_with_runner(
                 Err(err) => {
                     let status = classify_model_error(&err);
                     let http_status = http_status_from_error(&err);
+                    if model_error_triggers_provider_backpressure(&status, http_status)
+                        && let Some(spec) = attempted_specs.get(&task_result.index)
+                    {
+                        provider_backpressure.insert(
+                            spec.provider,
+                            ProviderBackpressure {
+                                status: status.clone(),
+                                http_status,
+                            },
+                        );
+                    }
                     let assignment = &context.assignments[task_result.index];
                     if let Some(fallback) = runtime_fallback_retry_spec(
                         assignment,
@@ -15226,6 +15270,35 @@ fn selected_provider_spec(
         ));
     }
     None
+}
+
+fn selected_provider_spec_with_backpressure(
+    assignment: &ModelAssignment,
+    preflights: &[ProviderPreflightReceipt],
+    provider_backpressure: &BTreeMap<ModelProvider, ProviderBackpressure>,
+) -> Option<(ProviderSpec, Option<String>, Option<String>)> {
+    let (spec, fallback_from, preflight_reason) = selected_provider_spec(assignment, preflights)?;
+    let Some(backpressure) = provider_backpressure.get(&spec.provider) else {
+        return Some((spec, fallback_from, preflight_reason));
+    };
+    let Some(fallback) = assignment.fallback.as_ref() else {
+        return Some((spec, fallback_from, preflight_reason));
+    };
+    if fallback.provider == spec.provider
+        || provider_backpressure.contains_key(&fallback.provider)
+        || !provider_preflight_ok(fallback, preflights)
+    {
+        return Some((spec, fallback_from, preflight_reason));
+    }
+    Some((
+        fallback.clone(),
+        Some(assignment.spec.label()),
+        Some(format!(
+            "provider backed off after {}; fallback used: {}",
+            provider_backpressure_label(backpressure),
+            fallback.label()
+        )),
+    ))
 }
 
 fn provider_preflight_ok(spec: &ProviderSpec, preflights: &[ProviderPreflightReceipt]) -> bool {
@@ -27634,6 +27707,278 @@ index 1111111..2222222 100644
             "a recovered lane is not a model evidence gap: {missing_or_failed_model_evidence:?}"
         );
         Ok(())
+    }
+
+    #[test]
+    fn model_lane_rate_limited_provider_sheds_next_wave_to_fallback() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 6;
+        args.model_concurrency = 3;
+        let primary = direct_minimax_spec(&args);
+        let fallback = opencode_canary_spec(&args);
+        let assignments = ["security", "opposition", "tests-oracle"]
+            .into_iter()
+            .map(|lane| ModelAssignment {
+                lane: lane_plan(lane),
+                spec: primary.clone(),
+                fallback: Some(fallback.clone()),
+            })
+            .collect::<Vec<_>>();
+        let preflights = vec![
+            preflight_ok_receipt(&primary),
+            preflight_ok_receipt(&fallback),
+        ];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::<Vec<ModelProvider>>::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits {
+                    minimax: Some(1),
+                    opencode_go: Some(3),
+                },
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            &mut issue_candidates,
+            |_context, _model_dir, tasks| {
+                waves.borrow_mut().push(
+                    tasks
+                        .iter()
+                        .map(|task| task.spec.provider)
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let result = match task.spec.provider {
+                            ModelProvider::MiniMaxDirect => Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            )),
+                            ModelProvider::OpenCodeGo => Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            }),
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(
+            waves.into_inner(),
+            vec![
+                vec![ModelProvider::MiniMaxDirect],
+                vec![
+                    ModelProvider::OpenCodeGo,
+                    ModelProvider::OpenCodeGo,
+                    ModelProvider::OpenCodeGo,
+                ],
+            ]
+        );
+        assert_eq!(
+            calls, 4,
+            "one primary failure, one queued retry, and two backpressure fallbacks"
+        );
+        assert!(model_lanes.iter().all(|receipt| receipt.status == "ok"));
+        assert!(
+            model_lanes
+                .iter()
+                .all(|receipt| receipt.provider == fallback.provider.key())
+        );
+        assert!(
+            model_lanes
+                .iter()
+                .all(|receipt| receipt.fallback_from == Some(primary.label()))
+        );
+        assert_eq!(
+            model_lanes[0].reason,
+            "completed after runtime fallback retry"
+        );
+        assert!(
+            model_lanes[1..]
+                .iter()
+                .all(|receipt| receipt.reason == "completed after provider backpressure fallback")
+        );
+        assert!(missing_or_failed_model_evidence.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn model_lane_rate_limited_retry_provider_sheds_next_wave_to_fallback() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let mut args = test_run_args(temp.path().join("out"));
+        args.max_model_calls = 4;
+        args.model_concurrency = 1;
+        let minimax = direct_minimax_spec(&args);
+        let opencode = opencode_canary_spec(&args);
+        let assignments = vec![
+            ModelAssignment {
+                lane: lane_plan("security"),
+                spec: minimax.clone(),
+                fallback: Some(opencode.clone()),
+            },
+            ModelAssignment {
+                lane: lane_plan("opencode-canary"),
+                spec: opencode.clone(),
+                fallback: Some(minimax.clone()),
+            },
+        ];
+        let preflights = vec![
+            preflight_ok_receipt(&minimax),
+            preflight_ok_receipt(&opencode),
+        ];
+        let mut model_lanes = assignments
+            .iter()
+            .map(|assignment| model_lane_receipt(&assignment.lane.id, "planned"))
+            .collect::<Vec<_>>();
+        let mut missing_or_failed_model_evidence = Vec::new();
+        let mut inline_comments = Vec::new();
+        let mut summary_only_findings = Vec::new();
+        let mut model_observations = Vec::new();
+        let mut proof_requests = Vec::new();
+        let mut issue_candidates = Vec::new();
+        let line_map = BTreeSet::new();
+        let waves = std::cell::RefCell::new(Vec::<Vec<ModelProvider>>::new());
+
+        let calls = run_available_model_lanes_with_runner(
+            ModelRunContext {
+                root: temp.path(),
+                review_dir: temp.path(),
+                assignments: &assignments,
+                provider_preflights: &preflights,
+                shared_context: "shared context",
+                args: &args,
+                line_map: &line_map,
+                key_present: |_| true,
+                provider_concurrency: ProviderConcurrencyLimits::default(),
+            },
+            &mut model_lanes,
+            &mut missing_or_failed_model_evidence,
+            &mut inline_comments,
+            &mut summary_only_findings,
+            &mut model_observations,
+            &mut proof_requests,
+            &mut issue_candidates,
+            |_context, _model_dir, tasks| {
+                let mut waves = waves.borrow_mut();
+                let wave_index = waves.len();
+                waves.push(
+                    tasks
+                        .iter()
+                        .map(|task| task.spec.provider)
+                        .collect::<Vec<_>>(),
+                );
+                Ok(tasks
+                    .into_iter()
+                    .map(|task| {
+                        let result = match (wave_index, task.spec.provider) {
+                            (0, ModelProvider::MiniMaxDirect) => Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            )),
+                            (1, ModelProvider::OpenCodeGo) => Err(anyhow::anyhow!(
+                                "model curl: http status Some(429) too many requests"
+                            )),
+                            (_, ModelProvider::MiniMaxDirect) => Ok(ModelCallOutcome {
+                                output: empty_lane_output(),
+                                duration_ms: 5,
+                                http_status: Some(200),
+                                response_shape: "anthropic-messages".to_owned(),
+                                cache_usage: ModelCacheUsage::default(),
+                                degraded: false,
+                            }),
+                            (_, ModelProvider::OpenCodeGo) => Err(anyhow::anyhow!(
+                                "unexpected OpenCode call after retry-provider backpressure"
+                            )),
+                        };
+                        ModelLaneTaskResult {
+                            index: task.index,
+                            result,
+                        }
+                    })
+                    .collect())
+            },
+        )?;
+
+        assert_eq!(
+            waves.into_inner(),
+            vec![
+                vec![ModelProvider::MiniMaxDirect],
+                vec![ModelProvider::OpenCodeGo],
+                vec![ModelProvider::MiniMaxDirect],
+            ]
+        );
+        assert_eq!(calls, 3);
+        assert_eq!(model_lanes[0].status, "rate_limited");
+        assert_eq!(model_lanes[0].provider, opencode.provider.key());
+        assert_eq!(model_lanes[0].fallback_from, Some(minimax.label()));
+        assert_eq!(model_lanes[1].status, "ok");
+        assert_eq!(model_lanes[1].provider, minimax.provider.key());
+        assert_eq!(model_lanes[1].fallback_from, Some(opencode.label()));
+        assert_eq!(
+            model_lanes[1].reason,
+            "completed after provider backpressure fallback"
+        );
+        assert_eq!(missing_or_failed_model_evidence.len(), 1);
+        Ok(())
+    }
+
+    #[test]
+    fn provider_backpressure_only_tracks_transient_provider_failures() {
+        for (status, http_status) in [
+            ("rate_limited", Some(429)),
+            ("timed_out", None),
+            ("failed", Some(500)),
+            ("failed", Some(503)),
+        ] {
+            assert!(
+                super::model_error_triggers_provider_backpressure(status, http_status),
+                "{status} {http_status:?} should shed the provider"
+            );
+        }
+        for (status, http_status) in [
+            ("auth_failed", Some(401)),
+            ("invalid_json", Some(200)),
+            ("bad_envelope", Some(200)),
+            ("failed", Some(404)),
+            ("failed", None),
+        ] {
+            assert!(
+                !super::model_error_triggers_provider_backpressure(status, http_status),
+                "{status} {http_status:?} should not shed the provider"
+            );
+        }
     }
 
     #[test]
