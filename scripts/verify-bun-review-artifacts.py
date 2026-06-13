@@ -8206,6 +8206,7 @@ def self_test_quality_backfill_contract() -> None:
                     root / source,
                     {
                         "schema": "ub-review.github_quality_outcomes.v1",
+                        "collection_status": "complete",
                         "source_artifacts": ["review-threads.json"],
                         "comments": [
                             {
@@ -8320,12 +8321,31 @@ def require_github_quality_outcomes_source(path: pathlib.Path) -> None:
         fail(f"{path.name} is not an object")
     if artifact.get("schema") != "ub-review.github_quality_outcomes.v1":
         fail(f"{path.name} schema invalid: {artifact.get('schema')!r}")
+    collection_status = artifact.get("collection_status")
+    if collection_status not in {"complete", "incomplete", "missing"}:
+        fail(f"{path.name} collection_status invalid: {collection_status!r}")
+    collection_warnings = artifact.get("collection_warnings", [])
+    if not isinstance(collection_warnings, list):
+        fail(f"{path.name} collection_warnings is not an array")
+    for index, warning in enumerate(collection_warnings):
+        if not isinstance(warning, dict):
+            fail(f"{path.name} collection_warnings[{index}] is not an object")
+        for field in ["source_artifact", "reason", "detail"]:
+            require_non_empty_string_value(
+                warning.get(field), f"{path.name} collection_warnings[{index}].{field}"
+            )
+    if collection_status == "incomplete" and not collection_warnings:
+        fail(f"{path.name} incomplete collection needs collection_warnings")
     source_artifacts = artifact.get("source_artifacts")
     if not isinstance(source_artifacts, list) or not source_artifacts:
         fail(f"{path.name} source_artifacts is not a non-empty array")
     for index, source in enumerate(source_artifacts):
         require_non_empty_string_value(source, f"{path.name} source_artifacts[{index}]")
     comments = artifact.get("comments")
+    if collection_status == "complete" and comments is None:
+        fail(f"{path.name} complete collection must include comments")
+    if collection_status != "complete" and comments is not None:
+        fail(f"{path.name} incomplete/missing collection must not include comments")
     if comments is not None:
         if not isinstance(comments, list):
             fail(f"{path.name} comments is not an array")

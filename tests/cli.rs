@@ -64,6 +64,13 @@ fn quality_backfill_workflow_is_artifact_only_not_pr_gate_noise() -> Result<()> 
     assert_eq!(workflow.matches("review-threads-${number}.json").count(), 2);
     assert_eq!(
         workflow
+            .matches("review-thread-error-${number}.json")
+            .count(),
+        1
+    );
+    assert_eq!(workflow.matches("hasNextPage").count(), 2);
+    assert_eq!(
+        workflow
             .matches("ub-review quality-github-outcomes")
             .count(),
         1
@@ -106,11 +113,13 @@ fn quality_github_outcomes_cli_writes_thread_state_receipt() -> Result<()> {
                         "number": 12,
                         "mergedAt": "2026-06-13T01:29:45Z",
                         "reviewThreads": {
+                            "pageInfo": {"hasNextPage": false, "endCursor": null},
                             "nodes": [
                                 {
                                     "id": "thread-one",
                                     "isResolved": false,
                                     "comments": {
+                                        "pageInfo": {"hasNextPage": false, "endCursor": null},
                                         "nodes": [
                                             {
                                                 "id": "comment-one",
@@ -152,6 +161,7 @@ fn quality_github_outcomes_cli_writes_thread_state_receipt() -> Result<()> {
     let artifact: serde_json::Value = serde_json::from_slice(&fs::read(out)?)?;
 
     assert_eq!(artifact["schema"], "ub-review.github_quality_outcomes.v1");
+    assert_eq!(artifact["collection_status"], "complete");
     let source_artifacts = artifact["source_artifacts"]
         .as_array()
         .ok_or_else(|| anyhow::anyhow!("source_artifacts missing"))?;

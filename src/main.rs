@@ -808,9 +808,19 @@ struct LoadedGithubQualityOutcomes {
 #[derive(Clone, Debug, Serialize)]
 struct GithubQualityOutcomesArtifact {
     schema: &'static str,
+    collection_status: &'static str,
     source_artifacts: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    collection_warnings: Vec<GithubQualityCollectionWarning>,
     #[serde(skip_serializing_if = "Option::is_none")]
     comments: Option<Vec<GithubQualityNormalizedComment>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GithubQualityCollectionWarning {
+    source_artifact: String,
+    reason: String,
+    detail: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -7233,27 +7243,52 @@ fn build_github_quality_outcomes_artifact(
 
     let mut source_artifacts = Vec::new();
     let mut comments = Vec::new();
+    let mut collection_warnings = Vec::new();
     let mut saw_review_thread_receipt = false;
     for source in source_files {
         let Some(file_name) = source.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
         source_artifacts.push(file_name.to_owned());
-        if !file_name.starts_with("review-threads-") || !file_name.ends_with(".json") {
+        if !github_quality_review_thread_json(file_name) {
             continue;
         }
         let value: serde_json::Value = read_json_file(&source)?;
+        if let Some(error) = github_quality_error_receipt(&value) {
+            collection_warnings.push(GithubQualityCollectionWarning {
+                source_artifact: file_name.to_owned(),
+                reason: "github_api_error".to_owned(),
+                detail: error,
+            });
+            continue;
+        }
         let Some(pr) = github_quality_pull_request_value(&value) else {
+            collection_warnings.push(GithubQualityCollectionWarning {
+                source_artifact: file_name.to_owned(),
+                reason: "missing_pull_request".to_owned(),
+                detail: "review-thread receipt did not include data.repository.pullRequest"
+                    .to_owned(),
+            });
             continue;
         };
         saw_review_thread_receipt = true;
+        collect_github_quality_pagination_warnings(pr, file_name, &mut collection_warnings);
         collect_github_quality_thread_comments(pr, author_logins, &mut comments);
     }
+    let collection_status = if !collection_warnings.is_empty() {
+        "incomplete"
+    } else if saw_review_thread_receipt {
+        "complete"
+    } else {
+        "missing"
+    };
 
     Ok(GithubQualityOutcomesArtifact {
         schema: GITHUB_QUALITY_OUTCOMES_SCHEMA,
+        collection_status,
         source_artifacts,
-        comments: saw_review_thread_receipt.then_some(comments),
+        collection_warnings,
+        comments: (collection_status == "complete").then_some(comments),
     })
 }
 
@@ -7276,7 +7311,7 @@ fn github_quality_source_files(source_dir: &Path) -> Result<Vec<PathBuf>> {
         if matches!(
             file_name,
             "actions-runs.json" | "pr-state.json" | "pr-numbers.txt" | "review-threads.graphql"
-        ) || (file_name.starts_with("review-threads-") && file_name.ends_with(".json"))
+        ) || github_quality_review_thread_json(file_name)
         {
             files.push(path);
         }
@@ -7289,10 +7324,76 @@ fn github_quality_source_files(source_dir: &Path) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
+fn github_quality_review_thread_json(file_name: &str) -> bool {
+    ((file_name.starts_with("review-threads-") && file_name.ends_with(".json"))
+        || (file_name.starts_with("review-thread-error-") && file_name.ends_with(".json")))
+        && file_name != "github-quality-outcomes.json"
+}
+
+fn github_quality_error_receipt(value: &serde_json::Value) -> Option<String> {
+    let schema = value.get("schema").and_then(serde_json::Value::as_str)?;
+    if schema != "ub-review.github_review_threads_error.v1" {
+        return None;
+    }
+    Some(
+        value
+            .get("error")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("GitHub review-thread query failed")
+            .to_owned(),
+    )
+}
+
 fn github_quality_pull_request_value(value: &serde_json::Value) -> Option<&serde_json::Value> {
     value
         .pointer("/data/repository/pullRequest")
         .or_else(|| value.get("pullRequest"))
+}
+
+fn collect_github_quality_pagination_warnings(
+    pr: &serde_json::Value,
+    source_artifact: &str,
+    warnings: &mut Vec<GithubQualityCollectionWarning>,
+) {
+    match pr.pointer("/reviewThreads/pageInfo/hasNextPage") {
+        Some(value) if value.as_bool() == Some(true) => {
+            warnings.push(GithubQualityCollectionWarning {
+                source_artifact: source_artifact.to_owned(),
+                reason: "review_threads_truncated".to_owned(),
+                detail: "reviewThreads.pageInfo.hasNextPage=true".to_owned(),
+            });
+        }
+        Some(_) => {}
+        None => warnings.push(GithubQualityCollectionWarning {
+            source_artifact: source_artifact.to_owned(),
+            reason: "review_threads_page_info_missing".to_owned(),
+            detail: "reviewThreads.pageInfo was absent; completeness is unknown".to_owned(),
+        }),
+    }
+    let Some(threads) = pr
+        .pointer("/reviewThreads/nodes")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return;
+    };
+    for thread in threads {
+        let thread_id = json_non_empty_string(thread.get("id")).unwrap_or("unknown-thread");
+        match thread.pointer("/comments/pageInfo/hasNextPage") {
+            Some(value) if value.as_bool() == Some(true) => {
+                warnings.push(GithubQualityCollectionWarning {
+                    source_artifact: source_artifact.to_owned(),
+                    reason: "review_thread_comments_truncated".to_owned(),
+                    detail: format!("thread {thread_id} comments.pageInfo.hasNextPage=true"),
+                });
+            }
+            Some(_) => {}
+            None => warnings.push(GithubQualityCollectionWarning {
+                source_artifact: source_artifact.to_owned(),
+                reason: "review_thread_comments_page_info_missing".to_owned(),
+                detail: format!("thread {thread_id} comments.pageInfo was absent"),
+            }),
+        }
+    }
 }
 
 fn collect_github_quality_thread_comments(
@@ -33103,11 +33204,13 @@ index 1111111..2222222 100644
                             "number": 445,
                             "mergedAt": "2026-06-13T01:29:45Z",
                             "reviewThreads": {
+                                "pageInfo": {"hasNextPage": false, "endCursor": null},
                                 "nodes": [
                                     {
                                         "id": "thread-a",
                                         "isResolved": false,
                                         "comments": {
+                                            "pageInfo": {"hasNextPage": false, "endCursor": null},
                                             "nodes": [
                                                 {
                                                     "id": "comment-a",
@@ -33128,6 +33231,7 @@ index 1111111..2222222 100644
                                         "id": "thread-b",
                                         "isResolved": true,
                                         "comments": {
+                                            "pageInfo": {"hasNextPage": false, "endCursor": null},
                                             "nodes": [
                                                 {
                                                     "id": "comment-c",
@@ -33154,6 +33258,8 @@ index 1111111..2222222 100644
             .ok_or_else(|| anyhow::anyhow!("comments[] missing"))?;
 
         assert_eq!(artifact.schema, super::GITHUB_QUALITY_OUTCOMES_SCHEMA);
+        assert_eq!(artifact.collection_status, "complete");
+        assert!(artifact.collection_warnings.is_empty());
         assert!(
             artifact
                 .source_artifacts
@@ -33182,6 +33288,89 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn github_quality_outcomes_keeps_comments_absent_when_collection_truncated() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("actions-runs.json"), "[]")?;
+        fs::write(
+            source.join("review-threads-445.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "number": 445,
+                            "mergedAt": "2026-06-13T01:29:45Z",
+                            "reviewThreads": {
+                                "pageInfo": {"hasNextPage": true, "endCursor": "cursor-100"},
+                                "nodes": [
+                                    {
+                                        "id": "thread-a",
+                                        "isResolved": false,
+                                        "comments": {
+                                            "pageInfo": {"hasNextPage": false, "endCursor": null},
+                                            "nodes": [
+                                                {
+                                                    "id": "comment-a",
+                                                    "body": "[source-route] finding",
+                                                    "url": "https://github.example/thread-a",
+                                                    "author": {"login": "github-actions"}
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }))?,
+        )?;
+
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+
+        assert_eq!(artifact.collection_status, "incomplete");
+        assert!(artifact.comments.is_none());
+        assert!(
+            artifact
+                .collection_warnings
+                .iter()
+                .any(|warning| warning.reason == "review_threads_truncated")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn github_quality_outcomes_keeps_comments_absent_when_error_receipt_present() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("actions-runs.json"), "[]")?;
+        fs::write(
+            source.join("review-thread-error-445.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.github_review_threads_error.v1",
+                "pull_number": 445,
+                "error": "GraphQL rate limit"
+            }))?,
+        )?;
+
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+
+        assert_eq!(artifact.collection_status, "incomplete");
+        assert!(artifact.comments.is_none());
+        assert!(
+            artifact
+                .collection_warnings
+                .iter()
+                .any(|warning| warning.reason == "github_api_error")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn github_quality_outcomes_keeps_comments_absent_without_thread_receipts() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let source = temp.path().join("github");
@@ -33193,6 +33382,7 @@ index 1111111..2222222 100644
         let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
 
         assert_eq!(artifact.schema, super::GITHUB_QUALITY_OUTCOMES_SCHEMA);
+        assert_eq!(artifact.collection_status, "missing");
         assert!(artifact.comments.is_none());
         assert_eq!(
             artifact.source_artifacts,

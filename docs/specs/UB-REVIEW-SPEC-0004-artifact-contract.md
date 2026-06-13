@@ -158,7 +158,10 @@ quality-backfill.json          ub-review.quality_backfill.v1; rolling
 github-quality-outcomes.json   ub-review.github_quality_outcomes.v1; normalized
                                quality-backfill source receipt produced from
                                raw GitHub review-thread API receipts; copied
-                               into quality-backfill-sources, never posted
+                               into quality-backfill-sources, never posted;
+                               collection_status is complete only when
+                               pagination/error receipts prove the comment
+                               set is complete
 scheduler.json                 ub-review.scheduler.v1; exact mirror of
                                metrics.run
 review.json                    compiled review: mode, posting, run_pass,

@@ -69,10 +69,18 @@ jobs:
                 number
                 mergedAt
                 reviewThreads(first: 100) {
+                  pageInfo {
+                    hasNextPage
+                    endCursor
+                  }
                   nodes {
                     id
                     isResolved
                     comments(first: 50) {
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
                       nodes {
                         id
                         body
@@ -99,7 +107,7 @@ jobs:
               -f query="$(cat target/ub-review-quality/source/github/review-threads.graphql)" \
               > "target/ub-review-quality/source/github/review-threads-${number}.json" \
               2> "$stderr_path"; then
-              python - "$number" "$stderr_path" > "target/ub-review-quality/source/github/review-threads-${number}-error.json" <<'PY'
+              python - "$number" "$stderr_path" > "target/ub-review-quality/source/github/review-thread-error-${number}.json" <<'PY'
           import json
           import pathlib
           import sys
