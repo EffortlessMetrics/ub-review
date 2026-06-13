@@ -10223,11 +10223,25 @@ fn candidate_disposition_for_summary_finding(finding: &SummaryOnlyFinding) -> &'
         "refuted"
     } else if reason.contains("duplicate inline candidate merged")
         || reason.contains("summary-only guard rejected candidate")
+        || is_submaterial_polish_finding(finding)
     {
         "dropped"
     } else {
         "summary-only"
     }
+}
+
+fn is_submaterial_polish_finding(finding: &SummaryOnlyFinding) -> bool {
+    if !matches!(finding.severity.as_str(), "low") {
+        return false;
+    }
+    let text = format!("{}\n{}", finding.reason, finding.evidence).to_ascii_lowercase();
+    text.contains("submaterial polish")
+        || text.contains("sub-material polish")
+        || text.contains("below materiality")
+        || text.contains("below the materiality")
+        || text.contains("polish suggestion")
+        || text.contains("style/polish")
 }
 
 fn write_candidate_artifacts(out: &Path, candidates: &[CandidateRecord]) -> Result<()> {
@@ -37456,6 +37470,7 @@ index 1111111..2222222 100644
             test_candidate_record("candidate-conflicting"),
             test_candidate_record("candidate-resolved-kind-open"),
             test_candidate_record("candidate-parked-kind-open"),
+            test_candidate_record("candidate-polish-dropped"),
         ];
         let outputs = vec![
             test_follow_up_output_for_candidate(
@@ -37575,6 +37590,21 @@ index 1111111..2222222 100644
                 )],
                 Vec::new(),
             ),
+            test_follow_up_output_for_candidate(
+                "follow-polish-dropped",
+                &candidates[9].id,
+                "ok",
+                Vec::new(),
+                vec![SummaryOnlyFinding {
+                    lane: "orchestrator-follow-up-follow-polish-dropped".to_owned(),
+                    severity: "low".to_owned(),
+                    confidence: "medium".to_owned(),
+                    reason: "Submaterial polish below materiality: also assert pointer identity."
+                        .to_owned(),
+                    evidence: "The test is already red/green-correct; this is a polish suggestion."
+                        .to_owned(),
+                }],
+            ),
         ];
         let results = outputs
             .iter()
@@ -37608,6 +37638,8 @@ index 1111111..2222222 100644
         assert_eq!(records[7].resolved_disposition, "summary-only");
         assert_eq!(records[8].resolved_status, "unresolved");
         assert_eq!(records[8].resolved_disposition, "summary-only");
+        assert_eq!(records[9].resolved_status, "resolved");
+        assert_eq!(records[9].resolved_disposition, "dropped");
         assert_eq!(
             records[6].source_artifacts,
             vec![
