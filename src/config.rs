@@ -31,18 +31,34 @@ pub(crate) struct Config {
     pub(crate) policy_errors: Vec<PolicyError>,
 }
 
-/// The `[providers]` section (D1/D2, spec 0006). Exactly one key is consumed
-/// today: `policy`, the provider routing policy the run uses when the CLI
-/// flag is `auto` (D2 precedence: an explicit `--provider-policy`/env value
-/// overrides config; config overrides the built-in default). An invalid
-/// `policy` value is stripped at load with a `PolicyError` receipt. The
-/// per-provider sub-tables (`[providers.minimax]`, `[providers.opencode]`)
-/// remain documentation of intent - `env`, `role`, `models`, `prompt_cache`,
-/// and `max_concurrency` are not read; wiring routes through #310.
+/// The `[providers]` section (D1/D2, spec 0006). `policy` selects provider
+/// routing when the CLI flag is `auto` (D2 precedence: explicit
+/// `--provider-policy`/env value overrides config; config overrides the
+/// built-in default). Per-provider `max_concurrency` caps live model-lane
+/// waves for that provider. Invalid consumed values are stripped at load with
+/// `PolicyError` receipts. Descriptive fields such as `env`, `role`,
+/// `models`, and `prompt_cache` remain documentation of intent.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ProvidersConfig {
     pub(crate) policy: String,
+    #[serde(skip_serializing_if = "ProviderRuntimeConfig::is_empty")]
+    pub(crate) minimax: ProviderRuntimeConfig,
+    #[serde(skip_serializing_if = "ProviderRuntimeConfig::is_empty")]
+    pub(crate) opencode: ProviderRuntimeConfig,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ProviderRuntimeConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) max_concurrency: Option<usize>,
+}
+
+impl ProviderRuntimeConfig {
+    fn is_empty(&self) -> bool {
+        self.max_concurrency.is_none()
+    }
 }
 
 /// Follow-up issue-capture posture (`[issues]`). `mode = "off"` keeps every
@@ -827,10 +843,11 @@ impl Config {
 /// Top-level keys `Config` deserializes. Unknown top-level keys are stripped
 /// and recorded as `PolicyError` receipts so a misspelled section (for
 /// example `[gatee]` or `[prooof]`) can never silently de-fang repo policy.
-/// `[providers]` consumes exactly one key today - `policy`, validated by
+/// `[providers]` consumes `policy` plus `[providers.minimax]` and
+/// `[providers.opencode]` `max_concurrency`, validated by
 /// `sanitize_providers_section` (D2: config wins when the CLI flag is
-/// `auto`); its per-provider sub-tables remain documentation of intent
-/// tolerated without receipts (#310).
+/// `auto`). Other per-provider keys remain documentation of intent tolerated
+/// without receipts.
 const KNOWN_TOP_LEVEL_KEYS: &[&str] = &[
     "review_profile",
     "profile",
@@ -904,13 +921,12 @@ fn sanitize_policy_sections(value: &mut toml::Value) -> Vec<PolicyError> {
     errors
 }
 
-/// Validate the one consumed `[providers]` key: `policy` must name a
-/// provider policy the CLI enum knows (`auto`, `minimax-primary`,
-/// `primary-with-fallback`, `minimax-only`, `opencode-go-canary`,
-/// `opencode-go-wide`). An invalid or non-string value is stripped with a
-/// `PolicyError` receipt so a typo'd policy can never silently fall back to
-/// the default while looking configured. Every other `[providers]` key stays
-/// tolerated as documentation of intent (#310 routes the wiring).
+/// Validate consumed `[providers]` keys. `policy` must name a provider policy
+/// the CLI enum knows (`auto`, `minimax-primary`, `primary-with-fallback`,
+/// `minimax-only`, `opencode-go-canary`, `opencode-go-wide`).
+/// `max_concurrency` in provider sub-tables must be a positive integer. Bad
+/// values are stripped with `PolicyError` receipts so the run cannot silently
+/// fall back while looking configured.
 fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
     let Some(providers) = table
         .get_mut("providers")
@@ -918,22 +934,43 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
     else {
         return;
     };
-    let Some(policy) = providers.get("policy") else {
-        return;
-    };
-    let valid = policy
-        .as_str()
-        .is_some_and(|value| crate::cli::ModelProviderPolicy::from_str(value, false).is_ok());
-    if !valid {
-        errors.push(PolicyError {
-            section: "providers".to_owned(),
-            detail: format!(
-                "invalid [providers] policy value {policy}; expected one of: auto, \
-                 minimax-primary, primary-with-fallback, minimax-only, \
-                 opencode-go-canary, opencode-go-wide"
-            ),
-        });
-        providers.remove("policy");
+    if let Some(policy) = providers.get("policy") {
+        let valid = policy
+            .as_str()
+            .is_some_and(|value| crate::cli::ModelProviderPolicy::from_str(value, false).is_ok());
+        if !valid {
+            errors.push(PolicyError {
+                section: "providers".to_owned(),
+                detail: format!(
+                    "invalid [providers] policy value {policy}; expected one of: auto, \
+                     minimax-primary, primary-with-fallback, minimax-only, \
+                     opencode-go-canary, opencode-go-wide"
+                ),
+            });
+            providers.remove("policy");
+        }
+    }
+    for provider in ["minimax", "opencode"] {
+        let Some(provider_table) = providers
+            .get_mut(provider)
+            .and_then(toml::Value::as_table_mut)
+        else {
+            continue;
+        };
+        let Some(max_concurrency) = provider_table.get("max_concurrency") else {
+            continue;
+        };
+        let valid = max_concurrency.as_integer().is_some_and(|value| value > 0);
+        if !valid {
+            errors.push(PolicyError {
+                section: format!("providers.{provider}.max_concurrency"),
+                detail: format!(
+                    "invalid [providers.{provider}] max_concurrency value {max_concurrency}; \
+                     expected a positive integer"
+                ),
+            });
+            provider_table.remove("max_concurrency");
+        }
     }
 }
 
@@ -1304,6 +1341,34 @@ pub(crate) fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
 mod tests {
     use super::*;
 
+    fn provider_max_concurrency_value<'a>(
+        value: &'a toml::Value,
+        provider: &str,
+    ) -> Option<&'a toml::Value> {
+        value
+            .get("providers")
+            .and_then(toml::Value::as_table)
+            .and_then(|providers| providers.get(provider))
+            .and_then(toml::Value::as_table)
+            .and_then(|table| table.get("max_concurrency"))
+    }
+
+    fn providers_max_concurrency_document(
+        minimax: toml::Value,
+        opencode: toml::Value,
+    ) -> toml::Value {
+        let mut minimax_table = toml::value::Table::new();
+        minimax_table.insert("max_concurrency".to_owned(), minimax);
+        let mut opencode_table = toml::value::Table::new();
+        opencode_table.insert("max_concurrency".to_owned(), opencode);
+        let mut providers = toml::value::Table::new();
+        providers.insert("minimax".to_owned(), toml::Value::Table(minimax_table));
+        providers.insert("opencode".to_owned(), toml::Value::Table(opencode_table));
+        let mut root = toml::value::Table::new();
+        root.insert("providers".to_owned(), toml::Value::Table(providers));
+        toml::Value::Table(root)
+    }
+
     // Config-parse oracles live in this module, next to the structs they
     // pin, so reach analysis connects them without crossing files (the
     // main.rs test mod's cross-file reach is unreliable upstream,
@@ -1320,6 +1385,8 @@ mod tests {
             "[providers]\npolicy = \"primary-with-fallback\"\n\n[providers.minimax]\nenabled = true\nmax_concurrency = 12\n",
         )?;
         assert_eq!(explicit.providers.policy, "primary-with-fallback");
+        assert_eq!(explicit.providers.minimax.max_concurrency, Some(12));
+        assert_eq!(explicit.providers.opencode.max_concurrency, None);
 
         // sanitize_providers_section strips an invalid policy value with a
         // receipt: parse the raw document the way load_or_default does.
@@ -1330,13 +1397,18 @@ mod tests {
         // accepted vocabulary.
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].section, "providers");
-        assert!(
-            errors[0]
-                .detail
-                .starts_with("invalid [providers] policy value")
+        assert_eq!(
+            errors[0].detail,
+            "invalid [providers] policy value \"minimax-primry\"; expected one of: auto, \
+             minimax-primary, primary-with-fallback, minimax-only, \
+             opencode-go-canary, opencode-go-wide"
         );
-        assert!(errors[0].detail.contains("minimax-primry"));
-        assert!(errors[0].detail.contains("opencode-go-wide"));
+        assert!(
+            !value
+                .get("providers")
+                .and_then(toml::Value::as_table)
+                .is_some_and(|providers| providers.contains_key("policy"))
+        );
         let sanitized: Config = value.try_into()?;
         assert_eq!(sanitized.providers.policy, "");
 
@@ -1345,6 +1417,85 @@ mod tests {
         assert!(sanitize_policy_sections(&mut valid).is_empty());
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.policy, "minimax-only");
+        Ok(())
+    }
+
+    #[test]
+    fn providers_section_receipts_invalid_max_concurrency() -> anyhow::Result<()> {
+        let mut value = providers_max_concurrency_document(
+            toml::Value::Integer(0),
+            toml::Value::String("many".to_owned()),
+        );
+        assert_eq!(
+            provider_max_concurrency_value(&value, "minimax").and_then(toml::Value::as_integer),
+            Some(0)
+        );
+        assert_eq!(
+            provider_max_concurrency_value(&value, "opencode").and_then(toml::Value::as_str),
+            Some("many")
+        );
+        let errors = sanitize_policy_sections(&mut value);
+        assert_eq!(errors.len(), 2);
+        assert_eq!(errors[0].section, "providers.minimax.max_concurrency");
+        assert_eq!(
+            errors[0].detail,
+            "invalid [providers.minimax] max_concurrency value 0; expected a positive integer"
+        );
+        assert_eq!(errors[1].section, "providers.opencode.max_concurrency");
+        assert_eq!(
+            errors[1].detail,
+            "invalid [providers.opencode] max_concurrency value \"many\"; expected a positive integer"
+        );
+        let Some(providers) = value.get("providers").and_then(toml::Value::as_table) else {
+            anyhow::bail!("providers table should remain after sanitization");
+        };
+        for provider in ["minimax", "opencode"] {
+            assert!(
+                !providers
+                    .get(provider)
+                    .and_then(toml::Value::as_table)
+                    .is_some_and(|table| table.contains_key("max_concurrency")),
+                "{provider} max_concurrency should be stripped from the raw TOML table"
+            );
+        }
+
+        let sanitized: Config = value.try_into()?;
+        assert_eq!(sanitized.providers.minimax.max_concurrency, None);
+        assert_eq!(sanitized.providers.opencode.max_concurrency, None);
+
+        let mut valid =
+            providers_max_concurrency_document(toml::Value::Integer(1), toml::Value::Integer(2));
+        assert_eq!(
+            provider_max_concurrency_value(&valid, "minimax").and_then(toml::Value::as_integer),
+            Some(1)
+        );
+        assert_eq!(
+            provider_max_concurrency_value(&valid, "opencode").and_then(toml::Value::as_integer),
+            Some(2)
+        );
+        assert!(sanitize_policy_sections(&mut valid).is_empty());
+        let Some(providers) = valid.get("providers").and_then(toml::Value::as_table) else {
+            anyhow::bail!("providers table should survive valid sanitization");
+        };
+        assert_eq!(
+            providers
+                .get("minimax")
+                .and_then(toml::Value::as_table)
+                .and_then(|table| table.get("max_concurrency"))
+                .and_then(toml::Value::as_integer),
+            Some(1)
+        );
+        assert_eq!(
+            providers
+                .get("opencode")
+                .and_then(toml::Value::as_table)
+                .and_then(|table| table.get("max_concurrency"))
+                .and_then(toml::Value::as_integer),
+            Some(2)
+        );
+        let kept: Config = valid.try_into()?;
+        assert_eq!(kept.providers.minimax.max_concurrency, Some(1));
+        assert_eq!(kept.providers.opencode.max_concurrency, Some(2));
         Ok(())
     }
 

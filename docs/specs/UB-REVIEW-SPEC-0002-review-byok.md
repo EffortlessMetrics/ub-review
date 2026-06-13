@@ -209,9 +209,9 @@ never feed the gate verdict (umbrella boundary).
   (src/main.rs `runtime_fallback_retry_spec`). Honest constraint: the retry
   needs a fallback spec to exist — under the default `minimax-primary` policy
   only the opposition canary has one; `primary-with-fallback` extends it to
-  every lane. The remainder of #310 is open: per-provider `max_concurrency`
-  enforcement, 429 backpressure, and `[providers]` config parsing (the
-  deliberately reserved section, spec 0006).
+  every lane. The remaining #310 work is 429 backpressure plus any future
+  decision to wire provider model/env/role or prompt-cache config; provider
+  policy and per-provider `max_concurrency` are executed by spec 0006.
 - Model and provider failures never block. They degrade the review surface
   (terminal status may reach `failed-to-review`) but never redden the gate;
   the gate check itself recognizes exactly the string `pass` and treats
@@ -278,8 +278,8 @@ python scripts/verify-bun-review-artifacts.py --self-test
 
 This spec is docs-only; it routes open work, it does not add any:
 
-1. #310 remainder — per-provider concurrency, 429 backpressure, `[providers]`
-   parsing (lands under spec 0006).
+1. #310 remainder — 429 backpressure and any future provider model/env/role
+   or prompt-cache config (lands under spec 0006).
 2. #311 — include proof receipt content in follow-up prompts (landed in
    PR #322).
 3. #306 — DONE: `[gate].synchronize_mode` was deleted with a deprecation

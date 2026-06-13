@@ -152,7 +152,7 @@ demotes inline candidates when it is unavailable. Honest routing caveats:
 - `minimax-only` means there is no fallback provider: a MiniMax outage
   degrades lanes to missing model evidence, never to a different model.
   Runtime fallback retry exists for policies that configure a fallback, but
-  the #310 remainder (per-provider concurrency, runtime fallback coverage)
+  the #310 remainder (429 backpressure and future provider config choices)
   does not affect minimax-only Bun v0.
 
 Model budgets from the workflow: `model-timeout-sec: '300'`,
@@ -428,8 +428,8 @@ around:
    story for Bun (#313).
 5. DONE: legacy `[gate].synchronize_mode` was deleted with a deprecation
    receipt before recommending `synchronize` triggers to any consumer (#306).
-6. Provider remainder before any non-minimax-only Bun policy: runtime
-   fallback coverage and per-provider concurrency (#310).
+6. Provider remainder before any non-minimax-only Bun policy: 429
+   backpressure and future provider config choices (#310).
 
 No slice changes the pinned contract; each lands behind a verifier-checked
 pin advance.

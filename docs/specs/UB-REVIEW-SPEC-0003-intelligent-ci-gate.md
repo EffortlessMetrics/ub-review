@@ -125,10 +125,11 @@ Model keys are optional inputs; their absence degrades the review, never the
 verdict.
 
 Note: this repository's `.ub-review.toml` also carries a `[providers]`
-section. That section is reserved and unwired (umbrella 0001; src/config.rs)
-— provider selection on the gate workflow comes from action inputs
-(`provider-policy: primary-with-fallback` in
-.github/workflows/ub-review-gate.yml), not from the config block.
+section. `policy` is used only when CLI/env provider policy is `auto`, and
+provider `max_concurrency` caps model-lane waves. The gate workflow still
+passes `provider-policy: primary-with-fallback` explicitly, so that input
+wins over config; descriptive provider keys such as `env`, `role`, `model`,
+`models`, and `prompt_cache` remain unwired (umbrella 0001; src/config.rs).
 
 ## Output artifact / user surface
 
