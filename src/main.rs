@@ -2984,10 +2984,15 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
     println!("Box: {}", box_state.summary_line());
     println!("Limits: {}", profile.limits.summary_line());
     println!("Cache root: {}", cache_root.display());
-    match std::env::current_exe() {
+    let current_exe = std::env::current_exe();
+    match &current_exe {
         Ok(path) => println!("Binary path: {}", path.display()),
         Err(err) => println!("Binary path: unknown ({err})"),
     }
+    println!(
+        "Install status: {}",
+        doctor_binary_install_status(current_exe.as_deref().ok())
+    );
     println!("Profile hash: {}", profile_hash);
     if let Some(base) = args.base.as_deref() {
         match git_tree_sha(&args.root, base) {
@@ -21075,6 +21080,48 @@ fn command_path(command: &str) -> Option<PathBuf> {
     })
 }
 
+fn doctor_binary_install_status(current_exe: Option<&Path>) -> String {
+    let path_binary = command_path("ub-review");
+    doctor_binary_install_status_from_paths(current_exe, path_binary.as_deref())
+}
+
+fn doctor_binary_install_status_from_paths(
+    current_exe: Option<&Path>,
+    path_binary: Option<&Path>,
+) -> String {
+    match (current_exe, path_binary) {
+        (Some(current), Some(path_binary)) if same_path(current, path_binary) => {
+            format!("on PATH as {}", path_binary.display())
+        }
+        (Some(current), Some(path_binary)) => format!(
+            "running {}; PATH resolves ub-review to {}",
+            current.display(),
+            path_binary.display()
+        ),
+        (Some(current), None) => {
+            let dir = current
+                .parent()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| current.display().to_string());
+            format!("not on PATH; add {dir} to PATH or use install-mode=path with binary-path={}", current.display())
+        }
+        (None, Some(path_binary)) => format!(
+            "binary path unknown; PATH resolves ub-review to {}",
+            path_binary.display()
+        ),
+        (None, None) => {
+            "binary path unknown and ub-review is not on PATH; install ub-review or use install-mode=path with binary-path".to_owned()
+        }
+    }
+}
+
+fn same_path(left: &Path, right: &Path) -> bool {
+    match (left.canonicalize(), right.canonicalize()) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => left == right,
+    }
+}
+
 fn detect_mem_available_mb() -> Option<u64> {
     let text = fs::read_to_string("/proc/meminfo").ok()?;
     for line in text.lines() {
@@ -23761,6 +23808,27 @@ mod tests {
             "1.7.12"
         ));
         assert!(!super::command_version_matches("ripr 0.7.9", "0.8.0"));
+    }
+
+    #[test]
+    fn doctor_binary_install_status_reports_path_state_and_fix() {
+        let current = PathBuf::from("/opt/ub-review/bin/ub-review");
+        let on_path =
+            super::doctor_binary_install_status_from_paths(Some(&current), Some(&current));
+        assert_eq!(on_path, "on PATH as /opt/ub-review/bin/ub-review");
+
+        let missing_path = super::doctor_binary_install_status_from_paths(Some(&current), None);
+        assert!(missing_path.contains("not on PATH"));
+        assert!(missing_path.contains("add /opt/ub-review/bin to PATH"));
+        assert!(missing_path.contains("install-mode=path"));
+        assert!(missing_path.contains("binary-path=/opt/ub-review/bin/ub-review"));
+
+        let shadowed = super::doctor_binary_install_status_from_paths(
+            Some(&current),
+            Some(Path::new("/usr/local/bin/ub-review")),
+        );
+        assert!(shadowed.contains("running /opt/ub-review/bin/ub-review"));
+        assert!(shadowed.contains("PATH resolves ub-review to /usr/local/bin/ub-review"));
     }
 
     #[test]

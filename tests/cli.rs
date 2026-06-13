@@ -2189,6 +2189,7 @@ fn doctor_reports_provider_key_env_status_without_values() -> Result<()> {
 
     assert!(output.contains("Providers:"));
     assert!(output.contains("Binary path:"));
+    assert!(output.contains("Install status:"));
     assert!(output.contains("path="));
     assert!(output.contains("minimax"));
     assert!(output.contains("present"));
