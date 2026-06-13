@@ -2460,6 +2460,8 @@ def require_quality_backfill(root: pathlib.Path, required: bool = False) -> None
         require_non_empty_string_value(source, f"quality-backfill.json source_artifacts[{index}]")
         if not (root / source).is_file():
             fail(f"quality-backfill.json source_artifacts[{index}] missing file: {source}")
+        if "github-quality-outcomes" in pathlib.PurePosixPath(source).name:
+            require_github_quality_outcomes_source(root / source)
 
     missing = artifact.get("missing")
     if not isinstance(missing, list):
@@ -8199,6 +8201,38 @@ def self_test_quality_backfill_contract() -> None:
         for source in candidate.get("source_artifacts", []):
             if source == "review/quality-backfill-sources/previous-quality-backfill.json":
                 write_self_test_json(root / source, previous)
+            elif "github-quality-outcomes" in pathlib.PurePosixPath(source).name:
+                write_self_test_json(
+                    root / source,
+                    {
+                        "schema": "ub-review.github_quality_outcomes.v1",
+                        "source_artifacts": ["review-threads.json"],
+                        "comments": [
+                            {
+                                "posted": True,
+                                "accepted": False,
+                                "resolved": False,
+                                "reviewer_override": True,
+                                "source_thread_id": "thread-a",
+                                "source_comment_id": "comment-a",
+                                "source_author_login": "github-actions",
+                                "source_url": "https://github.example/comment-a",
+                                "outcome_source": "github.reviewThreads.isResolved.v1",
+                            },
+                            {
+                                "posted": True,
+                                "accepted": True,
+                                "resolved": True,
+                                "reviewer_override": False,
+                                "source_thread_id": "thread-b",
+                                "source_comment_id": "comment-b",
+                                "source_author_login": "github-actions",
+                                "source_url": "https://github.example/comment-b",
+                                "outcome_source": "github.reviewThreads.isResolved.v1",
+                            },
+                        ],
+                    },
+                )
             else:
                 write_self_test_json(root / source, {"status": "self-test"})
         return root
@@ -8206,6 +8240,17 @@ def self_test_quality_backfill_contract() -> None:
     def write_root_with_dangling_source() -> pathlib.Path:
         root = write_root()
         (root / "review/quality-backfill-sources/run-a-receipt.json").unlink()
+        return root
+
+    def write_root_with_bad_github_outcomes_schema() -> pathlib.Path:
+        root = write_root()
+        write_self_test_json(
+            root / "review/quality-backfill-sources/github-quality-outcomes.json",
+            {
+                "schema": "ub-review.github_quality_outcomes.v2",
+                "source_artifacts": ["review-threads.json"],
+            },
+        )
         return root
 
     require_quality_backfill(write_root(), required=True)
@@ -8259,6 +8304,54 @@ def self_test_quality_backfill_contract() -> None:
             required=True,
         ),
     )
+    expect_self_test_failure(
+        "github quality outcomes source schema",
+        "github-quality-outcomes.json schema invalid",
+        lambda: require_quality_backfill(
+            write_root_with_bad_github_outcomes_schema(),
+            required=True,
+        ),
+    )
+
+
+def require_github_quality_outcomes_source(path: pathlib.Path) -> None:
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail(f"{path.name} is not an object")
+    if artifact.get("schema") != "ub-review.github_quality_outcomes.v1":
+        fail(f"{path.name} schema invalid: {artifact.get('schema')!r}")
+    source_artifacts = artifact.get("source_artifacts")
+    if not isinstance(source_artifacts, list) or not source_artifacts:
+        fail(f"{path.name} source_artifacts is not a non-empty array")
+    for index, source in enumerate(source_artifacts):
+        require_non_empty_string_value(source, f"{path.name} source_artifacts[{index}]")
+    comments = artifact.get("comments")
+    if comments is not None:
+        if not isinstance(comments, list):
+            fail(f"{path.name} comments is not an array")
+        for index, comment in enumerate(comments):
+            if not isinstance(comment, dict):
+                fail(f"{path.name} comments[{index}] is not an object")
+            posted = comment.get("posted")
+            if posted is not True:
+                fail(f"{path.name} comments[{index}].posted must be true")
+            for field in ["accepted", "resolved", "reviewer_override"]:
+                value = comment.get(field)
+                if value is not None and not isinstance(value, bool):
+                    fail(f"{path.name} comments[{index}].{field} must be bool or null")
+            for field in [
+                "source_thread_id",
+                "source_comment_id",
+                "source_author_login",
+                "source_url",
+                "outcome_source",
+            ]:
+                require_non_empty_string_value(
+                    comment.get(field), f"{path.name} comments[{index}].{field}"
+                )
+    adopted_generated_tests = artifact.get("adopted_generated_tests")
+    if adopted_generated_tests is not None and not isinstance(adopted_generated_tests, list):
+        fail(f"{path.name} adopted_generated_tests is not an array")
 
 
 def self_test_ci_audit_runner_cancellations_contract() -> None:

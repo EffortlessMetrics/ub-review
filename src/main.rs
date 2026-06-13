@@ -64,6 +64,7 @@ fn main() -> Result<()> {
         Command::AuditCi(args) => cmd_audit_ci(args),
         Command::SetupCi(args) => cmd_setup_ci(args),
         Command::QualityBackfill(args) => cmd_quality_backfill(args),
+        Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
         Command::GateCheck(args) => cmd_gate_check(args),
     }
 }
@@ -802,6 +803,32 @@ struct LoadedGithubQualityOutcomes {
     has_adopted_generated_tests: bool,
     source_artifact: String,
     raw_source_artifacts: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GithubQualityOutcomesArtifact {
+    schema: &'static str,
+    source_artifacts: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    comments: Option<Vec<GithubQualityNormalizedComment>>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GithubQualityNormalizedComment {
+    posted: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accepted: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    resolved: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reviewer_override: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    source_pull_number: Option<u64>,
+    source_thread_id: String,
+    source_comment_id: String,
+    source_author_login: String,
+    source_url: String,
+    outcome_source: &'static str,
 }
 
 #[derive(Clone)]
@@ -7143,6 +7170,190 @@ fn quality_trend_missing(
         reason: reason.to_owned(),
         source_artifact: source_artifact.to_owned(),
     }
+}
+
+const DEFAULT_GITHUB_QUALITY_AUTHOR_LOGINS: &[&str] = &["github-actions", "github-actions[bot]"];
+
+fn cmd_quality_github_outcomes(args: QualityGithubOutcomesArgs) -> Result<()> {
+    let author_logins = github_quality_author_logins(&args.author_logins);
+    let artifact = build_github_quality_outcomes_artifact(&args.source_dir, &author_logins)?;
+    if let Some(parent) = args.out.parent() {
+        fs::create_dir_all(parent).with_context(|| format!("create {}", parent.display()))?;
+    }
+    fs::write(&args.out, serde_json::to_vec_pretty(&artifact)?)
+        .with_context(|| format!("write {}", args.out.display()))?;
+    println!(
+        "quality-github-outcomes: wrote {} ({} comments)",
+        args.out.display(),
+        artifact
+            .comments
+            .as_ref()
+            .map(|comments| comments.len())
+            .unwrap_or(0)
+    );
+    Ok(())
+}
+
+fn github_quality_author_logins(author_logins: &[String]) -> BTreeSet<String> {
+    let mut logins = BTreeSet::new();
+    let configured = if author_logins.is_empty() {
+        DEFAULT_GITHUB_QUALITY_AUTHOR_LOGINS
+            .iter()
+            .map(|login| (*login).to_owned())
+            .collect::<Vec<_>>()
+    } else {
+        author_logins.to_vec()
+    };
+    for login in configured {
+        let trimmed = login.trim();
+        if !trimmed.is_empty() {
+            logins.insert(trimmed.to_ascii_lowercase());
+        }
+    }
+    logins
+}
+
+fn build_github_quality_outcomes_artifact(
+    source_dir: &Path,
+    author_logins: &BTreeSet<String>,
+) -> Result<GithubQualityOutcomesArtifact> {
+    if !source_dir.is_dir() {
+        bail!(
+            "GitHub quality source directory missing: {}",
+            source_dir.display()
+        );
+    }
+    let source_files = github_quality_source_files(source_dir)?;
+    if source_files.is_empty() {
+        bail!(
+            "GitHub quality source directory has no API receipts: {}",
+            source_dir.display()
+        );
+    }
+
+    let mut source_artifacts = Vec::new();
+    let mut comments = Vec::new();
+    let mut saw_review_thread_receipt = false;
+    for source in source_files {
+        let Some(file_name) = source.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        source_artifacts.push(file_name.to_owned());
+        if !file_name.starts_with("review-threads-") || !file_name.ends_with(".json") {
+            continue;
+        }
+        let value: serde_json::Value = read_json_file(&source)?;
+        let Some(pr) = github_quality_pull_request_value(&value) else {
+            continue;
+        };
+        saw_review_thread_receipt = true;
+        collect_github_quality_thread_comments(pr, author_logins, &mut comments);
+    }
+
+    Ok(GithubQualityOutcomesArtifact {
+        schema: GITHUB_QUALITY_OUTCOMES_SCHEMA,
+        source_artifacts,
+        comments: saw_review_thread_receipt.then_some(comments),
+    })
+}
+
+fn github_quality_source_files(source_dir: &Path) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    for entry in
+        fs::read_dir(source_dir).with_context(|| format!("read {}", source_dir.display()))?
+    {
+        let entry = entry.with_context(|| format!("read entry in {}", source_dir.display()))?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+        if file_name == "github-quality-outcomes.json" {
+            continue;
+        }
+        if matches!(
+            file_name,
+            "actions-runs.json" | "pr-state.json" | "pr-numbers.txt" | "review-threads.graphql"
+        ) || (file_name.starts_with("review-threads-") && file_name.ends_with(".json"))
+        {
+            files.push(path);
+        }
+    }
+    files.sort_by(|left, right| {
+        left.file_name()
+            .and_then(|name| name.to_str())
+            .cmp(&right.file_name().and_then(|name| name.to_str()))
+    });
+    Ok(files)
+}
+
+fn github_quality_pull_request_value(value: &serde_json::Value) -> Option<&serde_json::Value> {
+    value
+        .pointer("/data/repository/pullRequest")
+        .or_else(|| value.get("pullRequest"))
+}
+
+fn collect_github_quality_thread_comments(
+    pr: &serde_json::Value,
+    author_logins: &BTreeSet<String>,
+    comments: &mut Vec<GithubQualityNormalizedComment>,
+) {
+    let pull_number = pr.get("number").and_then(serde_json::Value::as_u64);
+    let pull_merged = pr
+        .get("mergedAt")
+        .and_then(serde_json::Value::as_str)
+        .is_some_and(|value| !value.trim().is_empty());
+    let Some(threads) = pr
+        .pointer("/reviewThreads/nodes")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return;
+    };
+    for thread in threads {
+        let thread_id = json_non_empty_string(thread.get("id")).unwrap_or("unknown-thread");
+        let resolved = thread
+            .get("isResolved")
+            .and_then(serde_json::Value::as_bool);
+        let Some(nodes) = thread
+            .pointer("/comments/nodes")
+            .and_then(serde_json::Value::as_array)
+        else {
+            continue;
+        };
+        for comment in nodes {
+            let author_login = comment
+                .pointer("/author/login")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .trim();
+            if !author_logins.contains(&author_login.to_ascii_lowercase()) {
+                continue;
+            }
+            let comment_id = json_non_empty_string(comment.get("id")).unwrap_or("unknown-comment");
+            let source_url = json_non_empty_string(comment.get("url")).unwrap_or("");
+            comments.push(GithubQualityNormalizedComment {
+                posted: true,
+                accepted: resolved,
+                resolved,
+                reviewer_override: resolved.map(|resolved| pull_merged && !resolved),
+                source_pull_number: pull_number,
+                source_thread_id: thread_id.to_owned(),
+                source_comment_id: comment_id.to_owned(),
+                source_author_login: author_login.to_owned(),
+                source_url: source_url.to_owned(),
+                outcome_source: "github.reviewThreads.isResolved.v1",
+            });
+        }
+    }
+}
+
+fn json_non_empty_string(value: Option<&serde_json::Value>) -> Option<&str> {
+    value
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }
 
 fn cmd_quality_backfill(args: QualityBackfillArgs) -> Result<()> {
@@ -32873,6 +33084,121 @@ index 1111111..2222222 100644
         ] {
             assert!(missing_fields.contains(field), "missing field {field}");
         }
+    }
+
+    #[test]
+    fn github_quality_outcomes_normalizes_review_thread_state() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("actions-runs.json"), "[]")?;
+        fs::write(source.join("pr-state.json"), "[]")?;
+        fs::write(source.join("review-threads.graphql"), "query ReviewThreads")?;
+        fs::write(
+            source.join("review-threads-445.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "data": {
+                    "repository": {
+                        "pullRequest": {
+                            "number": 445,
+                            "mergedAt": "2026-06-13T01:29:45Z",
+                            "reviewThreads": {
+                                "nodes": [
+                                    {
+                                        "id": "thread-a",
+                                        "isResolved": false,
+                                        "comments": {
+                                            "nodes": [
+                                                {
+                                                    "id": "comment-a",
+                                                    "body": "[source-route] finding",
+                                                    "url": "https://github.example/thread-a",
+                                                    "author": {"login": "github-actions"}
+                                                },
+                                                {
+                                                    "id": "comment-b",
+                                                    "body": "external review",
+                                                    "url": "https://github.example/thread-b",
+                                                    "author": {"login": "chatgpt-codex-connector"}
+                                                }
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "id": "thread-b",
+                                        "isResolved": true,
+                                        "comments": {
+                                            "nodes": [
+                                                {
+                                                    "id": "comment-c",
+                                                    "body": "[tests] fixed",
+                                                    "url": "https://github.example/thread-c",
+                                                    "author": {"login": "github-actions[bot]"}
+                                                }
+                                            ]
+                                        }
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            }))?,
+        )?;
+
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+        let comments = artifact
+            .comments
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("comments[] missing"))?;
+
+        assert_eq!(artifact.schema, super::GITHUB_QUALITY_OUTCOMES_SCHEMA);
+        assert!(
+            artifact
+                .source_artifacts
+                .contains(&"actions-runs.json".to_owned())
+        );
+        assert!(
+            artifact
+                .source_artifacts
+                .contains(&"pr-state.json".to_owned())
+        );
+        assert!(
+            artifact
+                .source_artifacts
+                .contains(&"review-threads-445.json".to_owned())
+        );
+        assert_eq!(comments.len(), 2);
+        assert_eq!(comments[0].source_comment_id, "comment-a");
+        assert_eq!(comments[0].accepted, Some(false));
+        assert_eq!(comments[0].resolved, Some(false));
+        assert_eq!(comments[0].reviewer_override, Some(true));
+        assert_eq!(comments[1].source_comment_id, "comment-c");
+        assert_eq!(comments[1].accepted, Some(true));
+        assert_eq!(comments[1].resolved, Some(true));
+        assert_eq!(comments[1].reviewer_override, Some(false));
+        Ok(())
+    }
+
+    #[test]
+    fn github_quality_outcomes_keeps_comments_absent_without_thread_receipts() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let source = temp.path().join("github");
+        fs::create_dir_all(&source)?;
+        fs::write(source.join("actions-runs.json"), "[]")?;
+        fs::write(source.join("pr-state.json"), "[]")?;
+
+        let authors = super::github_quality_author_logins(&[]);
+        let artifact = super::build_github_quality_outcomes_artifact(&source, &authors)?;
+
+        assert_eq!(artifact.schema, super::GITHUB_QUALITY_OUTCOMES_SCHEMA);
+        assert!(artifact.comments.is_none());
+        assert_eq!(
+            artifact.source_artifacts,
+            vec!["actions-runs.json".to_owned(), "pr-state.json".to_owned()]
+        );
+        Ok(())
     }
 
     #[test]
