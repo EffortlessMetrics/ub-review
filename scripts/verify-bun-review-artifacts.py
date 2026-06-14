@@ -4309,7 +4309,7 @@ def require_model_stage_artifacts(
             fail(f"follow-up model stage has wrong source: {stage!r}")
         if stage.get("stage") != result.get("stage"):
             fail(f"follow-up model stage does not match follow-up result: {stage!r}")
-        for field in ["status", "reason"]:
+        for field in ["status", "reason", "provider", "model", "endpoint_kind"]:
             if stage.get(field) != result.get(field):
                 fail(f"follow-up model stage {field} does not match result: {stage!r}")
         if stage.get("lane") != result.get("model_lane"):
@@ -5415,6 +5415,9 @@ def require_follow_up_result_schema(
         "model_lane",
         "status",
         "reason",
+        "provider",
+        "model",
+        "endpoint_kind",
     ]:
         if not isinstance(result.get(field), str) or not result[field]:
             fail(f"follow-up result missing string field {field}: {result!r}")
@@ -5439,6 +5442,14 @@ def require_follow_up_result_schema(
         fail(f"follow-up result model_lane does not match task: {result!r}")
     if result["status"] not in FOLLOW_UP_RESULT_STATUSES:
         fail(f"follow-up result has unsupported status: {result!r}")
+    if result["provider"] not in {"minimax", "opencode-go"}:
+        fail(f"follow-up result provider is unsupported: {result!r}")
+    if result["endpoint_kind"] not in {"openai-chat", "anthropic-messages"}:
+        fail(f"follow-up result endpoint_kind is unsupported: {result!r}")
+    if "fallback_from" in result and (
+        not isinstance(result["fallback_from"], str) or not result["fallback_from"]
+    ):
+        fail(f"follow-up result fallback_from is invalid: {result!r}")
 
     counts = result.get("output_counts")
     if not isinstance(counts, dict):
