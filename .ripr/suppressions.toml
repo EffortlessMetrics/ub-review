@@ -916,6 +916,23 @@ finding_id = "probe:tests_cli.rs:4565:error_path"
 owner = "ub-review/core"
 reason = "Probe on integration-test JSON lookup plumbing (ripr-swarm#1055): tool_gate_outcome locates the named gate outcome before field assertions. Missing entries fail the test, while #318 behavior is pinned by exact artifact parity and cargo-allow field assertions. Line-keyed id; re-verify after edits near tool_gate_outcome."
 
+# Doctor advisory fix-hint slice: ripr 0.8.0 probes integration-test fixture
+# setup in the two doctor output tests. The behavior under review is the
+# advisory doctor output, not the temporary fixture writes. The tests assert the
+# tool row and exact Fixes entry after setup succeeds.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:3331:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of writing the temporary config in doctor_reports_advisory_missing_tool_fix_without_requiring_core_tools. A failed fixture write fails the test; advisory missing-tool behavior is pinned by the tokmd row expected-version assertion and exact Fixes entry. Line-keyed id; re-verify after edits near the advisory doctor tests."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:3371:error_path"
+owner = "ub-review/core"
+reason = "Probe on integration-test fixture setup (ripr-swarm#1055): error_path of writing fake pinned tool binaries in doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools. A failed fixture write fails the test; advisory version-drift behavior is pinned by the ripr row expected-version assertion and exact Fixes entry. Line-keyed id; re-verify after edits near the advisory doctor tests."
+
 # PR #427 (#306 config-contract removal): CI ripr 0.8.0 reports medium
 # oracles for the dedicated synchronize_mode deprecation receipt and the
 # test's cfg(test) fixture construction, but still classifies the probes as

@@ -3317,6 +3317,86 @@ fn doctor_reports_provider_key_env_status_without_values() -> Result<()> {
 }
 
 #[test]
+fn doctor_reports_advisory_missing_tool_fix_without_requiring_core_tools() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(
+        &config,
+        r#"profile = "gh-runner"
+
+[tools.tokmd]
+id = "tokmd"
+command = "ub-review-test-missing-tokmd"
+"#,
+    )?;
+
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_capture_with_env(
+        temp.path(),
+        bin,
+        &["doctor", "--config", path_str(&config)?],
+        &[],
+    )?;
+
+    let tokmd_row = output
+        .lines()
+        .find(|line| line.trim_start().starts_with("tokmd "))
+        .context("doctor output missing tokmd tool row")?;
+    assert!(tokmd_row.contains("missing"), "{tokmd_row}");
+    assert!(tokmd_row.contains("expected=1.12.0"), "{tokmd_row}");
+    assert!(output.contains("Fixes:"), "{output}");
+    assert!(
+        output.contains("tokmd missing: cargo install tokmd --locked --version 1.12.0 --force"),
+        "{output}"
+    );
+    assert!(!output.contains("required core review tools missing from standard image"));
+    Ok(())
+}
+
+#[test]
+fn doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_core_review_tools_with_versions(
+        &fake_bin,
+        &[
+            ("tokmd", "1.12.0"),
+            ("cargo-allow", "0.1.8"),
+            ("ripr", "0.7.9"),
+            ("unsafe-review", "0.3.4"),
+            ("ast-grep", "0.0.0"),
+            ("actionlint", "1.7.12"),
+        ],
+    )?;
+    let path = prepend_to_path(&fake_bin)?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(&config, r#"profile = "gh-runner""#)?;
+
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_capture_with_env(
+        temp.path(),
+        bin,
+        &["doctor", "--config", path_str(&config)?],
+        &[("PATH", path.as_str())],
+    )?;
+
+    let ripr_row = output
+        .lines()
+        .find(|line| line.trim_start().starts_with("ripr "))
+        .context("doctor output missing ripr tool row")?;
+    assert!(ripr_row.contains("version=ripr 0.7.9"), "{ripr_row}");
+    assert!(ripr_row.contains("expected=0.8.0"), "{ripr_row}");
+    assert!(output.contains("Fixes:"), "{output}");
+    assert!(
+        output.contains("ripr version drift: cargo install ripr --locked --version 0.8.0 --force"),
+        "{output}"
+    );
+    assert!(!output.contains("required core review tool versions drifted"));
+    Ok(())
+}
+
+#[test]
 fn doctor_standard_image_env_requires_core_tools() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let config = temp.path().join(".ub-review.toml");
