@@ -362,12 +362,14 @@ fn skipped_receipt(name: &str, reason: &str) -> CommandReceipt {
 /// by the missing-tool receipts; versions track scripts/install-gh-runner-tools.sh.
 fn install_hint(name: &str) -> &'static str {
     match name {
-        "tokmd" => "cargo install tokmd --version 1.12.0",
-        "cargo-allow" => "cargo install cargo-allow",
-        "ripr" => "cargo install ripr --version 0.8.0",
-        "unsafe-review" => "cargo install unsafe-review --version 0.3.3",
+        "tokmd" => "cargo install tokmd --locked --version 1.12.0 --force",
+        "cargo-allow" => "cargo install cargo-allow --locked",
+        "ripr" => "cargo install ripr --locked --version 0.8.0 --force",
+        "unsafe-review" => "cargo install unsafe-review --locked --version 0.3.4 --force",
         "ast-grep" => "npm install -g @ast-grep/cli",
-        "actionlint" => "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
+        "actionlint" => {
+            "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
+        }
         _ => "see scripts/install-gh-runner-tools.sh",
     }
 }
@@ -1192,7 +1194,7 @@ mod tests {
         let reason = receipt.reason.as_deref().unwrap_or_default();
         assert!(reason.contains("not installed"), "{reason}");
         assert!(
-            reason.contains("cargo install ripr --version 0.8.0"),
+            reason.contains("cargo install ripr --locked --version 0.8.0 --force"),
             "{reason}"
         );
         // A relevance skip stays success: true and missing: false - the two
@@ -1212,6 +1214,38 @@ mod tests {
         );
         assert!(summary.contains("missing: ripr"), "{summary}");
         assert!(summary.contains("skipped: ripr"), "{summary}");
+    }
+
+    #[test]
+    fn missing_tool_install_hints_match_standard_runner_fixes() {
+        let expected = [
+            (
+                "tokmd",
+                "cargo install tokmd --locked --version 1.12.0 --force",
+            ),
+            ("cargo-allow", "cargo install cargo-allow --locked"),
+            (
+                "ripr",
+                "cargo install ripr --locked --version 0.8.0 --force",
+            ),
+            (
+                "unsafe-review",
+                "cargo install unsafe-review --locked --version 0.3.4 --force",
+            ),
+            ("ast-grep", "npm install -g @ast-grep/cli"),
+            (
+                "actionlint",
+                "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH",
+            ),
+        ];
+
+        for (tool, hint) in expected {
+            assert_eq!(install_hint(tool), hint, "{tool} install hint drifted");
+        }
+        assert!(
+            !install_hint("unsafe-review").contains("0.3.3"),
+            "unsafe-review missing-tool hint must not point operators at the stale pre-0.3.4 sensor"
+        );
     }
 
     #[test]
