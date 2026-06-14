@@ -7371,6 +7371,17 @@ def require_tool_gate_outcome_consistency(entry: dict) -> None:
             f"tool-gate-outcomes.json {tool_id} unevaluated outcome carries "
             "new_unsuppressed metric"
         )
+    if tool_id == "ripr" and outcome in {"passed", "failed"}:
+        source_artifacts = entry.get("source_artifacts", [])
+        for required_artifact in [
+            "sensors/ripr/gate-decision.json",
+            "sensors/ripr/exposure-gaps.json",
+        ]:
+            if required_artifact not in source_artifacts:
+                fail(
+                    f"tool-gate-outcomes.json ripr evaluated outcome missing "
+                    f"{required_artifact} in source_artifacts"
+                )
 
 
 def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
@@ -10410,6 +10421,61 @@ def self_test_tool_gate_outcome_false_pass_fails() -> None:
             "sensors/ripr/ub-review-sensor-status.json",
             "tool-status.json",
             "sensors/ripr/gate-decision.json",
+            "sensors/ripr/exposure-gaps.json",
+        ],
+        "packet_policy": "gate-only",
+        "gate_policy": "trust-affecting",
+    }
+    require_tool_gate_outcome_entry(entry)
+    require_tool_gate_outcome_consistency(entry)
+
+
+def self_test_evaluated_ripr_outcome_missing_gate_decision_fails() -> None:
+    entry = {
+        "schema": "ub-review.tool_gate_outcome.v1",
+        "tool": "ripr",
+        "policy": {"scope": "on-diff", "max_new_unsuppressed": 0},
+        "required": False,
+        "planned_run": True,
+        "sensor_status": "ok",
+        "sensor_reason": "completed",
+        "sensor_receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+        "status_source": "tool-status.json",
+        "outcome": "failed",
+        "evaluated": True,
+        "reason": "new_unsuppressed=2 exceeds configured maximum 0",
+        "metrics": {"new_unsuppressed": 2},
+        "source_artifacts": [
+            "sensors/ripr/ub-review-sensor-status.json",
+            "tool-status.json",
+            "sensors/ripr/exposure-gaps.json",
+        ],
+        "packet_policy": "gate-only",
+        "gate_policy": "trust-affecting",
+    }
+    require_tool_gate_outcome_entry(entry)
+    require_tool_gate_outcome_consistency(entry)
+
+
+def self_test_evaluated_ripr_outcome_missing_exposure_gaps_fails() -> None:
+    entry = {
+        "schema": "ub-review.tool_gate_outcome.v1",
+        "tool": "ripr",
+        "policy": {"scope": "on-diff", "max_new_unsuppressed": 0},
+        "required": False,
+        "planned_run": True,
+        "sensor_status": "ok",
+        "sensor_reason": "completed",
+        "sensor_receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+        "status_source": "tool-status.json",
+        "outcome": "failed",
+        "evaluated": True,
+        "reason": "new_unsuppressed=2 exceeds configured maximum 0",
+        "metrics": {"new_unsuppressed": 2},
+        "source_artifacts": [
+            "sensors/ripr/ub-review-sensor-status.json",
+            "tool-status.json",
+            "sensors/ripr/gate-decision.json",
         ],
         "packet_policy": "gate-only",
         "gate_policy": "trust-affecting",
@@ -11066,6 +11132,16 @@ def run_self_tests() -> None:
         "tool gate outcome false pass",
         "passed with new_unsuppressed 1 above threshold 0",
         self_test_tool_gate_outcome_false_pass_fails,
+    )
+    expect_self_test_failure(
+        "evaluated ripr outcome missing gate decision source",
+        "missing sensors/ripr/gate-decision.json in source_artifacts",
+        self_test_evaluated_ripr_outcome_missing_gate_decision_fails,
+    )
+    expect_self_test_failure(
+        "evaluated ripr outcome missing exposure-gap detail source",
+        "missing sensors/ripr/exposure-gaps.json in source_artifacts",
+        self_test_evaluated_ripr_outcome_missing_exposure_gaps_fails,
     )
     self_test_crashed_sensor_routes_as_missing_evidence()
     expect_self_test_failure(
