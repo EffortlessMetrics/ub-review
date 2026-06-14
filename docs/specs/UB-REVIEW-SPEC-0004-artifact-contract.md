@@ -613,7 +613,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
 | review/floor-trend.json | stable | floor_trend.v1; window_scope single_run_v1 | downstream automation (floor-time telemetry seed) | required (require_floor_trend, #338) |
-| review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1 | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
+| review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1; selected focused proof-request entries cite matching resource lease anchors | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
 | review/quality-receipt.json | stable | quality_receipt.v1; run-completion telemetry with reviewer outcome fields null in v1 | downstream automation (quality/usefulness telemetry) | required (require_quality_receipt, #339) |
 | review/quality-trend.json | stable | quality_trend.v1; window_scope single_run_v1 | downstream automation (quality/usefulness telemetry seed) | required (require_quality_trend, #339) |
 | review/quality-backfill.json | stable | quality_backfill.v1; window_scope rolling_v1; missing historical quality-trend sources are receipted as source_artifacts.quality_trend | downstream automation (GitHub-backed quality/usefulness telemetry) | optional full-tree / required backfill verifier path (require_quality_backfill, #441) |

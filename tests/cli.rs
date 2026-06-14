@@ -4223,6 +4223,43 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
         .collect::<Vec<_>>();
     assert_eq!(duplicate_leases.len(), 1);
     assert_eq!(duplicate_leases[0]["status"], "granted");
+    let receipt_source = format!(
+        "review/proof_receipts.json#{}",
+        json_str_field(receipt, "id")?
+    );
+    let lease_source = format!(
+        "review/resource_leases.json#{}",
+        json_str_field(duplicate_leases[0], "id")?
+    );
+    let fill_ledger: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/fill-ledger.json"))?)?;
+    let duplicate_fill_entries = json_array_field(&fill_ledger, "entries")?
+        .iter()
+        .filter(|entry| {
+            entry["kind"].as_str() == Some("proof-request")
+                && request_ids
+                    .iter()
+                    .any(|request_id| entry["check_id"].as_str() == Some(request_id.as_str()))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        duplicate_fill_entries.len(),
+        2,
+        "each duplicate proof request must keep its own fill-ledger decision"
+    );
+    for entry in duplicate_fill_entries {
+        assert_eq!(
+            entry["artifact_path"].as_str(),
+            Some(receipt_source.as_str())
+        );
+        let sources = json_array_field(entry, "source_artifacts")?;
+        assert!(
+            sources
+                .iter()
+                .any(|source| source.as_str() == Some(lease_source.as_str())),
+            "selected proof-request fill must cite the broker lease source `{lease_source}`: {entry:#?}"
+        );
+    }
 
     let log = fs::read_to_string(fake_cargo_log)?;
     assert_eq!(

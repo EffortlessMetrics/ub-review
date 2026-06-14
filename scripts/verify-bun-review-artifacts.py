@@ -2442,6 +2442,7 @@ def require_fill_ledger(root: pathlib.Path) -> None:
         "review/proof_requests.json",
         "review/proof_planner_output.json",
         "review/proof_receipts.json",
+        "review/resource_leases.json",
         "review/tool-gate-outcomes.json",
         "review/gate_outcome.json",
         "review/metrics.json",
@@ -2460,6 +2461,12 @@ def require_fill_ledger(root: pathlib.Path) -> None:
     proof_requests = load_json(root / "review/proof_requests.json")
     if not isinstance(proof_requests, list):
         fail("review/proof_requests.json is not an array")
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    if not isinstance(proof_receipts, list):
+        fail("review/proof_receipts.json is not an array")
+    resource_leases = load_json(root / "review/resource_leases.json")
+    if not isinstance(resource_leases, list):
+        fail("review/resource_leases.json is not an array")
     proof_planner_output = load_json(root / "review/proof_planner_output.json")
     planner_skips = proof_planner_output.get("skip") if isinstance(proof_planner_output, dict) else None
     if not isinstance(planner_skips, list):
@@ -2490,7 +2497,7 @@ def require_fill_ledger(root: pathlib.Path) -> None:
 
     seen: dict[tuple[str, str], bool] = {}
     for index, entry in enumerate(entries):
-        require_fill_ledger_entry(root, entry, index)
+        require_fill_ledger_entry(root, entry, index, proof_receipts, resource_leases)
         key = (entry["kind"], entry["check_id"])
         if key in seen:
             fail(f"fill-ledger.json duplicate entry for {key}")
@@ -2501,7 +2508,13 @@ def require_fill_ledger(root: pathlib.Path) -> None:
         fail(f"fill-ledger.json entries do not match optional work queue/proof planner surface: seen={seen!r} expected={expected!r}")
 
 
-def require_fill_ledger_entry(root: pathlib.Path, entry: Any, index: int) -> None:
+def require_fill_ledger_entry(
+    root: pathlib.Path,
+    entry: Any,
+    index: int,
+    proof_receipts: list,
+    resource_leases: list,
+) -> None:
     if not isinstance(entry, dict):
         fail(f"fill-ledger.json entries[{index}] is not an object")
     check_id = require_non_empty_string_value(
@@ -2552,8 +2565,65 @@ def require_fill_ledger_entry(root: pathlib.Path, entry: Any, index: int) -> Non
         source_file = source.split("#", 1)[0]
         if not (root / source_file).is_file():
             fail(f"fill-ledger.json entries[{index}].source_artifacts[{source_index}] missing file: {source}")
+    if selected and kind == "proof-request" and isinstance(artifact_path, str):
+        require_fill_ledger_proof_request_lease_sources(
+            entry,
+            index,
+            artifact_path,
+            source_artifacts,
+            proof_receipts,
+            resource_leases,
+        )
     if not check_id.strip():
         fail(f"fill-ledger.json entries[{index}].check_id is empty")
+
+
+def require_fill_ledger_proof_request_lease_sources(
+    entry: dict,
+    index: int,
+    artifact_path: str,
+    source_artifacts: list,
+    proof_receipts: list,
+    resource_leases: list,
+) -> None:
+    if not artifact_path.startswith("review/proof_receipts.json#"):
+        return
+    receipt_id = artifact_path.split("#", 1)[1]
+    if not receipt_id:
+        fail(f"fill-ledger.json entries[{index}].artifact_path missing proof receipt anchor")
+    receipt = next(
+        (
+            candidate
+            for candidate in proof_receipts
+            if isinstance(candidate, dict) and candidate.get("id") == receipt_id
+        ),
+        None,
+    )
+    if receipt is None:
+        fail(f"fill-ledger.json entries[{index}].artifact_path unknown proof receipt: {artifact_path}")
+    if receipt.get("kind") not in {"focused-head", "focused-red-green", "focused-build"}:
+        return
+    matching_leases = [
+        lease
+        for lease in resource_leases
+        if isinstance(lease, dict) and lease.get("consumer") == receipt_id
+    ]
+    if not matching_leases:
+        fail(
+            f"fill-ledger.json entries[{index}] focused proof receipt lacks resource lease source: {artifact_path}"
+        )
+    sources = set(source_artifacts)
+    for lease in matching_leases:
+        lease_id = require_non_empty_string_value(
+            lease.get("id"),
+            f"fill-ledger.json entries[{index}] matching resource lease id",
+        )
+        expected_source = f"review/resource_leases.json#{lease_id}"
+        if expected_source not in sources:
+            fail(
+                "fill-ledger.json entries"
+                f"[{index}] proof-request source_artifacts missing lease source: {expected_source}"
+            )
 
 
 QUALITY_BACKFILL_FIELDS = [
@@ -8342,7 +8412,23 @@ def self_test_fill_ledger_contract() -> None:
         )
         write_self_test_json(
             root / "review/proof_receipts.json",
-            [{"id": "receipt-optional", "request_ids": ["proof-optional"]}],
+            [
+                {
+                    "id": "receipt-optional",
+                    "kind": "focused-red-green",
+                    "request_ids": ["proof-optional"],
+                }
+            ],
+        )
+        write_self_test_json(
+            root / "review/resource_leases.json",
+            [
+                {
+                    "id": "lease-optional",
+                    "kind": "focused-test",
+                    "consumer": "receipt-optional",
+                }
+            ],
         )
         write_self_test_json(
             root / "review/proof_planner_output.json",
@@ -8361,6 +8447,7 @@ def self_test_fill_ledger_contract() -> None:
                 "review/proof_requests.json",
                 "review/proof_planner_output.json",
                 "review/proof_receipts.json",
+                "review/resource_leases.json",
                 "review/tool-gate-outcomes.json",
                 "review/gate_outcome.json",
                 "review/metrics.json",
@@ -8397,6 +8484,7 @@ def self_test_fill_ledger_contract() -> None:
                         "review/proof_requests.json",
                         "review/proof_planner_output.json",
                         "review/proof_receipts.json",
+                        "review/resource_leases.json#lease-optional",
                     ],
                 },
                 {
@@ -8415,6 +8503,19 @@ def self_test_fill_ledger_contract() -> None:
         }
         if ledger_overrides:
             ledger.update(ledger_overrides)
+        write_self_test_json(root / "review/fill-ledger.json", ledger)
+        return root
+
+    def write_fill_ledger_without_proof_lease_source() -> pathlib.Path:
+        root = write_valid_root()
+        ledger = load_json(root / "review/fill-ledger.json")
+        for entry in ledger["entries"]:
+            if entry.get("kind") == "proof-request" and entry.get("check_id") == "proof-optional":
+                entry["source_artifacts"] = [
+                    source
+                    for source in entry["source_artifacts"]
+                    if not source.startswith("review/resource_leases.json#")
+                ]
         write_self_test_json(root / "review/fill-ledger.json", ledger)
         return root
 
@@ -8439,6 +8540,11 @@ def self_test_fill_ledger_contract() -> None:
         "fill ledger missing planner skip",
         "entries do not match optional work queue/proof planner surface",
         lambda: require_fill_ledger(write_fill_ledger_without_skip()),
+    )
+    expect_self_test_failure(
+        "fill ledger missing proof lease source",
+        "proof-request source_artifacts missing lease source",
+        lambda: require_fill_ledger(write_fill_ledger_without_proof_lease_source()),
     )
 
 
