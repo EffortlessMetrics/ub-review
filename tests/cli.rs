@@ -373,6 +373,36 @@ fn adoption_docs_match_setup_ci_current_surface() {
 }
 
 #[test]
+fn artifact_contract_docs_match_ci_audit_verifier_coverage() {
+    let spec_0004 = include_str!("../docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md");
+    let verifier = include_str!("../scripts/verify-bun-review-artifacts.py");
+
+    assert!(
+        verifier.contains("def require_ci_audit_core_artifacts"),
+        "ci-audit core receipt verifier disappeared"
+    );
+    assert!(
+        spec_0004.contains("require_ci_audit_core_artifacts"),
+        "SPEC-0004 must name the executable ci-audit verifier"
+    );
+    assert!(
+        spec_0004.contains("ci-audit/audit-report.md"),
+        "SPEC-0004 must keep the human-only audit report separate from JSON receipts"
+    );
+    for stale in [
+        "ci-audit/*                              audit-ci output; contract pending",
+        "give ci-audit/* its own contract spec before anyone builds on it",
+        "`ci-audit/*` has a contract yet",
+        "ci-audit/* pending spec 0007",
+    ] {
+        assert!(
+            !spec_0004.contains(stale),
+            "SPEC-0004 leaked stale ci-audit contract claim `{stale}`"
+        );
+    }
+}
+
+#[test]
 fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

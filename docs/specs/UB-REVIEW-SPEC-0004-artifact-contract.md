@@ -279,8 +279,11 @@ questions/orchestrator-follow-up/*.json follow-up question packets
 input/pr.md, input/claims.md            prompt construction inputs
 review/proof_plan.md,                   markdown prose beyond "exists" is
 review/resource_plan.md                 uncontracted
-ci-audit/*                              audit-ci output; contract pending
+ci-audit/*.json                         audit-ci/setup-ci receipts; core JSON
+                                        contracts are verifier-covered here;
+                                        detailed audit semantics live in
                                         UB-REVIEW-SPEC-0007
+ci-audit/audit-report.md                human-only audit prose
 ```
 
 "Internal" does not mean unverified - several of these are exact-checked by
@@ -575,7 +578,7 @@ the verifier and this table in the same PR - the same rule
 Tiers: stable - verifier- or gate-check-enforced contract a consumer may
 build on. experimental - schema'd and (mostly) enforced but young; shape
 may still move via a verifier+spec PR (the issue-capture and broker
-artifacts, the coverage sidecar, ci-audit/*). internal - everything else
+artifacts, the coverage sidecar, core ci-audit JSON receipts). internal - everything else
 under the out dir; no contract, canonical surface elsewhere.
 
 Verifier status values: required - checked on every full-tree run, by the
@@ -678,7 +681,8 @@ This spec is docs-only. Open contract-surface work it routes:
        this spec in the same PR
 #312   close the proof-broker edge-status test gaps so rare receipt/lease
        statuses are exercised, not just shaped
-0007   give ci-audit/* its own contract spec before anyone builds on it
+0007   keep detailed ci-audit audit semantics aligned with the verifier-
+       covered core receipt contracts
 0006   provider/cache surface that would un-hardcode the cache manifest
        provider fields
 ```
@@ -696,8 +700,8 @@ ub-review emits stable gate, proof, tool, resource, and review artifacts.
 Concretely claimable: every stable artifact is existence-required,
 schema-pinned, or both by a fail-closed verifier that runs inside this
 repository's own required gate and self-tests in CI. Not claimable: that
-internal-tier files are stable, that `ci-audit/*` has a contract yet, or
-that the verifier covers `gate_outcome.json` (gate-check does).
+internal-tier files are stable, that ci-audit prose reports are contracted,
+or that the verifier covers `gate_outcome.json` (gate-check does).
 
 ## The six reliance questions
 
@@ -723,7 +727,7 @@ The whole internal tier: box-state.json, post-* receipts (shape-wise; note
 require_post_receipt does fail-closed-check their status/validity fields),
 per-lane observation NDJSON and per-question JSON decomposition, follow-up
 question packets as a surface, input/pr.md and input/claims.md, proof_plan.md and
-resource_plan.md prose, and ci-audit/* pending spec 0007. Also the entire
+resource_plan.md prose, and ci-audit/audit-report.md prose. Also the entire
 contract on consumer repos that do not add an equivalent verifier step to
 their own required workflow.
 
