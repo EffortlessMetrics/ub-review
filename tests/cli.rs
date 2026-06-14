@@ -4027,9 +4027,22 @@ test("no-finalizer toBuffer keeps caller memory alive", () => {
         serde_json::json!(["tests-oracle", "opposition", "compiler"])
     );
     assert_eq!(routes[0]["lease_ids"], serde_json::json!([leases[0]["id"]]));
+    let receipt_anchor = format!(
+        "review/proof_receipts.json#{}",
+        json_str_field(receipt, "id")?
+    );
+    let lease_anchor = format!(
+        "review/resource_leases.json#{}",
+        json_str_field(&leases[0], "id")?
+    );
     assert_eq!(
         routes[0]["source_artifacts"],
-        serde_json::json!(["review/proof_receipts.json", "review/resource_leases.json"])
+        serde_json::json!([
+            "review/proof_receipts.json",
+            receipt_anchor,
+            "review/resource_leases.json",
+            lease_anchor
+        ])
     );
     let route_ndjson = fs::read_to_string(out.join("receipt_routes.ndjson"))?;
     assert_eq!(

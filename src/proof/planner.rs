@@ -321,10 +321,7 @@ pub(crate) fn receipt_route_artifacts(
                 .filter(|lease| lease.consumer == receipt.id)
                 .map(|lease| lease.id.clone())
                 .collect::<Vec<_>>();
-            let mut source_artifacts = vec!["review/proof_receipts.json".to_owned()];
-            if !lease_ids.is_empty() {
-                source_artifacts.push("review/resource_leases.json".to_owned());
-            }
+            let source_artifacts = receipt_route_source_artifacts(&receipt.id, &lease_ids);
             ReceiptRouteArtifact {
                 schema: RECEIPT_ROUTE_SCHEMA,
                 id: format!("receipt-route-{}", receipt.id),
@@ -342,6 +339,23 @@ pub(crate) fn receipt_route_artifacts(
             }
         })
         .collect()
+}
+
+fn receipt_route_source_artifacts(receipt_id: &str, lease_ids: &[String]) -> Vec<String> {
+    let mut source_artifacts = vec![
+        "review/proof_receipts.json".to_owned(),
+        format!("review/proof_receipts.json#{receipt_id}"),
+    ];
+    if !lease_ids.is_empty() {
+        source_artifacts.push("review/resource_leases.json".to_owned());
+        for lease_id in lease_ids {
+            push_unique(
+                &mut source_artifacts,
+                &format!("review/resource_leases.json#{lease_id}"),
+            );
+        }
+    }
+    source_artifacts
 }
 
 pub(crate) fn receipt_route_phase(receipt: &ProofReceipt) -> &'static str {
@@ -1354,6 +1368,32 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn receipt_route_source_artifacts_include_exact_anchors() {
+        assert_eq!(
+            super::receipt_route_source_artifacts(
+                "proof-initial",
+                &[
+                    "lease-proof-initial".to_owned(),
+                    "lease-proof-initial".to_owned()
+                ]
+            ),
+            vec![
+                "review/proof_receipts.json",
+                "review/proof_receipts.json#proof-initial",
+                "review/resource_leases.json",
+                "review/resource_leases.json#lease-proof-initial"
+            ]
+        );
+        assert_eq!(
+            super::receipt_route_source_artifacts("proof-model", &[]),
+            vec![
+                "review/proof_receipts.json",
+                "review/proof_receipts.json#proof-model"
+            ]
+        );
+    }
+
+    #[test]
     fn receipt_routes_capture_initial_model_and_follow_up_consumers() {
         let initial = ProofReceipt {
             schema: "ub-review.proof_receipt.v1".to_owned(),
@@ -1419,9 +1459,25 @@ index 1111111..2222222 100644
             vec!["tests-oracle", "opposition", "compiler"]
         );
         assert_eq!(routes[0].lease_ids, vec!["lease-proof-initial"]);
+        assert_eq!(
+            routes[0].source_artifacts,
+            vec![
+                "review/proof_receipts.json",
+                "review/proof_receipts.json#proof-initial",
+                "review/resource_leases.json",
+                "review/resource_leases.json#lease-proof-initial"
+            ]
+        );
         assert_eq!(routes[0].status, "tool-confirmed");
         assert_eq!(routes[1].phase, "model-request-receipt");
         assert_eq!(routes[1].consumers, vec!["architecture", "compiler"]);
+        assert_eq!(
+            routes[1].source_artifacts,
+            vec![
+                "review/proof_receipts.json",
+                "review/proof_receipts.json#proof-model"
+            ]
+        );
         assert_eq!(routes[2].phase, "follow-up-receipt");
         assert_eq!(
             routes[2].consumers,
