@@ -3468,44 +3468,55 @@ fn cmd_doctor(args: DoctorArgs) -> Result<()> {
             .join(&tool.id)
             .join("manifest.json")
             .exists();
+        let expected = expected_standard_image_tool_version(&tool.id);
+        let fix_entry = if !found {
+            Some(format!(
+                "{} missing: {}",
+                tool.id,
+                doctor_tool_install_hint(&tool.id)
+            ))
+        } else {
+            expected.and_then(|expected| match version.as_deref() {
+                Some(actual) if command_version_matches(actual, expected) => None,
+                Some(_) => Some(format!(
+                    "{} version drift: {}",
+                    tool.id,
+                    doctor_tool_version_fix(&tool.id, expected)
+                )),
+                None => Some(format!(
+                    "{} version unknown: {}",
+                    tool.id,
+                    doctor_tool_version_fix(&tool.id, expected)
+                )),
+            })
+        };
         println!(
-            "  {:<16} {:<8} {:<24} path={} version={} rule-cache={}",
+            "  {:<16} {:<8} {:<24} path={} version={} expected={} rule-cache={}",
             tool.id,
             status,
             tool.command,
             path_text,
             version_text,
+            expected.unwrap_or("-"),
             if rule_hit { "hit" } else { "miss" }
         );
+        if let Some(fix) = fix_entry {
+            fixes.push(fix);
+        }
         if require_core_tools && is_core_review_tool(&tool.id) {
             if !found {
                 missing_required.push(tool.id.clone());
-                fixes.push(format!(
-                    "{} missing: {}",
-                    tool.id,
-                    doctor_tool_install_hint(&tool.id)
-                ));
             } else if let Some(expected) = expected_standard_image_tool_version(&tool.id) {
                 match version.as_deref() {
                     Some(actual) if command_version_matches(actual, expected) => {}
                     Some(actual) => {
                         version_mismatches
                             .push(format!("{} expected {}, got {}", tool.id, expected, actual));
-                        fixes.push(format!(
-                            "{} version drift: {}",
-                            tool.id,
-                            doctor_tool_version_fix(&tool.id, expected)
-                        ));
                     }
                     None => {
                         version_mismatches.push(format!(
                             "{} expected {}, got no --version output",
                             tool.id, expected
-                        ));
-                        fixes.push(format!(
-                            "{} version unknown: {}",
-                            tool.id,
-                            doctor_tool_version_fix(&tool.id, expected)
                         ));
                     }
                 }
