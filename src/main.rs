@@ -24540,6 +24540,11 @@ fn render_ci_audit_report(
                         .duration_p50_sec
                         .map(format_ci_duration)
                         .unwrap_or_else(|| "unknown".to_owned());
+                    let matrix = if cost.matrix_expansion > 1 {
+                        format!(", matrix fan-out x{}", cost.matrix_expansion)
+                    } else {
+                        String::new()
+                    };
                     let independent_failures = correlation
                         .jobs
                         .iter()
@@ -24549,7 +24554,7 @@ fn render_ci_audit_report(
                         .map(|job| job.independent_failures)
                         .unwrap_or(0);
                     out.push_str(&format!(
-                        "- `{}` ({workflow_file}) [{}]: p50 {p50}, {} runs, {} independent failures, ~{} runner-min/mo{note}\n",
+                        "- `{}` ({workflow_file}) [{}]: p50 {p50}, {} runs, {} independent failures, ~{} runner-min/mo{matrix}{note}\n",
                         recommendation.job,
                         recommendation.confidence,
                         history_job.runs,
@@ -43123,6 +43128,15 @@ jobs:
             .find(|job| job.job == "Unit tests (ubuntu-latest, stable)")
             .context("observed matrix cost job")?;
         assert_eq!(cost_job.matrix_expansion, 4);
+        let matrix_line = artifacts
+            .report
+            .lines()
+            .find(|line| line.starts_with("- `Unit tests (ubuntu-latest, stable)`"))
+            .context("matrix report line present")?;
+        assert!(
+            matrix_line.contains("~1 runner-min/mo, matrix fan-out x4"),
+            "matrix fan-out should sit beside the cost receipt: {matrix_line}"
+        );
         assert!(
             artifacts
                 .inventory
