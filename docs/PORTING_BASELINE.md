@@ -136,6 +136,10 @@ target/ub-review/
   running-summary.md
 ```
 
+Receipt routes must carry exact source anchors: each route's
+`source_artifacts` includes `review/proof_receipts.json#<receipt-id>` and,
+when a matching lease exists, `review/resource_leases.json#<lease-id>`.
+
 For a copied packet, verify with:
 
 ```bash
