@@ -1038,6 +1038,31 @@ fn artifact_contract_docs_match_ci_audit_verifier_coverage() {
 }
 
 #[test]
+fn artifact_contract_docs_pin_receipt_route_source_anchors() {
+    let spec_0004 = include_str!("../docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md");
+    let verifier = include_str!("../scripts/verify-bun-review-artifacts.py");
+
+    assert!(
+        verifier.contains("def receipt_route_source_artifacts"),
+        "receipt route source-anchor verifier disappeared"
+    );
+    assert!(
+        verifier.contains("receipt route missing exact source anchors"),
+        "receipt route self-test must fail old artifact-only route sources"
+    );
+    for required in [
+        "review/proof_receipts.json#<receipt-id>",
+        "review/resource_leases.json#<lease-id>",
+        "route entries carry exact proof receipt and matching lease anchors",
+    ] {
+        assert!(
+            spec_0004.contains(required),
+            "SPEC-0004 must document receipt route anchor contract `{required}`"
+        );
+    }
+}
+
+#[test]
 fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
