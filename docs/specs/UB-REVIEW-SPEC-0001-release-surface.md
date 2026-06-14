@@ -149,9 +149,10 @@ What does success look like in ten minutes?
 
 - `[providers]` config section: partly wired. `policy` selects provider
   routing when CLI/env policy is `auto`, and provider `max_concurrency` caps
-  model-lane waves. Descriptive keys inside it (`env`, `model`, `role`,
-  `models`, `prompt_cache`, `fallback_for`) remain documentation of intent,
-  not wired behavior.
+  model-lane waves. `[providers.minimax].prompt_cache` is executable for the
+  current `explicit-anthropic` / `off` cache modes. Descriptive keys inside
+  it (`env`, `model`, `role`, `models`, `fallback_for`) remain documentation
+  of intent, not wired behavior.
 - Legacy `[gate].synchronize_mode`: removed from the config contract because
   it never controlled posting (#306). Configs that still set it receive a
   deprecation `PolicyError`; posting on quiet passes is governed solely by

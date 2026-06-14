@@ -3353,6 +3353,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     // wins; `auto` defers to the repo's [providers].policy; with neither,
     // `auto` keeps its built-in minimax-primary semantics.
     args.provider_policy = resolved_provider_policy(&config, args.provider_policy);
+    args.minimax_prompt_cache = resolved_minimax_prompt_cache(&config);
     let profile = config.selected_profile()?;
     apply_runtime_profile_limits(&mut args, profile)?;
     let selected_model_lanes = selected_review_lanes_for_args(&plan, &args)?;
@@ -6503,6 +6504,7 @@ fn write_review_artifacts(
         final_follow_up_tasks: final_orchestrator_plan.follow_up_tasks.len(),
         run: run_loop_metrics,
         elapsed,
+        args,
     });
 
     fs::write(
@@ -7250,6 +7252,7 @@ struct ReviewMetricsInput<'a> {
     final_follow_up_tasks: usize,
     run: RunLoopMetrics,
     elapsed: Duration,
+    args: &'a RunArgs,
 }
 
 fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
@@ -7265,6 +7268,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         final_follow_up_tasks,
         mut run,
         elapsed,
+        args,
     } = input;
     let sensor_statuses = plan
         .sensors
@@ -7287,7 +7291,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         .collect::<Vec<_>>();
     run.model_call_duration_ms_sum = model_call_duration_ms_sum(review, follow_up_results);
     run.proof_command_duration_ms_sum = proof_command_duration_ms_sum(&review.proof_receipts);
-    let prompt_cache = model_prompt_cache_metrics(review, follow_up_results);
+    let prompt_cache = model_prompt_cache_metrics(review, follow_up_results, args);
 
     ReviewMetrics {
         schema_version: 1,
@@ -9548,6 +9552,7 @@ struct PromptCacheMetrics {
 fn model_prompt_cache_metrics(
     review: &ReviewArtifacts,
     follow_up_results: &[FollowUpResult],
+    args: &RunArgs,
 ) -> PromptCacheMetrics {
     let creation_input_tokens = review
         .provider_preflights
@@ -9586,7 +9591,7 @@ fn model_prompt_cache_metrics(
     let mut lane_unknown = 0;
     for receipt in &review.model_lanes {
         if !model_call_attempted_status(&receipt.status)
-            || model_cache_mode(&receipt.provider, &receipt.endpoint_kind)
+            || model_cache_mode_for_args(args, &receipt.provider, &receipt.endpoint_kind)
                 != "explicit-anthropic-cache-control"
         {
             continue;
@@ -13854,7 +13859,8 @@ fn write_shared_context_cache_artifacts(
             lane: Some("provider-preflight".to_owned()),
             provider: Some(receipt.provider.clone()),
             endpoint_kind: Some(receipt.endpoint_kind.clone()),
-            cache_mode: model_cache_mode(&receipt.provider, &receipt.endpoint_kind).to_owned(),
+            cache_mode: model_cache_mode_for_args(args, &receipt.provider, &receipt.endpoint_kind)
+                .to_owned(),
             cache_creation_input_tokens: receipt.cache_usage.cache_creation_input_tokens,
             cache_read_input_tokens: receipt.cache_usage.cache_read_input_tokens,
         });
@@ -13870,7 +13876,8 @@ fn write_shared_context_cache_artifacts(
             lane: Some(receipt.lane.clone()),
             provider: Some(receipt.provider.clone()),
             endpoint_kind: Some(receipt.endpoint_kind.clone()),
-            cache_mode: model_cache_mode(&receipt.provider, &receipt.endpoint_kind).to_owned(),
+            cache_mode: model_cache_mode_for_args(args, &receipt.provider, &receipt.endpoint_kind)
+                .to_owned(),
             cache_creation_input_tokens: receipt.cache_usage.cache_creation_input_tokens,
             cache_read_input_tokens: receipt.cache_usage.cache_read_input_tokens,
         });
@@ -13887,7 +13894,8 @@ fn write_shared_context_cache_artifacts(
             lane: Some(result.model_lane.clone()),
             provider: Some(follow_up_spec.provider.key().to_owned()),
             endpoint_kind: Some(follow_up_spec.endpoint_kind.key().to_owned()),
-            cache_mode: model_cache_mode(
+            cache_mode: model_cache_mode_for_args(
+                args,
                 follow_up_spec.provider.key(),
                 follow_up_spec.endpoint_kind.key(),
             )
@@ -13922,6 +13930,7 @@ fn shared_context_cache_lanes(
                     assignment.spec.provider.key(),
                     &assignment.spec.model,
                     assignment.spec.endpoint_kind.key(),
+                    args,
                 )
             })
             .collect();
@@ -13935,6 +13944,7 @@ fn shared_context_cache_lanes(
                 &receipt.provider,
                 &receipt.model,
                 &receipt.endpoint_kind,
+                args,
             )
         })
         .collect::<Vec<_>>();
@@ -13949,6 +13959,7 @@ fn shared_context_cache_lanes(
             follow_up_spec.provider.key(),
             &follow_up_spec.model,
             follow_up_spec.endpoint_kind.key(),
+            args,
         ));
     }
     lanes
@@ -13960,15 +13971,26 @@ fn shared_context_cache_lane(
     provider: &str,
     model: &str,
     endpoint_kind: &str,
+    args: &RunArgs,
 ) -> SharedContextCacheLane {
     SharedContextCacheLane {
         lane: lane.to_owned(),
         provider: provider.to_owned(),
         model: model.to_owned(),
         endpoint_kind: endpoint_kind.to_owned(),
-        cache_mode: model_cache_mode(provider, endpoint_kind).to_owned(),
+        cache_mode: model_cache_mode_for_args(args, provider, endpoint_kind).to_owned(),
         shared_context_hash: shared_context_hash.to_owned(),
     }
+}
+
+fn model_cache_mode_for_args(args: &RunArgs, provider: &str, endpoint_kind: &str) -> &'static str {
+    if provider == ModelProvider::MiniMaxDirect.key()
+        && endpoint_kind == ProviderEndpointKind::AnthropicMessages.key()
+        && args.minimax_prompt_cache == MinimaxPromptCache::Off
+    {
+        return "not-supported";
+    }
+    model_cache_mode(provider, endpoint_kind)
 }
 
 fn model_cache_mode(provider: &str, endpoint_kind: &str) -> &'static str {
@@ -15055,6 +15077,13 @@ fn provider_concurrency_limits(config: &Config) -> ProviderConcurrencyLimits {
     }
 }
 
+fn resolved_minimax_prompt_cache(config: &Config) -> MinimaxPromptCache {
+    match config.providers.minimax.prompt_cache.as_deref() {
+        Some(value) if value == MinimaxPromptCache::Off.key() => MinimaxPromptCache::Off,
+        _ => MinimaxPromptCache::ExplicitAnthropic,
+    }
+}
+
 fn provider_spec_for_lane_with_key_state(
     lane: &LanePlan,
     args: &RunArgs,
@@ -15425,7 +15454,7 @@ fn run_provider_preflights(
         let lane_dir = preflight_dir.join(sanitize_artifact_name(&spec.label()));
         fs::create_dir_all(&lane_dir)?;
         let prompt = "Return strict JSON only: {\"summary\":\"preflight ok\",\"inline_comments\":[],\"summary_only_findings\":[]}";
-        let outcome = match provider_preflight_cacheable_prefix(&spec, shared_context) {
+        let outcome = match provider_preflight_cacheable_prefix(&spec, shared_context, args) {
             Some(cacheable_prefix) => {
                 call_model_prompt_cached(root, &lane_dir, &spec, cacheable_prefix, prompt, args)
             }
@@ -15453,10 +15482,9 @@ fn run_provider_preflights(
 fn provider_preflight_cacheable_prefix<'a>(
     spec: &ProviderSpec,
     shared_context: &'a str,
+    args: &RunArgs,
 ) -> Option<&'a str> {
-    (model_cache_mode(spec.provider.key(), spec.endpoint_kind.key())
-        == "explicit-anthropic-cache-control")
-        .then_some(shared_context)
+    model_cacheable_prefix(spec, shared_context, args)
 }
 
 fn provider_spec_from_preflight(receipt: &ProviderPreflightReceipt) -> Result<ProviderSpec> {
@@ -16841,7 +16869,7 @@ fn call_model_prompt(
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<LaneModelOutput>> {
-    let content = call_model_prompt_content(root, lane_dir, spec, None, prompt, args)?;
+    let content = call_model_prompt_content(root, lane_dir, spec, None, false, prompt, args)?;
     let (output, degraded) =
         parse_lane_model_output_or_degrade(&content.json_payload, &content.parse_path)?;
     Ok(ModelCallOutcome {
@@ -16862,8 +16890,16 @@ fn call_model_prompt_cached(
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<LaneModelOutput>> {
-    let content =
-        call_model_prompt_content(root, lane_dir, spec, Some(cacheable_prefix), prompt, args)?;
+    let use_cache_control = model_cacheable_prefix(spec, cacheable_prefix, args).is_some();
+    let content = call_model_prompt_content(
+        root,
+        lane_dir,
+        spec,
+        Some(cacheable_prefix),
+        use_cache_control,
+        prompt,
+        args,
+    )?;
     let (output, degraded) =
         parse_lane_model_output_or_degrade(&content.json_payload, &content.parse_path)?;
     Ok(ModelCallOutcome {
@@ -16887,8 +16923,16 @@ fn call_model_prompt_typed_cached<T>(
 where
     T: DeserializeOwned,
 {
-    let content =
-        call_model_prompt_content(root, lane_dir, spec, Some(cacheable_prefix), prompt, args)?;
+    let use_cache_control = model_cacheable_prefix(spec, cacheable_prefix, args).is_some();
+    let content = call_model_prompt_content(
+        root,
+        lane_dir,
+        spec,
+        Some(cacheable_prefix),
+        use_cache_control,
+        prompt,
+        args,
+    )?;
     let parsed_output = serde_json::from_str(&content.json_payload)
         .with_context(|| format!("parse {}", content.parse_path.display()))?;
     Ok(ModelCallOutcome {
@@ -16899,6 +16943,16 @@ where
         cache_usage: content.cache_usage,
         degraded: false,
     })
+}
+
+fn model_cacheable_prefix<'a>(
+    spec: &ProviderSpec,
+    cacheable_prefix: &'a str,
+    args: &RunArgs,
+) -> Option<&'a str> {
+    (model_cache_mode_for_args(args, spec.provider.key(), spec.endpoint_kind.key())
+        == "explicit-anthropic-cache-control")
+        .then_some(cacheable_prefix)
 }
 
 struct ModelPromptContent {
@@ -16915,6 +16969,7 @@ fn call_model_prompt_content(
     lane_dir: &Path,
     spec: &ProviderSpec,
     cacheable_prefix: Option<&str>,
+    use_cache_control: bool,
     prompt: &str,
     args: &RunArgs,
 ) -> Result<ModelPromptContent> {
@@ -16922,7 +16977,12 @@ fn call_model_prompt_content(
     let token = env_value(env_name).with_context(|| format!("{env_name} missing"))?;
     let url = model_api_url(spec);
     let auth_header = model_auth_header(spec, &token);
-    let payload = model_request_payload_parts(spec, cacheable_prefix, prompt);
+    let payload = model_request_payload_parts_with_cache_control(
+        spec,
+        cacheable_prefix,
+        prompt,
+        use_cache_control,
+    );
     let request_path = lane_dir.join("request.json");
     let response_path = lane_dir.join("response.json");
     let stderr_path = lane_dir.join("stderr.txt");
@@ -20109,10 +20169,20 @@ fn model_request_payload(spec: &ProviderSpec, prompt: &str) -> serde_json::Value
     model_request_payload_parts(spec, None, prompt)
 }
 
+#[cfg(test)]
 fn model_request_payload_parts(
     spec: &ProviderSpec,
     cacheable_prefix: Option<&str>,
     prompt: &str,
+) -> serde_json::Value {
+    model_request_payload_parts_with_cache_control(spec, cacheable_prefix, prompt, true)
+}
+
+fn model_request_payload_parts_with_cache_control(
+    spec: &ProviderSpec,
+    cacheable_prefix: Option<&str>,
+    prompt: &str,
+    use_cache_control: bool,
 ) -> serde_json::Value {
     match spec.endpoint_kind {
         ProviderEndpointKind::AnthropicMessages => {
@@ -20121,7 +20191,7 @@ fn model_request_payload_parts(
             } else {
                 "adaptive"
             };
-            let content = anthropic_user_content(spec, cacheable_prefix, prompt);
+            let content = anthropic_user_content(spec, cacheable_prefix, prompt, use_cache_control);
             serde_json::json!({
                 "model": spec.model,
                 "max_tokens": model_max_tokens(spec),
@@ -20167,8 +20237,10 @@ fn anthropic_user_content(
     spec: &ProviderSpec,
     cacheable_prefix: Option<&str>,
     prompt: &str,
+    use_cache_control: bool,
 ) -> serde_json::Value {
     if spec.provider == ModelProvider::MiniMaxDirect
+        && use_cache_control
         && let Some(cacheable_prefix) = cacheable_prefix
     {
         return serde_json::json!([
@@ -25158,20 +25230,20 @@ mod tests {
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
         FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
         GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
-        LaneModelOutput, LanePlan, LanguageMix, Limits, ModelAssignment, ModelCacheUsage,
-        ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
-        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelLaneTaskResult, ModelMode,
-        ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
-        Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
-        PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
-        ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderConcurrencyLimits,
-        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext, ResourceLease,
-        ReviewArgs, ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
+        LaneModelOutput, LanePlan, LanguageMix, Limits, MinimaxPromptCache, ModelAssignment,
+        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
+        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
+        ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
+        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
+        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
+        ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
+        ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
+        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
         append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
@@ -25192,12 +25264,12 @@ mod tests {
         provider_concurrency_limits, provider_spec_for_lane_with_key_state,
         read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
         render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_provider_policy,
-        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
-        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
-        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
-        validate_failed_objection, validate_github_review_payload,
+        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
+        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
+        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
+        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
+        standard_minimax_lanes, validate_failed_objection, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate,
         validate_model_observation, validate_pr_review_body_policy, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
@@ -26312,6 +26384,7 @@ policy = "primary-with-fallback"
 [providers.minimax]
 enabled = true
 max_concurrency = 12
+prompt_cache = "off"
 
 [providers.opencode]
 role = "fallback"
@@ -26326,6 +26399,10 @@ max_concurrency = 8
                 minimax: Some(12),
                 opencode_go: Some(8),
             }
+        );
+        assert_eq!(
+            resolved_minimax_prompt_cache(&explicit),
+            MinimaxPromptCache::Off
         );
 
         // D2 precedence matrix: explicit CLI wins; auto defers to config;
@@ -32524,16 +32601,53 @@ UB_REVIEW_HTTP_STATUS:429
         args.minimax_provider_kind = ProviderKindArg::Anthropic;
         let anthropic = direct_minimax_spec(&args);
         assert_eq!(
-            super::provider_preflight_cacheable_prefix(&anthropic, "shared context"),
+            super::provider_preflight_cacheable_prefix(&anthropic, "shared context", &args),
             Some("shared context")
         );
 
         args.minimax_provider_kind = ProviderKindArg::Openai;
         let openai = direct_minimax_spec(&args);
         assert_eq!(
-            super::provider_preflight_cacheable_prefix(&openai, "shared context"),
+            super::provider_preflight_cacheable_prefix(&openai, "shared context", &args),
             None
         );
+
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
+        args.minimax_prompt_cache = MinimaxPromptCache::Off;
+        let cache_disabled = direct_minimax_spec(&args);
+        assert_eq!(
+            super::provider_preflight_cacheable_prefix(&cache_disabled, "shared context", &args),
+            None
+        );
+    }
+
+    #[test]
+    fn minimax_prompt_cache_off_omits_anthropic_cache_control() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.minimax_provider_kind = ProviderKindArg::Anthropic;
+        let spec = direct_minimax_spec(&args);
+        let cached =
+            super::model_request_payload_parts(&spec, Some("shared cache block"), "lane task");
+        let content = cached["messages"][0]["content"].as_array().ok_or_else(|| {
+            anyhow::anyhow!("default MiniMax Anthropic content should be block array")
+        })?;
+        assert_eq!(content[0]["cache_control"]["type"], "ephemeral");
+
+        args.minimax_prompt_cache = MinimaxPromptCache::Off;
+        let disabled = super::model_request_payload_parts_with_cache_control(
+            &spec,
+            Some("shared cache block"),
+            "lane task",
+            super::model_cacheable_prefix(&spec, "shared cache block", &args).is_some(),
+        );
+        let prompt = disabled["messages"][0]["content"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("disabled cache payload should use plain prompt"))?;
+        assert!(prompt.contains("Cached shared context:"));
+        assert!(prompt.contains("shared cache block"));
+        assert!(prompt.contains("lane task"));
+        assert!(!prompt.contains("cache_control"));
+        Ok(())
     }
 
     #[test]
@@ -36005,6 +36119,7 @@ index 1111111..2222222 100644
             final_follow_up_tasks: 1,
             run: test_run_loop_metrics(),
             elapsed: std::time::Duration::from_secs(601),
+            args: &test_run_args(Path::new("target/ub-review").to_path_buf()),
         });
 
         assert_eq!(metrics.wall_clock_seconds, 601);
@@ -36112,6 +36227,7 @@ index 1111111..2222222 100644
             final_follow_up_tasks: 1,
             run,
             elapsed: std::time::Duration::from_secs(120),
+            args: &test_run_args(temp.path().join("out")),
         });
         let mut config = Config::default();
         config.gate.target_minutes = 25;
@@ -36228,6 +36344,7 @@ index 1111111..2222222 100644
             final_follow_up_tasks: 0,
             run: test_run_loop_metrics(),
             elapsed: std::time::Duration::from_secs(1),
+            args: &test_run_args(temp.path().join("out")),
         });
         let config = Config::default();
 
@@ -36297,6 +36414,7 @@ index 1111111..2222222 100644
             final_follow_up_tasks: 0,
             run: test_run_loop_metrics(),
             elapsed: std::time::Duration::from_secs(1),
+            args: &test_run_args(Path::new("target/ub-review").to_path_buf()),
         });
         let fill_ledger = super::FillLedger {
             schema: super::FILL_LEDGER_SCHEMA,
@@ -40639,6 +40757,7 @@ index 1111111..2222222 100644
             model_concurrency: STANDARD_MODEL_CONCURRENCY,
             max_model_calls: STANDARD_MAX_MODEL_CALLS,
             provider_policy: ModelProviderPolicy::MinimaxPrimary,
+            minimax_prompt_cache: MinimaxPromptCache::ExplicitAnthropic,
             lane_width: STANDARD_LANE_WIDTH,
             model_timeout_sec: 300,
             ledger_path: String::new(),

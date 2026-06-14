@@ -35,9 +35,11 @@ pub(crate) struct Config {
 /// routing when the CLI flag is `auto` (D2 precedence: explicit
 /// `--provider-policy`/env value overrides config; config overrides the
 /// built-in default). Per-provider `max_concurrency` caps live model-lane
-/// waves for that provider. Invalid consumed values are stripped at load with
-/// `PolicyError` receipts. Descriptive fields such as `env`, `role`,
-/// `models`, and `prompt_cache` remain documentation of intent.
+/// waves for that provider. `[providers.minimax].prompt_cache` is consumed
+/// as strict vocabulary for the current MiniMax cache modes. Invalid
+/// consumed values are stripped at load with `PolicyError` receipts.
+/// Descriptive fields such as `env`, `role`, and `models` remain
+/// documentation of intent.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ProvidersConfig {
@@ -53,11 +55,13 @@ pub(crate) struct ProvidersConfig {
 pub(crate) struct ProviderRuntimeConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) max_concurrency: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) prompt_cache: Option<String>,
 }
 
 impl ProviderRuntimeConfig {
     fn is_empty(&self) -> bool {
-        self.max_concurrency.is_none()
+        self.max_concurrency.is_none() && self.prompt_cache.is_none()
     }
 }
 
@@ -924,9 +928,12 @@ fn sanitize_policy_sections(value: &mut toml::Value) -> Vec<PolicyError> {
 /// Validate consumed `[providers]` keys. `policy` must name a provider policy
 /// the CLI enum knows (`auto`, `minimax-primary`, `primary-with-fallback`,
 /// `minimax-only`, `opencode-go-canary`, `opencode-go-wide`).
-/// `max_concurrency` in provider sub-tables must be a positive integer. Bad
-/// values are stripped with `PolicyError` receipts so the run cannot silently
-/// fall back while looking configured.
+/// `max_concurrency` in provider sub-tables must be a positive integer.
+/// `[providers.minimax].prompt_cache`, when present, must name a supported
+/// cache mode (`explicit-anthropic` or `off`). `[providers.opencode]` has no
+/// cache mode yet, so any `prompt_cache` value there is rejected. Bad values
+/// are stripped with `PolicyError` receipts so the run cannot silently fall
+/// back while looking configured.
 fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
     let Some(providers) = table
         .get_mut("providers")
@@ -957,19 +964,44 @@ fn sanitize_providers_section(table: &mut toml::value::Table, errors: &mut Vec<P
         else {
             continue;
         };
-        let Some(max_concurrency) = provider_table.get("max_concurrency") else {
+        if let Some(max_concurrency) = provider_table.get("max_concurrency") {
+            let valid = max_concurrency.as_integer().is_some_and(|value| value > 0);
+            if !valid {
+                errors.push(PolicyError {
+                    section: format!("providers.{provider}.max_concurrency"),
+                    detail: format!(
+                        "invalid [providers.{provider}] max_concurrency value {max_concurrency}; \
+                         expected a positive integer"
+                    ),
+                });
+                provider_table.remove("max_concurrency");
+            }
+        }
+        let Some(prompt_cache) = provider_table.get("prompt_cache") else {
             continue;
         };
-        let valid = max_concurrency.as_integer().is_some_and(|value| value > 0);
-        if !valid {
-            errors.push(PolicyError {
-                section: format!("providers.{provider}.max_concurrency"),
-                detail: format!(
-                    "invalid [providers.{provider}] max_concurrency value {max_concurrency}; \
-                     expected a positive integer"
-                ),
+        let valid = provider == "minimax"
+            && prompt_cache.as_str().is_some_and(|value| {
+                value == crate::cli::MinimaxPromptCache::ExplicitAnthropic.key()
+                    || value == crate::cli::MinimaxPromptCache::Off.key()
             });
-            provider_table.remove("max_concurrency");
+        if !valid {
+            let detail = if provider == "minimax" {
+                format!(
+                    "invalid [providers.minimax] prompt_cache value {prompt_cache}; \
+                     expected one of: explicit-anthropic, off"
+                )
+            } else {
+                format!(
+                    "unsupported [providers.opencode] prompt_cache value {prompt_cache}; \
+                     OpenCode prompt caching is not implemented"
+                )
+            };
+            errors.push(PolicyError {
+                section: format!("providers.{provider}.prompt_cache"),
+                detail,
+            });
+            provider_table.remove("prompt_cache");
         }
     }
 }
@@ -1353,6 +1385,18 @@ mod tests {
             .and_then(|table| table.get("max_concurrency"))
     }
 
+    fn provider_prompt_cache_value<'a>(
+        value: &'a toml::Value,
+        provider: &str,
+    ) -> Option<&'a toml::Value> {
+        value
+            .get("providers")
+            .and_then(toml::Value::as_table)
+            .and_then(|providers| providers.get(provider))
+            .and_then(toml::Value::as_table)
+            .and_then(|table| table.get("prompt_cache"))
+    }
+
     fn providers_max_concurrency_document(
         minimax: toml::Value,
         opencode: toml::Value,
@@ -1361,6 +1405,19 @@ mod tests {
         minimax_table.insert("max_concurrency".to_owned(), minimax);
         let mut opencode_table = toml::value::Table::new();
         opencode_table.insert("max_concurrency".to_owned(), opencode);
+        let mut providers = toml::value::Table::new();
+        providers.insert("minimax".to_owned(), toml::Value::Table(minimax_table));
+        providers.insert("opencode".to_owned(), toml::Value::Table(opencode_table));
+        let mut root = toml::value::Table::new();
+        root.insert("providers".to_owned(), toml::Value::Table(providers));
+        toml::Value::Table(root)
+    }
+
+    fn providers_prompt_cache_document(minimax: toml::Value, opencode: toml::Value) -> toml::Value {
+        let mut minimax_table = toml::value::Table::new();
+        minimax_table.insert("prompt_cache".to_owned(), minimax);
+        let mut opencode_table = toml::value::Table::new();
+        opencode_table.insert("prompt_cache".to_owned(), opencode);
         let mut providers = toml::value::Table::new();
         providers.insert("minimax".to_owned(), toml::Value::Table(minimax_table));
         providers.insert("opencode".to_owned(), toml::Value::Table(opencode_table));
@@ -1382,10 +1439,14 @@ mod tests {
         assert_eq!(absent.providers.policy, "");
 
         let explicit: Config = toml::from_str(
-            "[providers]\npolicy = \"primary-with-fallback\"\n\n[providers.minimax]\nenabled = true\nmax_concurrency = 12\n",
+            "[providers]\npolicy = \"primary-with-fallback\"\n\n[providers.minimax]\nenabled = true\nmax_concurrency = 12\nprompt_cache = \"explicit-anthropic\"\n",
         )?;
         assert_eq!(explicit.providers.policy, "primary-with-fallback");
         assert_eq!(explicit.providers.minimax.max_concurrency, Some(12));
+        assert_eq!(
+            explicit.providers.minimax.prompt_cache.as_deref(),
+            Some("explicit-anthropic")
+        );
         assert_eq!(explicit.providers.opencode.max_concurrency, None);
 
         // sanitize_providers_section strips an invalid policy value with a
@@ -1496,6 +1557,69 @@ mod tests {
         let kept: Config = valid.try_into()?;
         assert_eq!(kept.providers.minimax.max_concurrency, Some(1));
         assert_eq!(kept.providers.opencode.max_concurrency, Some(2));
+        Ok(())
+    }
+
+    #[test]
+    fn providers_section_receipts_invalid_prompt_cache() -> anyhow::Result<()> {
+        let mut value = providers_prompt_cache_document(
+            toml::Value::String("anthropic-explicit".to_owned()),
+            toml::Value::String("explicit-anthropic".to_owned()),
+        );
+        assert_eq!(
+            provider_prompt_cache_value(&value, "minimax").and_then(toml::Value::as_str),
+            Some("anthropic-explicit")
+        );
+        assert_eq!(
+            provider_prompt_cache_value(&value, "opencode").and_then(toml::Value::as_str),
+            Some("explicit-anthropic")
+        );
+        let errors = sanitize_policy_sections(&mut value);
+        assert_eq!(errors.len(), 2);
+        assert_eq!(errors[0].section, "providers.minimax.prompt_cache");
+        assert_eq!(
+            errors[0].detail,
+            "invalid [providers.minimax] prompt_cache value \"anthropic-explicit\"; \
+             expected one of: explicit-anthropic, off"
+        );
+        assert_eq!(errors[1].section, "providers.opencode.prompt_cache");
+        assert_eq!(
+            errors[1].detail,
+            "unsupported [providers.opencode] prompt_cache value \"explicit-anthropic\"; \
+             OpenCode prompt caching is not implemented"
+        );
+        let Some(providers) = value.get("providers").and_then(toml::Value::as_table) else {
+            anyhow::bail!("providers table should remain after sanitization");
+        };
+        for provider in ["minimax", "opencode"] {
+            assert!(
+                !providers
+                    .get(provider)
+                    .and_then(toml::Value::as_table)
+                    .is_some_and(|table| table.contains_key("prompt_cache")),
+                "{provider} prompt_cache should be stripped from the raw TOML table"
+            );
+        }
+
+        let sanitized: Config = value.try_into()?;
+        assert_eq!(sanitized.providers.minimax.prompt_cache, None);
+        assert_eq!(sanitized.providers.opencode.prompt_cache, None);
+
+        let mut valid = providers_prompt_cache_document(
+            toml::Value::String("off".to_owned()),
+            toml::Value::String("unsupported value gets removed before valid parse".to_owned()),
+        );
+        let Some(providers) = valid
+            .get_mut("providers")
+            .and_then(toml::Value::as_table_mut)
+        else {
+            anyhow::bail!("providers table should exist");
+        };
+        providers.remove("opencode");
+        assert!(sanitize_policy_sections(&mut valid).is_empty());
+        let kept: Config = valid.try_into()?;
+        assert_eq!(kept.providers.minimax.prompt_cache.as_deref(), Some("off"));
+        assert_eq!(kept.providers.opencode.prompt_cache, None);
         Ok(())
     }
 

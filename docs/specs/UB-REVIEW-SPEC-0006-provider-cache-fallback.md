@@ -127,9 +127,12 @@ repo declares `policy = "primary-with-fallback"`,
 (models, `max_concurrency = 8`). `policy` is read when CLI/env provider
 policy is `auto`, and each provider's `max_concurrency` is read by the
 model-lane wave scheduler. Descriptive keys (`env`, `model`, `role`,
-`models`, `prompt_cache`) are still documentation of intent. In particular
-`prompt_cache` is decorative: caching behavior is hardcoded (next section)
-and the key changes nothing.
+`models`) are still documentation of intent. `[providers.minimax].prompt_cache`
+is executable only for the current
+MiniMax cache modes: absent means the default `explicit-anthropic` behavior,
+`"explicit-anthropic"` preserves that behavior, and `"off"` disables the
+Anthropic cache-control marker on the shared-context prefix. Invalid MiniMax values, and any
+`[providers.opencode].prompt_cache`, are stripped with PolicyError receipts.
 
 ## Output artifact / user surface
 
@@ -167,20 +170,21 @@ PR-visible surface: nearly nothing, by design. The bun-ub-v0 profile sets
 provider status reaches the review body only when model evidence actually
 failed; healthy fallback use stays in artifacts.
 
-Caching mechanics (current behavior, hardcoded): `model_cache_mode` returns
-`explicit-anthropic-cache-control` for exactly MiniMax + anthropic-messages
-and `not-supported` for every other provider/endpoint pair (src/main.rs).
-On the caching path the shared context is sent as a separate text block with
-`"cache_control": {"type": "ephemeral"}` ahead of the lane prompt
-(src/main.rs `anthropic_user_content`); on non-caching paths the prefix is
-plain-concatenated into the prompt (`combined_model_prompt`). Response usage
-is parsed into `ModelCacheUsage` (input_tokens, output_tokens,
-cache_creation_input_tokens, cache_read_input_tokens). Caching is ON by
-default because the default MiniMax endpoint kind is `anthropic`; choosing
-`minimax-provider-kind: openai` silently disables it. There is no config
-switch - intent is for `[providers.minimax].prompt_cache` to become that
-switch if prompt-cache config becomes executable in a future provider-config
-slice.
+Caching mechanics: `model_cache_mode_for_args` returns
+`explicit-anthropic-cache-control` for MiniMax + anthropic-messages when the
+resolved MiniMax prompt-cache mode is `explicit-anthropic`, and
+`not-supported` for every other provider/endpoint pair or when the resolved
+mode is `off` (src/main.rs). On the caching path the shared context is sent
+as a separate text block with `"cache_control": {"type": "ephemeral"}`
+ahead of the lane prompt (src/main.rs `anthropic_user_content`); on
+non-caching paths the prefix is plain-concatenated into the prompt
+(`combined_model_prompt`). Response usage is parsed into `ModelCacheUsage`
+(input_tokens, output_tokens, cache_creation_input_tokens,
+cache_read_input_tokens). Caching is ON by default because absent
+`[providers.minimax].prompt_cache` resolves to `explicit-anthropic` and the
+default MiniMax endpoint kind is `anthropic`; choosing
+`minimax-provider-kind: openai` or setting
+`[providers.minimax].prompt_cache = "off"` disables it.
 
 Fallback mechanics (current behavior):
 
@@ -302,7 +306,8 @@ fallback use is an availability event, not a finding
 prompt caching is a cost optimization with provider-ephemeral lifetime;
   no correctness or determinism claim attaches to a cache hit or miss
 [providers].policy and provider max_concurrency are behavior
-env/model/role/prompt_cache keys remain documentation of intent
+minimax prompt_cache is behavior; env/model/role keys remain documentation
+  of intent
 no claim of provider redundancy: default policy arms fallback on one lane,
   and proof-planner/follow-up passes have no fallback at all
 ```
@@ -363,8 +368,10 @@ This spec routes the remaining work:
    `[providers.opencode].max_concurrency` cap provider wave slots.
 3. DONE: 429/timeout/5xx backpressure sheds the next wave to fallback so a
    rate-limited provider does not keep receiving full waves.
-4. Remaining provider config decision: decide whether provider model/env/role
-   plus `prompt_cache` become executable config or stay descriptive.
+4. DONE: `[providers.minimax].prompt_cache` is executable for
+   `explicit-anthropic` and `off`; invalid values are PolicyError receipts.
+   Remaining provider config decision: decide whether provider model/env/role
+   become executable config or stay descriptive.
 5. Candidate slice, no issue yet: fallback specs for the proof-planner and
    follow-up passes, which today hard-pin direct MiniMax and fail without
    it.
