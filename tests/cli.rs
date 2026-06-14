@@ -2354,7 +2354,7 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
     let fake_bin = temp.path().join("fake-bin");
-    write_fake_core_review_tools_with_versions(
+    let fake_tools_written = write_fake_core_review_tools_with_versions(
         &fake_bin,
         &[
             ("tokmd", "1.12.0"),
@@ -2364,7 +2364,12 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
             ("ast-grep", "0.0.0"),
             ("actionlint", "1.7.0"),
         ],
-    )?;
+    );
+    assert!(
+        fake_tools_written.is_ok(),
+        "write stale actionlint fake core review tools: {fake_tools_written:?}"
+    );
+    assert_fake_core_review_tool_version(&fake_bin, "actionlint", "1.7.0")?;
     let path = prepend_to_path(&fake_bin)?;
     let config = temp.path().join(".ub-review.toml");
     write_file(&config, r#"profile = "gh-runner""#)?;
@@ -2389,6 +2394,32 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
         "actionlint version drift: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
     ));
     assert!(output.contains("see Fixes above"));
+    Ok(())
+}
+
+#[test]
+fn fake_core_review_tools_with_versions_emit_requested_versions() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    let fake_tools_written = write_fake_core_review_tools_with_versions(
+        &fake_bin,
+        &[
+            ("tokmd", "9.9.1"),
+            ("cargo-allow", "9.9.2"),
+            ("ripr", "9.9.3"),
+            ("unsafe-review", "9.9.4"),
+            ("ast-grep", "9.9.5"),
+            ("actionlint", "9.9.6"),
+        ],
+    );
+    assert!(
+        fake_tools_written.is_ok(),
+        "write version-mapped fake core review tools: {fake_tools_written:?}"
+    );
+
+    assert_fake_core_review_tool_version(&fake_bin, "tokmd", "9.9.1")?;
+    assert_fake_core_review_tool_version(&fake_bin, "actionlint", "9.9.6")?;
     Ok(())
 }
 
@@ -5435,6 +5466,22 @@ fn main() {{
         }
     }
 
+    Ok(())
+}
+
+fn assert_fake_core_review_tool_version(dir: &Path, tool: &str, expected: &str) -> Result<()> {
+    let executable = if cfg!(windows) {
+        dir.join(format!("{tool}.exe"))
+    } else {
+        dir.join(tool)
+    };
+    assert!(
+        executable.exists(),
+        "fake {tool} executable should exist at {}",
+        executable.display()
+    );
+    let output = run_capture_with_env(dir, path_str(&executable)?, &[], &[])?;
+    assert_eq!(output.trim(), format!("{tool} {expected}"));
     Ok(())
 }
 
