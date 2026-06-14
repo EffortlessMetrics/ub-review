@@ -153,15 +153,14 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
 - `doctor --require-core-tools` (or `UB_REVIEW_STANDARD_IMAGE`): doctor
   bails when a core tool is missing or a pinned version mismatches
   (src/main.rs `cmd_doctor`). The pin table covers tokmd (`1.12.0`),
-  ripr (`0.8.0`), unsafe-review (`0.3.4`), and actionlint (`1.7.12`)
-  (src/main.rs `expected_standard_image_tool_version`); cargo-allow and
-  ast-grep remain unpinned.
+  cargo-allow (`0.1.8`), ripr (`0.8.0`), unsafe-review (`0.3.4`),
+  and actionlint (`1.7.12`) (src/main.rs
+  `expected_standard_image_tool_version`); ast-grep remains unpinned.
 - The action's sensor install step (scripts/install-gh-runner-tools.sh)
-  pins tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`), actionlint
-  (v1.7.12, `UB_REVIEW_ACTIONLINT_VERSION`), ripr (0.8.0,
-  `UB_REVIEW_RIPR_VERSION`), and unsafe-review (0.3.4,
-  `UB_REVIEW_UNSAFE_REVIEW_VERSION`); cargo-allow installs unpinned - the
-  remaining install-time drift gap.
+  pins tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`), cargo-allow
+  (0.1.8, `UB_REVIEW_CARGO_ALLOW_VERSION`), actionlint (v1.7.12,
+  `UB_REVIEW_ACTIONLINT_VERSION`), ripr (0.8.0, `UB_REVIEW_RIPR_VERSION`),
+  and unsafe-review (0.3.4, `UB_REVIEW_UNSAFE_REVIEW_VERSION`).
 - unsafe-review exit codes are classified by contract (#396): 0 and 1 both
   mean the tool completed and emitted reviewability evidence (`status: ok`,
   with `exit_code` preserved); 1 means policy findings under
@@ -457,9 +456,8 @@ on every pass with status receipts that record the exact command, duration,
 and reason; a missing or failed sensor is recorded as an evidence gap, never
 as clean evidence; tool metadata is mirrored and verifier-enforced across
 `resolved-tools.json` and `tool-status.json`; the ripr tool-gate threshold
-is production-proven (#335; blocks on PR #342/#346). Not claimable: that a
-sensor version drift beyond the four pinned tools (cargo-allow and
-ast-grep stay unpinned) is detected, or that coverage proves anything
+is production-proven (#335; blocks on PR #342/#346). Not claimable: that
+ast-grep version drift is detected, or that coverage proves anything
 beyond execution surface.
 
 ## The six reliance questions

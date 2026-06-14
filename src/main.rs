@@ -21662,10 +21662,12 @@ const CORE_REVIEW_TOOLS: [&str; 6] = [
     "actionlint",
 ];
 const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
-// ripr and unsafe-review were the unpinned sensors: the install script took
+const STANDARD_IMAGE_CARGO_ALLOW_VERSION: &str = "0.1.8";
+// Core Rust sensors must not float on crates.io latest: the install script took
 // crates.io latest, so image and local drifted apart silently (#316 — the
 // dogfooded local ripr 0.5.0 lacked the subcommand the image's newer ripr
-// accepted). Pins move together with scripts/install-gh-runner-tools.sh.
+// accepted). Pins move together with scripts/install-gh-runner-tools.sh and
+// scripts/install-review-image-tools.sh.
 const STANDARD_IMAGE_RIPR_VERSION: &str = "0.8.0";
 const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.4";
 const STANDARD_IMAGE_ACTIONLINT_VERSION: &str = "1.7.12";
@@ -21677,6 +21679,7 @@ fn is_core_review_tool(tool_id: &str) -> bool {
 fn expected_standard_image_tool_version(tool_id: &str) -> Option<&'static str> {
     match tool_id {
         "tokmd" => Some(STANDARD_IMAGE_TOKMD_VERSION),
+        "cargo-allow" => Some(STANDARD_IMAGE_CARGO_ALLOW_VERSION),
         "ripr" => Some(STANDARD_IMAGE_RIPR_VERSION),
         "unsafe-review" => Some(STANDARD_IMAGE_UNSAFE_REVIEW_VERSION),
         "actionlint" => Some(STANDARD_IMAGE_ACTIONLINT_VERSION),
@@ -21690,7 +21693,10 @@ fn doctor_tool_install_hint(tool_id: &str) -> String {
             "cargo install tokmd --locked --version {} --force",
             STANDARD_IMAGE_TOKMD_VERSION
         ),
-        "cargo-allow" => "cargo install cargo-allow --locked".to_owned(),
+        "cargo-allow" => format!(
+            "cargo install cargo-allow --locked --version {} --force",
+            STANDARD_IMAGE_CARGO_ALLOW_VERSION
+        ),
         "ripr" => format!(
             "cargo install ripr --locked --version {} --force",
             STANDARD_IMAGE_RIPR_VERSION
@@ -21711,6 +21717,9 @@ fn doctor_tool_install_hint(tool_id: &str) -> String {
 fn doctor_tool_version_fix(tool_id: &str, expected: &str) -> String {
     match tool_id {
         "tokmd" => format!("cargo install tokmd --locked --version {expected} --force"),
+        "cargo-allow" => {
+            format!("cargo install cargo-allow --locked --version {expected} --force")
+        }
         "ripr" => format!("cargo install ripr --locked --version {expected} --force"),
         "unsafe-review" => {
             format!("cargo install unsafe-review --locked --version {expected} --force")
@@ -25386,6 +25395,10 @@ mod tests {
             "cargo install tokmd --locked --version 1.12.0 --force"
         );
         assert_eq!(
+            super::doctor_tool_install_hint("cargo-allow"),
+            "cargo install cargo-allow --locked --version 0.1.8 --force"
+        );
+        assert_eq!(
             super::doctor_tool_install_hint("ripr"),
             "cargo install ripr --locked --version 0.8.0 --force"
         );
@@ -25404,6 +25417,10 @@ mod tests {
         assert_eq!(
             super::doctor_tool_version_fix("tokmd", "1.12.0"),
             "cargo install tokmd --locked --version 1.12.0 --force"
+        );
+        assert_eq!(
+            super::doctor_tool_version_fix("cargo-allow", "0.1.8"),
+            "cargo install cargo-allow --locked --version 0.1.8 --force"
         );
         assert_eq!(
             super::doctor_tool_version_fix("unsafe-review", "0.3.4"),

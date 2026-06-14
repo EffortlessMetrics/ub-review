@@ -87,8 +87,9 @@ case "$bundle" in
     ;;
   core|bun-fast|full)
     tokmd_version="${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
+    cargo_allow_version="${UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8}"
     install_cargo_bin tokmd tokmd "$tokmd_version"
-    install_cargo_bin cargo-allow cargo-allow
+    install_cargo_bin cargo-allow cargo-allow "$cargo_allow_version"
     # Pinned so doctor --require-core-tools can detect image/local drift;
     # versions move together with STANDARD_IMAGE_*_VERSION in src/main.rs
     # (#316 - unpinned installs let the gate-receipt subcommand drift apart).

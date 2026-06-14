@@ -13,15 +13,21 @@ const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow
      policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
 
 #[test]
-fn gh_runner_tool_installer_pins_tokmd_for_bun_ub_sensor() -> Result<()> {
+fn gh_runner_tool_installer_pins_core_rust_sensor_versions() -> Result<()> {
     let script = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-gh-runner-tools.sh"),
     )?;
     assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
     assert!(script.contains("install_cargo_bin tokmd tokmd \"$tokmd_version\""));
+    assert!(script.contains("install_cargo_bin cargo-allow cargo-allow \"$cargo_allow_version\""));
     assert!(
         !script.contains("install_cargo_bin tokmd tokmd\n"),
         "hosted fallback must not install crates.io latest tokmd implicitly"
+    );
+    assert!(
+        !script.contains("install_cargo_bin cargo-allow cargo-allow\n"),
+        "hosted fallback must not install crates.io latest cargo-allow implicitly"
     );
     Ok(())
 }
@@ -32,8 +38,12 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("scripts/install-review-image-tools.sh"),
     )?;
     assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
+    assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
     assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.8.0"));
     assert!(script.contains("UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4"));
+    assert!(script.contains(
+        "install_tool cargo-allow cargo-allow \"${UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8}\""
+    ));
     assert!(script.contains("prefix=\"${UB_REVIEW_TOOL_DIR:-/opt/ub-review}\""));
     assert!(script.contains("export PATH=\"$prefix/bin:\\$PATH\""));
     assert!(script.contains("export UB_REVIEW_TOOL_DIR=\"$prefix\""));
@@ -2567,6 +2577,54 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
 }
 
 #[test]
+fn doctor_require_core_tools_fails_stale_cargo_allow_version() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    let fake_tools_written = write_fake_core_review_tools_with_versions(
+        &fake_bin,
+        &[
+            ("tokmd", "1.12.0"),
+            ("cargo-allow", "0.1.7"),
+            ("ripr", "0.8.0"),
+            ("unsafe-review", "0.3.4"),
+            ("ast-grep", "0.0.0"),
+            ("actionlint", "1.7.12"),
+        ],
+    );
+    assert!(
+        fake_tools_written.is_ok(),
+        "write stale cargo-allow fake core review tools: {fake_tools_written:?}"
+    );
+    assert_fake_core_review_tool_version(&fake_bin, "cargo-allow", "0.1.7")?;
+    let path = prepend_to_path(&fake_bin)?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(&config, r#"profile = "gh-runner""#)?;
+
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_expect_failure_with_env(
+        temp.path(),
+        bin,
+        &[
+            "doctor",
+            "--config",
+            path_str(&config)?,
+            "--require-core-tools",
+        ],
+        &[("PATH", path.as_str())],
+    )?;
+    assert!(output.contains("required core review tool versions drifted"));
+    assert!(output.contains("cargo-allow expected 0.1.8"));
+    assert!(output.contains("cargo-allow 0.1.7"));
+    assert!(output.contains("Fixes:"));
+    assert!(output.contains(
+        "cargo-allow version drift: cargo install cargo-allow --locked --version 0.1.8 --force"
+    ));
+    assert!(output.contains("see Fixes above"));
+    Ok(())
+}
+
+#[test]
 fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -2575,7 +2633,7 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
         &fake_bin,
         &[
             ("tokmd", "1.12.0"),
-            ("cargo-allow", "0.0.0"),
+            ("cargo-allow", "0.1.8"),
             ("ripr", "0.8.0"),
             ("unsafe-review", "0.3.4"),
             ("ast-grep", "0.0.0"),
@@ -5764,7 +5822,7 @@ fn write_fake_core_review_tools(dir: &Path, tokmd_version: &str) -> Result<()> {
         dir,
         &[
             ("tokmd", tokmd_version),
-            ("cargo-allow", "0.0.0"),
+            ("cargo-allow", "0.1.8"),
             ("ripr", "0.8.0"),
             ("unsafe-review", "0.3.4"),
             ("ast-grep", "0.0.0"),

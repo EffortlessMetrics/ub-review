@@ -22,10 +22,14 @@ where `UB_REVIEW_TOOL_DIR` defaults to `/opt/ub-review`. It uses
 `go install` for `actionlint`, so the standard image build must provide Go.
 `tokmd` defaults to version `1.12.0` because the Bun profile depends on the
 current on-diff `bun-ub`, `cockpit`, and `context` command surfaces.
-`actionlint` defaults to `v1.7.12`:
+`cargo-allow` defaults to `0.1.8`; `ripr` defaults to `0.8.0`;
+`unsafe-review` defaults to `0.3.4`; `actionlint` defaults to `v1.7.12`:
 
 ```bash
 export UB_REVIEW_TOKMD_VERSION="1.12.0"
+export UB_REVIEW_CARGO_ALLOW_VERSION="0.1.8"
+export UB_REVIEW_RIPR_VERSION="0.8.0"
+export UB_REVIEW_UNSAFE_REVIEW_VERSION="0.3.4"
 export UB_REVIEW_ACTIONLINT_VERSION="v1.7.12"
 scripts/install-review-image-tools.sh
 ```
@@ -43,8 +47,9 @@ export UB_REVIEW_STANDARD_IMAGE="true"
 do not set `UB_REVIEW_TOOL_DIR` to the `bin` directory itself.
 
 `UB_REVIEW_STANDARD_IMAGE=true` makes `ub-review doctor` fail if any core
-sensor is missing or if `tokmd` drifts from the pinned `1.12.0` version. On
-generic GitHub-hosted runners, missing tools remain missing evidence unless
+sensor is missing or if any pinned core tool (`tokmd`, `cargo-allow`, `ripr`,
+`unsafe-review`, or `actionlint`) drifts from its expected version. On generic
+GitHub-hosted runners, missing tools remain missing evidence unless
 `install-tools=true` installs them successfully.
 
 ## Cache Layers
