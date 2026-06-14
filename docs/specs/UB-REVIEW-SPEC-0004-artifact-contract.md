@@ -236,7 +236,13 @@ proof_receipts.json            ub-review.proof_receipt.v1 records
 receipt_routes.json            ub-review.receipt_routes.v1; route entries
                                ub-review.receipt_route.v1, phase
                                initial-diff-receipt | model-request-receipt
-                               | follow-up-receipt
+                               | follow-up-receipt; each route's
+                               source_artifacts include the exact
+                               review/proof_receipts.json#<receipt-id>
+                               anchor and, when a matching lease exists, the
+                               exact
+                               review/resource_leases.json#<lease-id>
+                               anchor
 resource_leases.json           ub-review.resource_lease.v1 records
 resolved-tools.json            mirror copy (must equal root)
 tool-status.json               mirror copy (must equal root)
@@ -634,7 +640,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/final_compiler_input.json | stable | final_compiler_input.v2 | downstream automation | required (require_final_compiler_input) |
 | review/witnesses.json + witness_registry.json | stable | witness.v1, witness_registry.v1 | downstream automation | required (require_witness_artifacts, require_witness_registry) |
 | review/proof_requests.json + proof_request_groups.json + proof_planner_input.json + proof_planner_output.json + proof_receipts.json | stable | proof_request_group.v1, proof_planner_input.v1, proof_planner_output.v1, proof_task.v1, proof_receipt.v1 | downstream automation | required (require_proof_request_groups, require_proof_planner_artifacts, schema checks) |
-| review/receipt_routes.json + resource_leases.json | stable | receipt_routes.v1/receipt_route.v1, resource_lease.v1 | downstream automation | required (require_receipt_route_artifacts, require_resource_lease_artifacts) |
+| review/receipt_routes.json + resource_leases.json | stable | receipt_routes.v1/receipt_route.v1, resource_lease.v1; route entries carry exact proof receipt and matching lease anchors in source_artifacts | downstream automation | required (require_receipt_route_artifacts, require_resource_lease_artifacts) |
 | review/proof_plan.md, review/resource_plan.md | stable (existence only) | none; prose uncontracted | humans | required (require_common_tree) |
 | candidates/<sanitized-id>.json | stable | candidate.v1 copies, exact set | downstream automation | conditional (require_candidate_artifacts; dir required iff array non-empty) |
 | proof_requests/<sanitized-id>.json | stable | per-record copies, exact set | downstream automation | conditional (require_proof_request_files; dir required iff array non-empty) |
