@@ -283,7 +283,9 @@ ci-audit/*.json                         audit-ci/setup-ci receipts; core JSON
                                         contracts are verifier-covered here;
                                         detailed audit semantics live in
                                         UB-REVIEW-SPEC-0007
-ci-audit/audit-report.md                human-only audit prose
+ci-audit/audit-report.md                human audit report with verifier-
+                                        covered recommendation receipt
+                                        pointers
 ci-audit/setup-pr-result.json XOR       setup-ci --open-pr terminal receipt
 ci-audit/setup-pr-error.json
 ```
@@ -646,7 +648,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci; humans; detailed semantics in spec 0007 | conditional (require_ci_audit_core_artifacts; required under --ci-audit-only, conditional when present in a full run root; schema/job/receipt checks) |
 | ci-audit/runner-cancellations.json | experimental | ci_runner_cancellations.v1 | humans; setup-ci validates when present; runner cancellation runbook | conditional (require_ci_audit_runner_cancellations; --ci-audit-only for audit roots) |
 | ci-audit/setup-pr-result.json XOR setup-pr-error.json | experimental | setup_pr_result.v1, setup_pr_error.v1 | humans; setup-ci adoption automation receipts | conditional (require_setup_ci_terminal_receipts; result/error XOR, schema/status, action SHA, and exact generated-file set) |
-| ci-audit/audit-report.md | experimental | none (tier-ordered report) | humans | none (tests only - ci_audit_report_lines_carry_receipts_without_boilerplate, src/main.rs) |
+| ci-audit/audit-report.md | experimental | none (tier-ordered report with recommendation receipt pointers) | humans | conditional (require_ci_audit_report; required when core ci-audit JSON is present, one job line per recommendation, backticked receipt pointers exactly from recommendations.json, boilerplate guard) |
 | post-result.json / post-error.json | internal | none | downstream automation via action outputs post-result-path / post-error-path | conditional (require_post_receipt; one must exist on posting passes, status/validity fields fail-closed) |
 | everything else under the out dir (box-state.json, post payload/stdout/stderr receipts, observations/<lane>.ndjson, questions/**, input/pr.md, input/claims.md) | internal | none | none contracted | none (some internally exact-checked; no row here defends them) |
 
@@ -730,9 +732,8 @@ The whole internal tier: box-state.json, post-* receipts (shape-wise; note
 require_post_receipt does fail-closed-check their status/validity fields),
 per-lane observation NDJSON and per-question JSON decomposition, follow-up
 question packets as a surface, input/pr.md and input/claims.md, proof_plan.md and
-resource_plan.md prose, and ci-audit/audit-report.md prose. Also the entire
-contract on consumer repos that do not add an equivalent verifier step to
-their own required workflow.
+resource_plan.md prose. Also the entire contract on consumer repos that do not
+add an equivalent verifier step to their own required workflow.
 
 What is visible in the PR?
 Almost none of this. running-summary.md is appended to the GitHub step

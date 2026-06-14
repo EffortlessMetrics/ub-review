@@ -392,7 +392,15 @@ fn artifact_contract_docs_match_ci_audit_verifier_coverage() {
     );
     assert!(
         spec_0004.contains("ci-audit/audit-report.md"),
-        "SPEC-0004 must keep the human-only audit report separate from JSON receipts"
+        "SPEC-0004 must keep the human audit report separate from JSON receipts"
+    );
+    assert!(
+        verifier.contains("def require_ci_audit_report"),
+        "ci-audit report verifier disappeared"
+    );
+    assert!(
+        spec_0004.contains("require_ci_audit_report"),
+        "SPEC-0004 must name the executable ci-audit report verifier"
     );
     assert!(
         verifier.contains("def require_setup_ci_terminal_receipts"),
