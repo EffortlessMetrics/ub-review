@@ -22048,6 +22048,7 @@ struct CiWorkflowScan {
     permissions: Option<serde_json::Value>,
     uses_secrets: Vec<String>,
     yaml_jobs: Vec<CiWorkflowYamlJob>,
+    evidence_gaps: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -22055,6 +22056,7 @@ struct CiWorkflowYamlJob {
     id: String,
     name: Option<String>,
     runs_on: Vec<String>,
+    matrix_size: usize,
     timeout_minutes: Option<u64>,
     uses: Vec<String>,
     permissions: Option<serde_json::Value>,
@@ -22628,12 +22630,147 @@ fn ci_yaml_list_at(
     (items, index)
 }
 
+fn ci_yaml_skip_nested_block(
+    lines: &[(usize, String)],
+    start: usize,
+    parent_indent: usize,
+) -> usize {
+    let mut index = start + 1;
+    while index < lines.len() && lines[index].0 > parent_indent {
+        index += 1;
+    }
+    index
+}
+
+fn ci_yaml_matrix_literal_size_at(
+    lines: &[(usize, String)],
+    key_index: usize,
+    key_indent: usize,
+    inline_value: &str,
+) -> (usize, Vec<String>, usize) {
+    let inline = inline_value.trim();
+    if !inline.is_empty() {
+        return (
+            1,
+            vec![format!("inline matrix value `{inline}` is not parsed")],
+            key_index + 1,
+        );
+    }
+
+    let mut size = 1usize;
+    let mut saw_dimension = false;
+    let mut gaps = Vec::new();
+    let mut child_indent: Option<usize> = None;
+    let mut index = key_index + 1;
+    while index < lines.len() {
+        let (indent, content) = &lines[index];
+        if *indent <= key_indent {
+            break;
+        }
+        let expected = *child_indent.get_or_insert(*indent);
+        if *indent != expected || content.starts_with('-') {
+            index += 1;
+            continue;
+        }
+        let Some((raw_key, raw_value)) = content.split_once(':') else {
+            gaps.push(format!(
+                "matrix entry `{content}` is not a key/value dimension"
+            ));
+            index += 1;
+            continue;
+        };
+        let key = ci_yaml_unquote(raw_key);
+        let value = raw_value.trim();
+        if matches!(key.as_str(), "include" | "exclude") {
+            gaps.push(format!(
+                "matrix `{key}` adjustments are not applied to matrix_size"
+            ));
+            index = ci_yaml_skip_nested_block(lines, index, *indent);
+            continue;
+        }
+        if value.contains("${{") {
+            gaps.push(format!(
+                "matrix dimension `{key}` uses a dynamic expression"
+            ));
+            index += 1;
+            continue;
+        }
+        if value.is_empty() {
+            let (items, next) = ci_yaml_list_at(lines, index, *indent, value);
+            if items.is_empty() {
+                gaps.push(format!("matrix dimension `{key}` is not a literal list"));
+            } else {
+                saw_dimension = true;
+                size = size.saturating_mul(items.len().max(1));
+            }
+            index = next;
+            continue;
+        }
+        if let Some(items) = ci_yaml_inline_list(value) {
+            saw_dimension = true;
+            size = size.saturating_mul(items.len().max(1));
+        } else {
+            // A scalar matrix dimension is a single literal value in GitHub
+            // Actions, but recording it keeps the expansion exact at x1.
+            saw_dimension = true;
+        }
+        index += 1;
+    }
+
+    if !saw_dimension && gaps.is_empty() {
+        gaps.push("matrix block did not contain literal dimensions".to_owned());
+    }
+    (size.max(1), gaps, index)
+}
+
+fn ci_yaml_strategy_matrix_size_at(
+    lines: &[(usize, String)],
+    key_index: usize,
+    key_indent: usize,
+    inline_value: &str,
+) -> (usize, Vec<String>, usize) {
+    let inline = inline_value.trim();
+    if !inline.is_empty() {
+        return (
+            1,
+            vec![format!("inline strategy value `{inline}` is not parsed")],
+            key_index + 1,
+        );
+    }
+
+    let mut matrix_size = 1usize;
+    let mut gaps = Vec::new();
+    let mut child_indent: Option<usize> = None;
+    let mut index = key_index + 1;
+    while index < lines.len() {
+        let (indent, content) = &lines[index];
+        if *indent <= key_indent {
+            break;
+        }
+        let expected = *child_indent.get_or_insert(*indent);
+        if *indent != expected || content.starts_with('-') {
+            index += 1;
+            continue;
+        }
+        if let Some(rest) = content.strip_prefix("matrix:") {
+            let (size, matrix_gaps, next) =
+                ci_yaml_matrix_literal_size_at(lines, index, *indent, rest);
+            matrix_size = size;
+            gaps.extend(matrix_gaps);
+            index = next;
+            continue;
+        }
+        index += 1;
+    }
+    (matrix_size.max(1), gaps, index)
+}
+
 /// Targeted line-scan of a workflow file. This is intentionally not a YAML
 /// parser: it extracts only `on:` triggers (with branch refinement), workflow
 /// level `paths`/`paths-ignore`, workflow cancellation concurrency,
 /// workflow/job `permissions`, per-job secret references, and per-job
-/// `runs-on`, `timeout-minutes`, `name`, and `uses` references. Everything else
-/// is an explicit evidence gap.
+/// `runs-on`, literal `strategy.matrix` dimensions, `timeout-minutes`, `name`,
+/// and `uses` references. Everything else is an explicit evidence gap.
 fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
     let lines: Vec<(usize, String)> = text
         .lines()
@@ -22658,6 +22795,7 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
     });
     let mut workflow_permissions = None;
     let mut yaml_jobs = Vec::new();
+    let mut evidence_gaps = Vec::new();
     let mut index = 0;
     while index < lines.len() {
         let (indent, content) = &lines[index];
@@ -22753,6 +22891,7 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                 let id = ci_yaml_unquote(line_content.trim_end_matches(':'));
                 let mut name = None;
                 let mut runs_on = Vec::new();
+                let mut matrix_size = 1usize;
                 let mut timeout_minutes = None;
                 let mut uses = Vec::new();
                 let mut permissions = None;
@@ -22765,6 +22904,17 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                     if let Some(rest) = body.strip_prefix("runs-on:") {
                         let (items, next) = ci_yaml_list_at(&lines, cursor, lines[cursor].0, rest);
                         runs_on.extend(items);
+                        cursor = next;
+                        continue;
+                    } else if let Some(rest) = body.strip_prefix("strategy:") {
+                        let (size, gaps, next) =
+                            ci_yaml_strategy_matrix_size_at(&lines, cursor, lines[cursor].0, rest);
+                        matrix_size = size;
+                        for gap in gaps {
+                            evidence_gaps.push(format!(
+                                "{path} job `{id}` strategy.matrix: {gap}; matrix_size is best-effort"
+                            ));
+                        }
                         cursor = next;
                         continue;
                     } else if let Some(rest) = body.strip_prefix("timeout-minutes:") {
@@ -22799,6 +22949,7 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
                     id,
                     name,
                     runs_on,
+                    matrix_size,
                     timeout_minutes,
                     uses,
                     permissions,
@@ -22819,6 +22970,7 @@ fn scan_workflow_text(path: &str, text: &str) -> CiWorkflowScan {
         permissions: workflow_permissions,
         uses_secrets: workflow_uses_secrets.into_iter().collect(),
         yaml_jobs,
+        evidence_gaps,
     }
 }
 
@@ -23898,10 +24050,10 @@ fn build_ci_audit_artifacts(
     let stats = fetch
         .map(|fetch| compute_ci_job_stats(&fetch.workflows, &fetch.runs))
         .unwrap_or_default();
-    let mut inventory_gaps: Vec<String> = vec![
-        "matrix structure not extracted from workflow YAML (v0 line-scan covers triggers, paths, permissions, secrets, runs-on, timeout-minutes, uses)"
-            .to_owned(),
-    ];
+    let mut inventory_gaps: Vec<String> = scans
+        .iter()
+        .flat_map(|scan| scan.evidence_gaps.iter().cloned())
+        .collect();
     let required_checks = fetch.map(|fetch| &fetch.required_checks);
     match required_checks {
         Some(required) if required.default_source.is_some() => {
@@ -24028,15 +24180,17 @@ fn build_ci_audit_artifacts(
             .map(|scan| scan.path_filters.clone())
             .unwrap_or_default();
         let matrix_size = match seed.yaml {
-            Some(yaml_job) => stats
-                .iter()
-                .filter(|stat| {
-                    stat.workflow_path == seed.workflow_path
-                        && ci_match_yaml_job(scan, &stat.job)
-                            .is_some_and(|matched| matched.id == yaml_job.id)
-                })
-                .count()
-                .max(1),
+            Some(yaml_job) => yaml_job.matrix_size.max(
+                stats
+                    .iter()
+                    .filter(|stat| {
+                        stat.workflow_path == seed.workflow_path
+                            && ci_match_yaml_job(scan, &stat.job)
+                                .is_some_and(|matched| matched.id == yaml_job.id)
+                    })
+                    .count()
+                    .max(1),
+            ),
             None => 1,
         };
         // Observed API job names are already display names; the YAML `name:`
@@ -41275,6 +41429,42 @@ jobs:
       - run: cargo test --workspace
 "#;
 
+    const CI_MATRIX_WORKFLOW: &str = r#"name: Matrix CI
+
+on: [pull_request]
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        rust:
+          - stable
+          - beta
+    steps:
+      - run: cargo test --workspace
+  generated:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package: ${{ fromJSON(needs.plan.outputs.packages) }}
+    steps:
+      - run: cargo test -p ${{ matrix.package }}
+  adjusted:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            extra: true
+    steps:
+      - run: cargo check
+"#;
+
     fn ci_api_job_value(name: &str, conclusion: &str, seconds: u64) -> serde_json::Value {
         serde_json::json!({
             "name": name,
@@ -41614,6 +41804,46 @@ jobs:
         let e2e = scan.yaml_jobs.last().context("e2e yaml job present")?;
         assert_eq!(e2e.name.as_deref(), Some("End to end"));
         assert_eq!(e2e.timeout_minutes, Some(45));
+        Ok(())
+    }
+
+    #[test]
+    fn ci_workflow_scan_extracts_literal_matrix_size_with_gaps() -> Result<()> {
+        let scan = super::scan_workflow_text(".github/workflows/matrix.yml", CI_MATRIX_WORKFLOW);
+        let test = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "test")
+            .context("test matrix job")?;
+        assert_eq!(test.matrix_size, 4);
+
+        let generated = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "generated")
+            .context("generated matrix job")?;
+        assert_eq!(generated.matrix_size, 1);
+        assert!(
+            scan.evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("generated") && gap.contains("dynamic expression")),
+            "dynamic matrix gap missing: {:?}",
+            scan.evidence_gaps
+        );
+
+        let adjusted = scan
+            .yaml_jobs
+            .iter()
+            .find(|job| job.id == "adjusted")
+            .context("adjusted matrix job")?;
+        assert_eq!(adjusted.matrix_size, 2);
+        assert!(
+            scan.evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("adjusted") && gap.contains("include")),
+            "include adjustment gap missing: {:?}",
+            scan.evidence_gaps
+        );
         Ok(())
     }
 
@@ -42846,6 +43076,80 @@ jobs:
         }
         let report = fs::read_to_string(temp.path().join("audit-report.md"))?;
         assert!(report.contains("# CI audit: acme/widgets"));
+        Ok(())
+    }
+
+    #[test]
+    fn ci_audit_artifacts_use_literal_matrix_size_for_inventory_and_costs() -> Result<()> {
+        let scans = vec![super::scan_workflow_text(
+            ".github/workflows/matrix.yml",
+            CI_MATRIX_WORKFLOW,
+        )];
+        let workflows_value = serde_json::json!({
+            "workflows": [
+                {"id": 1, "name": "Matrix CI", "path": ".github/workflows/matrix.yml", "state": "active"}
+            ]
+        });
+        let fetch = super::CiAuditFetch {
+            workflows: super::parse_ci_api_array(&workflows_value, "workflows").0,
+            runs: ci_fixture_runs(&[(
+                201,
+                vec![("Unit tests (ubuntu-latest, stable)", "success", 120)],
+            )])?,
+            pages_fetched: 1,
+            truncated: false,
+            required_checks: ci_no_required_checks(),
+            evidence_gaps: Vec::new(),
+        };
+        let artifacts = super::build_ci_audit_artifacts(
+            "acme/widgets",
+            90,
+            &scans,
+            Some(&fetch),
+            None,
+            super::Utc::now(),
+        );
+        let inventory_job = artifacts
+            .inventory
+            .jobs
+            .iter()
+            .find(|job| job.job == "Unit tests (ubuntu-latest, stable)")
+            .context("observed matrix inventory job")?;
+        assert_eq!(inventory_job.matrix_size, 4);
+        let cost_job = artifacts
+            .costs
+            .jobs
+            .iter()
+            .find(|job| job.job == "Unit tests (ubuntu-latest, stable)")
+            .context("observed matrix cost job")?;
+        assert_eq!(cost_job.matrix_expansion, 4);
+        assert!(
+            artifacts
+                .inventory
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("generated") && gap.contains("dynamic expression")),
+            "dynamic matrix gap missing: {:?}",
+            artifacts.inventory.evidence_gaps
+        );
+        assert!(
+            artifacts
+                .inventory
+                .evidence_gaps
+                .iter()
+                .any(|gap| gap.contains("adjusted") && gap.contains("include")),
+            "include matrix gap missing: {:?}",
+            artifacts.inventory.evidence_gaps
+        );
+        assert!(
+            artifacts
+                .inventory
+                .evidence_gaps
+                .iter()
+                .all(|gap| !gap.contains("matrix structure not extracted")),
+            "stale blanket matrix gap remained: {:?}",
+            artifacts.inventory.evidence_gaps
+        );
         Ok(())
     }
 
