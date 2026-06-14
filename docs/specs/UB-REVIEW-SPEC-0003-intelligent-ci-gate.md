@@ -155,7 +155,7 @@ configurable.
 schema                    "ub-review.gate_outcome.v1" exactly
 conclusion                "pass" | "fail"
 terminal_status           from ub-review.terminal_state.v1
-reasons[]                 {kind, id, detail, receipt}
+reasons[]                 {kind, id, detail, receipt, next_action?}
 required_proof            {matched, passed, failed, skipped}
 tool_gates                {evaluated, passed, failed}
 evidence_gaps_blocking    count
@@ -168,7 +168,8 @@ Reason kinds (src/gate.rs gate outcome construction; docs/adr/0002):
 required-proof      a matched [[proof.required]] task failed (head_failed,
                     timed_out)
 tool-gate           a configured [tools.*.gate] threshold was evaluated and
-                    exceeded
+                    exceeded; next_action names the threshold-clearing action
+                    and points the operator at the per-tool receipt chain
 required-sensor     a required sensor's matched trigger produced no evidence
                     (receipt-absent, failed, skipped); intelligent-ci mode
                     only
