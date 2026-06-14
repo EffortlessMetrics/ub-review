@@ -387,14 +387,15 @@ The upstream-first discipline has a live, receipted example: the 2026-06
 sensor dogfood pass filed defects against the instruments instead of
 patching local glue - ripr-swarm#1035-#1038, unsafe-review-swarm#1516-#1518,
 cargo-allow#1467-#1470, and tokmd-swarm#219-#221 - with the local
-glue-visibility issues tracked here as #317 (xtask precommit buffers
-unbounded sensor stdout into receipt markdown; 450 MB ripr.md on a 26 KB
-diff), #318 (DONE locally: cargo-allow foreign-dialect ledgers skip with a
-linked reason mirrored through tool artifacts), #319 (DONE locally: tokmd run
-preflight names the installed vs pinned version before preset-bearing commands
-run), #320 (precommit records missing tools as
-`success: true` skips, indistinguishable from relevance skips), and #321
-(missing-tool receipts should say how to install the tool). Local
+glue-visibility issues tracked here as #317 (DONE locally: xtask precommit
+clips stdout/stderr with a head+tail budget and truncation marker), #318
+(DONE locally: cargo-allow foreign-dialect ledgers skip with a linked reason
+mirrored through tool artifacts), #319 (DONE locally: tokmd run preflight
+names the installed vs pinned version before preset-bearing commands run),
+#320 (DONE locally: precommit missing-tool receipts are `missing=true`,
+`success=false`, distinct from relevance skips), and #321 (DONE locally:
+missing-tool receipts include install guidance, with xtask and doctor hint
+tables exact-value test-pinned). Local
 workarounds must link the upstream issue (docs/ARCHITECTURE.md sensor-defect
 rule); none of these were absorbed silently.
 
@@ -430,12 +431,12 @@ This spec is docs-only. Open sensor-surface work it routes:
          verifier-covered as a skipped proof edge; base_patch_failed
          routes as missing evidence; manual-cost and shell-token
          requests remain non-executable broker inputs
-#313     coverage sensor transient-failure tracking (exit 101 on the
-         PR #305 red run; stayed advisory by policy)
-#317-321 xtask precommit and sensor-glue honesty: bounded receipt
-         stdout (#317), DONE foreign-ledger skip semantics (#318), DONE
-         pinned-version preflight reason (#319), missing-tool receipts that
-         are distinguishable (#320) and actionable (#321)
+#313     DONE: coverage exit-101 no longer reproduces on current main;
+         reopen only on a fresh coverage artifact with stderr
+#317-321 DONE: xtask precommit and sensor-glue honesty. Bounded
+         receipt stdout/stderr (#317), foreign-ledger skip semantics (#318),
+         pinned-version preflight reason (#319), distinguishable missing-tool
+         receipts (#320), and actionable install hints (#321) are test-pinned
 upstream ripr-swarm#1035-1038, unsafe-review-swarm#1516-1518,
          cargo-allow#1467-1470, tokmd-swarm#219-221 - tracked to
          resolution; local glue changes must link them
