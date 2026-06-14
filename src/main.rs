@@ -25051,10 +25051,11 @@ fn setup_ci_section_bullets(recommendations: &[CiRecommendation], tier: &str) ->
     let mut text = String::new();
     for entry in entries {
         text.push_str(&format!(
-            "- `{}` ({}) - {}. receipts: {}\n",
+            "- `{}` ({}) - {}. judgment: {}; receipts: {}\n",
             entry.job,
             entry.workflow,
             entry.reason,
+            entry.judgment,
             entry.receipts.join(", ")
         ));
     }
@@ -25079,10 +25080,11 @@ fn setup_ci_move_required_bullets(
             None => "not accepted; no policy generated".to_owned(),
         };
         text.push_str(&format!(
-            "- `{}` ({}) - {}. {status}. receipts: {}\n",
+            "- `{}` ({}) - {}. {status}. judgment: {}; receipts: {}\n",
             entry.job,
             entry.workflow,
             entry.reason,
+            entry.judgment,
             entry.receipts.join(", ")
         ));
     }
@@ -25231,10 +25233,11 @@ fn render_setup_ci_migration_plan(
                 None => "not accepted; no policy generated".to_owned(),
             };
             plan.push_str(&format!(
-                "- `{}` ({}) - {}. {status}. receipts: {}\n",
+                "- `{}` ({}) - {}. {status}. judgment: {}; receipts: {}\n",
                 entry.job,
                 entry.workflow,
                 entry.reason,
+                entry.judgment,
                 entry.receipts.join(", ")
             ));
         }
@@ -42737,6 +42740,12 @@ jobs:
         assert!(plan.contains("old required checks unknown"));
         assert!(plan.contains("refuses to invent it"));
         assert!(plan.contains("accepted; command `cargo test --workspace --locked`"));
+        assert!(
+            plan.contains(
+                "judgment: deterministic; receipts: ci-audit/correlation.json#integration"
+            )
+        );
+        assert!(plan.contains("judgment: deterministic; receipts: ci-audit/correlation.json#fmt"));
         assert!(plan.contains("- none recommended by this audit"));
         // Generated config block: round-trips with zero policy receipts and
         // never carries reserved or inert keys.
@@ -42835,6 +42844,7 @@ jobs:
         let plan = fs::read_to_string(out.join("ci-audit/migration-plan.md"))?;
         assert!(plan.contains("accepted; command `cargo test --workspace --locked`"));
         assert!(plan.contains("accepted; command `cargo test --lib --locked`"));
+        assert!(plan.contains("judgment: deterministic; receipts: ci-audit/correlation.json#unit"));
         assert!(plan.contains("moved to required proof from audited job `unit`"));
         assert!(plan.contains("right-sized to adaptive proof from audited job `integration`"));
 
