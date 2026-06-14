@@ -788,7 +788,7 @@ def require_pr_review_body_policy(
         ]:
             if phrase in lowered:
                 fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
-        if "## Residual risk" in body:
+        if "## residual risk" in lowered:
             fail(
                 f"{path} contains artifact-only status section: '## Residual risk'"
             )
@@ -809,7 +809,7 @@ def require_pr_review_body_policy(
         "## Sensor status",
         "## Sensor receipts",
     ]:
-        if heading in body:
+        if heading.lower() in lowered:
             fail(f"{path} contains artifact-only status section: {heading!r}")
     for label in [
         "- Shared context:",
@@ -824,7 +824,7 @@ def require_pr_review_body_policy(
         "Review payload:",
         "Follow-up results:",
     ]:
-        if label in body:
+        if label.lower() in lowered:
             fail(f"{path} contains execution summary boilerplate: {label!r}")
 
 
@@ -10361,7 +10361,23 @@ def run_self_tests() -> None:
         "residual risk PR section",
         "artifact-only status section",
         lambda: require_pr_review_body_policy(
-            "## Residual risk\n\n- External trust risk remains.",
+            "## residual risk\n\n- External trust risk remains.",
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "lowercase status section",
+        "artifact-only status section",
+        lambda: require_pr_review_body_policy(
+            "## Decision\n\n- Needs proof.\n\n## model lanes\n\n- tests: ok",
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "lowercase execution summary label",
+        "execution summary boilerplate",
+        lambda: require_pr_review_body_policy(
+            "## Evidence gaps\n\n- runtime: 31s",
             pathlib.Path("review/github-review.json"),
         ),
     )
@@ -10374,6 +10390,14 @@ def run_self_tests() -> None:
                 "- Confirm the cached prior observation still matches; "
                 "the refuter demoted inline candidate because Gate proof is pending."
             ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "stale no-action phrase",
+        "artifact-only boilerplate",
+        lambda: require_pr_review_body_policy(
+            "## Evidence gaps\n\n- This is pre-existing, not a diff target.",
             pathlib.Path("review/github-review.json"),
         ),
     )
