@@ -2676,7 +2676,7 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
 
     text.push_str("\n## Recommended path\n\n");
     text.push_str(&format!(
-        "1. Run `ub-review doctor --config {} --root {}` and fix missing tools or provider keys.\n",
+        "1. Run `ub-review doctor --config {} --root {} --require-core-tools` and fix missing tools or provider keys before trusting the standard gate image.\n",
         args.path.display(),
         args.root.display()
     ));
