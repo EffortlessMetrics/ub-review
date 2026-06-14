@@ -151,12 +151,17 @@ fn ripr_threshold_contribution(suppression_state: &str) -> u64 {
 /// `sensors/ripr/exposure-gaps.json`. Infallible by design: any failure
 /// writes a `detail_unavailable` artifact naming the error, so absence of
 /// detail is itself receipted and the sensor status never changes.
-pub(crate) fn write_ripr_exposure_gap_details(root: &Path, dir: &Path, timeout_sec: u64) {
+pub(crate) fn write_ripr_exposure_gap_details(
+    root: &Path,
+    dir: &Path,
+    command: &str,
+    timeout_sec: u64,
+) {
     let artifact_path = dir.join("exposure-gaps.json");
     let stdout_path = dir.join("exposure-gaps.stdout.tmp");
     let stderr_path = dir.join("exposure-gaps.stderr.tmp");
     let argv = vec![
-        "ripr".to_owned(),
+        command.to_owned(),
         "check".to_owned(),
         "--root".to_owned(),
         root.display().to_string(),
@@ -230,7 +235,12 @@ mod tests {
         let temp = tempfile::tempdir()?;
         let dir = temp.path().join("sensors/ripr");
         std::fs::create_dir_all(&dir)?;
-        super::write_ripr_exposure_gap_details(temp.path(), &dir, 30);
+        super::write_ripr_exposure_gap_details(
+            temp.path(),
+            &dir,
+            "ub-review-test-missing-ripr",
+            30,
+        );
         let detail: serde_json::Value =
             serde_json::from_slice(&std::fs::read(dir.join("exposure-gaps.json"))?)?;
         assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v1");

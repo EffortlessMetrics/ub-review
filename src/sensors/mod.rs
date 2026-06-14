@@ -165,7 +165,7 @@ pub(crate) fn run_sensor(
                 // pass persists per-finding exposure-gap detail; its failure
                 // never changes the sensor status - the threshold input
                 // stays the verbatim badge receipt above.
-                write_ripr_exposure_gap_details(root, &dir, sensor.timeout_sec);
+                write_ripr_exposure_gap_details(root, &dir, &sensor.command, sensor.timeout_sec);
             }
             write_sensor_status(
                 out,
@@ -542,7 +542,7 @@ pub(crate) fn build_sensor_argv(
         // that nothing had generated, so the configured threshold never
         // evaluated in production.
         "ripr" => vec![
-            "ripr".to_owned(),
+            sensor.command.clone(),
             "check".to_owned(),
             "--root".to_owned(),
             root.display().to_string(),
@@ -940,7 +940,7 @@ pub(crate) fn display_command(argv: &[String]) -> String {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    use anyhow::Result;
+    use anyhow::{Context as _, Result};
 
     use crate::tests::{run_test_command, sensor_plan, sleeper_argv, test_diff, test_plan};
     use crate::*;
@@ -1130,6 +1130,78 @@ mod tests {
                 dir.join("cargo-allow.md").display().to_string(),
             ]
         );
+        Ok(())
+    }
+
+    #[test]
+    fn ripr_sensor_writes_badge_and_detail_receipts_from_configured_command() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        let fake_bin = temp.path().join("fake-bin");
+        fs::create_dir_all(&root)?;
+        fs::create_dir_all(out.join("input"))?;
+        fs::write(
+            out.join("input/diff.patch"),
+            "diff --git a/src/lib.rs b/src/lib.rs\n",
+        )?;
+        let fake_ripr = write_fake_ripr_command(&fake_bin)?;
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        let mut sensor = sensor_plan("ripr", &fake_ripr.display().to_string(), true);
+        sensor.timeout_sec = 5;
+        let plan = test_plan(vec![sensor.clone()]);
+
+        run_sensor(&root, &out, &sensor, &event_log, &plan)?;
+
+        let sensor_dir = out.join("sensors/ripr");
+        let status: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("ub-review-sensor-status.json"))?)?;
+        assert_eq!(status["status"], "ok");
+        assert!(
+            status["command"]
+                .as_str()
+                .is_some_and(|command| command.contains(&fake_ripr.display().to_string())),
+            "sensor command must use configured ripr path: {status}"
+        );
+        assert_eq!(
+            fs::read(sensor_dir.join("gate-decision.json"))?,
+            fs::read(sensor_dir.join("stdout.txt"))?,
+            "gate-decision.json must be the verbatim badge-json stdout receipt"
+        );
+
+        let gate: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("gate-decision.json"))?)?;
+        assert_eq!(gate["counts"]["unsuppressed_exposure_gaps"], 1);
+        assert_eq!(gate["counts"]["suppressed_exposure_gaps"], 1);
+        let detail: serde_json::Value =
+            serde_json::from_slice(&fs::read(sensor_dir.join("exposure-gaps.json"))?)?;
+        assert_eq!(detail["schema"], "ub-review.ripr_exposure_gaps.v1");
+        assert_eq!(detail["status"], "ok");
+        assert_eq!(detail["total_gap_findings"], 2);
+        assert_eq!(detail["truncated"], false);
+        let entries = detail["entries"]
+            .as_array()
+            .context("ripr detail entries")?;
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["id"], "probe:src_lib_rs:12:call_deletion");
+        assert_eq!(entries[0]["path"], "src/lib.rs");
+        assert_eq!(entries[0]["range"]["start_line"], 12);
+        assert_eq!(entries[0]["range"]["end_line"], 12);
+        assert_eq!(entries[0]["exposure_gap_class"], "weakly_exposed");
+        assert_eq!(entries[0]["suppression_state"], "unsuppressed");
+        assert_eq!(entries[0]["threshold_contribution"], 1);
+        assert_eq!(
+            entries[0]["artifact_pointer"],
+            "sensors/ripr/exposure-gaps.json#/entries/0"
+        );
+        assert_eq!(entries[1]["suppression_state"], "suppressed");
+        assert_eq!(entries[1]["threshold_contribution"], 0);
+        assert_eq!(
+            entries[1]["artifact_pointer"],
+            "sensors/ripr/exposure-gaps.json#/entries/1"
+        );
+        assert!(!sensor_dir.join("exposure-gaps.stdout.tmp").exists());
+        assert!(!sensor_dir.join("exposure-gaps.stderr.tmp").exists());
         Ok(())
     }
 
@@ -1407,6 +1479,73 @@ fn main() {{
                 format!(
                     "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then echo \"tokmd {version}\"; exit 0; fi\necho \"unexpected tokmd subcommand: $*\" >&2\nexit 42\n"
                 ),
+            )?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+
+                let mut permissions = fs::metadata(&script)?.permissions();
+                permissions.set_mode(0o755);
+                fs::set_permissions(&script, permissions)?;
+            }
+            Ok(script)
+        }
+    }
+
+    fn write_fake_ripr_command(dir: &Path) -> Result<PathBuf> {
+        fs::create_dir_all(dir)?;
+        #[cfg(windows)]
+        {
+            let source = dir.join("fake_ripr.rs");
+            fs::write(
+                &source,
+                r####"use std::env;
+
+const BADGE: &str = r###"{"schema_version":"0.5","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}"###;
+const DETAIL: &str = r###"{"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","suppressed":true,"probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"suppressed reach gap"},"discriminate":{"summary":"suppressed oracle gap"}}}]}"###;
+
+fn main() {
+    let args = env::args().skip(1).collect::<Vec<_>>();
+    let format = args
+        .windows(2)
+        .find(|pair| pair[0] == "--format")
+        .map(|pair| pair[1].as_str());
+    match format {
+        Some("badge-json") => println!("{BADGE}"),
+        Some("json") => println!("{DETAIL}"),
+        other => {
+            eprintln!("unexpected ripr format: {other:?}; args={args:?}");
+            std::process::exit(42);
+        }
+    }
+}
+"####,
+            )?;
+            let exe = dir.join("fake_ripr.exe");
+            let source_arg = source.display().to_string();
+            let exe_arg = exe.display().to_string();
+            run_test_command(dir, "rustc", &[source_arg.as_str(), "-o", exe_arg.as_str()])?;
+            Ok(exe)
+        }
+        #[cfg(not(windows))]
+        {
+            let script = dir.join("fake_ripr");
+            fs::write(
+                &script,
+                r####"#!/bin/sh
+case "$*" in
+  *"--format badge-json"*)
+    printf '%s\n' '{"schema_version":"0.5","kind":"ripr","scope":"diff","basis":"finding_exposure","label":"ripr","message":"1","status":"fail","color":"red","counts":{"unsuppressed_exposure_gaps":1,"suppressed_exposure_gaps":1,"unsuppressed_test_efficiency_findings":0,"analyzed_findings":2},"policy":{"include_unknowns":false,"fail_on_nonzero":false},"warnings":[]}'
+    ;;
+  *"--format json"*)
+    printf '%s\n' '{"findings":[{"id":"probe:src_lib_rs:12:call_deletion","classification":"weakly_exposed","probe":{"family":"call_deletion","file":"src/lib.rs","line":12,"expression":"crate::value()"},"ripr":{"reach":{"summary":"test reaches changed owner"},"discriminate":{"summary":"oracle does not distinguish behavior"}}},{"id":"probe:src_lib_rs:18:error_path","classification":"reachable_unrevealed","suppressed":true,"probe":{"family":"error_path","file":"src/lib.rs","line":18,"expression":"crate::fallible()"},"ripr":{"reach":{"summary":"suppressed reach gap"},"discriminate":{"summary":"suppressed oracle gap"}}}]}'
+    ;;
+  *)
+    echo "unexpected ripr args: $*" >&2
+    exit 42
+    ;;
+esac
+"####,
             )?;
             #[cfg(unix)]
             {
