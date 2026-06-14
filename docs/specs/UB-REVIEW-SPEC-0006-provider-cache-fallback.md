@@ -216,11 +216,12 @@ Fallback mechanics (current behavior):
   default `minimax-primary` policy only the opposition canary has one, so
   runtime fallback and wave shedding effectively arm one lane;
   `primary-with-fallback` extends them to every lane.
-- no fallback anywhere else: the proof-planner lane, follow-up passes, the
-  orchestrator, and the refuter all pin `direct_minimax_spec` with no
-  provider selection and no fallback - if MiniMax is unavailable they are
-  receipted `preflight_failed` or `skipped_budget` (src/main.rs
-  `run_proof_planner_model_lane`, follow-up spec construction).
+- model-pass fallback: the proof-planner lane and orchestrator follow-up
+  passes use the same provider assignment/preflight selection as review lanes.
+  Under `primary-with-fallback`, a MiniMax preflight failure can route these
+  passes to the configured OpenCode fallback, with `fallback_from` and
+  provider/model/endpoint stamped on their receipts. The orchestrator and
+  refuter still pin `direct_minimax_spec` and have no fallback.
 
 ## Required fields
 
@@ -308,8 +309,9 @@ prompt caching is a cost optimization with provider-ephemeral lifetime;
 [providers].policy and provider max_concurrency are behavior
 minimax prompt_cache is behavior; env/model/role keys remain documentation
   of intent
-no claim of provider redundancy: default policy arms fallback on one lane,
-  and proof-planner/follow-up passes have no fallback at all
+no broad provider redundancy claim: default policy arms fallback on one lane;
+  proof-planner/follow-up fallback is available only when policy/key/preflight
+  conditions arm it; the orchestrator and refuter still have no fallback
 ```
 
 The six reliance questions:
@@ -372,9 +374,9 @@ This spec routes the remaining work:
    `explicit-anthropic` and `off`; invalid values are PolicyError receipts.
    Remaining provider config decision: decide whether provider model/env/role
    become executable config or stay descriptive.
-5. Candidate slice, no issue yet: fallback specs for the proof-planner and
-   follow-up passes, which today hard-pin direct MiniMax and fail without
-   it.
+5. DONE: fallback specs for the proof-planner and follow-up passes use
+   provider assignment/preflight selection, and follow-up receipts/stage/cache
+   artifacts record the actual provider/model/endpoint used.
 
 ## Release note claim
 

@@ -1518,6 +1518,11 @@ struct FollowUpResult {
     model_lane: String,
     status: String,
     reason: String,
+    provider: String,
+    model: String,
+    endpoint_kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fallback_from: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     duration_ms: Option<u128>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2186,6 +2191,7 @@ struct ProofPlannerRunContext<'a> {
     box_state: &'a BoxState,
     pr_thread_context: &'a PrThreadContext,
     model_calls_used: usize,
+    key_present: fn(&str) -> bool,
     line_map: &'a BTreeSet<(String, u32)>,
 }
 
@@ -2197,6 +2203,7 @@ struct FollowUpRunContext<'a> {
     shared_context: &'a str,
     args: &'a RunArgs,
     model_calls_used: usize,
+    key_present: fn(&str) -> bool,
     tasks: &'a [FollowUpQuestionTask],
     line_map: &'a BTreeSet<(String, u32)>,
 }
@@ -5917,9 +5924,9 @@ fn write_review_artifacts(
     let assignments = model_assignments(plan, args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
     if should_run_proof_planner_model_lane(args, diff) {
-        ensure_provider_preflight_receipt(
+        ensure_provider_preflight_receipts_for_assignment(
             &mut provider_preflights,
-            direct_minimax_spec(args),
+            &proof_planner_assignment(args),
             args,
         );
     }
@@ -6028,6 +6035,7 @@ fn write_review_artifacts(
                     box_state,
                     pr_thread_context: &pr_thread_context,
                     model_calls_used,
+                    key_present: env_value_present,
                     line_map: &line_map,
                 },
                 &mut model_lanes,
@@ -6252,6 +6260,7 @@ fn write_review_artifacts(
             shared_context: &shared_context,
             args,
             model_calls_used,
+            key_present: env_value_present,
             tasks: &orchestrator_plan.follow_up_tasks,
             line_map: &line_map,
         },
@@ -11548,18 +11557,13 @@ fn write_final_compiler_input_artifact(
 fn model_stage_records(
     model_lanes: &[ModelLaneReceipt],
     follow_up_results: &[FollowUpResult],
-    args: &RunArgs,
+    _args: &RunArgs,
 ) -> Vec<ModelStageRecord> {
     let mut records = model_lanes
         .iter()
         .map(model_lane_stage_record)
         .collect::<Vec<_>>();
-    let follow_up_spec = direct_minimax_spec(args);
-    records.extend(
-        follow_up_results
-            .iter()
-            .map(|result| follow_up_stage_record(result, &follow_up_spec)),
-    );
+    records.extend(follow_up_results.iter().map(follow_up_stage_record));
     records
 }
 
@@ -11606,7 +11610,7 @@ fn model_lane_stage_metadata(lane: &str) -> (&'static str, &'static str, &'stati
     }
 }
 
-fn follow_up_stage_record(result: &FollowUpResult, spec: &ProviderSpec) -> ModelStageRecord {
+fn follow_up_stage_record(result: &FollowUpResult) -> ModelStageRecord {
     ModelStageRecord {
         schema: MODEL_STAGE_SCHEMA.to_owned(),
         lane: result.model_lane.clone(),
@@ -11615,9 +11619,9 @@ fn follow_up_stage_record(result: &FollowUpResult, spec: &ProviderSpec) -> Model
         stage_reason: follow_up_stage_reason(&result.stage).to_owned(),
         status: result.status.clone(),
         reason: result.reason.clone(),
-        provider: spec.provider.key().to_owned(),
-        model: spec.model.clone(),
-        endpoint_kind: spec.endpoint_kind.key().to_owned(),
+        provider: result.provider.clone(),
+        model: result.model.clone(),
+        endpoint_kind: result.endpoint_kind.clone(),
         task_id: Some(result.task_id.clone()),
         group_id: Some(result.group_id.clone()),
         packet_path: Some(result.packet_path.clone()),
@@ -13882,7 +13886,6 @@ fn write_shared_context_cache_artifacts(
             cache_read_input_tokens: receipt.cache_usage.cache_read_input_tokens,
         });
     }
-    let follow_up_spec = direct_minimax_spec(args);
     for result in follow_up_results
         .iter()
         .filter(|result| model_call_attempted_status(&result.status))
@@ -13892,14 +13895,10 @@ fn write_shared_context_cache_artifacts(
             kind: "follow_up_cache_usage".to_owned(),
             shared_context_hash: shared_context_hash.clone(),
             lane: Some(result.model_lane.clone()),
-            provider: Some(follow_up_spec.provider.key().to_owned()),
-            endpoint_kind: Some(follow_up_spec.endpoint_kind.key().to_owned()),
-            cache_mode: model_cache_mode_for_args(
-                args,
-                follow_up_spec.provider.key(),
-                follow_up_spec.endpoint_kind.key(),
-            )
-            .to_owned(),
+            provider: Some(result.provider.clone()),
+            endpoint_kind: Some(result.endpoint_kind.clone()),
+            cache_mode: model_cache_mode_for_args(args, &result.provider, &result.endpoint_kind)
+                .to_owned(),
             cache_creation_input_tokens: result.cache_usage.cache_creation_input_tokens,
             cache_read_input_tokens: result.cache_usage.cache_read_input_tokens,
         });
@@ -13948,7 +13947,6 @@ fn shared_context_cache_lanes(
             )
         })
         .collect::<Vec<_>>();
-    let follow_up_spec = direct_minimax_spec(args);
     for result in follow_up_results
         .iter()
         .filter(|result| model_call_attempted_status(&result.status))
@@ -13956,9 +13954,9 @@ fn shared_context_cache_lanes(
         lanes.push(shared_context_cache_lane(
             shared_context_hash,
             &result.model_lane,
-            follow_up_spec.provider.key(),
-            &follow_up_spec.model,
-            follow_up_spec.endpoint_kind.key(),
+            &result.provider,
+            &result.model,
+            &result.endpoint_kind,
             args,
         ));
     }
@@ -15015,6 +15013,20 @@ fn proof_planner_lane() -> LanePlan {
     )
 }
 
+fn follow_up_provider_lane() -> LanePlan {
+    model_lane(
+        "orchestrator-follow-up",
+        "Orchestrator follow-up",
+        &[
+            "shared-context",
+            "work-queue",
+            "routed-evidence",
+            "follow-up-question",
+        ],
+        "Classify routed follow-up evidence without posting, mutating, or running commands.",
+    )
+}
+
 fn model_assignments(plan: &Plan, args: &RunArgs) -> Result<Vec<ModelAssignment>> {
     model_assignments_with_key_state(plan, args, model_api_key_present(ModelProvider::OpenCodeGo))
 }
@@ -15027,26 +15039,41 @@ fn model_assignments_with_key_state(
     let lanes = selected_review_lanes_for_args(plan, args)?;
     let assignments = lanes
         .into_iter()
-        .map(|lane| {
-            let spec = provider_spec_for_lane(&lane, args);
-            let fallback =
-                fallback_provider_spec_for_lane(&lane, &spec, args, opencode_key_present);
-            ModelAssignment {
-                lane,
-                spec,
-                fallback,
-            }
-        })
+        .map(|lane| model_assignment_for_lane_with_key_state(lane, args, opencode_key_present))
         .collect::<Vec<_>>();
     Ok(assignments)
 }
 
-fn provider_spec_for_lane(lane: &LanePlan, args: &RunArgs) -> ProviderSpec {
-    provider_spec_for_lane_with_key_state(
+fn proof_planner_assignment(args: &RunArgs) -> ModelAssignment {
+    proof_planner_assignment_with_key_state(args, model_api_key_present(ModelProvider::OpenCodeGo))
+}
+
+fn proof_planner_assignment_with_key_state(
+    args: &RunArgs,
+    opencode_key_present: bool,
+) -> ModelAssignment {
+    model_assignment_for_lane_with_key_state(proof_planner_lane(), args, opencode_key_present)
+}
+
+fn follow_up_provider_assignment_with_key_state(
+    args: &RunArgs,
+    opencode_key_present: bool,
+) -> ModelAssignment {
+    model_assignment_for_lane_with_key_state(follow_up_provider_lane(), args, opencode_key_present)
+}
+
+fn model_assignment_for_lane_with_key_state(
+    lane: LanePlan,
+    args: &RunArgs,
+    opencode_key_present: bool,
+) -> ModelAssignment {
+    let spec = provider_spec_for_lane_with_key_state(&lane, args, opencode_key_present);
+    let fallback = fallback_provider_spec_for_lane(&lane, &spec, args, opencode_key_present);
+    ModelAssignment {
         lane,
-        args,
-        model_api_key_present(ModelProvider::OpenCodeGo),
-    )
+        spec,
+        fallback,
+    }
 }
 
 /// D2 precedence for the provider policy (spec 0006, decision D2: config
@@ -15286,6 +15313,17 @@ fn ensure_provider_preflight_receipt(
         return;
     }
     receipts.push(provider_preflight_receipt_for_spec(spec, args));
+}
+
+fn ensure_provider_preflight_receipts_for_assignment(
+    receipts: &mut Vec<ProviderPreflightReceipt>,
+    assignment: &ModelAssignment,
+    args: &RunArgs,
+) {
+    ensure_provider_preflight_receipt(receipts, assignment.spec.clone(), args);
+    if let Some(fallback) = &assignment.fallback {
+        ensure_provider_preflight_receipt(receipts, fallback.clone(), args);
+    }
 }
 
 fn provider_preflight_receipt_for_spec(
@@ -15881,8 +15919,12 @@ fn run_proof_planner_model_lane(
         return Ok(0);
     }
 
-    let lane = proof_planner_lane();
-    let spec = direct_minimax_spec(context.args);
+    let assignment = proof_planner_assignment_with_key_state(
+        context.args,
+        (context.key_present)(model_api_key_env(ModelProvider::OpenCodeGo)),
+    );
+    let lane = assignment.lane.clone();
+    let mut spec = assignment.spec.clone();
     let mut receipt = ModelLaneReceipt {
         lane: lane.id.clone(),
         provider: spec.provider.key().to_owned(),
@@ -15903,16 +15945,28 @@ fn run_proof_planner_model_lane(
         model_lanes.push(receipt);
         return Ok(0);
     }
-    if !provider_preflight_ok(&spec, context.provider_preflights) {
+    let Some((selected_spec, fallback_from, preflight_reason)) =
+        selected_provider_spec(&assignment, context.provider_preflights)
+    else {
         receipt.status = "preflight_failed".to_owned();
-        receipt.reason = provider_preflight_reason(&spec, context.provider_preflights)
-            .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
+        receipt.reason =
+            provider_assignment_preflight_failed_reason(&assignment, context.provider_preflights);
         missing_or_failed_model_evidence.push(model_issue_from_receipt(&receipt));
         model_lanes.push(receipt);
         return Ok(0);
+    };
+    spec = selected_spec;
+    receipt.provider = spec.provider.key().to_owned();
+    receipt.model = spec.model.clone();
+    receipt.endpoint_kind = spec.endpoint_kind.key().to_owned();
+    if let Some(original) = fallback_from {
+        receipt.fallback_from = Some(original);
+    }
+    if let Some(reason) = preflight_reason {
+        receipt.reason = reason;
     }
     let env_name = model_api_key_env(spec.provider);
-    if !env_value_present(env_name) {
+    if !(context.key_present)(env_name) {
         let key_label = model_api_key_label(spec.provider);
         receipt.status = "missing_key".to_owned();
         receipt.reason = format!("{key_label} not provided; proof-planner output unavailable");
@@ -15974,77 +16028,92 @@ fn run_follow_up_model_pass(
     follow_up_results: &mut Vec<FollowUpResult>,
     follow_up_outputs: &mut Vec<FollowUpOutputRecord>,
 ) -> Result<usize> {
-    let spec = direct_minimax_spec(context.args);
+    let assignment = follow_up_provider_assignment_with_key_state(
+        context.args,
+        (context.key_present)(model_api_key_env(ModelProvider::OpenCodeGo)),
+    );
+    let default_spec = assignment.spec.clone();
+    let selected_provider = selected_provider_spec(&assignment, context.provider_preflights);
     let available = context
         .args
         .max_model_calls
         .saturating_sub(context.model_calls_used);
     let model_mode_enabled = matches!(context.args.model_mode, ModelMode::Auto);
-    let preflight_ready = provider_preflight_ok(&spec, context.provider_preflights);
-    let key_present = env_value_present(model_api_key_env(spec.provider));
     let mut calls = 0usize;
     for task in context.tasks {
         let model_lane = follow_up_model_lane_id(task);
         let packet_path = follow_up_packet_artifact_path(task);
         let packet = read_follow_up_packet(context.out, task)?;
         if !model_mode_enabled {
-            let result = follow_up_result(
+            let result = follow_up_result(FollowUpResultInput {
                 task,
-                &packet_path,
-                &model_lane,
-                "skipped",
-                "model-mode off; follow-up task remains artifact-only",
-                FollowUpResultArtifacts::default(),
-                FollowUpOutputCounts::default(),
-            );
+                packet_path: &packet_path,
+                model_lane: &model_lane,
+                spec: &default_spec,
+                fallback_from: None,
+                status: "skipped",
+                reason: "model-mode off; follow-up task remains artifact-only",
+                artifacts: FollowUpResultArtifacts::default(),
+                output_counts: FollowUpOutputCounts::default(),
+            });
             follow_up_outputs.push(empty_follow_up_output_record(task, &model_lane, &result));
             follow_up_results.push(result);
             continue;
         }
-        if !preflight_ready {
-            let reason = provider_preflight_reason(&spec, context.provider_preflights)
-                .unwrap_or_else(|| "MiniMax preflight did not succeed".to_owned());
-            let result = follow_up_result(
-                task,
-                &packet_path,
-                &model_lane,
-                "preflight_failed",
-                &reason,
-                FollowUpResultArtifacts::default(),
-                FollowUpOutputCounts::default(),
+        let Some((spec, fallback_from, _preflight_reason)) = selected_provider.clone() else {
+            let reason = provider_assignment_preflight_failed_reason(
+                &assignment,
+                context.provider_preflights,
             );
+            let result = follow_up_result(FollowUpResultInput {
+                task,
+                packet_path: &packet_path,
+                model_lane: &model_lane,
+                spec: &default_spec,
+                fallback_from: None,
+                status: "preflight_failed",
+                reason: &reason,
+                artifacts: FollowUpResultArtifacts::default(),
+                output_counts: FollowUpOutputCounts::default(),
+            });
             follow_up_outputs.push(empty_follow_up_output_record(task, &model_lane, &result));
             follow_up_results.push(result);
             continue;
-        }
+        };
+        let fallback_from_for_result = fallback_from.clone();
+        let key_present = (context.key_present)(model_api_key_env(spec.provider));
         if !key_present {
             let reason = format!(
                 "{} not provided; follow-up task remains artifact-only",
                 model_api_key_env(spec.provider)
             );
-            let result = follow_up_result(
+            let result = follow_up_result(FollowUpResultInput {
                 task,
-                &packet_path,
-                &model_lane,
-                "missing_key",
-                &reason,
-                FollowUpResultArtifacts::default(),
-                FollowUpOutputCounts::default(),
-            );
+                packet_path: &packet_path,
+                model_lane: &model_lane,
+                spec: &spec,
+                fallback_from: fallback_from_for_result,
+                status: "missing_key",
+                reason: &reason,
+                artifacts: FollowUpResultArtifacts::default(),
+                output_counts: FollowUpOutputCounts::default(),
+            });
             follow_up_outputs.push(empty_follow_up_output_record(task, &model_lane, &result));
             follow_up_results.push(result);
             continue;
         }
         if calls >= available {
-            let result = follow_up_result(
+            let result = follow_up_result(FollowUpResultInput {
                 task,
-                &packet_path,
-                &model_lane,
-                "skipped_budget",
-                "follow-up model call budget exhausted before task execution",
-                FollowUpResultArtifacts::default(),
-                FollowUpOutputCounts::default(),
-            );
+                packet_path: &packet_path,
+                model_lane: &model_lane,
+                spec: &spec,
+                fallback_from: fallback_from_for_result,
+                status: "skipped_budget",
+                reason: "follow-up model call budget exhausted before task execution",
+                artifacts: FollowUpResultArtifacts::default(),
+                output_counts: FollowUpOutputCounts::default(),
+            });
             follow_up_outputs.push(empty_follow_up_output_record(task, &model_lane, &result));
             follow_up_results.push(result);
             continue;
@@ -16077,15 +16146,17 @@ fn run_follow_up_model_pass(
                     outcome.output,
                     context.line_map,
                 );
-                let mut result = follow_up_result(
+                let mut result = follow_up_result(FollowUpResultInput {
                     task,
-                    &packet_path,
-                    &model_lane,
+                    packet_path: &packet_path,
+                    model_lane: &model_lane,
+                    spec: &spec,
+                    fallback_from: fallback_from_for_result,
                     status,
                     reason,
-                    follow_up_result_artifacts(&model_lane, &task_dir),
+                    artifacts: follow_up_result_artifacts(&model_lane, &task_dir),
                     output_counts,
-                );
+                });
                 result.duration_ms = Some(outcome.duration_ms);
                 result.http_status = outcome.http_status;
                 result.response_shape = Some(outcome.response_shape);
@@ -16095,15 +16166,17 @@ fn run_follow_up_model_pass(
             }
             Err(err) => {
                 let status = classify_model_error(&err);
-                let mut result = follow_up_result(
+                let mut result = follow_up_result(FollowUpResultInput {
                     task,
-                    &packet_path,
-                    &model_lane,
-                    &status,
-                    &format!("{err:#}"),
-                    follow_up_result_artifacts(&model_lane, &task_dir),
-                    FollowUpOutputCounts::default(),
-                );
+                    packet_path: &packet_path,
+                    model_lane: &model_lane,
+                    spec: &spec,
+                    fallback_from: fallback_from_for_result,
+                    status: &status,
+                    reason: &format!("{err:#}"),
+                    artifacts: follow_up_result_artifacts(&model_lane, &task_dir),
+                    output_counts: FollowUpOutputCounts::default(),
+                });
                 result.http_status = http_status_from_error(&err);
                 follow_up_outputs.push(empty_follow_up_output_record(task, &model_lane, &result));
                 follow_up_results.push(result);
@@ -16156,6 +16229,18 @@ struct FollowUpResultArtifacts {
     content_path: Option<String>,
     normalized_content_path: Option<String>,
     stderr_path: Option<String>,
+}
+
+struct FollowUpResultInput<'a> {
+    task: &'a FollowUpQuestionTask,
+    packet_path: &'a str,
+    model_lane: &'a str,
+    spec: &'a ProviderSpec,
+    fallback_from: Option<String>,
+    status: &'a str,
+    reason: &'a str,
+    artifacts: FollowUpResultArtifacts,
+    output_counts: FollowUpOutputCounts,
 }
 
 fn follow_up_result_artifacts(model_lane: &str, task_dir: &Path) -> FollowUpResultArtifacts {
@@ -16280,38 +16365,34 @@ fn follow_up_lane(task: &FollowUpQuestionTask, model_lane: &str) -> LanePlan {
     }
 }
 
-fn follow_up_result(
-    task: &FollowUpQuestionTask,
-    packet_path: &str,
-    model_lane: &str,
-    status: &str,
-    reason: &str,
-    artifacts: FollowUpResultArtifacts,
-    output_counts: FollowUpOutputCounts,
-) -> FollowUpResult {
+fn follow_up_result(input: FollowUpResultInput<'_>) -> FollowUpResult {
     FollowUpResult {
         schema: FOLLOW_UP_RESULT_SCHEMA.to_owned(),
-        task_id: task.id.clone(),
-        group_id: task.group_id.clone(),
-        stage: task.stage.clone(),
-        disposition: task.disposition.clone(),
-        evidence_need: task.evidence_need.clone(),
-        candidate_ids: task.candidate_ids.clone(),
-        observation_group_ids: task.observation_group_ids.clone(),
-        packet_path: packet_path.to_owned(),
-        model_lane: model_lane.to_owned(),
-        status: status.to_owned(),
-        reason: reason.to_owned(),
+        task_id: input.task.id.clone(),
+        group_id: input.task.group_id.clone(),
+        stage: input.task.stage.clone(),
+        disposition: input.task.disposition.clone(),
+        evidence_need: input.task.evidence_need.clone(),
+        candidate_ids: input.task.candidate_ids.clone(),
+        observation_group_ids: input.task.observation_group_ids.clone(),
+        packet_path: input.packet_path.to_owned(),
+        model_lane: input.model_lane.to_owned(),
+        status: input.status.to_owned(),
+        reason: input.reason.to_owned(),
+        provider: input.spec.provider.key().to_owned(),
+        model: input.spec.model.clone(),
+        endpoint_kind: input.spec.endpoint_kind.key().to_owned(),
+        fallback_from: input.fallback_from,
         duration_ms: None,
         http_status: None,
         response_shape: None,
         cache_usage: ModelCacheUsage::default(),
-        request_path: artifacts.request_path,
-        response_path: artifacts.response_path,
-        content_path: artifacts.content_path,
-        normalized_content_path: artifacts.normalized_content_path,
-        stderr_path: artifacts.stderr_path,
-        output_counts,
+        request_path: input.artifacts.request_path,
+        response_path: input.artifacts.response_path,
+        content_path: input.artifacts.content_path,
+        normalized_content_path: input.artifacts.normalized_content_path,
+        stderr_path: input.artifacts.stderr_path,
+        output_counts: input.output_counts,
     }
 }
 
@@ -16792,6 +16873,21 @@ fn selected_provider_spec(
         ));
     }
     None
+}
+
+fn provider_assignment_preflight_failed_reason(
+    assignment: &ModelAssignment,
+    preflights: &[ProviderPreflightReceipt],
+) -> String {
+    let primary = provider_preflight_reason(&assignment.spec, preflights)
+        .unwrap_or_else(|| format!("{} preflight receipt missing", assignment.spec.label()));
+    if let Some(fallback) = &assignment.fallback {
+        let fallback_reason = provider_preflight_reason(fallback, preflights)
+            .unwrap_or_else(|| format!("{} preflight receipt missing", fallback.label()));
+        format!("{primary}; fallback unavailable: {fallback_reason}")
+    } else {
+        primary
+    }
 }
 
 fn selected_provider_spec_with_backpressure(
@@ -25256,11 +25352,12 @@ mod tests {
         default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
         fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
-        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, normalize_run_args,
-        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, normalize_run_args, observation_summary_artifacts,
+        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
         provider_concurrency_limits, provider_spec_for_lane_with_key_state,
         read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
         render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
@@ -25268,17 +25365,18 @@ mod tests {
         resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
         run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
         run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, sensor_job_count, sha256_hex, split_curl_http_status,
-        standard_minimax_lanes, validate_failed_objection, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
-        write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
-        write_sensor_status, write_witness_artifacts,
+        runtime_profile_override, selected_provider_spec, sensor_job_count, sha256_hex,
+        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
+        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
+        write_candidate_artifacts, write_final_orchestrator_artifact,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
+        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
+        write_proof_request_artifacts, write_resolved_candidate_artifacts,
+        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
+        write_witness_artifacts,
     };
 
     #[test]
@@ -30354,6 +30452,61 @@ index 1111111..2222222 100644
         }
     }
 
+    fn preflight_failed_receipt(
+        spec: &super::ProviderSpec,
+        status: &str,
+        reason: &str,
+    ) -> super::ProviderPreflightReceipt {
+        super::ProviderPreflightReceipt {
+            provider: spec.provider.key().to_owned(),
+            model: spec.model.clone(),
+            endpoint_kind: spec.endpoint_kind.key().to_owned(),
+            status: status.to_owned(),
+            reason: reason.to_owned(),
+            duration_ms: Some(1),
+            http_status: None,
+            response_shape: None,
+            cache_usage: ModelCacheUsage::default(),
+        }
+    }
+
+    #[test]
+    fn model_pass_provider_selection_uses_fallback_preflight() -> Result<()> {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.opencode_model = "mimo-v2.5".to_owned();
+        let assignments = [
+            proof_planner_assignment_with_key_state(&args, true),
+            follow_up_provider_assignment_with_key_state(&args, true),
+        ];
+
+        for assignment in assignments {
+            let fallback = assignment
+                .fallback
+                .clone()
+                .ok_or_else(|| anyhow::anyhow!("fallback missing for {}", assignment.lane.id))?;
+            let preflights = vec![
+                preflight_failed_receipt(&assignment.spec, "missing_key", "primary unavailable"),
+                preflight_ok_receipt(&fallback),
+            ];
+
+            let (selected, fallback_from, reason) =
+                selected_provider_spec(&assignment, &preflights).ok_or_else(|| {
+                    anyhow::anyhow!("provider selection failed for {}", assignment.lane.id)
+                })?;
+
+            assert_eq!(selected.provider, ModelProvider::OpenCodeGo);
+            assert_eq!(selected.model, "mimo-v2.5");
+            assert_eq!(fallback_from, Some(assignment.spec.label()));
+            assert!(
+                reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.contains("primary provider unavailable"))
+            );
+        }
+        Ok(())
+    }
+
     #[test]
     fn runtime_fallback_retry_spec_only_retries_transient_primary_failures() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
@@ -32249,6 +32402,41 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn primary_with_fallback_routes_model_pass_fallbacks() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
+        args.opencode_model = "mimo-v2.5".to_owned();
+
+        let proof_planner = proof_planner_assignment_with_key_state(&args, true);
+        assert_eq!(proof_planner.spec.provider, ModelProvider::MiniMaxDirect);
+        assert_eq!(
+            proof_planner.fallback.as_ref().map(|spec| spec.provider),
+            Some(ModelProvider::OpenCodeGo)
+        );
+        assert_eq!(
+            proof_planner
+                .fallback
+                .as_ref()
+                .map(|spec| spec.model.as_str()),
+            Some("mimo-v2.5")
+        );
+
+        let follow_up = follow_up_provider_assignment_with_key_state(&args, true);
+        assert_eq!(follow_up.spec.provider, ModelProvider::MiniMaxDirect);
+        assert_eq!(
+            follow_up.fallback.as_ref().map(|spec| spec.provider),
+            Some(ModelProvider::OpenCodeGo)
+        );
+        assert_eq!(
+            follow_up.fallback.as_ref().map(|spec| spec.model.as_str()),
+            Some("mimo-v2.5")
+        );
+
+        let unavailable = follow_up_provider_assignment_with_key_state(&args, false);
+        assert!(unavailable.fallback.is_none());
+    }
+
+    #[test]
     fn primary_with_fallback_does_not_plan_missing_opencode_fallbacks() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.provider_policy = ModelProviderPolicy::PrimaryWithFallback;
@@ -32701,6 +32889,62 @@ UB_REVIEW_HTTP_STATUS:429
         );
         assert_eq!(preflight_event["cache_creation_input_tokens"], 700);
         assert_eq!(preflight_event["cache_read_input_tokens"], 50);
+        Ok(())
+    }
+
+    #[test]
+    fn cache_artifacts_use_follow_up_result_provider() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let args = test_run_args(temp.path().join("out"));
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let mut follow_up = test_follow_up_result("follow-cache", "group-cache", "ok");
+        follow_up.provider = "opencode-go".to_owned();
+        follow_up.model = "mimo-v2.5".to_owned();
+        follow_up.endpoint_kind = "anthropic-messages".to_owned();
+        follow_up.cache_usage = super::ModelCacheUsage {
+            input_tokens: Some(321),
+            output_tokens: Some(12),
+            cache_creation_input_tokens: None,
+            cache_read_input_tokens: Some(111),
+        };
+
+        super::write_shared_context_cache_artifacts(
+            temp.path(),
+            "stable shared context",
+            &[],
+            &[],
+            &model_lanes,
+            std::slice::from_ref(&follow_up),
+            &args,
+        )?;
+
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("review/cache_manifest.json"))?)?;
+        let follow_lane = manifest["lanes"]
+            .as_array()
+            .and_then(|lanes| {
+                lanes
+                    .iter()
+                    .find(|lane| lane["lane"] == "orchestrator-follow-up-follow-cache")
+            })
+            .ok_or_else(|| anyhow::anyhow!("follow-up cache lane missing"))?;
+        assert_eq!(follow_lane["provider"], "opencode-go");
+        assert_eq!(follow_lane["model"], "mimo-v2.5");
+        assert_eq!(follow_lane["endpoint_kind"], "anthropic-messages");
+
+        let events = fs::read_to_string(temp.path().join("review/cache_events.ndjson"))?;
+        let follow_event = events
+            .lines()
+            .filter(|line| !line.trim().is_empty())
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .find(|event| event["kind"] == "follow_up_cache_usage")
+            .ok_or_else(|| anyhow::anyhow!("follow-up cache event missing"))?;
+        assert_eq!(follow_event["provider"], "opencode-go");
+        assert_eq!(follow_event["endpoint_kind"], "anthropic-messages");
+        assert_eq!(follow_event["cache_mode"], "not-supported");
+        assert_eq!(follow_event["cache_read_input_tokens"], 111);
         Ok(())
     }
 
@@ -38081,6 +38325,7 @@ index 1111111..2222222 100644
                 shared_context: "shared context",
                 args: &args,
                 model_calls_used: 0,
+                key_present: |_| false,
                 tasks: &plan.follow_up_tasks,
                 line_map: &BTreeSet::new(),
             },
@@ -38121,6 +38366,10 @@ index 1111111..2222222 100644
             proof_result.reason,
             "model-mode off; follow-up task remains artifact-only"
         );
+        assert_eq!(proof_result.provider, "minimax");
+        assert_eq!(proof_result.model, "MiniMax-M3");
+        assert_eq!(proof_result.endpoint_kind, "anthropic-messages");
+        assert!(proof_result.fallback_from.is_none());
         assert_eq!(proof_result.output_counts.observations, 0);
         assert_eq!(proof_result.output_counts.candidate_findings, 0);
         assert_eq!(proof_result.output_counts.summary_only_findings, 0);
@@ -38215,6 +38464,10 @@ index 1111111..2222222 100644
         refuter.reason = "completed".to_owned();
         let model_lanes = vec![model_lane_receipt("tests-oracle", "ok"), planner, refuter];
         let mut secondary = test_follow_up_result("follow-secondary", "group-secondary", "ok");
+        secondary.provider = "opencode-go".to_owned();
+        secondary.model = "mimo-v2.5".to_owned();
+        secondary.endpoint_kind = "anthropic-messages".to_owned();
+        secondary.fallback_from = Some("minimax:MiniMax-M3:anthropic-messages".to_owned());
         secondary.duration_ms = Some(123);
         secondary.http_status = Some(200);
         secondary.response_shape = Some("anthropic".to_owned());
@@ -38243,7 +38496,9 @@ index 1111111..2222222 100644
         assert_eq!(records[3].source, "orchestrator-follow-up");
         assert_eq!(records[3].stage, "secondary");
         assert_eq!(records[3].task_id.as_deref(), Some("follow-secondary"));
-        assert_eq!(records[3].provider, "minimax");
+        assert_eq!(records[3].provider, "opencode-go");
+        assert_eq!(records[3].model, "mimo-v2.5");
+        assert_eq!(records[3].endpoint_kind, "anthropic-messages");
         assert_eq!(records[3].duration_ms, Some(123));
         assert_eq!(records[3].http_status, Some(200));
         assert_eq!(records[3].response_shape.as_deref(), Some("anthropic"));
@@ -40392,6 +40647,10 @@ index 1111111..2222222 100644
             model_lane: format!("orchestrator-follow-up-{task_id}"),
             status: status.to_owned(),
             reason: "test follow-up result".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            fallback_from: None,
             duration_ms: None,
             http_status: None,
             response_shape: None,
