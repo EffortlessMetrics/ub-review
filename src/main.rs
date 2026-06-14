@@ -2517,11 +2517,20 @@ struct InitGuideInspection {
     build_systems: Vec<String>,
     workflows: Vec<CiWorkflowScan>,
     package_scripts: Vec<InitPackageScript>,
+    audit_ci: Option<InitAuditCiInspection>,
     rust_source_count: usize,
     rust_test_count: usize,
     docs_or_specs_count: usize,
     unsafe_native_found: bool,
     cargo_allow_path: Option<String>,
+}
+
+#[derive(Debug)]
+struct InitAuditCiInspection {
+    dir: PathBuf,
+    inventory: Option<CiInventoryArtifact>,
+    recommendations: Option<CiRecommendationsArtifact>,
+    evidence_gaps: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -2687,6 +2696,7 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
         ),
     }
 
+    render_init_audit_ci_summary(&mut text, &inspection);
     render_init_config_proposal(&mut text, &inspection);
 
     text.push_str("\n## Recommended path\n\n");
@@ -2717,6 +2727,86 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
     text.push_str("- Follow-up capture: route real out-of-scope work into issue candidates with evidence, plan, and acceptance criteria.\n");
 
     Ok(text)
+}
+
+fn render_init_audit_ci_summary(text: &mut String, inspection: &InitGuideInspection) {
+    let Some(audit) = inspection.audit_ci.as_ref() else {
+        return;
+    };
+
+    text.push_str("\n## Audit-ci receipt summary\n\n");
+    text.push_str(&format!(
+        "- Existing audit-ci receipts: `{}`.\n",
+        init_display_repo_path(&inspection.root, &audit.dir)
+    ));
+    match audit.inventory.as_ref() {
+        Some(inventory) => text.push_str(&format!(
+            "- Inventory: {} jobs for `{}` over {} days.\n",
+            inventory.jobs.len(),
+            init_markdown_inline_code(&inventory.repo),
+            inventory.window_days
+        )),
+        None => text.push_str("- Inventory: unavailable; rerun `ub-review audit-ci --out target/ub-review` before setup-ci materialization.\n"),
+    }
+    if let Some(recommendations) = audit.recommendations.as_ref() {
+        text.push_str(&format!(
+            "- Recommendations: {} jobs for `{}` over {} days.\n",
+            recommendations.jobs.len(),
+            init_markdown_inline_code(&recommendations.repo),
+            recommendations.window_days
+        ));
+        for (tier, label) in CI_AUDIT_REPORT_TIER_SECTIONS {
+            let entries: Vec<&CiRecommendation> = recommendations
+                .jobs
+                .iter()
+                .filter(|entry| entry.tier == *tier)
+                .collect();
+            if entries.is_empty() {
+                continue;
+            }
+            text.push_str(&format!("- {label} (`{tier}`):\n"));
+            for entry in entries.iter().take(8) {
+                text.push_str(&format!(
+                    "  - `{}` from `{}` - {}. receipts: {}\n",
+                    init_markdown_inline_code(&entry.job),
+                    init_markdown_inline_code(&entry.workflow),
+                    init_markdown_plain(&entry.reason),
+                    init_join_markdown_code(&entry.receipts)
+                ));
+            }
+            if entries.len() > 8 {
+                text.push_str(&format!(
+                    "  - ... {} more jobs in this tier; inspect `ci-audit/recommendations.json`.\n",
+                    entries.len() - 8
+                ));
+            }
+        }
+        for gap in recommendations.evidence_gaps.iter().take(4) {
+            text.push_str(&format!(
+                "- Recommendation evidence gap: {}.\n",
+                init_markdown_plain(gap)
+            ));
+        }
+    } else {
+        text.push_str("- Recommendations: unavailable; rerun `ub-review audit-ci --out target/ub-review` before setup-ci materialization.\n");
+    }
+    if let Some(inventory) = audit.inventory.as_ref() {
+        for gap in inventory.evidence_gaps.iter().take(4) {
+            text.push_str(&format!(
+                "- Inventory evidence gap: {}.\n",
+                init_markdown_plain(gap)
+            ));
+        }
+    }
+    for gap in &audit.evidence_gaps {
+        text.push_str(&format!(
+            "- Audit receipt evidence gap: {}.\n",
+            init_markdown_plain(gap)
+        ));
+    }
+    text.push_str(
+        "- Setup boundary: audit receipts do not record runnable commands; use explicit `setup-ci --accept <job>=<command>` only for audited `adaptive` or `move-to-ub-review-required` jobs.\n",
+    );
 }
 
 fn render_init_config_proposal(text: &mut String, inspection: &InitGuideInspection) {
@@ -2812,6 +2902,7 @@ fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
         build_systems.push("JavaScript/TypeScript (`package.json`)".to_owned());
     }
     let package_scripts = init_package_json_scripts(&root);
+    let audit_ci = inspect_init_audit_ci_receipts(&root);
     if root.join("pyproject.toml").is_file() {
         build_systems.push("Python (`pyproject.toml`)".to_owned());
     } else if root.join("requirements.txt").is_file() {
@@ -2830,11 +2921,68 @@ fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
         build_systems,
         workflows,
         package_scripts,
+        audit_ci,
         rust_source_count,
         rust_test_count,
         docs_or_specs_count,
         unsafe_native_found,
         cargo_allow_path,
+    })
+}
+
+fn inspect_init_audit_ci_receipts(root: &Path) -> Option<InitAuditCiInspection> {
+    let dir = root.join("target").join("ub-review").join("ci-audit");
+    let inventory_path = dir.join("inventory.json");
+    let recommendations_path = dir.join("recommendations.json");
+    if !inventory_path.exists() && !recommendations_path.exists() {
+        return None;
+    }
+
+    let mut evidence_gaps = Vec::new();
+    let inventory = if inventory_path.is_file() {
+        match load_ci_audit_receipt(&dir, "inventory.json", CI_INVENTORY_SCHEMA) {
+            Ok(receipt) => Some(receipt),
+            Err(error) => {
+                evidence_gaps.push(format!(
+                    "`{}` unreadable: {}",
+                    init_display_repo_path(root, &inventory_path),
+                    init_markdown_plain(&error.to_string())
+                ));
+                None
+            }
+        }
+    } else {
+        evidence_gaps.push(format!(
+            "`{}` missing; rerun `ub-review audit-ci --out target/ub-review`",
+            init_display_repo_path(root, &inventory_path)
+        ));
+        None
+    };
+    let recommendations = if recommendations_path.is_file() {
+        match load_ci_audit_receipt(&dir, "recommendations.json", CI_RECOMMENDATIONS_SCHEMA) {
+            Ok(receipt) => Some(receipt),
+            Err(error) => {
+                evidence_gaps.push(format!(
+                    "`{}` unreadable: {}",
+                    init_display_repo_path(root, &recommendations_path),
+                    init_markdown_plain(&error.to_string())
+                ));
+                None
+            }
+        }
+    } else {
+        evidence_gaps.push(format!(
+            "`{}` missing; rerun `ub-review audit-ci --out target/ub-review`",
+            init_display_repo_path(root, &recommendations_path)
+        ));
+        None
+    };
+
+    Some(InitAuditCiInspection {
+        dir,
+        inventory,
+        recommendations,
+        evidence_gaps,
     })
 }
 
@@ -3057,6 +3205,35 @@ fn init_markdown_inline_code(value: &str) -> String {
         .collect::<String>()
         .trim()
         .to_owned()
+}
+
+fn init_markdown_plain(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            '\r' | '\n' | '\t' => ' ',
+            _ => ch,
+        })
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn init_join_markdown_code(values: &[String]) -> String {
+    if values.is_empty() {
+        return "`ci-audit/recommendations.json`".to_owned();
+    }
+    values
+        .iter()
+        .map(|value| format!("`{}`", init_markdown_inline_code(value)))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn init_display_repo_path(root: &Path, path: &Path) -> String {
+    let display = path.strip_prefix(root).unwrap_or(path);
+    display.to_string_lossy().replace('\\', "/")
 }
 
 fn init_cargo_package_name(text: &str) -> Option<String> {

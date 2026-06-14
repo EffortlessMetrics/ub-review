@@ -463,6 +463,10 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
             "init guide missing `{expected}`:\n{guide_text}"
         );
     }
+    assert!(
+        !guide_text.contains("## Audit-ci receipt summary"),
+        "fresh init without audit receipts should not add an empty audit summary:\n{guide_text}"
+    );
 
     let failure = run_expect_failure(
         temp.path(),
@@ -508,6 +512,115 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
         !repo.join("collision.md").exists(),
         "collision preflight must not write either output"
     );
+    Ok(())
+}
+
+#[test]
+fn init_guide_summarizes_existing_audit_ci_receipts() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    write_init_audit_ci_fixture(&repo.join("target/ub-review/ci-audit"))?;
+
+    let config = repo.join(".ub-review.toml");
+    let guide = repo.join("ub-review-init.md");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "init",
+            "--root",
+            path_str(&repo)?,
+            "--path",
+            path_str(&config)?,
+            "--guide-out",
+            path_str(&guide)?,
+        ],
+    )?;
+
+    let config_text = fs::read_to_string(&config)?;
+    for forbidden in [
+        "ci-audit",
+        "integration",
+        "unit",
+        "move-to-ub-review-required",
+        "[[proof.required]]",
+    ] {
+        assert!(
+            !config_text.contains(forbidden),
+            "init must not materialize audit recommendations into starter config (`{forbidden}` leaked):\n{config_text}"
+        );
+    }
+
+    let guide_text = fs::read_to_string(&guide)?;
+    for expected in [
+        "## Audit-ci receipt summary",
+        "Existing audit-ci receipts: `target/ub-review/ci-audit`.",
+        "Inventory: 4 jobs for `acme/widgets` over 90 days.",
+        "Recommendations: 4 jobs for `acme/widgets` over 90 days.",
+        "Right-size to adaptive (`adaptive`):",
+        "`integration` from `.github/workflows/ci.yml` - expensive and quiet on unrelated diffs. receipts: `ci-audit/correlation.json#integration`",
+        "Move into ub-review/gate (`move-to-ub-review-required`):",
+        "`unit` from `.github/workflows/ci.yml`",
+        "Keep required (`keep-required`):",
+        "Human review required (`flag-for-human`):",
+        "Inventory evidence gap: required checks unreadable from tokenless audit.",
+        "Recommendation evidence gap: history window truncated.",
+        "Setup boundary: audit receipts do not record runnable commands",
+        "explicit `setup-ci --accept <job>=<command>`",
+        "only for audited `adaptive` or `move-to-ub-review-required` jobs",
+    ] {
+        assert!(
+            guide_text.contains(expected),
+            "init guide missing `{expected}`:\n{guide_text}"
+        );
+    }
+    assert!(
+        !guide_text.contains("integration=cargo test"),
+        "init must not invent runnable setup-ci --accept commands:\n{guide_text}"
+    );
+    Ok(())
+}
+
+#[test]
+fn init_guide_flags_bad_existing_audit_ci_receipts_without_failing() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    write_bad_init_audit_ci_fixture(&repo.join("target/ub-review/ci-audit"));
+
+    let config = repo.join(".ub-review.toml");
+    let guide = repo.join("ub-review-init.md");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "init",
+            "--root",
+            path_str(&repo)?,
+            "--path",
+            path_str(&config)?,
+            "--guide-out",
+            path_str(&guide)?,
+        ],
+    )?;
+
+    let guide_text = fs::read_to_string(&guide)?;
+    for expected in [
+        "## Audit-ci receipt summary",
+        "Inventory: unavailable; rerun `ub-review audit-ci --out target/ub-review` before setup-ci materialization.",
+        "Recommendations: unavailable; rerun `ub-review audit-ci --out target/ub-review` before setup-ci materialization.",
+        "Audit receipt evidence gap: `target/ub-review/ci-audit/inventory.json` unreadable:",
+        "expected ub-review.ci_inventory.v1",
+        "`target/ub-review/ci-audit/recommendations.json` missing; rerun `ub-review audit-ci --out target/ub-review`",
+    ] {
+        assert!(
+            guide_text.contains(expected),
+            "init guide missing `{expected}`:\n{guide_text}"
+        );
+    }
     Ok(())
 }
 
@@ -5661,6 +5774,84 @@ fn write_file(path: &Path, text: &str) -> Result<()> {
     }
     fs::write(path, text)?;
     Ok(())
+}
+
+fn write_init_audit_ci_fixture(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    let job = |name: &str| {
+        serde_json::json!({
+            "workflow": ".github/workflows/ci.yml",
+            "job": name,
+            "name": name,
+            "triggers": ["pull_request"],
+            "path_filters": [],
+            "matrix_size": 1,
+            "timeout_minutes": 30,
+            "permissions": null,
+            "uses_secrets": [],
+            "required_check": null,
+            "required_check_source": "unknown",
+            "required_check_context": null,
+        })
+    };
+    fs::write(
+        dir.join("inventory.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.ci_inventory.v1",
+            "generated_at": "2026-06-14T00:00:00Z",
+            "repo": "acme/widgets",
+            "window_days": 90,
+            "jobs": [job("integration"), job("unit"), job("fmt"), job("deploy")],
+            "evidence_gaps": ["required checks unreadable from tokenless audit"],
+        }))?,
+    )?;
+    let recommendation = |name: &str, tier: &str, reason: &str| {
+        serde_json::json!({
+            "job": name,
+            "workflow": ".github/workflows/ci.yml",
+            "tier": tier,
+            "positioned_to_catch": "regressions in its scope",
+            "has_caught": "2 independent failures in the window",
+            "receipts": [format!("ci-audit/correlation.json#{name}")],
+            "proposed_policy": "per tier",
+            "confidence": "medium",
+            "judgment": "deterministic",
+            "reason": reason,
+            "report_note": "",
+        })
+    };
+    fs::write(
+        dir.join("recommendations.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.ci_recommendations.v1",
+            "repo": "acme/widgets",
+            "window_days": 90,
+            "jobs": [
+                recommendation("integration", "adaptive", "expensive and quiet on unrelated diffs"),
+                recommendation("unit", "move-to-ub-review-required", "already merge-relevant and cheap"),
+                recommendation("fmt", "keep-required", "cheap deterministic floor"),
+                recommendation("deploy", "flag-for-human", "release-sensitive job"),
+            ],
+            "evidence_gaps": ["history window truncated"],
+        }))?,
+    )?;
+    Ok(())
+}
+
+fn write_bad_init_audit_ci_fixture(dir: &Path) {
+    let created = fs::create_dir_all(dir);
+    assert!(
+        created.is_ok(),
+        "bad audit fixture directory should be writable: {created:?}"
+    );
+    let written = fs::write(
+        dir.join("inventory.json"),
+        "{ \"schema\": \"wrong.schema\", \"jobs\": [] }\n",
+    );
+    assert!(
+        written.is_ok(),
+        "bad audit fixture inventory receipt should be writable: {written:?}"
+    );
 }
 
 fn write_fake_bun(dir: &Path) -> Result<()> {
