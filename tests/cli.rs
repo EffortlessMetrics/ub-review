@@ -470,6 +470,236 @@ fn setup_ci_print_pr_cli_materializes_accepted_preview_files() -> Result<()> {
 }
 
 #[test]
+fn audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let repo = temp.path().join("repo");
+    write_file(
+        &repo.join(".github/workflows/ci.yml"),
+        r#"name: CI
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+
+permissions: read-all
+
+jobs:
+  fmt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - run: cargo fmt --check
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - run: cargo test --workspace
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - run: ./scripts/deploy.sh
+"#,
+    )
+    .context("write tokenless audit-ci workflow fixture")?;
+    let out = temp.path().join("target/ub-review");
+    let out_arg = path_str(&out)?;
+    let root_arg = path_str(&repo)?;
+    let mut command = isolated_command(bin, temp.path());
+    command
+        .env_remove("GITHUB_REPOSITORY")
+        .env_remove("GITHUB_TOKEN")
+        .args([
+            "audit-ci",
+            "--root",
+            root_arg,
+            "--out",
+            out_arg,
+            "--repo",
+            "acme/widgets",
+            "--window-days",
+            "45",
+        ]);
+    let output = command.output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(
+        output.status.success(),
+        "audit-ci failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("audit-ci: wrote"),
+        "audit-ci should report the output directory:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("(3 jobs, inventory-only mode)"),
+        "tokenless audit-ci should stay in inventory-only mode:\n{stdout}"
+    );
+    assert!(
+        stderr.trim().is_empty(),
+        "tokenless audit-ci should not write stderr noise:\n{stderr}"
+    );
+
+    let ci_audit = out.join("ci-audit");
+    let files = collect_relative_file_paths(&ci_audit)?;
+    assert_eq!(
+        files,
+        vec![
+            "audit-report.md",
+            "correlation.json",
+            "costs.json",
+            "history.json",
+            "inventory.json",
+            "recommendations.json",
+            "runner-cancellations.json",
+        ],
+        "audit-ci should write only its read-only receipt set"
+    );
+
+    let inventory = read_json(&ci_audit.join("inventory.json"))?;
+    assert_eq!(inventory["schema"], "ub-review.ci_inventory.v1");
+    assert_eq!(inventory["repo"], "acme/widgets");
+    assert_eq!(inventory["window_days"], 45);
+    let inventory_jobs = json_array_field(&inventory, "jobs")?;
+    assert_eq!(inventory_jobs.len(), 3);
+    let inventory_job_names = inventory_jobs
+        .iter()
+        .map(|job| json_str_field(job, "job").map(ToOwned::to_owned))
+        .collect::<Result<Vec<_>>>()?;
+    assert_eq!(inventory_job_names, vec!["deploy", "fmt", "integration"]);
+    let deploy = inventory_jobs
+        .iter()
+        .find(|job| job["job"].as_str() == Some("deploy"))
+        .context("deploy inventory job")?;
+    assert_eq!(
+        deploy["permissions"],
+        serde_json::json!({"contents": "write", "id-token": "write"})
+    );
+    let fmt = inventory_jobs
+        .iter()
+        .find(|job| job["job"].as_str() == Some("fmt"))
+        .context("fmt inventory job")?;
+    assert_eq!(fmt["timeout_minutes"], 10);
+    assert_eq!(fmt["required_check"], serde_json::Value::Null);
+    assert_eq!(fmt["required_check_source"], "unknown");
+    assert!(
+        inventory["evidence_gaps"]
+            .as_array()
+            .is_some_and(|gaps| gaps.iter().any(|gap| gap
+                .as_str()
+                .is_some_and(|gap| gap.contains("no GitHub token")))),
+        "inventory should receipt tokenless history limitations: {inventory:#?}"
+    );
+
+    let history = read_json(&ci_audit.join("history.json"))?;
+    assert_eq!(history["schema"], "ub-review.ci_history.v1");
+    assert_eq!(history["runs_fetched"], 0);
+    assert_eq!(history["pages_fetched"], 0);
+    assert!(json_array_field(&history, "jobs")?.is_empty());
+    let costs = read_json(&ci_audit.join("costs.json"))?;
+    assert_eq!(costs["schema"], "ub-review.ci_costs.v1");
+    assert!(json_array_field(&costs, "jobs")?.is_empty());
+    let correlation = read_json(&ci_audit.join("correlation.json"))?;
+    assert_eq!(correlation["schema"], "ub-review.ci_correlation.v1");
+    assert!(
+        correlation["independent_failure_rule"]
+            .as_str()
+            .is_some_and(|rule| rule.contains("independent failure"))
+    );
+    assert!(json_array_field(&correlation, "jobs")?.is_empty());
+
+    let recommendations = read_json(&ci_audit.join("recommendations.json"))?;
+    assert_eq!(recommendations["schema"], "ub-review.ci_recommendations.v1");
+    let recommendation_jobs = json_array_field(&recommendations, "jobs")?;
+    assert_eq!(recommendation_jobs.len(), 3);
+    for recommendation in recommendation_jobs {
+        assert_eq!(recommendation["tier"], "flag-for-human");
+        assert_eq!(recommendation["judgment"], "deterministic");
+        let expected_receipt = format!(
+            "ci-audit/inventory.json#{}",
+            json_str_field(recommendation, "job")?
+        );
+        assert_eq!(
+            json_array_field(recommendation, "receipts")?
+                .first()
+                .and_then(serde_json::Value::as_str),
+            Some(expected_receipt.as_str())
+        );
+    }
+
+    let runner_cancellations = read_json(&ci_audit.join("runner-cancellations.json"))?;
+    assert_eq!(
+        runner_cancellations["schema"],
+        "ub-review.ci_runner_cancellations.v1"
+    );
+    assert!(json_array_field(&runner_cancellations, "classifications")?.is_empty());
+    assert!(
+        runner_cancellations["evidence_gaps"]
+            .as_array()
+            .is_some_and(|gaps| gaps.iter().any(|gap| gap
+                .as_str()
+                .is_some_and(|gap| gap.contains("audit-log cancellation event count")))),
+        "runner cancellation receipt should preserve the audit-log gap: {runner_cancellations:#?}"
+    );
+
+    let report = fs::read_to_string(ci_audit.join("audit-report.md"))?;
+    for expected in [
+        "# CI audit: acme/widgets",
+        "Window: 45 days. Inventory-only: no GitHub token, no run history fetched.",
+        "### Human review required",
+        "`ci-audit/inventory.json#fmt`",
+        "`ci-audit/inventory.json#integration`",
+        "required-check status unknown",
+        "no GitHub token",
+    ] {
+        assert!(
+            report.contains(expected),
+            "audit report missing `{expected}`:\n{report}"
+        );
+    }
+
+    for relative in [
+        ".ub-review.toml",
+        ".github/workflows/ub-review-gate.yml",
+        "docs/ci/ub-review-migration.md",
+        "docs/ci/branch-protection-change.md",
+    ] {
+        assert!(
+            !temp.path().join(relative).exists(),
+            "audit-ci must not write migration files at repo root: {relative}"
+        );
+    }
+    assert_eq!(
+        collect_relative_file_paths(&repo)?,
+        vec![".github/workflows/ci.yml"],
+        "audit-ci must leave the audited repo unchanged"
+    );
+    for forbidden in [
+        "preview",
+        "setup-pr-result.json",
+        "setup-pr-error.json",
+        "setup-pr-branch-payload.json",
+        "setup-pr-pull-payload.json",
+    ] {
+        assert!(
+            !ci_audit.join(forbidden).exists(),
+            "audit-ci must not write setup-ci/open-pr artifact `{forbidden}`"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn adoption_docs_match_setup_ci_current_surface() {
     let docs = [
         (
