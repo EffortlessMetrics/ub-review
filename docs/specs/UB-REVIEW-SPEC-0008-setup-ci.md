@@ -346,9 +346,11 @@ surface) carries those in full; the migration plan doc should link them
 rather than restate them, because a migration PR that oversells its
 destination violates the no-vibes rule.
 
-And the largest non-claim of all, restated from the Status line: none of
-this exists. A release, a README, or a PR comment must not present setup-ci
-as available until the slices below land.
+The current non-claim is narrower: setup-ci v0 exists as a local renderer
+and new-files-only PR opener. A release, README, or PR comment may present
+that surface, but must not imply setup-ci edits existing workflows, mutates
+branch protection, proves the migrated gate is complete, or applies the
+future slices below.
 
 ## Validation commands
 

@@ -948,6 +948,8 @@ fn adoption_docs_match_setup_ci_current_surface() {
             "the PR you write yourself",
             "`setup-ci` ships only after",
             "three new files",
+            "none of this exists",
+            "must not present setup-ci as available until the slices below land",
         ] {
             assert!(
                 !text.contains(stale),
