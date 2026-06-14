@@ -4082,7 +4082,8 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
         duplicate_lane_content.clone(),
         duplicate_lane_content,
         fake_openai_lane_content(),
-    ])?;
+    ])
+    .context("spawn fake OpenAI provider for duplicate proof requests")?;
     let fake_bin = temp.path().join("fake-bin");
     write_fake_cargo(&fake_bin)?;
     let path = prepend_to_path(&fake_bin)?;
