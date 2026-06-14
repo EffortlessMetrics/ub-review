@@ -36,15 +36,14 @@ below say which side of the line they are on.
 
 ## Purpose
 
-Define the contract for the migration-PR generator before any code exists:
+Define the executable contract for the migration-PR generator:
 what `setup-ci` reads, exactly which files it may create or edit, what it
 must print before it opens anything, what it must never mutate, and the
 human-review boundaries that make the PR trustworthy. The command is the
 last step of the adoption path in docs/adr/0002: audit-ci produces the
 receipts, the gate proves it can fail correctly, and only then does setup-ci
-package the fold into one reviewable PR. Writing the contract first means
-the implementation is graded against this document, not the other way
-around.
+package the fold into one reviewable PR. The implementation is graded against
+this document, not the other way around.
 
 ## User question
 
@@ -52,14 +51,12 @@ around.
 Can ub-review open the migration PR that folds my CI into one gate?
 ```
 
-Honest answer today: no. The fold has happened exactly once, on this
-repository, by hand (roadmap item 26: PRs #300/#301 folded `ci.yml` and
-`coverage.yml` into the gate as `[[proof.required]]` tasks and
-required/leased tools in `.ub-review.toml`; branch protection was edited
-manually via the API). setup-ci is the productized version of that manual
-sequence. Until it ships, the answer a release may give is "audit-ci tells
-you what to fold and this repo's history shows the fold working; the PR you
-write yourself."
+Honest answer today: yes, within the v0 boundary. `setup-ci --print-pr`
+renders the migration plan from audit receipts without writes, and
+`setup-ci --open-pr` opens one new-files-only migration PR containing the
+generated `.ub-review.toml`, SHA-pinned gate workflow, migration plan, and
+manual branch-protection instructions. It still does not rewrite existing
+workflows and never mutates branch protection.
 
 ## Lifecycle moment
 
@@ -78,8 +75,8 @@ Once per repository adoption, and only after three things are true:
 ADR 0002's rollout sequence places setup-ci sixth, "calibrated on the
 receipts from steps 3-5" - meaning the audit-ci report, the dogfood fold on
 this repo (done), and the rust-test-proof multi-repo rollout (item 27, not
-yet done) all feed calibration before the generator ships. setup-ci is a
-one-shot adoption event, not a per-PR surface.
+yet done) all feed calibration before broader right-sizing edits. setup-ci is
+a one-shot adoption event, not a per-PR surface.
 
 ## Consumer
 

@@ -22,7 +22,8 @@ their runner minutes, which should move inside the gate as required proof,
 which should become adaptive, and which must stay with a human. The framing is
 right-sizing, not downgrading (docs/CI_AUDIT_WIZARD.md). It is a read-only
 report: no workflow edits, no branch-protection changes, no PR. The PR-emitting
-successor is `setup-ci` (spec 0008, unimplemented).
+successor is `setup-ci` (spec 0008): `--print-pr` renders the migration plan,
+and `--open-pr` opens the new-files-only migration PR.
 
 ## User question
 
@@ -45,7 +46,7 @@ exports works with no ub-review-specific configuration (comment on
 
 - a maintainer deciding whether and how to adopt the gate, reading
   `audit-report.md`;
-- the (future) `setup-ci` migration PR generator, reading the JSON receipts;
+- the `setup-ci` migration PR generator, reading the JSON receipts;
 - this repo's own governance: the #299 report against ub-review itself
   justified the #301 CI fold (docs/ROADMAP.md, single-gate section).
 

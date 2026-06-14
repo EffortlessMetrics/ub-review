@@ -42012,7 +42012,7 @@ jobs:
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("run");
 
-        // Bare setup-ci names the unimplemented slice instead of guessing.
+        // Bare setup-ci is inert: operators must choose local render or PR open.
         let mut bare = setup_ci_args(&out, Vec::new());
         bare.print_pr = false;
         let err = setup_ci_err(bare)?;

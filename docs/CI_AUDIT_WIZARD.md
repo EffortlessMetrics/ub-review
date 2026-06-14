@@ -27,12 +27,13 @@ setup-ci    migration-PR generator: writes .ub-review.toml, proposes workflow
             Never mutates branch protection itself.
 ```
 
-`audit-ci` is the adoption wedge and ships first. `setup-ci` ships only after
-the gate verdict surface (roadmap #23) and required-proof/tool policy
-(roadmap #24) exist, because the migration PR depends on `ub-review/gate`
-being able to fail correctly. A later `setup-ci --apply-branch-protection`
-may apply the required-checks change with an explicitly granted admin token;
-it is a separate command invocation, never a default.
+`audit-ci` is the read-only measurement step. `setup-ci --print-pr` and the
+new-files-only `setup-ci --open-pr` path run after the gate verdict surface
+and required-proof/tool policy exist, because the migration PR depends on
+`ub-review/gate` being able to fail correctly. A later
+`setup-ci --apply-branch-protection` may apply the required-checks change with
+an explicitly granted admin token; it is a separate command invocation, never
+a default.
 
 ## audit-ci artifacts
 
