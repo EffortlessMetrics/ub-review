@@ -45,7 +45,7 @@ ub-review setup-ci --print-pr       # render the migration PR - generated
 ub-review setup-ci --open-pr \
   --accept <job>="<command>" \
   --action-sha <full-sha>           # open the migration PR: one branch,
-                                    # three new files, one PR whose body is
+                                    # four new files, one PR whose body is
                                     # the plan. Never touches branch
                                     # protection; refuses repos that already
                                     # have a .ub-review.toml

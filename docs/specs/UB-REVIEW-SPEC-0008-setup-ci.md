@@ -482,8 +482,9 @@ diffs remain future work. `--print-pr` shows the plan with nothing opened.
 What is artifact-only?
 `<out>/ci-audit/migration-plan.md` (the run-artifact copy of the plan),
 `<out>/ci-audit/preview/...` when `--action-sha` is supplied for a
-no-network generated-file preview, and the upstream audit receipts they were
-built from.
+no-network generated-file preview, `setup-pr-result.json` or
+`setup-pr-error.json` when `--open-pr` attempts the PR, and the upstream
+audit receipts they were built from.
 
 What does success look like in ten minutes?
 Run `audit-ci` with a token, read the report, run `setup-ci --print-pr`,

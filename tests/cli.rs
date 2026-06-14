@@ -327,6 +327,7 @@ fn adoption_docs_match_setup_ci_current_surface() {
             "SPEC-0001",
             include_str!("../docs/specs/UB-REVIEW-SPEC-0001-release-surface.md"),
         ),
+        ("README", include_str!("../README.md")),
     ];
     for (name, text) in &docs {
         for stale in [
@@ -336,6 +337,7 @@ fn adoption_docs_match_setup_ci_current_surface() {
             "Until it ships",
             "the PR you write yourself",
             "`setup-ci` ships only after",
+            "three new files",
         ] {
             assert!(
                 !text.contains(stale),
@@ -356,6 +358,9 @@ fn adoption_docs_match_setup_ci_current_surface() {
     assert!(wizard.contains("`setup-ci --print-pr`"));
     assert!(wizard.contains("new-files-only `setup-ci --open-pr`"));
     assert!(wizard.contains("Never mutates branch protection itself."));
+
+    let readme = docs[6].1;
+    assert!(readme.contains("four new files"));
 
     for (name, text) in &docs {
         if text.contains("--apply-branch-protection") {
@@ -388,6 +393,18 @@ fn artifact_contract_docs_match_ci_audit_verifier_coverage() {
     assert!(
         spec_0004.contains("ci-audit/audit-report.md"),
         "SPEC-0004 must keep the human-only audit report separate from JSON receipts"
+    );
+    assert!(
+        verifier.contains("def require_setup_ci_terminal_receipts"),
+        "setup-ci terminal receipt verifier disappeared"
+    );
+    assert!(
+        spec_0004.contains("require_setup_ci_terminal_receipts"),
+        "SPEC-0004 must name the executable setup-ci terminal receipt verifier"
+    );
+    assert!(
+        spec_0004.contains("ci-audit/setup-pr-result.json XOR setup-pr-error.json"),
+        "SPEC-0004 must document setup-ci result/error as an XOR terminal receipt"
     );
     for stale in [
         "ci-audit/*                              audit-ci output; contract pending",

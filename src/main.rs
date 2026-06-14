@@ -25610,6 +25610,14 @@ fn execute_setup_ci_open_pr(
     })
 }
 
+fn remove_stale_setup_ci_terminal_receipt(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err).with_context(|| format!("remove stale {}", path.display())),
+    }
+}
+
 fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
     if !args.print_pr && !args.open_pr {
         bail!(
@@ -25722,6 +25730,10 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
                  adaptive jobs to fold in."
             );
         }
+        let result_path = dir.join("setup-pr-result.json");
+        let error_path = dir.join("setup-pr-error.json");
+        remove_stale_setup_ci_terminal_receipt(&result_path)?;
+        remove_stale_setup_ci_terminal_receipt(&error_path)?;
         match execute_setup_ci_open_pr(
             &args,
             &plan,
@@ -25730,14 +25742,12 @@ fn cmd_setup_ci(args: SetupCiArgs) -> Result<()> {
             &required_check,
         ) {
             Ok(result) => {
-                let result_path = dir.join("setup-pr-result.json");
                 fs::write(&result_path, serde_json::to_vec_pretty(&result)?)
                     .with_context(|| format!("write {}", result_path.display()))?;
                 println!("opened {}", result.pr_url);
                 eprintln!("wrote {}", result_path.display());
             }
             Err(err) => {
-                let error_path = dir.join("setup-pr-error.json");
                 fs::write(
                     &error_path,
                     serde_json::to_vec_pretty(&serde_json::json!({
@@ -43001,6 +43011,7 @@ jobs:
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("run");
         write_setup_ci_fixture(&out.join("ci-audit"))?;
+        fs::write(out.join("ci-audit/setup-pr-error.json"), "{}")?;
         // Sequence: repo meta, base ref, base tree, create ref, 4 file PUTs,
         // open PR = 9 requests.
         let (api_url, handle) = spawn_fake_setup_ci_api(9, false)?;
@@ -43037,6 +43048,10 @@ jobs:
         assert!(requests[8].contains("Adopt ub-review/gate"));
         let result: serde_json::Value =
             serde_json::from_slice(&fs::read(out.join("ci-audit/setup-pr-result.json"))?)?;
+        assert!(
+            !out.join("ci-audit/setup-pr-error.json").exists(),
+            "successful setup-ci --open-pr must remove stale error receipts"
+        );
         assert_eq!(result["schema"], "ub-review.setup_pr_result.v1");
         assert_eq!(result["pr_url"], "https://github.com/acme/widgets/pull/77");
         assert_eq!(result["base"], "main");
@@ -43113,10 +43128,15 @@ jobs:
         args.github_token = Some("test-token".to_owned());
         args.github_api_url = api_url;
         args.action_sha = Some("b".repeat(40));
+        fs::write(out.join("ci-audit/setup-pr-result.json"), "{}")?;
         let err = setup_ci_err(args)?;
         assert!(
             format!("{err:#}").contains("already has a .ub-review.toml"),
             "{err:#}"
+        );
+        assert!(
+            !out.join("ci-audit/setup-pr-result.json").exists(),
+            "failed setup-ci --open-pr must remove stale success receipts"
         );
         let error_receipt: serde_json::Value =
             serde_json::from_slice(&fs::read(out.join("ci-audit/setup-pr-error.json"))?)?;

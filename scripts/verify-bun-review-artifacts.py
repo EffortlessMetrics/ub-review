@@ -48,6 +48,12 @@ CI_AUDIT_RECOMMENDATION_TIERS = {
     "label-gated",
     "flag-for-human",
 }
+SETUP_CI_GENERATED_FILES = [
+    ".ub-review.toml",
+    ".github/workflows/ub-review-gate.yml",
+    "docs/ci/ub-review-migration.md",
+    "docs/ci/branch-protection-change.md",
+]
 SKIPPED_REVIEW_PAYLOAD_STATUSES = {
     "skipped_empty_smoke",
     "skipped_artifact_only_body",
@@ -478,6 +484,55 @@ def require_ci_audit_core_artifacts(root: pathlib.Path, *, required: bool = Fals
             require_ci_audit_recommendation_job(
                 job, f"{paths['recommendations.json']} jobs[{index}]"
             )
+
+
+def require_setup_ci_terminal_receipts(root: pathlib.Path) -> None:
+    result_path = ci_audit_artifact_path(root, "setup-pr-result.json")
+    error_path = ci_audit_artifact_path(root, "setup-pr-error.json")
+    result_exists = result_path.exists()
+    error_exists = error_path.exists()
+    if not result_exists and not error_exists:
+        return
+    if result_exists and error_exists:
+        fail("both setup-pr-result.json and setup-pr-error.json exist")
+    if result_exists:
+        receipt = load_json(result_path)
+        if not isinstance(receipt, dict):
+            fail(f"{result_path} is not an object")
+        if receipt.get("schema") != "ub-review.setup_pr_result.v1":
+            fail(
+                f"{result_path} has wrong schema: expected "
+                "ub-review.setup_pr_result.v1"
+            )
+        require_string(receipt, str(result_path), "repo", nonempty=True)
+        require_string(receipt, str(result_path), "base", nonempty=True)
+        require_string(receipt, str(result_path), "branch", nonempty=True)
+        require_string(receipt, str(result_path), "pr_url", nonempty=True)
+        action_sha = require_string(
+            receipt, str(result_path), "action_sha", nonempty=True
+        )
+        if not re.fullmatch(r"[A-Fa-f0-9]{40}", action_sha):
+            fail(f"{result_path}.action_sha is not a full 40-hex SHA")
+        files = require_string_list(receipt, str(result_path), "files", nonempty=True)
+        if files != SETUP_CI_GENERATED_FILES:
+            fail(
+                f"{result_path}.files does not match expected setup-ci files: "
+                f"{files!r}"
+            )
+        return
+
+    receipt = load_json(error_path)
+    if not isinstance(receipt, dict):
+        fail(f"{error_path} is not an object")
+    if receipt.get("schema") != "ub-review.setup_pr_error.v1":
+        fail(
+            f"{error_path} has wrong schema: expected "
+            "ub-review.setup_pr_error.v1"
+        )
+    status = require_string(receipt, str(error_path), "status", nonempty=True)
+    if status != "failed":
+        fail(f"{error_path}.status expected failed, got {status!r}")
+    require_string(receipt, str(error_path), "reason", nonempty=True)
 
 
 def require_ci_audit_runner_cancellations(root: pathlib.Path, *, required: bool = False) -> None:
@@ -9143,6 +9198,89 @@ def self_test_ci_audit_core_artifact_contract() -> None:
     )
 
 
+def self_test_setup_ci_terminal_receipt_contract() -> None:
+    import tempfile
+
+    def write_root(
+        *,
+        result: dict | None = None,
+        error: dict | None = None,
+        direct: bool = False,
+    ) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        audit_dir = root / "ci-audit"
+        audit_dir.mkdir()
+        if result is not None:
+            (audit_dir / "setup-pr-result.json").write_text(
+                json.dumps(result), encoding="utf-8"
+            )
+        if error is not None:
+            (audit_dir / "setup-pr-error.json").write_text(
+                json.dumps(error), encoding="utf-8"
+            )
+        return audit_dir if direct else root
+
+    def result(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.setup_pr_result.v1",
+            "repo": "acme/widgets",
+            "base": "main",
+            "branch": "ub-review/setup-ci-migration",
+            "pr_url": "https://github.com/acme/widgets/pull/77",
+            "files": SETUP_CI_GENERATED_FILES,
+            "action_sha": "a" * 40,
+        }
+        base.update(overrides)
+        return base
+
+    def error(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.setup_pr_error.v1",
+            "status": "failed",
+            "reason": "repo already has a .ub-review.toml",
+        }
+        base.update(overrides)
+        return base
+
+    require_setup_ci_terminal_receipts(write_root(result=result()))
+    require_setup_ci_terminal_receipts(write_root(result=result(), direct=True))
+    require_setup_ci_terminal_receipts(write_root(error=error()))
+    require_setup_ci_terminal_receipts(pathlib.Path("__missing_setup_ci_terminal_root__"))
+    expect_self_test_failure(
+        "setup-ci terminal receipts both present",
+        "both setup-pr-result.json and setup-pr-error.json exist",
+        lambda: require_setup_ci_terminal_receipts(
+            write_root(result=result(), error=error())
+        ),
+    )
+    expect_self_test_failure(
+        "setup-ci terminal result bad files",
+        "files does not match expected setup-ci files",
+        lambda: require_setup_ci_terminal_receipts(
+            write_root(result=result(files=[".ub-review.toml"]))
+        ),
+    )
+    expect_self_test_failure(
+        "setup-ci terminal result bad action sha",
+        "action_sha is not a full 40-hex SHA",
+        lambda: require_setup_ci_terminal_receipts(
+            write_root(result=result(action_sha="abc"))
+        ),
+    )
+    expect_self_test_failure(
+        "setup-ci terminal error wrong status",
+        "status expected failed",
+        lambda: require_setup_ci_terminal_receipts(
+            write_root(error=error(status="ok"))
+        ),
+    )
+    expect_self_test_failure(
+        "setup-ci terminal error missing reason",
+        "reason is empty",
+        lambda: require_setup_ci_terminal_receipts(write_root(error=error(reason=""))),
+    )
+
+
 def self_test_ci_audit_runner_cancellations_contract() -> None:
     import tempfile
 
@@ -10516,6 +10654,7 @@ def run_self_tests() -> None:
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
     self_test_ci_audit_core_artifact_contract()
+    self_test_setup_ci_terminal_receipt_contract()
     self_test_ci_audit_runner_cancellations_contract()
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
@@ -10641,11 +10780,13 @@ def main(argv: list[str]) -> int:
 
     if args.ci_audit_only:
         require_ci_audit_core_artifacts(root, required=True)
+        require_setup_ci_terminal_receipts(root)
         require_ci_audit_runner_cancellations(root, required=True)
         print(f"ci-audit artifact contract verified: root={root}")
         return 0
 
     require_ci_audit_core_artifacts(root)
+    require_setup_ci_terminal_receipts(root)
     require_ci_audit_runner_cancellations(root)
     require_common_tree(root)
     require_summary(root)
