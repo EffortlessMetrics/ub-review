@@ -304,6 +304,172 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
 }
 
 #[test]
+fn setup_ci_print_pr_cli_materializes_accepted_preview_files() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let out = temp.path().join("target/ub-review");
+    write_setup_ci_cli_audit_fixture(&out.join("ci-audit"))?;
+
+    let action_sha = "d".repeat(40);
+    let out_arg = path_str(&out)?;
+    let integration_accept = "integration=cargo test --workspace --locked";
+    let unit_accept = "unit=cargo test --lib --locked";
+    let mut command = isolated_command(bin, temp.path());
+    command
+        .env_remove("GITHUB_REPOSITORY")
+        .env_remove("GITHUB_TOKEN")
+        .args([
+            "setup-ci",
+            "--print-pr",
+            "--out",
+            out_arg,
+            "--accept",
+            integration_accept,
+            "--accept",
+            unit_accept,
+            "--action-sha",
+            action_sha.as_str(),
+        ]);
+    let output = command.output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(
+        output.status.success(),
+        "setup-ci --print-pr failed\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        stdout.contains("# CI migration plan"),
+        "setup-ci --print-pr should render the plan to stdout:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("wrote 4 setup-ci preview file(s)"),
+        "setup-ci --print-pr should report the preview file materialization:\n{stderr}"
+    );
+
+    let ci_audit = out.join("ci-audit");
+    let plan = fs::read_to_string(ci_audit.join("migration-plan.md"))?;
+    assert_eq!(
+        stdout, plan,
+        "setup-ci stdout must exactly mirror migration-plan.md"
+    );
+    for expected in [
+        "Fold 2 accepted job(s) into one required check `ub-review/gate`",
+        "accepted; command `cargo test --workspace --locked`",
+        "accepted; command `cargo test --lib --locked`",
+        "ci-audit/correlation.json#integration",
+        "ci-audit/correlation.json#unit",
+        "old required checks unknown",
+        "refuses to invent it",
+    ] {
+        assert!(
+            plan.contains(expected),
+            "migration plan missing `{expected}`:\n{plan}"
+        );
+    }
+
+    let preview = ci_audit.join("preview");
+    let files = collect_relative_file_paths(&preview)?;
+    assert_eq!(
+        files,
+        vec![
+            ".github/workflows/ub-review-gate.yml",
+            ".ub-review.toml",
+            "docs/ci/branch-protection-change.md",
+            "docs/ci/ub-review-migration.md",
+        ],
+        "setup-ci --print-pr should materialize only the migration preview files"
+    );
+
+    let generated_config = fs::read_to_string(preview.join(".ub-review.toml"))?;
+    for expected in [
+        "required_check = \"ub-review/gate\"",
+        "id = \"integration\"",
+        "command = \"cargo test --workspace --locked\"",
+        "required = false",
+        "id = \"unit\"",
+        "command = \"cargo test --lib --locked\"",
+        "required = true",
+    ] {
+        assert!(
+            generated_config.contains(expected),
+            "generated config missing `{expected}`:\n{generated_config}"
+        );
+    }
+    for forbidden in ["[providers]", "synchronize_mode", "[tools."] {
+        assert!(
+            !generated_config.contains(forbidden),
+            "setup-ci generated decorative or inert config key `{forbidden}`:\n{generated_config}"
+        );
+    }
+
+    let workflow = fs::read_to_string(preview.join(".github/workflows/ub-review-gate.yml"))?;
+    for expected in [
+        "name: ub-review/gate",
+        &format!("uses: EffortlessMetrics/ub-review@{action_sha}"),
+        "posting: artifact-only",
+        "model-mode: 'off'",
+    ] {
+        assert!(
+            workflow.contains(expected),
+            "generated workflow missing `{expected}`:\n{workflow}"
+        );
+    }
+
+    let migration = fs::read_to_string(preview.join("docs/ci/ub-review-migration.md"))?;
+    assert_eq!(
+        migration, plan,
+        "preview migration doc must exactly mirror migration-plan.md"
+    );
+    let branch_doc = fs::read_to_string(preview.join("docs/ci/branch-protection-change.md"))?;
+    for expected in [
+        "Branch protection remains manual",
+        "`setup-ci` opened a migration PR only; it did not mutate repository protection rules.",
+        "one observed red proof",
+        "does not prove an old-check remove list",
+    ] {
+        assert!(
+            branch_doc.contains(expected),
+            "branch-protection doc missing `{expected}`:\n{branch_doc}"
+        );
+    }
+    assert!(
+        !ci_audit.join("setup-pr-result.json").exists(),
+        "print-pr must not write open-pr success receipts"
+    );
+    assert!(
+        !ci_audit.join("setup-pr-error.json").exists(),
+        "print-pr must not write open-pr failure receipts"
+    );
+    for relative in [
+        "setup-pr-branch-payload.json",
+        "setup-pr-pull-payload.json",
+        "setup-pr-file-payload-0.json",
+        "setup-pr-file-payload-1.json",
+        "setup-pr-file-payload-2.json",
+        "setup-pr-file-payload-3.json",
+    ] {
+        assert!(
+            !ci_audit.join(relative).exists(),
+            "print-pr must not write open-pr mutation payload `{relative}`"
+        );
+    }
+    for relative in [
+        ".ub-review.toml",
+        ".github/workflows/ub-review-gate.yml",
+        "docs/ci/ub-review-migration.md",
+        "docs/ci/branch-protection-change.md",
+    ] {
+        assert!(
+            !temp.path().join(relative).exists(),
+            "print-pr must keep generated repo files under the preview directory, not write `{relative}`"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn adoption_docs_match_setup_ci_current_surface() {
     let docs = [
         (
@@ -6075,6 +6241,53 @@ fn write_file(path: &Path, text: &str) -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, text)?;
+    Ok(())
+}
+
+fn collect_relative_file_paths(root: &Path) -> Result<Vec<String>> {
+    fn visit(base: &Path, dir: &Path, files: &mut Vec<String>) -> Result<()> {
+        for entry in fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                visit(base, &path, files)?;
+            } else if file_type.is_file() {
+                let relative = path
+                    .strip_prefix(base)
+                    .with_context(|| format!("strip prefix {}", base.display()))?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                files.push(relative);
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    visit(root, root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+fn write_setup_ci_cli_audit_fixture(dir: &Path) -> Result<()> {
+    write_init_audit_ci_fixture(dir)?;
+    for (name, schema) in [
+        ("history.json", "ub-review.ci_history.v1"),
+        ("costs.json", "ub-review.ci_costs.v1"),
+        ("correlation.json", "ub-review.ci_correlation.v1"),
+    ] {
+        fs::write(
+            dir.join(name),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": schema,
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [],
+                "evidence_gaps": [],
+            }))?,
+        )?;
+    }
     Ok(())
 }
 
