@@ -314,7 +314,7 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
                     id: entry.tool.clone(),
                     detail: entry.reason.clone(),
                     receipt: format!("review/tool-gate-outcomes.json#{}", entry.tool),
-                    next_action: None,
+                    next_action: Some(tool_gate_failure_next_action(entry)),
                 });
             }
             "missing_evidence" if entry.required && blocking_policy.tool_gate_missing_evidence => {
@@ -453,6 +453,30 @@ pub(crate) fn required_sensor_gap_reason(issue: &SensorEvidenceIssue) -> GateRea
         ),
         receipt: required_sensor_gap_receipt(issue),
         next_action: None,
+    }
+}
+
+pub(crate) fn tool_gate_failure_next_action(entry: &ToolGateOutcomeEntry) -> String {
+    let outcome_receipt = format!("review/tool-gate-outcomes.json#{}", entry.tool);
+    let detail_artifact = entry
+        .source_artifacts
+        .iter()
+        .find(|artifact| artifact.contains("exposure-gaps.json"))
+        .or_else(|| {
+            entry
+                .source_artifacts
+                .iter()
+                .find(|artifact| artifact.contains("gate-decision.json"))
+        });
+    let inspect = match detail_artifact {
+        Some(artifact) => format!("inspect {outcome_receipt} and {artifact}"),
+        None => format!("inspect {outcome_receipt} source_artifacts"),
+    };
+    match entry.policy.max_new_unsuppressed {
+        Some(max) => format!(
+            "{inspect}; fix or suppress the reported findings until new_unsuppressed <= {max}"
+        ),
+        None => format!("{inspect}; fix or suppress the failed tool-gate findings"),
     }
 }
 
@@ -1168,6 +1192,14 @@ mod tests {
             "detail: {}",
             gate.reasons[0].detail
         );
+        assert!(
+            gate.reasons[0]
+                .next_action
+                .as_deref()
+                .is_some_and(|action| action.contains("new_unsuppressed <= 0")),
+            "next_action: {:?}",
+            gate.reasons[0].next_action
+        );
     }
 
     #[test]
@@ -1436,6 +1468,15 @@ mod tests {
         assert_eq!(
             gate.reasons[0].receipt,
             "review/tool-gate-outcomes.json#ripr"
+        );
+        let next_action = gate.reasons[0].next_action.as_deref().unwrap_or("");
+        assert!(
+            next_action.contains("sensors/ripr/exposure-gaps.json"),
+            "next_action: {next_action}"
+        );
+        assert!(
+            next_action.contains("new_unsuppressed <= 0"),
+            "next_action: {next_action}"
         );
         Ok(())
     }

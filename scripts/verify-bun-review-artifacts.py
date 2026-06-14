@@ -5203,6 +5203,14 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                     "next_action is not a non-empty string: "
                     f"{next_action!r}"
                 )
+        if kind == "tool-gate":
+            next_action = reason.get("next_action")
+            if not isinstance(next_action, str) or not next_action:
+                fail(
+                    f"gate outcome reason {index + 1} (tool-gate) "
+                    "next_action is not a non-empty string: "
+                    f"{next_action!r}"
+                )
     required_proof = outcome.get("required_proof")
     if not isinstance(required_proof, dict):
         fail("gate outcome required_proof is not an object")
@@ -8957,6 +8965,56 @@ def self_test_gate_outcome_contract() -> None:
         "gate-outcome timeout reason with dangling sensor receipt",
         "receipt does not resolve",
         lambda root=write_root(outcome(reasons=[timeout_reason()])): require_gate_outcome(root),
+    )
+
+    def tool_gate_reason(**overrides) -> dict:
+        base = {
+            "kind": "tool-gate",
+            "id": "ripr",
+            "detail": "new_unsuppressed=1 exceeds configured maximum 0",
+            "receipt": "review/tool-gate-outcomes.json#ripr",
+            "next_action": "inspect review/tool-gate-outcomes.json#ripr "
+            "and sensors/ripr/exposure-gaps.json; fix or suppress the "
+            "reported findings until new_unsuppressed <= 0",
+        }
+        base.update(overrides)
+        return base
+
+    def tool_gate_outcome_payload() -> dict:
+        return {
+            "schema": "ub-review.tool_gate_outcomes.v1",
+            "outcomes": [
+                {"tool": "ripr", "outcome": "failed", "required": True}
+            ],
+        }
+
+    def write_tool_gate_root(reason: dict) -> "pathlib.Path":
+        root = write_root(
+            outcome(
+                reasons=[reason],
+                required_proof={
+                    "matched": 0,
+                    "passed": 0,
+                    "failed": 0,
+                    "skipped": 0,
+                },
+                tool_gates={"evaluated": 1, "passed": 0, "failed": 1},
+            )
+        )
+        payload = json.dumps(tool_gate_outcome_payload())
+        (root / "review/tool-gate-outcomes.json").write_text(
+            payload, encoding="utf-8"
+        )
+        (root / "tool-gate-outcomes.json").write_text(payload, encoding="utf-8")
+        return root
+
+    require_gate_outcome(write_tool_gate_root(tool_gate_reason()))
+    expect_self_test_failure(
+        "gate-outcome tool gate reason without next_action",
+        "next_action is not a non-empty string",
+        lambda root=write_tool_gate_root(
+            {key: value for key, value in tool_gate_reason().items() if key != "next_action"}
+        ): require_gate_outcome(root),
     )
 
     def write_skip_root(payload_status: str, gate_outcome: dict) -> "pathlib.Path":
