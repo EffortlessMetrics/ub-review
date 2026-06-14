@@ -284,6 +284,8 @@ ci-audit/*.json                         audit-ci/setup-ci receipts; core JSON
                                         detailed audit semantics live in
                                         UB-REVIEW-SPEC-0007
 ci-audit/audit-report.md                human-only audit prose
+ci-audit/setup-pr-result.json XOR       setup-ci --open-pr terminal receipt
+ci-audit/setup-pr-error.json
 ```
 
 "Internal" does not mean unverified - several of these are exact-checked by
@@ -643,6 +645,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | sensors/coverage/status.json (+ coverage-summary.json, changed-lines.json, upload.json, lcov.info) | experimental | coverage_status.v1, coverage_summary.v1 | gate-check (coverage tool gate); downstream automation | conditional (require_coverage_status_artifact; runs when tool-status carries the coverage tool) |
 | ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci; humans; detailed semantics in spec 0007 | conditional (require_ci_audit_core_artifacts; required under --ci-audit-only, conditional when present in a full run root; schema/job/receipt checks) |
 | ci-audit/runner-cancellations.json | experimental | ci_runner_cancellations.v1 | humans; setup-ci validates when present; runner cancellation runbook | conditional (require_ci_audit_runner_cancellations; --ci-audit-only for audit roots) |
+| ci-audit/setup-pr-result.json XOR setup-pr-error.json | experimental | setup_pr_result.v1, setup_pr_error.v1 | humans; setup-ci adoption automation receipts | conditional (require_setup_ci_terminal_receipts; result/error XOR, schema/status, action SHA, and exact generated-file set) |
 | ci-audit/audit-report.md | experimental | none (tier-ordered report) | humans | none (tests only - ci_audit_report_lines_carry_receipts_without_boilerplate, src/main.rs) |
 | post-result.json / post-error.json | internal | none | downstream automation via action outputs post-result-path / post-error-path | conditional (require_post_receipt; one must exist on posting passes, status/validity fields fail-closed) |
 | everything else under the out dir (box-state.json, post payload/stdout/stderr receipts, observations/<lane>.ndjson, questions/**, input/pr.md, input/claims.md) | internal | none | none contracted | none (some internally exact-checked; no row here defends them) |
