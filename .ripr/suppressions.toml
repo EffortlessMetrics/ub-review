@@ -609,6 +609,12 @@ finding_id = "probe:src_proof_red_green.rs:243:error_path"
 owner = "ub-review/core"
 reason = "Reachable-unrevealed false-negative on moved-not-modified base+tests command execution error path (ripr-swarm#1054, proof slice C1 motion). proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating, proof_broker_v0_skips_base_plus_tests_when_head_fails, and proof_broker_v0_records_base_patch_failed_as_missing_proof assert the red/green command receipt outcomes. Identical code probed clean before the move. Line-keyed id; re-verify after any edit to red_green.rs."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_red_green.rs:277:error_path"
+owner = "ub-review/core"
+reason = "Reachable-unrevealed false-negative on the base+tests command receipt error path after cleanup moved before result propagation. proof_broker_v0_cleans_base_plus_tests_worktree_when_base_receipt_errors forces HEAD receipt success, prepares a real base+tests worktree, sabotages the base receipt directory as a file so this exact `?` returns an error, asserts the error names base-plus-tests, and asserts the prepared worktree no longer exists. The regression fails before this cleanup move because base_root remains. Line-keyed id; re-verify after edits near run_focused_red_green_proof_task."
+
 # Proof slice C2 (extract proof/build.rs, pure code motion) - 22
 # entries for moved-not-modified focused build proof execution and its
 # colocated focused-build runner tests. The build runner moved out of
