@@ -820,8 +820,10 @@ Acceptance:
 `ub-review setup-ci` (and `--print-pr`): read the audit-ci receipts, emit one
 migration PR per the contract — `.ub-review.toml`, minimal workflow edits,
 `docs/ci/branch-protection-change.md` with the exact required-checks change.
-Branch protection is never mutated by the PR; a later explicit
-`setup-ci --apply-branch-protection` may apply it with an admin token.
+Branch protection is never mutated by the PR. `setup-ci
+--apply-branch-protection` is not implemented in the current CLI and is not
+part of the adoption path; a future admin-only command may apply the same
+documented change only as a separate explicit invocation.
 
 Acceptance:
 

@@ -308,6 +308,15 @@ fn adoption_docs_match_setup_ci_current_surface() {
             "CI_AUDIT_WIZARD",
             include_str!("../docs/CI_AUDIT_WIZARD.md"),
         ),
+        (
+            "ADR-0002",
+            include_str!("../docs/adr/0002-single-gate-and-ci-audit-wizard.md"),
+        ),
+        ("ROADMAP", include_str!("../docs/ROADMAP.md")),
+        (
+            "SPEC-0001",
+            include_str!("../docs/specs/UB-REVIEW-SPEC-0001-release-surface.md"),
+        ),
     ];
     for (name, text) in &docs {
         for stale in [
@@ -337,6 +346,20 @@ fn adoption_docs_match_setup_ci_current_surface() {
     assert!(wizard.contains("`setup-ci --print-pr`"));
     assert!(wizard.contains("new-files-only `setup-ci --open-pr`"));
     assert!(wizard.contains("Never mutates branch protection itself."));
+
+    for (name, text) in &docs {
+        if text.contains("--apply-branch-protection") {
+            let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+            assert!(
+                normalized.contains("not implemented in the current CLI"),
+                "{name} mentions branch-protection mutation without current CLI boundary"
+            );
+            assert!(
+                normalized.contains("not part of the adoption path"),
+                "{name} mentions branch-protection mutation without adoption-path boundary"
+            );
+        }
+    }
 }
 
 #[test]
