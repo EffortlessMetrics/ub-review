@@ -168,6 +168,21 @@ impl ModelProviderPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MinimaxPromptCache {
+    ExplicitAnthropic,
+    Off,
+}
+
+impl MinimaxPromptCache {
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::ExplicitAnthropic => "explicit-anthropic",
+            Self::Off => "off",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, ValueEnum)]
 pub(crate) enum ProviderKindArg {
     Openai,
@@ -478,6 +493,10 @@ pub(crate) struct RunArgs {
         env = "UB_REVIEW_PROVIDER_POLICY"
     )]
     pub(crate) provider_policy: ModelProviderPolicy,
+    /// Resolved from [providers.minimax].prompt_cache. Hidden from CLI so the
+    /// repository config remains the source of truth for provider cache mode.
+    #[arg(skip = MinimaxPromptCache::ExplicitAnthropic)]
+    pub(crate) minimax_prompt_cache: MinimaxPromptCache,
     /// Number of Bun review lanes to prepare: 6, 10, or 20.
     #[arg(long, default_value_t = STANDARD_LANE_WIDTH, env = "UB_REVIEW_LANE_WIDTH")]
     pub(crate) lane_width: usize,
@@ -817,4 +836,18 @@ pub(crate) struct QualityGithubCollectArgs {
     /// Per-request timeout in seconds.
     #[arg(long = "timeout-sec", default_value_t = 60)]
     pub(crate) timeout_sec: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MinimaxPromptCache;
+
+    #[test]
+    fn minimax_prompt_cache_keys_match_config_vocabulary() {
+        assert_eq!(
+            MinimaxPromptCache::ExplicitAnthropic.key(),
+            "explicit-anthropic"
+        );
+        assert_eq!(MinimaxPromptCache::Off.key(), "off");
+    }
 }

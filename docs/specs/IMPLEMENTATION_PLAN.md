@@ -25,8 +25,8 @@ slice                                          spec    issue   proof obligation
    leaked refuted surface fails                        leaked refuted candidate
    require_final_compiler_input                        surface reds the verifier
 3  [providers] config parsing + per-provider   0006    #310    DONE: config keys read
-   max_concurrency + 429 backpressure                          with CLI precedence;
-   (prompt_cache/model/env/role config                         a rate-limited provider
+   max_concurrency + prompt_cache + 429                         with CLI precedence;
+   backpressure (model/env/role config                          a rate-limited provider
    choices remain separate)                                    sheds load instead of
                                                                failing waves
 4  DONE: xtask precommit missing tools        0005    #320    missing-tool receipt
