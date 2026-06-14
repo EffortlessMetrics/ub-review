@@ -37423,6 +37423,119 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn fill_ledger_selected_focused_build_request_cites_matching_lease() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(out.join("review"))?;
+        let diff = test_diff();
+        let plan = test_plan(Vec::new());
+        let request = ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-build-policy-check".to_owned(),
+            lane: "proof-planner".to_owned(),
+            requested_by: vec!["proof-planner".to_owned()],
+            command: "cargo xtask policy-check".to_owned(),
+            reason: "Policy receipts should be checked before asking a reviewer.".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 90,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let mut review = test_review_artifacts();
+        review.proof_requests = vec![request.clone()];
+        let mut receipt = test_proof_receipt("head_passed", "passed");
+        receipt.id = super::focused_build_candidates_from_requests(&review.proof_requests)
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("focused-build request did not plan"))?
+            .id;
+        receipt.kind = "focused-build".to_owned();
+        receipt.requested_by = request.requested_by.clone();
+        receipt.request_ids = vec![request.id.clone()];
+        receipt.commands[0].command = request.command.clone();
+        receipt.commands[0].duration_ms = 1_234;
+        let lease = ResourceLease {
+            schema: super::RESOURCE_LEASE_SCHEMA.to_owned(),
+            id: format!("lease-{}", receipt.id),
+            kind: "focused-build".to_owned(),
+            consumer: receipt.id.clone(),
+            status: "granted".to_owned(),
+            reason: "focused build proof lease granted by runtime profile".to_owned(),
+            cpu: 1,
+            memory_mb: 1_024,
+            disk_mb: 512,
+            timeout_sec: 90,
+            network: false,
+            scratch: true,
+            worktree: None,
+            command: Some(format!("head: {}", request.command)),
+        };
+        review.proof_receipts = vec![receipt.clone()];
+        review.resource_leases = vec![lease.clone()];
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: &out,
+            diff: &diff,
+            plan: &plan,
+            review: &review,
+            github_review: None,
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &[],
+            final_follow_up_tasks: 0,
+            run: test_run_loop_metrics(),
+            elapsed: std::time::Duration::from_secs(1),
+            args: &test_run_args(out.clone()),
+        });
+        let gate_outcome = super::GateOutcome {
+            schema: super::GATE_OUTCOME_SCHEMA.to_owned(),
+            conclusion: "pass".to_owned(),
+            terminal_status: "artifact-only".to_owned(),
+            reasons: Vec::new(),
+            required_proof: super::GateRequiredProofCounts::default(),
+            tool_gates: super::GateToolGateCounts::default(),
+            evidence_gaps_blocking: 0,
+            evidence_gaps_advisory: 0,
+        };
+
+        let ledger = super::build_fill_ledger(super::FillLedgerInput {
+            out: &out,
+            diff: &diff,
+            profile: &Profile::default(),
+            plan: &plan,
+            tool_gate_outcomes: &[],
+            gate_outcome: &gate_outcome,
+            review: &review,
+            metrics: &metrics,
+        })?;
+
+        let entry = ledger
+            .entries
+            .iter()
+            .find(|entry| {
+                entry.kind == "proof-request" && entry.check_id == "proof-build-policy-check"
+            })
+            .ok_or_else(|| anyhow::anyhow!("missing focused-build fill-ledger entry"))?;
+        assert!(entry.selected);
+        assert_eq!(
+            entry.artifact_path.as_deref(),
+            Some(format!("review/proof_receipts.json#{}", receipt.id).as_str())
+        );
+        assert_eq!(entry.time_spent_sec, 1.234);
+        assert!(
+            entry
+                .source_artifacts
+                .contains(&"review/proof_receipts.json".to_owned())
+        );
+        assert!(
+            entry
+                .source_artifacts
+                .contains(&format!("review/resource_leases.json#{}", lease.id)),
+            "focused-build fills must cite the exact broker lease anchor: {entry:#?}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn quality_trend_records_single_run_without_reviewer_or_history_overclaim() {
         let receipt = super::QualityReceipt {
             schema: super::QUALITY_RECEIPT_SCHEMA,
