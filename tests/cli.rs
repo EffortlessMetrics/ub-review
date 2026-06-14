@@ -3727,6 +3727,161 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn model_suggested_manual_cost_proof_request_is_rejected_before_execution() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+
+    let manual_command = "cargo test --locked manual_cost_should_not_execute";
+    let planner_content = serde_json::json!({
+        "summary": null,
+        "observations": [],
+        "candidate_findings": [],
+        "summary_only_findings": [],
+        "failed_objections": [],
+        "proof_requests": [
+            {
+                "command": manual_command,
+                "reason": "Manual-cost proof request must be parked instead of executed.",
+                "cost": "manual",
+                "timeout_sec": 60,
+                "required": false
+            }
+        ]
+    })
+    .to_string();
+    let dummy_key = "dummy-minimax-key-for-manual-cost-proof";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+        fake_openai_lane_content(),
+        fake_openai_lane_content(),
+        planner_content,
+    ])
+    .context("spawn fake OpenAI provider for manual-cost proof request")?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_cargo(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let fake_cargo_log = temp.path().join("fake-cargo.log");
+    let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    run_with_env(
+        temp.path(),
+        "cargo",
+        &["--version"],
+        &[
+            ("PATH", path.as_str()),
+            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
+        ],
+    )
+    .context("fake cargo sanity check before manual-cost proof run")?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "2",
+            "--model-timeout-sec",
+            "10",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[
+            ("PATH", path.as_str()),
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 3);
+
+    let proof_requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    let request = proof_requests
+        .iter()
+        .find(|request| request["command"].as_str() == Some(manual_command))
+        .ok_or_else(|| anyhow::anyhow!("manual-cost proof request missing"))?;
+    assert_eq!(request["status"], "unsupported");
+    assert_eq!(request["cost"], "manual");
+    let request_id = json_str_field(request, "id")?;
+
+    let groups: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_request_groups.json"))?)?;
+    let group = groups
+        .iter()
+        .find(|group| {
+            group["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        })
+        .ok_or_else(|| anyhow::anyhow!("manual-cost proof request group missing"))?;
+    assert_eq!(group["status"], "unsupported");
+
+    let planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    let proof_tasks = json_array_field(&planner_output, "proof_tasks")?;
+    assert!(
+        proof_tasks.iter().all(|task| {
+            !task["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        }),
+        "unsupported manual-cost request must not become a proof task"
+    );
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    assert!(
+        receipts.iter().all(|receipt| {
+            !receipt["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        }),
+        "unsupported manual-cost request must not receive an execution receipt"
+    );
+    let leases: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+    assert!(
+        leases.iter().all(|lease| {
+            !lease["command"]
+                .as_str()
+                .is_some_and(|command| command.contains(manual_command))
+        }),
+        "unsupported manual-cost request must not receive a command lease"
+    );
+    let log = fs::read_to_string(fake_cargo_log)?;
+    assert!(log.contains("fake cargo --version"));
+    assert!(!log.contains("manual_cost_should_not_execute"));
+    Ok(())
+}
+
+#[test]
 fn model_suggested_shell_token_proof_request_is_rejected_before_execution() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
