@@ -8,8 +8,8 @@ of this repository and behind the Bun pin. The two gaps this spec
 originally named closed together in #335 (#316): the ripr threshold
 production-evaluates (`sensors/ripr/gate-decision.json` from badge-json
 stdout, first evaluation run 27077206713, real blocks on PR #342/#346), and
-the install script + doctor pin ripr 0.8.0 / unsafe-review 0.3.3. Named
-remaining gaps: ripr
+the install script + doctor pin ripr 0.8.0 / unsafe-review 0.3.4 /
+actionlint 1.7.12. Named remaining gaps: ripr
 has known matcher/reach false-negatives plus line-keyed suppression-id
 instability upstream (ripr-swarm#1052/#1053/#1054) - the governance loop
 (strengthen the genuine half, file upstream, suppress with an owned
@@ -152,14 +152,14 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
 
 - `doctor --require-core-tools` (or `UB_REVIEW_STANDARD_IMAGE`): doctor
   bails when a core tool is missing or a pinned version mismatches
-  (src/main.rs `cmd_doctor`). Since #335 the pin table covers tokmd
-  (`1.12.0`), ripr (`0.8.0`), and unsafe-review (`0.3.3`)
-  (src/main.rs `expected_standard_image_tool_version`); cargo-allow remains
-  unpinned.
+  (src/main.rs `cmd_doctor`). The pin table covers tokmd (`1.12.0`),
+  ripr (`0.8.0`), unsafe-review (`0.3.4`), and actionlint (`1.7.12`)
+  (src/main.rs `expected_standard_image_tool_version`); cargo-allow and
+  ast-grep remain unpinned.
 - The action's sensor install step (scripts/install-gh-runner-tools.sh)
   pins tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`), actionlint
   (v1.7.12, `UB_REVIEW_ACTIONLINT_VERSION`), ripr (0.8.0,
-  `UB_REVIEW_RIPR_VERSION`), and unsafe-review (0.3.3,
+  `UB_REVIEW_RIPR_VERSION`), and unsafe-review (0.3.4,
   `UB_REVIEW_UNSAFE_REVIEW_VERSION`); cargo-allow installs unpinned - the
   remaining install-time drift gap.
 - unsafe-review exit codes are classified by contract (#396): 0 and 1 both
@@ -457,7 +457,7 @@ and reason; a missing or failed sensor is recorded as an evidence gap, never
 as clean evidence; tool metadata is mirrored and verifier-enforced across
 `resolved-tools.json` and `tool-status.json`; the ripr tool-gate threshold
 is production-proven (#335; blocks on PR #342/#346). Not claimable: that a
-sensor version drift beyond the three pinned tools (cargo-allow,
+sensor version drift beyond the four pinned tools (cargo-allow and
 ast-grep stay unpinned) is detected, or that coverage proves anything
 beyond execution surface.
 

@@ -136,10 +136,12 @@ deliberately not an input and doctor does not check it
 
 - `none` installs nothing;
 - `core`, `bun-fast`, and `full` all install the same six advisory sensors:
-  tokmd (pinned 1.12.0, override `UB_REVIEW_TOKMD_VERSION`), cargo-allow,
-  ripr, unsafe-review (all three unpinned `cargo install`), ast-grep (npm,
-  unpinned), actionlint (go install, pinned v1.7.12, override
-  `UB_REVIEW_ACTIONLINT_VERSION`); `full` adds only a notice that optional
+  tokmd (pinned 1.12.0, override `UB_REVIEW_TOKMD_VERSION`), cargo-allow
+  (unpinned cargo install), ripr (pinned 0.8.0, override
+  `UB_REVIEW_RIPR_VERSION`), unsafe-review (pinned 0.3.4, override
+  `UB_REVIEW_UNSAFE_REVIEW_VERSION`), ast-grep (unpinned), actionlint
+  (go install, pinned v1.7.12, override `UB_REVIEW_ACTIONLINT_VERSION`);
+  `full` adds only a notice that optional
   sensors (semgrep, gitleaks, osv-scanner, cargo-audit, cargo-deny,
   cppcheck, zizmor) must be preinstalled and enabled explicitly;
 - an unknown bundle value fails the install step with an `::error::`
@@ -238,8 +240,9 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
   (src/main.rs `cmd_doctor`): it then bails when any of the six core tools
   is missing, or when a pinned tool's `--version` output does not contain
   the pinned version token (`command_version_matches` tolerates `v`
-  prefixes and punctuation splits). Today only tokmd has a pin
-  (`expected_standard_image_tool_version` returns Some only for tokmd).
+  prefixes and punctuation splits). The standard-image pin table covers
+  tokmd (`1.12.0`), ripr (`0.8.0`), unsafe-review (`0.3.4`), and
+  actionlint (`1.7.12`).
 - `cache warm` never blocks; tools missing at warm time are recorded as
   `status: missing` in the manifest.
 
@@ -256,13 +259,14 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
   `validate_release_request`); the release workflow refuses malformed tags
   (release-binary.yml "Validate release tag").
 - Doctor reports provider key presence without printing values; under
-  standard-image enforcement, missing core tools and tokmd version drift
-  are hard failures, not warnings (src/main.rs `cmd_doctor`;
+  standard-image enforcement, missing core tools and pinned-tool version
+  drift are hard failures, not warnings (src/main.rs `cmd_doctor`;
   docs/RUNNER_IMAGE.md "Policy").
 - Honest gaps, where the surface does not fail closed today:
   - cargo-allow and ast-grep are NOT version-pinned: the install scripts
-    take latest and doctor's drift check does not cover them. Since #335
-    the pins cover tokmd (1.12.0), ripr (0.8.0), and unsafe-review (0.3.3)
+    take latest and doctor's drift check does not cover them. The pins cover
+    tokmd (1.12.0), ripr (0.8.0), unsafe-review (0.3.4), and actionlint
+    (1.7.12)
     in both the install script and doctor — unpinned-ripr drift is how
     #316 stayed invisible until a local 0.5/0.8 mismatch surfaced it.
     The foreign-dialect cargo-allow path from #318 now skips with a linked
@@ -283,8 +287,8 @@ release assets are integrity-receipted (.sha256) and checked by the action
 pinning by commit SHA pins the source you build; pinning by tag trusts
   GitHub release storage for the prebuilt asset
 missing sensors after install are missing evidence, never clean evidence
-doctor verifies presence and three version pins (tokmd, ripr,
-  unsafe-review since #335); tokmd run preflight guards #319 and
+doctor verifies presence and four version pins (tokmd, ripr,
+  unsafe-review, actionlint); tokmd run preflight guards #319 and
   cargo-allow planning guards #318, but doctor still does not certify sensor
   output contracts
 ```
@@ -369,11 +373,11 @@ This spec is docs-only; it routes open work:
 3. DONE: unknown `tool-bundle` values fail the install step with an error
    naming the accepted values, matching the strict `install-mode`
    validation.
-4. PARTIALLY DONE (#335): ripr (0.8.0) and unsafe-review (0.3.3) are
-   pinned in the install script and doctor
-   (`expected_standard_image_tool_version`); the ripr gate-decision
-   receipt landed under spec 0005. Remaining: pin cargo-allow itself;
-   #318 covered only the foreign-ledger skip path.
+4. PARTIALLY DONE (#335 plus actionlint drift guard): ripr (0.8.0),
+   unsafe-review (0.3.4), and actionlint (1.7.12) are pinned in the
+   install script and doctor (`expected_standard_image_tool_version`);
+   the ripr gate-decision receipt landed under spec 0005. Remaining: pin
+   cargo-allow itself; #318 covered only the foreign-ledger skip path.
 5. Make xtask precommit missing-tool receipts honest and actionable:
    distinguish missing-tool skips from relevance skips (#320) and include
    install instructions in the receipt (#321).

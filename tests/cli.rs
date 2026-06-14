@@ -2350,6 +2350,49 @@ fn doctor_require_core_tools_fails_stale_tokmd_version() -> Result<()> {
 }
 
 #[test]
+fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_core_review_tools_with_versions(
+        &fake_bin,
+        &[
+            ("tokmd", "1.12.0"),
+            ("cargo-allow", "0.0.0"),
+            ("ripr", "0.8.0"),
+            ("unsafe-review", "0.3.4"),
+            ("ast-grep", "0.0.0"),
+            ("actionlint", "1.7.0"),
+        ],
+    )?;
+    let path = prepend_to_path(&fake_bin)?;
+    let config = temp.path().join(".ub-review.toml");
+    write_file(&config, r#"profile = "gh-runner""#)?;
+
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let output = run_expect_failure_with_env(
+        temp.path(),
+        bin,
+        &[
+            "doctor",
+            "--config",
+            path_str(&config)?,
+            "--require-core-tools",
+        ],
+        &[("PATH", path.as_str())],
+    )?;
+    assert!(output.contains("required core review tool versions drifted"));
+    assert!(output.contains("actionlint expected 1.7.12"));
+    assert!(output.contains("actionlint 1.7.0"));
+    assert!(output.contains("Fixes:"));
+    assert!(output.contains(
+        "actionlint version drift: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
+    ));
+    assert!(output.contains("see Fixes above"));
+    Ok(())
+}
+
+#[test]
 fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -5314,6 +5357,20 @@ fn main() {
 "#;
 
 fn write_fake_core_review_tools(dir: &Path, tokmd_version: &str) -> Result<()> {
+    write_fake_core_review_tools_with_versions(
+        dir,
+        &[
+            ("tokmd", tokmd_version),
+            ("cargo-allow", "0.0.0"),
+            ("ripr", "0.8.0"),
+            ("unsafe-review", "0.3.4"),
+            ("ast-grep", "0.0.0"),
+            ("actionlint", "1.7.12"),
+        ],
+    )
+}
+
+fn write_fake_core_review_tools_with_versions(dir: &Path, versions: &[(&str, &str)]) -> Result<()> {
     fs::create_dir_all(dir)?;
     let tools = [
         "tokmd",
@@ -5327,12 +5384,14 @@ fn write_fake_core_review_tools(dir: &Path, tokmd_version: &str) -> Result<()> {
     #[cfg(windows)]
     {
         let source = dir.join("fake_review_tool.rs");
+        let mut match_arms = String::new();
+        for (tool, version) in versions {
+            match_arms.push_str(&format!("{tool:?} => {version:?},\n"));
+        }
         write_file(
             &source,
             &format!(
                 r#"use std::{{env, path::Path}};
-
-const TOKMD_VERSION: &str = {tokmd_version:?};
 
 fn main() {{
     let executable = env::args().next().unwrap_or_default();
@@ -5340,7 +5399,10 @@ fn main() {{
         .file_stem()
         .and_then(|value| value.to_str())
         .unwrap_or("review-tool");
-    let version = if name == "tokmd" {{ TOKMD_VERSION }} else {{ "0.0.0" }};
+    let version = match name {{
+        {match_arms}
+        _ => "0.0.0",
+    }};
     println!("{{name}} {{version}}");
 }}
 "#
@@ -5356,11 +5418,10 @@ fn main() {{
     #[cfg(not(windows))]
     {
         for tool in tools {
-            let version = if tool == "tokmd" {
-                tokmd_version
-            } else {
-                "0.0.0"
-            };
+            let version = versions
+                .iter()
+                .find_map(|(name, version)| (*name == tool).then_some(*version))
+                .unwrap_or("0.0.0");
             let script = dir.join(tool);
             write_file(&script, &format!("#!/bin/sh\necho \"{tool} {version}\"\n"))?;
             #[cfg(unix)]
