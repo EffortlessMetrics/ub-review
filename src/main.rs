@@ -2530,6 +2530,7 @@ struct InitAuditCiInspection {
     dir: PathBuf,
     inventory: Option<CiInventoryArtifact>,
     recommendations: Option<CiRecommendationsArtifact>,
+    audit_report: Option<PathBuf>,
     evidence_gaps: Vec<String>,
 }
 
@@ -2859,10 +2860,21 @@ fn render_init_model_assist_handoff(text: &mut String, inspection: &InitGuideIns
 
     text.push_str("\n## Model-assisted config proposal input\n\n");
     text.push_str(&format!(
-        "- Bounded deterministic inputs: `{}/inventory.json` and `{}/recommendations.json` when present and readable.\n",
+        "- Bounded deterministic inputs: `{}/inventory.json`, `{}/recommendations.json`, and `{}/audit-report.md` when present and readable.\n",
+        init_display_repo_path(&inspection.root, &audit.dir),
         init_display_repo_path(&inspection.root, &audit.dir),
         init_display_repo_path(&inspection.root, &audit.dir)
     ));
+    if let Some(path) = audit.audit_report.as_ref() {
+        text.push_str(&format!(
+            "- Human audit report: `{}` pairs tier summaries with backticked recommendation receipt pointers.\n",
+            init_display_repo_path(&inspection.root, path)
+        ));
+    } else {
+        text.push_str(
+            "- Human audit report: unavailable; rerun `ub-review audit-ci --out target/ub-review` before asking a model or external agent to propose setup-ci accepts.\n",
+        );
+    }
     text.push_str(
         "- Use recommendation receipts as pointers to supporting audit artifacts; do not infer from workflow names alone.\n",
     );
@@ -3025,7 +3037,8 @@ fn inspect_init_audit_ci_receipts(root: &Path) -> Option<InitAuditCiInspection> 
     let dir = root.join("target").join("ub-review").join("ci-audit");
     let inventory_path = dir.join("inventory.json");
     let recommendations_path = dir.join("recommendations.json");
-    if !inventory_path.exists() && !recommendations_path.exists() {
+    let audit_report_path = dir.join("audit-report.md");
+    if !inventory_path.exists() && !recommendations_path.exists() && !audit_report_path.exists() {
         return None;
     }
 
@@ -3068,11 +3081,31 @@ fn inspect_init_audit_ci_receipts(root: &Path) -> Option<InitAuditCiInspection> 
         ));
         None
     };
+    let audit_report = if audit_report_path.is_file() {
+        match fs::read_to_string(&audit_report_path) {
+            Ok(_) => Some(audit_report_path.clone()),
+            Err(error) => {
+                evidence_gaps.push(format!(
+                    "`{}` unreadable: {}",
+                    init_display_repo_path(root, &audit_report_path),
+                    init_markdown_plain(&error.to_string())
+                ));
+                None
+            }
+        }
+    } else {
+        evidence_gaps.push(format!(
+            "`{}` missing; rerun `ub-review audit-ci --out target/ub-review`",
+            init_display_repo_path(root, &audit_report_path)
+        ));
+        None
+    };
 
     Some(InitAuditCiInspection {
         dir,
         inventory,
         recommendations,
+        audit_report,
         evidence_gaps,
     })
 }

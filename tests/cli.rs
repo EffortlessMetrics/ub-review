@@ -630,7 +630,8 @@ fn init_guide_summarizes_existing_audit_ci_receipts() -> Result<()> {
         "explicit `setup-ci --accept <job>=<command>`",
         "only for audited `adaptive` or `move-to-ub-review-required` jobs",
         "## Model-assisted config proposal input",
-        "Bounded deterministic inputs: `target/ub-review/ci-audit/inventory.json` and `target/ub-review/ci-audit/recommendations.json` when present and readable.",
+        "Bounded deterministic inputs: `target/ub-review/ci-audit/inventory.json`, `target/ub-review/ci-audit/recommendations.json`, and `target/ub-review/ci-audit/audit-report.md` when present and readable.",
+        "Human audit report: `target/ub-review/ci-audit/audit-report.md` pairs tier summaries with backticked recommendation receipt pointers.",
         "Use recommendation receipts as pointers to supporting audit artifacts; do not infer from workflow names alone.",
         "Setup-ci accepts: 2 audited `adaptive` or `move-to-ub-review-required` jobs may be proposed only with maintainer-supplied commands.",
         "Manual boundary: keep-required, flag-for-human, risk-pack, nightly, release, deploy, provenance, and compliance jobs stay manual unless later receipts retier them.",
@@ -690,8 +691,10 @@ fn init_guide_flags_bad_existing_audit_ci_receipts_without_failing() -> Result<(
         "Audit receipt evidence gap: `target/ub-review/ci-audit/inventory.json` unreadable:",
         "expected ub-review.ci_inventory.v1",
         "`target/ub-review/ci-audit/recommendations.json` missing; rerun `ub-review audit-ci --out target/ub-review`",
+        "`target/ub-review/ci-audit/audit-report.md` missing; rerun `ub-review audit-ci --out target/ub-review`",
         "## Model-assisted config proposal input",
         "Recommendations are unavailable; rerun `ub-review audit-ci --out target/ub-review` before asking a model or external agent to propose setup-ci accepts.",
+        "Human audit report: unavailable; rerun `ub-review audit-ci --out target/ub-review` before asking a model or external agent to propose setup-ci accepts.",
         "Receipt gaps: treat missing or unreadable audit receipts as blockers for materialization.",
     ] {
         assert!(
@@ -5913,6 +5916,12 @@ fn write_init_audit_ci_fixture(dir: &Path) -> Result<()> {
             "evidence_gaps": ["history window truncated"],
         }))?,
     )?;
+    let report_path = dir.join("audit-report.md");
+    fs::write(
+        &report_path,
+        "# CI audit: acme/widgets\n\n## Jobs\n\n### Right-size to adaptive\n\n- `integration` (ci.yml) [medium]: p50 unknown, 2 runs, 0 independent failures, ~4 runner-min/mo, receipts: `ci-audit/correlation.json#integration`\n",
+    )
+    .with_context(|| format!("write {}", report_path.display()))?;
     Ok(())
 }
 
