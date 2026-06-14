@@ -265,16 +265,20 @@ where
         }
     };
     let base_spec = proof_task_command_spec(task, "base-plus-tests");
-    let base = run_proof_command_receipt_for_task(
-        &base_root,
-        out,
-        task,
-        "base-plus-tests",
-        &base_spec,
-        timeout_sec,
-        lease,
-        runner,
-    )?;
+    let base = {
+        let result = run_proof_command_receipt_for_task(
+            &base_root,
+            out,
+            task,
+            "base-plus-tests",
+            &base_spec,
+            timeout_sec,
+            lease,
+            runner,
+        );
+        let _ = cleanup_base_plus_tests_worktree(root, &base_root);
+        result?
+    };
     let (result, reason) = match base.status.as_str() {
         "failed" => (
             "discriminating".to_owned(),
@@ -293,7 +297,6 @@ where
             format!("base+tests proof unavailable: {}", base.reason),
         ),
     };
-    let _ = cleanup_base_plus_tests_worktree(root, &base_root);
     Ok(focused_red_green_receipt(
         diff,
         task,

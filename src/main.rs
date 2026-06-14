@@ -29243,6 +29243,77 @@ index 3333333..4444444 100644
     }
 
     #[test]
+    fn proof_broker_v0_cleans_base_plus_tests_worktree_when_base_receipt_errors() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let diff = test_diff();
+        let task = super::focused_test_task(
+            "test/js/bun/md/md-edge-cases.test.ts",
+            Some("snapshots input".to_owned()),
+            &[] as &[ProofRequestGroup],
+        );
+        let lease = test_focused_test_lease(&task);
+        let base_receipt_dir = out.join("proof").join(&task.id).join("base-plus-tests");
+        fs::create_dir_all(base_receipt_dir.parent().context("base receipt parent")?)?;
+        fs::write(&base_receipt_dir, b"not a directory")?;
+
+        let mut runner_calls = 0;
+        let mut prepare_calls = 0;
+        let mut runner = |_root: &Path,
+                          _argv: &[String],
+                          _env: &BTreeMap<String, String>,
+                          _timeout: u64,
+                          stdout: &Path,
+                          stderr: &Path|
+         -> Result<CommandStatus> {
+            runner_calls += 1;
+            fs::write(stdout, b"head ok\n")?;
+            fs::write(stderr, b"")?;
+            Ok(CommandStatus {
+                exit_code: Some(0),
+                timed_out: false,
+                success: true,
+                reason: "completed".to_owned(),
+                duration_ms: 7,
+            })
+        };
+        let prepared_base_root = base_root.clone();
+        let mut prepare = |_root: &Path, _out: &Path, _diff: &DiffContext| -> Result<PathBuf> {
+            prepare_calls += 1;
+            Ok(prepared_base_root.clone())
+        };
+
+        let result = super::run_focused_red_green_proof_task(
+            temp.path(),
+            &out,
+            &diff,
+            &task,
+            300,
+            &lease,
+            &mut runner,
+            &mut prepare,
+        );
+
+        let error = match result {
+            Ok(_) => bail!("base receipt path error should have failed the proof task"),
+            Err(error) => error,
+        };
+        assert_eq!(runner_calls, 1);
+        assert_eq!(prepare_calls, 1);
+        assert!(
+            format!("{error:#}").contains("base-plus-tests"),
+            "error should name the failed base receipt path: {error:#}"
+        );
+        assert!(
+            !base_root.exists(),
+            "base+tests worktree must be cleaned after receipt-path errors"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn proof_broker_v0_does_not_execute_without_focused_test_lease() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
