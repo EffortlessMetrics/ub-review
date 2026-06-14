@@ -990,6 +990,40 @@ fn adoption_docs_match_setup_ci_current_surface() {
 }
 
 #[test]
+fn handoff_docs_cover_current_product_gate_surfaces() {
+    let handoff = include_str!("../docs/REPO_OPERATING_HANDOFF.md");
+    let porting = include_str!("../docs/PORTING_BASELINE.md");
+
+    for required in [
+        "review/fill-ledger.json",
+        "selected and skipped optional proof",
+        "review/proof_receipts.json#<receipt-id>",
+        "review/resource_leases.json#<lease-id>",
+        "sensors/ripr/exposure-gaps.json",
+        "setup-ci --print-pr",
+        "setup-ci --open-pr",
+        "new-files-only migration PR",
+        "never mutates branch protection",
+    ] {
+        assert!(
+            handoff.contains(required),
+            "handoff must keep current product gate surface `{required}` visible"
+        );
+    }
+
+    for required in [
+        "Receipt routes must carry exact source anchors",
+        "review/proof_receipts.json#<receipt-id>",
+        "review/resource_leases.json#<lease-id>",
+    ] {
+        assert!(
+            porting.contains(required),
+            "porting baseline must keep receipt-route source anchor `{required}` visible"
+        );
+    }
+}
+
+#[test]
 fn artifact_contract_docs_match_ci_audit_verifier_coverage() {
     let spec_0004 = include_str!("../docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md");
     let verifier = include_str!("../scripts/verify-bun-review-artifacts.py");

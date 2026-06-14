@@ -90,6 +90,19 @@ For a copyable adoption guide, use [PORTING_BASELINE.md](PORTING_BASELINE.md).
   `review/final_orchestrator_plan.json`.
 - PR #293: Bun runner docs make `FACTORY_API_KEY` a verifier-guarded secret
   name, not a Bun v0 action input or doctor-reported provider key.
+- Product-finish receipt contracts now matter for adopters:
+  `review/fill-ledger.json` records selected and skipped optional proof with
+  expected signal, actual signal, time spent, artifact path, and source
+  receipts; `review/receipt_routes.json` route entries cite exact
+  `review/proof_receipts.json#<receipt-id>` and matching
+  `review/resource_leases.json#<lease-id>` anchors; and
+  `sensors/ripr/exposure-gaps.json` carries per-finding ripr exposure-gap
+  detail so a red tool gate is diagnosable without a local rerun.
+- `audit-ci` / `setup-ci` v0 is available for onboarding: `audit-ci` stays
+  read-only, `setup-ci --print-pr` renders the migration plan and preview
+  files locally, and `setup-ci --open-pr` opens a new-files-only migration PR.
+  It never mutates branch protection; the generated branch-protection doc is
+  an instruction file for a human maintainer.
 - Bun PR #49: the Bun gate is pinned to
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd` with
   a successful `UB evidence packet / gh-runner` run, terminal state
