@@ -555,9 +555,9 @@ Honest current-state limits a consumer must know:
   #320, #321) is a
   different artifact tree entirely and is out of scope here (sensor
   integration is spec 0005).
-- `ci-audit/*` artifacts exist with v1 schema strings but their contract is
-  deliberately deferred to spec 0007; do not build against them from this
-  spec.
+- Core `ci-audit/*` JSON receipts are verifier-covered for setup-ci
+  onboarding; detailed audit semantics live in spec 0007. Prose reports
+  remain human-only.
 - Never claim the artifact tree proves code correct or UB-free (umbrella
   0001); the tree records what ran and what it saw, including missing
   evidence as missing evidence.
@@ -638,7 +638,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/issue_broker_results.json + issue_broker_results.ndjson (root twin) | experimental | issue_broker_result.v1 records | humans; downstream automation (the broker's receipts) | conditional (require_issue_broker_artifacts; post-side, checked when present; results without a plan fail) |
 | sensors/ripr/exposure-gaps.json | experimental | ripr_exposure_gaps.v1 | humans; downstream automation (tool-gate red diagnosis) | conditional (require_ripr_exposure_gap_details; required whenever gate-decision.json exists, ok totals reconciled against badge counts, detail_unavailable needs an error) |
 | sensors/coverage/status.json (+ coverage-summary.json, changed-lines.json, upload.json, lcov.info) | experimental | coverage_status.v1, coverage_summary.v1 | gate-check (coverage tool gate); downstream automation | conditional (require_coverage_status_artifact; runs when tool-status carries the coverage tool) |
-| ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci (spec 0008, planned); humans; contract deferred to spec 0007 | none (tests only - ci_audit_artifacts_carry_schema_fields_and_receipts, src/main.rs) |
+| ci-audit/inventory.json, history.json, costs.json, correlation.json, recommendations.json | experimental | ci_inventory.v1, ci_history.v1, ci_costs.v1, ci_correlation.v1, ci_recommendations.v1 | setup-ci; humans; detailed semantics in spec 0007 | conditional (require_ci_audit_core_artifacts; required under --ci-audit-only, conditional when present in a full run root; schema/job/receipt checks) |
 | ci-audit/runner-cancellations.json | experimental | ci_runner_cancellations.v1 | humans; setup-ci validates when present; runner cancellation runbook | conditional (require_ci_audit_runner_cancellations; --ci-audit-only for audit roots) |
 | ci-audit/audit-report.md | experimental | none (tier-ordered report) | humans | none (tests only - ci_audit_report_lines_carry_receipts_without_boilerplate, src/main.rs) |
 | post-result.json / post-error.json | internal | none | downstream automation via action outputs post-result-path / post-error-path | conditional (require_post_receipt; one must exist on posting passes, status/validity fields fail-closed) |

@@ -32,6 +32,22 @@ CI_RUNNER_CANCELLATION_CLASSIFICATIONS = {
     "unavailable_repeated",
     "unknown",
 }
+CI_AUDIT_CORE_ARTIFACT_SCHEMAS = {
+    "inventory.json": "ub-review.ci_inventory.v1",
+    "history.json": "ub-review.ci_history.v1",
+    "costs.json": "ub-review.ci_costs.v1",
+    "correlation.json": "ub-review.ci_correlation.v1",
+    "recommendations.json": "ub-review.ci_recommendations.v1",
+}
+CI_AUDIT_RECOMMENDATION_TIERS = {
+    "adaptive",
+    "move-to-ub-review-required",
+    "keep-required",
+    "advisory",
+    "nightly-release",
+    "label-gated",
+    "flag-for-human",
+}
 SKIPPED_REVIEW_PAYLOAD_STATUSES = {
     "skipped_empty_smoke",
     "skipped_artifact_only_body",
@@ -214,11 +230,15 @@ def require_file(path: pathlib.Path) -> pathlib.Path:
     return path
 
 
-def ci_audit_runner_cancellations_path(root: pathlib.Path) -> pathlib.Path:
-    nested = root / "ci-audit/runner-cancellations.json"
+def ci_audit_artifact_path(root: pathlib.Path, filename: str) -> pathlib.Path:
+    nested = root / "ci-audit" / filename
     if nested.exists() or root.name != "ci-audit":
         return nested
-    return root / "runner-cancellations.json"
+    return root / filename
+
+
+def ci_audit_runner_cancellations_path(root: pathlib.Path) -> pathlib.Path:
+    return ci_audit_artifact_path(root, "runner-cancellations.json")
 
 
 def require_string(container: dict, label: str, field: str, *, nonempty: bool = False) -> str:
@@ -237,6 +257,227 @@ def require_string_list(container: dict, label: str, field: str, *, nonempty: bo
     if nonempty and not value:
         fail(f"{label}.{field} is empty")
     return value
+
+
+def require_bool(container: dict, label: str, field: str) -> bool:
+    value = container.get(field)
+    if not isinstance(value, bool):
+        fail(f"{label}.{field} is not a boolean: {value!r}")
+    return value
+
+
+def require_optional_bool(container: dict, label: str, field: str) -> bool | None:
+    value = container.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, bool):
+        fail(f"{label}.{field} is not null or a boolean: {value!r}")
+    return value
+
+
+def require_optional_string(container: dict, label: str, field: str, *, nonempty: bool = False) -> str | None:
+    value = container.get(field)
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        fail(f"{label}.{field} is not null or a string: {value!r}")
+    if nonempty and not value.strip():
+        fail(f"{label}.{field} is empty")
+    return value
+
+
+def require_optional_non_negative_int(container: dict, label: str, field: str) -> int | None:
+    value = container.get(field)
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        fail(f"{label}.{field} is not null or a non-negative integer: {value!r}")
+    return value
+
+
+def require_unit_rate(container: dict, label: str, field: str) -> float:
+    value = container.get(field)
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(float(value))
+        or value < 0
+        or value > 1
+    ):
+        fail(f"{label}.{field} is not in [0, 1]: {value!r}")
+    return float(value)
+
+
+def require_ci_audit_artifact(
+    root: pathlib.Path, filename: str, expected_schema: str, *, required: bool
+) -> dict | None:
+    path = ci_audit_artifact_path(root, filename)
+    if not path.exists():
+        if required:
+            fail(f"missing {path}")
+        return None
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail(f"{path} is not an object")
+    if artifact.get("schema") != expected_schema:
+        fail(f"{path} has wrong schema: expected {expected_schema}")
+    require_string(artifact, str(path), "repo", nonempty=True)
+    require_non_negative_int(artifact, str(path), "window_days")
+    jobs = artifact.get("jobs")
+    if not isinstance(jobs, list):
+        fail(f"{path} jobs is not an array")
+    require_string_list(artifact, str(path), "evidence_gaps")
+    return artifact
+
+
+def require_ci_audit_inventory_job(job: dict, label: str) -> None:
+    require_string(job, label, "workflow", nonempty=True)
+    require_string(job, label, "job", nonempty=True)
+    require_string(job, label, "name", nonempty=True)
+    require_string_list(job, label, "triggers")
+    require_string_list(job, label, "path_filters")
+    require_non_negative_int(job, label, "matrix_size")
+    require_optional_non_negative_int(job, label, "timeout_minutes")
+    if "permissions" not in job:
+        fail(f"{label}.permissions is missing")
+    require_string_list(job, label, "uses_secrets")
+    require_optional_bool(job, label, "required_check")
+    require_string(job, label, "required_check_source", nonempty=True)
+    require_optional_string(job, label, "required_check_context", nonempty=True)
+
+
+def require_ci_audit_history_job(job: dict, label: str) -> None:
+    require_string(job, label, "job", nonempty=True)
+    require_string(job, label, "workflow", nonempty=True)
+    require_non_negative_int(job, label, "window_days")
+    runs = require_non_negative_int(job, label, "runs")
+    require_unit_rate(job, label, "failure_rate")
+    require_unit_rate(job, label, "cancellation_rate")
+    require_unit_rate(job, label, "flake_rate")
+    rerun_then_pass = require_non_negative_int(job, label, "rerun_then_pass")
+    if rerun_then_pass > runs:
+        fail(f"{label}.rerun_then_pass exceeds runs")
+    require_string_list(job, label, "evidence_gaps")
+
+
+def require_ci_audit_costs_job(job: dict, label: str) -> None:
+    require_string(job, label, "job", nonempty=True)
+    require_string(job, label, "workflow", nonempty=True)
+    require_optional_non_negative_int(job, label, "duration_p50_sec")
+    require_optional_non_negative_int(job, label, "duration_p90_sec")
+    require_optional_non_negative_int(job, label, "duration_p99_sec")
+    require_non_negative_int(job, label, "runner_minutes_per_month")
+    require_non_negative_int(job, label, "matrix_expansion")
+
+
+def require_ci_audit_correlation_job(job: dict, label: str) -> None:
+    require_string(job, label, "job", nonempty=True)
+    require_string(job, label, "workflow", nonempty=True)
+    require_non_negative_int(job, label, "independent_failures")
+    require_string_list(job, label, "co_failing_jobs")
+    require_string_list(job, label, "cheaper_jobs_compared")
+    require_non_negative_int(job, label, "window_days")
+
+
+def require_ci_audit_recommendation_job(job: dict, label: str) -> None:
+    require_string(job, label, "job", nonempty=True)
+    require_string(job, label, "workflow", nonempty=True)
+    tier = require_string(job, label, "tier", nonempty=True)
+    if tier not in CI_AUDIT_RECOMMENDATION_TIERS:
+        fail(f"{label}.tier is unknown: {tier!r}")
+    require_string(job, label, "positioned_to_catch", nonempty=True)
+    require_string(job, label, "has_caught", nonempty=True)
+    receipts = require_string_list(job, label, "receipts", nonempty=True)
+    for receipt in receipts:
+        if not receipt.startswith("ci-audit/"):
+            fail(f"{label}.receipts contains non-ci-audit pointer: {receipt!r}")
+    require_string(job, label, "proposed_policy", nonempty=True)
+    require_string(job, label, "confidence", nonempty=True)
+    require_string(job, label, "judgment", nonempty=True)
+    require_string(job, label, "reason", nonempty=True)
+    require_string(job, label, "report_note")
+
+
+def require_ci_audit_core_artifacts(root: pathlib.Path, *, required: bool = False) -> None:
+    paths = {
+        filename: ci_audit_artifact_path(root, filename)
+        for filename in CI_AUDIT_CORE_ARTIFACT_SCHEMAS
+    }
+    present = [path for path in paths.values() if path.exists()]
+    if not present:
+        if required:
+            fail(f"missing {paths['inventory.json']}")
+        return
+    missing = [str(path) for path in paths.values() if not path.exists()]
+    if missing:
+        fail(f"missing ci-audit artifact(s): {', '.join(missing)}")
+
+    artifacts = {
+        filename: require_ci_audit_artifact(
+            root,
+            filename,
+            expected_schema,
+            required=True,
+        )
+        for filename, expected_schema in CI_AUDIT_CORE_ARTIFACT_SCHEMAS.items()
+    }
+    repos = {artifact["repo"] for artifact in artifacts.values() if artifact is not None}
+    if len(repos) != 1:
+        fail(f"ci-audit artifacts disagree on repo: {sorted(repos)!r}")
+    windows = {
+        artifact["window_days"] for artifact in artifacts.values() if artifact is not None
+    }
+    if len(windows) != 1:
+        fail(f"ci-audit artifacts disagree on window_days: {sorted(windows)!r}")
+
+    inventory = artifacts["inventory.json"]
+    if inventory is not None:
+        require_string(inventory, str(paths["inventory.json"]), "generated_at", nonempty=True)
+        for index, job in enumerate(inventory["jobs"]):
+            if not isinstance(job, dict):
+                fail(f"{paths['inventory.json']} jobs[{index}] is not an object")
+            require_ci_audit_inventory_job(job, f"{paths['inventory.json']} jobs[{index}]")
+
+    history = artifacts["history.json"]
+    if history is not None:
+        for field in ["runs_fetched", "pages_fetched", "page_cap", "run_cap"]:
+            require_non_negative_int(history, str(paths["history.json"]), field)
+        require_bool(history, str(paths["history.json"]), "truncated")
+        for index, job in enumerate(history["jobs"]):
+            if not isinstance(job, dict):
+                fail(f"{paths['history.json']} jobs[{index}] is not an object")
+            require_ci_audit_history_job(job, f"{paths['history.json']} jobs[{index}]")
+
+    costs = artifacts["costs.json"]
+    if costs is not None:
+        for index, job in enumerate(costs["jobs"]):
+            if not isinstance(job, dict):
+                fail(f"{paths['costs.json']} jobs[{index}] is not an object")
+            require_ci_audit_costs_job(job, f"{paths['costs.json']} jobs[{index}]")
+
+    correlation = artifacts["correlation.json"]
+    if correlation is not None:
+        require_string(
+            correlation,
+            str(paths["correlation.json"]),
+            "independent_failure_rule",
+            nonempty=True,
+        )
+        for index, job in enumerate(correlation["jobs"]):
+            if not isinstance(job, dict):
+                fail(f"{paths['correlation.json']} jobs[{index}] is not an object")
+            require_ci_audit_correlation_job(
+                job, f"{paths['correlation.json']} jobs[{index}]"
+            )
+
+    recommendations = artifacts["recommendations.json"]
+    if recommendations is not None:
+        for index, job in enumerate(recommendations["jobs"]):
+            if not isinstance(job, dict):
+                fail(f"{paths['recommendations.json']} jobs[{index}] is not an object")
+            require_ci_audit_recommendation_job(
+                job, f"{paths['recommendations.json']} jobs[{index}]"
+            )
 
 
 def require_ci_audit_runner_cancellations(root: pathlib.Path, *, required: bool = False) -> None:
@@ -8740,6 +8981,168 @@ def require_github_quality_outcomes_source(path: pathlib.Path) -> None:
                     )
 
 
+def self_test_ci_audit_core_artifact_contract() -> None:
+    import tempfile
+
+    def artifacts() -> dict[str, dict]:
+        return {
+            "inventory.json": {
+                "schema": "ub-review.ci_inventory.v1",
+                "generated_at": "2026-06-14T00:00:00Z",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [
+                    {
+                        "workflow": ".github/workflows/ci.yml",
+                        "job": "test",
+                        "name": "test",
+                        "triggers": ["pull_request"],
+                        "path_filters": ["src/**"],
+                        "matrix_size": 1,
+                        "timeout_minutes": 30,
+                        "permissions": None,
+                        "uses_secrets": [],
+                        "required_check": True,
+                        "required_check_source": "branch-protection",
+                        "required_check_context": "test",
+                    }
+                ],
+                "evidence_gaps": [],
+            },
+            "history.json": {
+                "schema": "ub-review.ci_history.v1",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "runs_fetched": 12,
+                "pages_fetched": 1,
+                "page_cap": 10,
+                "run_cap": 1000,
+                "truncated": False,
+                "jobs": [
+                    {
+                        "job": "test",
+                        "workflow": ".github/workflows/ci.yml",
+                        "window_days": 90,
+                        "runs": 12,
+                        "failure_rate": 0.25,
+                        "cancellation_rate": 0.0,
+                        "flake_rate": 0.0,
+                        "rerun_then_pass": 1,
+                        "evidence_gaps": [],
+                    }
+                ],
+                "evidence_gaps": [],
+            },
+            "costs.json": {
+                "schema": "ub-review.ci_costs.v1",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [
+                    {
+                        "job": "test",
+                        "workflow": ".github/workflows/ci.yml",
+                        "duration_p50_sec": 120,
+                        "duration_p90_sec": 180,
+                        "duration_p99_sec": None,
+                        "runner_minutes_per_month": 24,
+                        "matrix_expansion": 1,
+                    }
+                ],
+                "evidence_gaps": [],
+            },
+            "correlation.json": {
+                "schema": "ub-review.ci_correlation.v1",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "independent_failure_rule": "failed while cheaper siblings passed",
+                "jobs": [
+                    {
+                        "job": "test",
+                        "workflow": ".github/workflows/ci.yml",
+                        "independent_failures": 3,
+                        "co_failing_jobs": [],
+                        "cheaper_jobs_compared": ["fmt"],
+                        "window_days": 90,
+                    }
+                ],
+                "evidence_gaps": [],
+            },
+            "recommendations.json": {
+                "schema": "ub-review.ci_recommendations.v1",
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [
+                    {
+                        "job": "test",
+                        "workflow": ".github/workflows/ci.yml",
+                        "tier": "move-to-ub-review-required",
+                        "positioned_to_catch": "pull_request test job",
+                        "has_caught": "3 independent failures",
+                        "receipts": [
+                            "ci-audit/correlation.json#test",
+                            "ci-audit/costs.json#test",
+                            "ci-audit/history.json#test",
+                            "ci-audit/inventory.json#test",
+                        ],
+                        "proposed_policy": "[[proof.required]] test",
+                        "confidence": "medium",
+                        "judgment": "deterministic",
+                        "reason": "independent failure signal",
+                        "report_note": "fold into ub-review/gate",
+                    }
+                ],
+                "evidence_gaps": [],
+            },
+        }
+
+    def write_root(payloads: dict[str, dict], *, direct: bool = False, omit: set[str] | None = None) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        audit_dir = root / "ci-audit"
+        audit_dir.mkdir()
+        omitted = omit or set()
+        for name, payload in payloads.items():
+            if name in omitted:
+                continue
+            (audit_dir / name).write_text(json.dumps(payload), encoding="utf-8")
+        return audit_dir if direct else root
+
+    require_ci_audit_core_artifacts(write_root(artifacts()), required=True)
+    require_ci_audit_core_artifacts(write_root(artifacts(), direct=True), required=True)
+    require_ci_audit_core_artifacts(
+        pathlib.Path("__missing_empty_ci_audit_root__"), required=False
+    )
+    expect_self_test_failure(
+        "ci-audit core missing required file",
+        "missing ci-audit artifact",
+        lambda: require_ci_audit_core_artifacts(
+            write_root(artifacts(), omit={"recommendations.json"}), required=True
+        ),
+    )
+    broken_schema = artifacts()
+    broken_schema["inventory.json"]["schema"] = "vibes"
+    expect_self_test_failure(
+        "ci-audit core wrong schema",
+        "expected ub-review.ci_inventory.v1",
+        lambda: require_ci_audit_core_artifacts(write_root(broken_schema), required=True),
+    )
+    broken_tier = artifacts()
+    broken_tier["recommendations.json"]["jobs"][0]["tier"] = "maybe"
+    expect_self_test_failure(
+        "ci-audit recommendation unknown tier",
+        "tier is unknown",
+        lambda: require_ci_audit_core_artifacts(write_root(broken_tier), required=True),
+    )
+    broken_receipt = artifacts()
+    broken_receipt["recommendations.json"]["jobs"][0]["receipts"] = [
+        "review/gate_outcome.json"
+    ]
+    expect_self_test_failure(
+        "ci-audit recommendation non-ci-audit receipt",
+        "contains non-ci-audit pointer",
+        lambda: require_ci_audit_core_artifacts(write_root(broken_receipt), required=True),
+    )
+
+
 def self_test_ci_audit_runner_cancellations_contract() -> None:
     import tempfile
 
@@ -10112,6 +10515,7 @@ def run_self_tests() -> None:
     self_test_proof_command_stream_bound_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_ci_audit_core_artifact_contract()
     self_test_ci_audit_runner_cancellations_contract()
     self_test_issue_capture_contract()
     self_test_issue_broker_contract()
@@ -10236,10 +10640,12 @@ def main(argv: list[str]) -> int:
         fail(f"artifact root is not a directory: {root}")
 
     if args.ci_audit_only:
+        require_ci_audit_core_artifacts(root, required=True)
         require_ci_audit_runner_cancellations(root, required=True)
         print(f"ci-audit artifact contract verified: root={root}")
         return 0
 
+    require_ci_audit_core_artifacts(root)
     require_ci_audit_runner_cancellations(root)
     require_common_tree(root)
     require_summary(root)
