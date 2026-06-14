@@ -73,16 +73,21 @@ Note #316 is already closed: #335 production-evaluated the ripr threshold
 
 ## 3. Economics / telemetry (how the gate learns)
 
-Strict sequence: #336 -> #337 -> #338 -> #339. Artifacts only by default;
-no invented quality score.
+Strict sequence: #336 -> #337 -> #338 -> #339. Artifacts are emitted and
+verified; historical backfill remains receipt-only and artifact-only by
+default. No invented quality score.
 
 ```text
-#336  keep      ub-review-cost.json; inputs all exist (metrics, cache
-                events, provider receipts, ci-budget.toml)
-#337  keep      suggested-fill ledger; proof-planner rationale is the source
-#338  keep      floor-time trend; pure aggregation over #336 receipts
-#339  keep      quality telemetry (posted vs accepted, fills with signal);
-                per-run receipt first, nightly backfill second
+#336  closed    review/ub-review-cost.json ships with verifier coverage;
+                v1 records missing upstream/cache/pricing inputs instead
+                of inventing values
+#337  closed    review/fill-ledger.json ships with verifier parity against
+                work_queue/proof-planner optional-fill surfaces
+#338  closed    review/floor-trend.json ships as single_run_v1; historical
+                deltas stay receipted gaps until a real backfill source exists
+#339  closed    review/quality-receipt.json and review/quality-trend.json
+                ship; reviewer acceptance/override fields stay null or
+                missing until GitHub backfill receipts exist
 #325  narrowed  ask (c) shipped (proof broker on-demand focused proof);
                 remaining: (a) lanes off fast precontext, (b) streaming
                 late deterministic outputs into running lanes
