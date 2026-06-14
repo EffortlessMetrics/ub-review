@@ -8,7 +8,7 @@ one-sentence next action. Umbrella issues are not worked as written - they
 are converted into one-promise-one-verifier slices. Re-triage whenever a
 bucket-2 item merges.
 
-Tally this pass: 4 closed, 8 narrowed, 15 kept.
+Tally this pass: 5 closed, 7 narrowed, 15 kept.
 
 ## Closed this pass (receipts on the issues)
 
@@ -27,9 +27,10 @@ Tally this pass: 4 closed, 8 narrowed, 15 kept.
 ## 1. Stale / solved - remaining after the closure pass
 
 ```text
-#77   narrowed  terminal sufficient state shipped; remaining: cross-pass
-                convergence (pass N+1 vs pass N resolutions) + materiality
-                threshold
+#77   closed    terminal sufficient state, submaterial-polish drop,
+                covered-observation drop, prior resolved-candidate input,
+                action pass-through, and automatic previous-run artifact
+                discovery all ship with verifier/test coverage
 #306  DONE      synchronize_mode removed from config contract; legacy configs
                 receive a deprecation PolicyError receipt
 #310  narrowed  retry (#315), [providers].policy D2 (#351),
@@ -110,8 +111,10 @@ default. No invented quality score.
 #75   narrowed  red/green half shipped (proof broker allowlisted execution,
                 discriminating classification); remaining: scoped
                 sanitizer/mutation issue behind allow-heavy
-#76   narrowed  cache/planner/[[lanes]]/doctrine shipped; remaining two
-                slices: diff-class lane routing, PR-thread seed packet
+#76   narrowed  cache/planner/[[lanes]]/doctrine, PR-thread seed packets,
+                workflow/tooling diff-class routing, and proof late-receipt
+                routing shipped; remaining: broader primary/secondary/
+                tertiary convergence and non-proof late-receipt routing
 #147  narrowed  refuter covers part of contradiction; remaining: cross-lane
                 conflict surfacing (lane-gating half folds into #76)
 #178  done      file:line dedup, same-claim-different-line dedup,
