@@ -24809,6 +24809,7 @@ fn render_ci_audit_report(
             } else {
                 format!(" — {}", recommendation.report_note)
             };
+            let receipts = format_ci_audit_report_receipts(&recommendation.receipts);
             match (cost, history_job) {
                 (Some(cost), Some(history_job)) => {
                     let p50 = cost
@@ -24829,7 +24830,7 @@ fn render_ci_audit_report(
                         .map(|job| job.independent_failures)
                         .unwrap_or(0);
                     out.push_str(&format!(
-                        "- `{}` ({workflow_file}) [{}]: p50 {p50}, {} runs, {} independent failures, ~{} runner-min/mo{matrix}{note}\n",
+                        "- `{}` ({workflow_file}) [{}]: p50 {p50}, {} runs, {} independent failures, ~{} runner-min/mo{matrix}, receipts: {receipts}{note}\n",
                         recommendation.job,
                         recommendation.confidence,
                         history_job.runs,
@@ -24839,7 +24840,7 @@ fn render_ci_audit_report(
                 }
                 _ => {
                     out.push_str(&format!(
-                        "- `{}` ({workflow_file}) [{}]: {}{note}\n",
+                        "- `{}` ({workflow_file}) [{}]: {}, receipts: {receipts}{note}\n",
                         recommendation.job,
                         recommendation.confidence,
                         recommendation.positioned_to_catch,
@@ -24865,6 +24866,17 @@ fn render_ci_audit_report(
         }
     }
     out
+}
+
+fn format_ci_audit_report_receipts(receipts: &[String]) -> String {
+    if receipts.is_empty() {
+        return "none".to_owned();
+    }
+    receipts
+        .iter()
+        .map(|receipt| format!("`{receipt}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn write_ci_audit_json<T: Serialize>(dir: &Path, name: &str, value: &T) -> Result<()> {
@@ -44028,6 +44040,18 @@ jobs:
             .context("fmt report line present")?;
         assert_eq!(fmt_line.matches("25").count(), 1, "line: {fmt_line}");
         assert_eq!(fmt_line.matches('3').count(), 1, "line: {fmt_line}");
+        assert!(
+            fmt_line.contains("receipts: `ci-audit/correlation.json#fmt`"),
+            "line: {fmt_line}"
+        );
+        assert!(
+            fmt_line.contains("`ci-audit/costs.json#fmt`"),
+            "line: {fmt_line}"
+        );
+        assert!(
+            fmt_line.contains("`ci-audit/history.json#fmt`"),
+            "line: {fmt_line}"
+        );
         assert!(report.contains("## Evidence gaps"));
         let lowercase = report.to_ascii_lowercase();
         for banned in [
