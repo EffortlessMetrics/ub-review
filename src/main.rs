@@ -29280,7 +29280,7 @@ index 3333333..4444444 100644
         assert_eq!(proof_result.proof_receipts.len(), 1);
         assert_eq!(proof_result.proof_receipts[0].result, "skipped_profile");
         assert_eq!(proof_result.resource_leases.len(), 1);
-        assert_eq!(proof_result.resource_leases[0].status, "skipped_profile");
+        assert_eq!(proof_result.resource_leases[0].status, "absent");
         assert_eq!(
             proof_result.resource_leases[0].reason,
             "profile allows zero focused test leases"

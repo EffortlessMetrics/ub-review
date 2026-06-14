@@ -64,7 +64,7 @@ where
                 &task,
                 budget,
                 lease_budget,
-                "skipped_profile",
+                "absent",
                 "profile allows zero focused test leases",
             ));
             receipts.push(skipped_focused_proof_receipt(
