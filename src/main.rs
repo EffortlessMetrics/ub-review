@@ -2787,6 +2787,30 @@ fn render_init_audit_ci_summary(text: &mut String, inspection: &InitGuideInspect
                 init_markdown_plain(gap)
             ));
         }
+        let accept_candidates = init_setup_ci_accept_candidates(recommendations);
+        if !accept_candidates.is_empty() {
+            text.push_str(
+                "- Acceptable setup-ci candidates (commands still maintainer-supplied):\n",
+            );
+            for entry in accept_candidates.iter().take(8) {
+                text.push_str(&format!(
+                    "  - `{}` (`{}`): add `{}` after running the command locally; receipts: {}\n",
+                    init_markdown_inline_code(&entry.job),
+                    init_markdown_inline_code(&entry.tier),
+                    init_setup_ci_accept_placeholder(&entry.job),
+                    init_join_markdown_code(&entry.receipts)
+                ));
+            }
+            if accept_candidates.len() > 8 {
+                text.push_str(&format!(
+                    "  - ... {} more acceptable jobs; inspect `ci-audit/recommendations.json`.\n",
+                    accept_candidates.len() - 8
+                ));
+            }
+            text.push_str(
+                "  - Leave `keep-required`, `flag-for-human`, risk-pack, nightly, release, deploy, provenance, and compliance jobs manual unless a later audit changes their tier.\n",
+            );
+        }
     } else {
         text.push_str("- Recommendations: unavailable; rerun `ub-review audit-ci --out target/ub-review` before setup-ci materialization.\n");
     }
@@ -2807,6 +2831,24 @@ fn render_init_audit_ci_summary(text: &mut String, inspection: &InitGuideInspect
     text.push_str(
         "- Setup boundary: audit receipts do not record runnable commands; use explicit `setup-ci --accept <job>=<command>` only for audited `adaptive` or `move-to-ub-review-required` jobs.\n",
     );
+}
+
+fn init_setup_ci_accept_candidates(
+    recommendations: &CiRecommendationsArtifact,
+) -> Vec<&CiRecommendation> {
+    let mut entries = Vec::new();
+    for (tier, _) in CI_AUDIT_REPORT_TIER_SECTIONS {
+        if setup_ci_required_flag_for_tier(tier).is_none() {
+            continue;
+        }
+        entries.extend(
+            recommendations
+                .jobs
+                .iter()
+                .filter(|entry| entry.tier == *tier),
+        );
+    }
+    entries
 }
 
 fn render_init_config_proposal(text: &mut String, inspection: &InitGuideInspection) {
@@ -3229,6 +3271,13 @@ fn init_join_markdown_code(values: &[String]) -> String {
         .map(|value| format!("`{}`", init_markdown_inline_code(value)))
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+fn init_setup_ci_accept_placeholder(job: &str) -> String {
+    format!(
+        "--accept {}=\"<maintainer command>\"",
+        init_markdown_inline_code(job)
+    )
 }
 
 fn init_display_repo_path(root: &Path, path: &Path) -> String {

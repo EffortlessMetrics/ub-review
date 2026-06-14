@@ -567,6 +567,10 @@ fn init_guide_summarizes_existing_audit_ci_receipts() -> Result<()> {
         "Human review required (`flag-for-human`):",
         "Inventory evidence gap: required checks unreadable from tokenless audit.",
         "Recommendation evidence gap: history window truncated.",
+        "Acceptable setup-ci candidates (commands still maintainer-supplied):",
+        "`integration` (`adaptive`): add `--accept integration=\"<maintainer command>\"` after running the command locally; receipts: `ci-audit/correlation.json#integration`",
+        "`unit` (`move-to-ub-review-required`): add `--accept unit=\"<maintainer command>\"` after running the command locally; receipts: `ci-audit/correlation.json#unit`",
+        "Leave `keep-required`, `flag-for-human`, risk-pack, nightly, release, deploy, provenance, and compliance jobs manual",
         "Setup boundary: audit receipts do not record runnable commands",
         "explicit `setup-ci --accept <job>=<command>`",
         "only for audited `adaptive` or `move-to-ub-review-required` jobs",
@@ -580,6 +584,15 @@ fn init_guide_summarizes_existing_audit_ci_receipts() -> Result<()> {
         !guide_text.contains("integration=cargo test"),
         "init must not invent runnable setup-ci --accept commands:\n{guide_text}"
     );
+    for forbidden in [
+        "--accept fmt=\"<maintainer command>\"",
+        "--accept deploy=\"<maintainer command>\"",
+    ] {
+        assert!(
+            !guide_text.contains(forbidden),
+            "init guide must not make manual-tier jobs acceptable (`{forbidden}` leaked):\n{guide_text}"
+        );
+    }
     Ok(())
 }
 
