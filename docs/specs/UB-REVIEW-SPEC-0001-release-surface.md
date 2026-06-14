@@ -162,9 +162,10 @@ What does success look like in ten minutes?
   per-finding gap detail ships next to the badge receipt
   (`sensors/ripr/exposure-gaps.json`, verifier-checked; #347 closed).
 - `setup-ci`: `--print-pr` is implemented (slice 1 - migration plan from
-  audit receipts, fail-closed, round-trip-checked generated config). The
-  PR generator, repo-file generation, and `--apply-branch-protection` stay
-  contract-first spec only.
+  audit receipts, fail-closed, round-trip-checked generated config), and the
+  new-files-only `--open-pr` PR generator exists. Branch-protection mutation
+  remains manual today: `setup-ci --apply-branch-protection` is not
+  implemented in the current CLI and is not part of the adoption path.
 
 ## Spec index and authoring sequence
 

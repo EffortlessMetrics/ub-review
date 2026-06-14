@@ -140,10 +140,11 @@ judgment lane weighs both; conservative defaults; the maintainer reviews the PR.
 
 The migration PR cannot change branch protection (admin API, not repo files);
 it carries the exact required-checks change in
-`docs/ci/branch-protection-change.md` and the PR body. A later
-`setup-ci --apply-branch-protection` may apply it with an explicitly granted
-admin token — a separate explicit command, never a default. Full artifact and
-PR contracts: [../CI_AUDIT_WIZARD.md](../CI_AUDIT_WIZARD.md).
+`docs/ci/branch-protection-change.md` and the PR body. `setup-ci
+--apply-branch-protection` is not implemented in the current CLI and is not
+part of the adoption path; a future admin-only command may apply the same
+documented change, but only as a separate explicit invocation. Full artifact
+and PR contracts: [../CI_AUDIT_WIZARD.md](../CI_AUDIT_WIZARD.md).
 
 ### 3. Out-of-the-box posture
 

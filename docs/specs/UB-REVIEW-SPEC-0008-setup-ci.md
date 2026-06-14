@@ -32,7 +32,9 @@ touches branch protection, and writes `setup-pr-result.json` /
 `setup-pr-error.json` receipts under `<out>/ci-audit/`. Still contract
 intent: edits to existing workflows or configs (right-sizing diffs), a
 branch-protection API mutation, and `--apply-branch-protection`; sections
-below say which side of the line they are on.
+below say which side of the line they are on. `setup-ci
+--apply-branch-protection` is not implemented in the current CLI and is not
+part of the adoption path.
 
 ## Purpose
 
@@ -88,11 +90,11 @@ the repo's existing CI  must pass the migration PR as it stands - the old
 a branch-protection
 admin (human)           executes the documented required-checks change after
                         merge, from docs/ci/branch-protection-change.md
-a future
---apply-branch-protection
-invocation              may execute that same change with an explicitly
-                        granted admin token; separate command, never a
-                        default (docs/adr/0002)
+a future admin-only
+command                 may execute that same change with an explicitly
+                        granted admin token; `--apply-branch-protection` is
+                        not implemented in the current CLI, separate from
+                        adoption, and never a default (docs/adr/0002)
 ```
 
 No automation consumes setup-ci output: the PR is a product demo addressed
@@ -183,8 +185,9 @@ setup-ci --open-pr      opens one PR on a new branch; no force-push
 What it must never mutate automatically: branch protection and rulesets.
 The migration PR cannot change branch protection because that is an admin
 API surface, not a repo file (docs/adr/0002); the PR carries the exact
-change as text. A later `setup-ci --apply-branch-protection` may apply it
-with an explicitly granted admin token - a separate explicit command
+change as text. `setup-ci --apply-branch-protection` is not implemented in
+the current CLI and is not part of the adoption path; a future admin-only
+command may apply the same documented change, but only as a separate explicit
 invocation, never a default, never bundled into the PR run
 (docs/CI_AUDIT_WIZARD.md, docs/adr/0002).
 
@@ -262,9 +265,8 @@ proposes, a human accepts, and nothing it emits changes any gate behavior
 until the PR is merged. The handoff is the point - once merged, the
 generated `.ub-review.toml` becomes blocking policy under the gate
 semantics of spec 0003 (authored in this wave), and the branch-protection
-change (applied by a
-human, or later by `--apply-branch-protection`) makes `ub-review/gate` the
-required check.
+change (applied manually by a human today, or by a future admin-only command
+outside the current adoption path) makes `ub-review/gate` the required check.
 
 Human-review boundaries the contract fixes:
 
@@ -310,7 +312,7 @@ PolicyError receipt on reload                    generator failure, abort
 no token / no push permission                    --print-pr still works; PR
                                                  opening fails with the
                                                  named permission gap
---apply-branch-protection without an
+future --apply-branch-protection without an
 admin-scoped token                               hard error before any API
                                                  write; partial application
                                                  is worse than none
@@ -426,12 +428,12 @@ slice 5   PR opening. One branch, one PR, no force-push, token-gated;
           --print-pr remains the no-network path and prints exactly what
           slice 5 would open. Acceptance run on a real repo: the PR passes
           that repo's pre-existing CI.
-slice 6   setup-ci --apply-branch-protection (separate, later). Admin
-          token explicitly granted; refuses unless the migration PR is
-          merged and the gate has a green run on the default branch;
-          applies exactly the change in branch-protection-change.md and
-          prints the rollback command. Never a default; never bundled
-          into slices 1-5.
+slice 6   future setup-ci --apply-branch-protection (not implemented in the
+          current CLI; separate, later). Admin token explicitly granted;
+          refuses unless the migration PR is merged and the gate has a green
+          run on the default branch; applies exactly the change in
+          branch-protection-change.md and prints the rollback command. Never
+          a default; never bundled into slices 1-5.
 ```
 
 ## Release note claim
