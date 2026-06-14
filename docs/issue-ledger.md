@@ -101,8 +101,9 @@ default. No invented quality score.
                 + checksums; SPEC-0010 specifies the surface; first
                 external consumer is already live
 #327  narrowed  audit-ci/setup-ci ship the gate-generation half (#299,
-                #354, #355); remaining: LLM-guided config proposal +
-                file-driven ub-review-init.md mode
+                #354, #355); file-driven ub-review-init.md guidance ships
+                with repo-scan candidates; remaining: LLM-guided/model-
+                assisted config proposal over deterministic receipts
 ```
 
 ## 5. Older architecture umbrellas (converted, not worked as written)

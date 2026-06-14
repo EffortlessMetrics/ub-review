@@ -502,6 +502,79 @@ fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
 }
 
 #[test]
+fn init_guide_lists_existing_package_scripts_as_proof_candidates() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    write_file(
+        &repo.join("package.json"),
+        &serde_json::to_string_pretty(&serde_json::json!({
+            "name": "init-js-fixture",
+            "scripts": {
+                "test": "vitest run",
+                "lint": "eslint .",
+                "typecheck": "tsc --noEmit",
+                "build": "vite build",
+                "dev": "vite --host 0.0.0.0",
+                "pretest": "node scripts/prepare-fixtures.js",
+                "deploy": "wrangler deploy",
+                "docker:build": "docker build .",
+                "lint;rm": "eslint ."
+            }
+        }))?,
+    )?;
+    write_file(&repo.join("pnpm-lock.yaml"), "# lockfile fixture\n")?;
+    write_file(&repo.join("src/index.ts"), "export const value = 42;\n")?;
+
+    let config = repo.join(".ub-review.toml");
+    let guide = repo.join("ub-review-init.md");
+    run(
+        temp.path(),
+        bin,
+        &[
+            "init",
+            "--root",
+            path_str(&repo)?,
+            "--path",
+            path_str(&config)?,
+            "--guide-out",
+            path_str(&guide)?,
+        ],
+    )?;
+
+    let guide_text = fs::read_to_string(&guide)?;
+    for expected in [
+        "JavaScript/TypeScript (`package.json`)",
+        "JavaScript/TypeScript package scripts detected in `package.json`",
+        "`test`: `pnpm run test` (script: `vitest run`).",
+        "`lint`: `pnpm run lint` (script: `eslint .`).",
+        "`typecheck`: `pnpm run typecheck` (script: `tsc --noEmit`).",
+        "`build`: `pnpm run build` (script: `vite build`).",
+        "No root Cargo manifest detected",
+    ] {
+        assert!(
+            guide_text.contains(expected),
+            "init guide missing `{expected}`:\n{guide_text}"
+        );
+    }
+    for unexpected in [
+        "pnpm run dev",
+        "pnpm run pretest",
+        "pnpm run deploy",
+        "pnpm run docker:build",
+        "pnpm run lint;rm",
+        "cargo check --workspace",
+    ] {
+        assert!(
+            !guide_text.contains(unexpected),
+            "init guide invented or over-selected `{unexpected}`:\n{guide_text}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

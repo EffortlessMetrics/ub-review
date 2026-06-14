@@ -2509,11 +2509,19 @@ struct InitGuideInspection {
     root: PathBuf,
     build_systems: Vec<String>,
     workflows: Vec<CiWorkflowScan>,
+    package_scripts: Vec<InitPackageScript>,
     rust_source_count: usize,
     rust_test_count: usize,
     docs_or_specs_count: usize,
     unsafe_native_found: bool,
     cargo_allow_path: Option<String>,
+}
+
+#[derive(Debug)]
+struct InitPackageScript {
+    name: String,
+    command: String,
+    definition: String,
 }
 
 fn cmd_init(args: InitArgs) -> Result<()> {
@@ -2723,6 +2731,17 @@ fn render_init_config_proposal(text: &mut String, inspection: &InitGuideInspecti
     } else {
         text.push_str("- No root Cargo manifest detected; derive required proof from `audit-ci` receipts and maintainer-supplied `--accept <job>=<command>` values.\n");
     }
+    if !inspection.package_scripts.is_empty() {
+        text.push_str("- JavaScript/TypeScript package scripts detected in `package.json` (candidate commands only after a maintainer runs them locally):\n");
+        for script in &inspection.package_scripts {
+            text.push_str(&format!(
+                "  - `{}`: `{}` (script: `{}`).\n",
+                init_markdown_inline_code(&script.name),
+                init_markdown_inline_code(&script.command),
+                init_markdown_inline_code(&script.definition)
+            ));
+        }
+    }
     if inspection.workflows.is_empty() {
         text.push_str("- `actionlint`: wait until workflow files exist or change.\n");
     } else {
@@ -2785,6 +2804,7 @@ fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
     if root.join("package.json").is_file() {
         build_systems.push("JavaScript/TypeScript (`package.json`)".to_owned());
     }
+    let package_scripts = init_package_json_scripts(&root);
     if root.join("pyproject.toml").is_file() {
         build_systems.push("Python (`pyproject.toml`)".to_owned());
     } else if root.join("requirements.txt").is_file() {
@@ -2802,6 +2822,7 @@ fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection> {
         root,
         build_systems,
         workflows,
+        package_scripts,
         rust_source_count,
         rust_test_count,
         docs_or_specs_count,
@@ -2931,6 +2952,104 @@ fn init_cargo_manifest_summary(root: &Path) -> String {
         return format!("Rust package `{name}` (`Cargo.toml`)");
     }
     "Rust (`Cargo.toml`)".to_owned()
+}
+
+fn init_package_json_scripts(root: &Path) -> Vec<InitPackageScript> {
+    let path = root.join("package.json");
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return Vec::new();
+    };
+    let Some(scripts) = value.get("scripts").and_then(serde_json::Value::as_object) else {
+        return Vec::new();
+    };
+    let package_manager = init_package_manager(root);
+    let mut candidates = Vec::new();
+    for (name, definition) in scripts {
+        let Some(definition) = definition.as_str() else {
+            continue;
+        };
+        let definition = definition.trim();
+        if definition.is_empty()
+            || !init_package_script_name_is_safe(name)
+            || !init_package_script_is_proof_candidate(name)
+        {
+            continue;
+        }
+        candidates.push(InitPackageScript {
+            name: name.to_owned(),
+            command: format!("{package_manager} run {name}"),
+            definition: definition.to_owned(),
+        });
+        if candidates.len() >= 8 {
+            break;
+        }
+    }
+    candidates
+}
+
+fn init_package_manager(root: &Path) -> &'static str {
+    if root.join("pnpm-lock.yaml").is_file() {
+        "pnpm"
+    } else if root.join("yarn.lock").is_file() {
+        "yarn"
+    } else {
+        "npm"
+    }
+}
+
+fn init_package_script_name_is_safe(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 80
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, ':' | '_' | '-' | '.' | '/' | '@'))
+}
+
+fn init_package_script_is_proof_candidate(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    if lower.starts_with("pre") || lower.starts_with("post") {
+        return false;
+    }
+    if [
+        "dev",
+        "serve",
+        "start",
+        "watch",
+        "deploy",
+        "publish",
+        "release",
+        "docker",
+        "container",
+        "image",
+        "push",
+        "upload",
+    ]
+    .iter()
+    .any(|term| lower.contains(term))
+    {
+        return false;
+    }
+    [
+        "test", "lint", "type", "check", "build", "fmt", "format", "doc",
+    ]
+    .iter()
+    .any(|term| lower.contains(term))
+}
+
+fn init_markdown_inline_code(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| match ch {
+            '`' => '\'',
+            '\r' | '\n' => ' ',
+            _ => ch,
+        })
+        .collect::<String>()
+        .trim()
+        .to_owned()
 }
 
 fn init_cargo_package_name(text: &str) -> Option<String> {
