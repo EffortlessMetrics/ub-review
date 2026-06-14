@@ -4052,6 +4052,190 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+
+    let duplicate_command = "cargo test --locked duplicate_requested_proof";
+    let duplicate_lane_content = serde_json::json!({
+        "summary": null,
+        "observations": [],
+        "candidate_findings": [],
+        "summary_only_findings": [],
+        "failed_objections": [],
+        "proof_requests": [
+            {
+                "command": duplicate_command,
+                "reason": "A repeated focused proof request should run once with both request ids.",
+                "cost": "focused-test",
+                "timeout_sec": 60,
+                "required": false
+            }
+        ]
+    })
+    .to_string();
+    let dummy_key = "dummy-minimax-key-for-duplicate-proof-requests";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+        fake_openai_lane_content(),
+        duplicate_lane_content.clone(),
+        duplicate_lane_content,
+        fake_openai_lane_content(),
+    ])
+    .context("spawn fake OpenAI provider for duplicate proof requests")?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_cargo(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let fake_cargo_log = temp.path().join("fake-cargo.log");
+    let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green,opposition",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "3",
+            "--model-timeout-sec",
+            "10",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[
+            ("PATH", path.as_str()),
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 4);
+
+    let proof_requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    let duplicate_requests = proof_requests
+        .iter()
+        .filter(|request| request["command"].as_str() == Some(duplicate_command))
+        .collect::<Vec<_>>();
+    assert_eq!(duplicate_requests.len(), 2);
+    let request_ids = duplicate_requests
+        .iter()
+        .map(|request| json_str_field(request, "id").map(ToOwned::to_owned))
+        .collect::<Result<Vec<_>>>()?;
+    assert_ne!(request_ids[0], request_ids[1]);
+    assert!(
+        duplicate_requests
+            .iter()
+            .all(|request| request["status"].as_str() == Some("requested"))
+    );
+
+    let groups: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_request_groups.json"))?)?;
+    let group = groups
+        .iter()
+        .find(|group| group["command"].as_str() == Some(duplicate_command))
+        .ok_or_else(|| anyhow::anyhow!("duplicate proof request group missing"))?;
+    assert_eq!(group["status"], "requested");
+    assert_eq!(group["duplicate_count"], 2);
+    assert_eq!(group["request_ids"], serde_json::json!(request_ids));
+    assert!(group["requested_by"].as_array().is_some_and(|lanes| {
+        lanes
+            .iter()
+            .any(|lane| lane.as_str() == Some("tests-red-green"))
+            && lanes.iter().any(|lane| lane.as_str() == Some("opposition"))
+    }));
+
+    let planner_output: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/proof_planner_output.json"))?)?;
+    let duplicate_tasks = json_array_field(&planner_output, "proof_tasks")?
+        .iter()
+        .filter(|task| {
+            task["command"].as_str().is_some_and(|command| {
+                command.contains("cargo test --locked duplicate_requested_proof")
+            })
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        duplicate_tasks.len(),
+        1,
+        "duplicate requests must plan one broker task"
+    );
+    assert_eq!(
+        duplicate_tasks[0]["request_ids"],
+        serde_json::json!(request_ids)
+    );
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    let duplicate_receipts = receipts
+        .iter()
+        .filter(|receipt| receipt["request_ids"] == serde_json::json!(request_ids))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        duplicate_receipts.len(),
+        1,
+        "duplicate requests must produce one execution receipt"
+    );
+    let receipt = duplicate_receipts[0];
+    assert_eq!(receipt["kind"], "focused-red-green");
+    assert!(receipt["requested_by"].as_array().is_some_and(|lanes| {
+        lanes
+            .iter()
+            .any(|lane| lane.as_str() == Some("tests-red-green"))
+            && lanes.iter().any(|lane| lane.as_str() == Some("opposition"))
+    }));
+    let commands = json_array_field(receipt, "commands")?;
+    assert_eq!(commands.len(), 2);
+    assert_eq!(commands[0]["side"], "head");
+    assert_eq!(commands[1]["side"], "base-plus-tests");
+
+    let leases: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/resource_leases.json"))?)?;
+    let duplicate_leases = leases
+        .iter()
+        .filter(|lease| lease["consumer"] == receipt["id"])
+        .collect::<Vec<_>>();
+    assert_eq!(duplicate_leases.len(), 1);
+    assert_eq!(duplicate_leases[0]["status"], "granted");
+
+    let log = fs::read_to_string(fake_cargo_log)?;
+    assert_eq!(
+        log.lines()
+            .filter(|line| line.contains("duplicate_requested_proof"))
+            .count(),
+        2,
+        "duplicate model proof requests should run one red/green task:\n{log}"
+    );
+    Ok(())
+}
+
+#[test]
 fn model_suggested_manual_cost_proof_request_is_rejected_before_execution() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
