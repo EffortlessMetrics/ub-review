@@ -11027,6 +11027,7 @@ def run_self_tests() -> None:
     if plan["follow_up_tasks"]:
         fail("artifact-only meta observations created follow-up tasks in self-test")
     self_test_source_route_late_proof_routes_and_suppresses_task()
+    self_test_final_tool_gate_routes_to_relevant_lanes()
     self_test_empty_candidate_artifacts_without_dir()
     self_test_lane_packet_pr_thread_seed_contract()
     expect_self_test_failure(
@@ -11117,6 +11118,108 @@ def self_test_source_route_late_proof_routes_and_suppresses_task() -> None:
         fail("source-route self-test did not route the proof receipt")
     if final["follow_up_tasks"]:
         fail("source-route self-test did not suppress the resolved follow-up task")
+
+
+def self_test_final_tool_gate_routes_to_relevant_lanes() -> None:
+    candidate = {
+        "schema": "ub-review.candidate.v1",
+        "id": "candidate-test-oracle-ripr",
+        "lane": "tests-oracle",
+        "source": "summary-only-finding",
+        "status": "summary-only",
+        "disposition": "summary-only",
+        "severity": "medium",
+        "confidence": "medium",
+        "claim": "The changed test oracle needs the ripr receipt before promotion.",
+        "evidence": "test oracle lane asked for static mutation-exposure signal",
+        "path": None,
+        "line": None,
+        "side": None,
+    }
+    unrelated_observation = self_test_observation(
+        "obsgrp-security-only",
+        "security-only-test-gap",
+        "The changed test oracle still needs a security-only review.",
+        "test-gap",
+    )
+    unrelated_observation["lanes"] = ["security"]
+    ripr_outcome = {
+        "schema": "ub-review.tool_gate_outcome.v1",
+        "tool": "ripr",
+        "policy": {"scope": "on-diff", "max_new_unsuppressed": 0},
+        "required": False,
+        "planned_run": True,
+        "sensor_status": "ok",
+        "sensor_reason": "ripr completed",
+        "sensor_receipt_path": "sensors/ripr/ub-review-sensor-status.json",
+        "status_source": "tool-status.json",
+        "outcome": "passed",
+        "evaluated": True,
+        "reason": "ripr threshold passed",
+        "metrics": {"new_unsuppressed": 0},
+        "source_artifacts": [
+            "sensors/ripr/ub-review-sensor-status.json",
+            "tool-status.json",
+            "sensors/ripr/gate-decision.json",
+            "sensors/ripr/exposure-gaps.json",
+        ],
+        "packet_policy": "gate-only",
+        "gate_policy": "trust-affecting",
+    }
+    final = expected_final_orchestrator_plan(
+        [candidate], [unrelated_observation], [], [], [ripr_outcome]
+    )
+    candidate_groups = [
+        group
+        for group in final["evidence_groups"]
+        if group["candidate_ids"] == ["candidate-test-oracle-ripr"]
+    ]
+    if len(candidate_groups) != 1:
+        fail("tool-gate self-test did not create the expected candidate group")
+    candidate_group = candidate_groups[0]
+    if candidate_group["evidence_need"] != "test-oracle-confirmation":
+        fail("tool-gate self-test did not classify candidate as test-oracle")
+    routed = candidate_group["routed_evidence"]
+    if len(routed) != 1:
+        fail("tool-gate self-test did not route exactly one ripr evidence item")
+    routed_item = routed[0]
+    if routed_item["kind"] != "tool-gate-outcome" or routed_item["id"] != "ripr":
+        fail("tool-gate self-test routed the wrong evidence kind")
+    if routed_item["artifact"] != "review/tool-gate-outcomes.json#ripr":
+        fail("tool-gate self-test routed the wrong artifact pointer")
+    if routed_item["status"] != "tool-gate-passed" or routed_item["result"] != "passed":
+        fail("tool-gate self-test routed the wrong status")
+    if "new_unsuppressed=0" not in routed_item["reason"]:
+        fail("tool-gate self-test dropped the ripr metric from the reason")
+    if "sensors/ripr/exposure-gaps.json" not in routed_item["reason"]:
+        fail("tool-gate self-test dropped the ripr detail artifact from the reason")
+    candidate_tasks = [
+        task
+        for task in final["follow_up_tasks"]
+        if task["group_id"] == candidate_group["id"]
+    ]
+    if len(candidate_tasks) != 1:
+        fail("tool-gate self-test suppressed or duplicated the candidate follow-up")
+    if candidate_tasks[0]["stage"] != "tertiary":
+        fail("tool-gate self-test did not move routed tool-gate evidence to tertiary")
+    if candidate_tasks[0]["routed_evidence"] != routed:
+        fail("tool-gate self-test did not copy routed evidence into follow-up task")
+    observation_groups = [
+        group
+        for group in final["observation_groups"]
+        if group["lanes"] == ["security"]
+    ]
+    if len(observation_groups) != 1:
+        fail("tool-gate self-test did not create the security observation group")
+    if observation_groups[0]["routed_evidence"]:
+        fail("tool-gate self-test routed ripr evidence to a security-only group")
+    observation_tasks = [
+        task
+        for task in final["follow_up_tasks"]
+        if task["group_id"] == observation_groups[0]["id"]
+    ]
+    if len(observation_tasks) != 1 or observation_tasks[0]["stage"] != "secondary":
+        fail("tool-gate self-test changed the unrelated observation follow-up")
 
 
 def self_test_observation(
