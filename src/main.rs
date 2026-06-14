@@ -2697,6 +2697,7 @@ fn render_init_guide(args: &InitArgs, config: &Config) -> Result<String> {
     }
 
     render_init_audit_ci_summary(&mut text, &inspection);
+    render_init_model_assist_handoff(&mut text, &inspection);
     render_init_config_proposal(&mut text, &inspection);
 
     text.push_str("\n## Recommended path\n\n");
@@ -2849,6 +2850,54 @@ fn init_setup_ci_accept_candidates(
         );
     }
     entries
+}
+
+fn render_init_model_assist_handoff(text: &mut String, inspection: &InitGuideInspection) {
+    let Some(audit) = inspection.audit_ci.as_ref() else {
+        return;
+    };
+
+    text.push_str("\n## Model-assisted config proposal input\n\n");
+    text.push_str(&format!(
+        "- Bounded deterministic inputs: `{}/inventory.json` and `{}/recommendations.json` when present and readable.\n",
+        init_display_repo_path(&inspection.root, &audit.dir),
+        init_display_repo_path(&inspection.root, &audit.dir)
+    ));
+    text.push_str(
+        "- Use recommendation receipts as pointers to supporting audit artifacts; do not infer from workflow names alone.\n",
+    );
+    match audit.recommendations.as_ref() {
+        Some(recommendations) => {
+            let accept_candidates = init_setup_ci_accept_candidates(recommendations);
+            if accept_candidates.is_empty() {
+                text.push_str("- Setup-ci accepts: none proposed by deterministic receipts; ask for more audit proof before materializing commands.\n");
+            } else {
+                text.push_str(&format!(
+                    "- Setup-ci accepts: {} audited `adaptive` or `move-to-ub-review-required` jobs may be proposed only with maintainer-supplied commands.\n",
+                    accept_candidates.len()
+                ));
+            }
+            text.push_str(
+                "- Manual boundary: keep-required, flag-for-human, risk-pack, nightly, release, deploy, provenance, and compliance jobs stay manual unless later receipts retier them.\n",
+            );
+            if !recommendations.evidence_gaps.is_empty() {
+                text.push_str(
+                    "- Evidence gaps: convert unresolved recommendation gaps into verification questions, not config changes.\n",
+                );
+            }
+        }
+        None => text.push_str(
+            "- Recommendations are unavailable; rerun `ub-review audit-ci --out target/ub-review` before asking a model or external agent to propose setup-ci accepts.\n",
+        ),
+    }
+    if !audit.evidence_gaps.is_empty() {
+        text.push_str(
+            "- Receipt gaps: treat missing or unreadable audit receipts as blockers for materialization.\n",
+        );
+    }
+    text.push_str(
+        "- Proposal boundary: a model or external agent may draft rationale and open questions from these receipts, but must not invent commands, treat model judgment as proof, enable posting/blocking, or mutate branch protection.\n",
+    );
 }
 
 fn render_init_config_proposal(text: &mut String, inspection: &InitGuideInspection) {

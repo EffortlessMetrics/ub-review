@@ -574,6 +574,13 @@ fn init_guide_summarizes_existing_audit_ci_receipts() -> Result<()> {
         "Setup boundary: audit receipts do not record runnable commands",
         "explicit `setup-ci --accept <job>=<command>`",
         "only for audited `adaptive` or `move-to-ub-review-required` jobs",
+        "## Model-assisted config proposal input",
+        "Bounded deterministic inputs: `target/ub-review/ci-audit/inventory.json` and `target/ub-review/ci-audit/recommendations.json` when present and readable.",
+        "Use recommendation receipts as pointers to supporting audit artifacts; do not infer from workflow names alone.",
+        "Setup-ci accepts: 2 audited `adaptive` or `move-to-ub-review-required` jobs may be proposed only with maintainer-supplied commands.",
+        "Manual boundary: keep-required, flag-for-human, risk-pack, nightly, release, deploy, provenance, and compliance jobs stay manual unless later receipts retier them.",
+        "Evidence gaps: convert unresolved recommendation gaps into verification questions, not config changes.",
+        "Proposal boundary: a model or external agent may draft rationale and open questions from these receipts, but must not invent commands, treat model judgment as proof, enable posting/blocking, or mutate branch protection.",
     ] {
         assert!(
             guide_text.contains(expected),
@@ -628,6 +635,9 @@ fn init_guide_flags_bad_existing_audit_ci_receipts_without_failing() -> Result<(
         "Audit receipt evidence gap: `target/ub-review/ci-audit/inventory.json` unreadable:",
         "expected ub-review.ci_inventory.v1",
         "`target/ub-review/ci-audit/recommendations.json` missing; rerun `ub-review audit-ci --out target/ub-review`",
+        "## Model-assisted config proposal input",
+        "Recommendations are unavailable; rerun `ub-review audit-ci --out target/ub-review` before asking a model or external agent to propose setup-ci accepts.",
+        "Receipt gaps: treat missing or unreadable audit receipts as blockers for materialization.",
     ] {
         assert!(
             guide_text.contains(expected),
