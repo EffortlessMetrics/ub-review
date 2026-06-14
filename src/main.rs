@@ -21363,6 +21363,7 @@ const STANDARD_IMAGE_TOKMD_VERSION: &str = "1.12.0";
 // accepted). Pins move together with scripts/install-gh-runner-tools.sh.
 const STANDARD_IMAGE_RIPR_VERSION: &str = "0.8.0";
 const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.4";
+const STANDARD_IMAGE_ACTIONLINT_VERSION: &str = "1.7.12";
 
 fn is_core_review_tool(tool_id: &str) -> bool {
     CORE_REVIEW_TOOLS.contains(&tool_id)
@@ -21373,6 +21374,7 @@ fn expected_standard_image_tool_version(tool_id: &str) -> Option<&'static str> {
         "tokmd" => Some(STANDARD_IMAGE_TOKMD_VERSION),
         "ripr" => Some(STANDARD_IMAGE_RIPR_VERSION),
         "unsafe-review" => Some(STANDARD_IMAGE_UNSAFE_REVIEW_VERSION),
+        "actionlint" => Some(STANDARD_IMAGE_ACTIONLINT_VERSION),
         _ => None,
     }
 }
@@ -21393,7 +21395,10 @@ fn doctor_tool_install_hint(tool_id: &str) -> String {
             STANDARD_IMAGE_UNSAFE_REVIEW_VERSION
         ),
         "ast-grep" => "npm install -g @ast-grep/cli".to_owned(),
-        "actionlint" => "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH".to_owned(),
+        "actionlint" => format!(
+            "go install github.com/rhysd/actionlint/cmd/actionlint@v{}; add $(go env GOPATH)/bin to PATH",
+            STANDARD_IMAGE_ACTIONLINT_VERSION
+        ),
         _ => format!("install `{tool_id}` and make it available on PATH"),
     }
 }
@@ -21404,6 +21409,11 @@ fn doctor_tool_version_fix(tool_id: &str, expected: &str) -> String {
         "ripr" => format!("cargo install ripr --locked --version {expected} --force"),
         "unsafe-review" => {
             format!("cargo install unsafe-review --locked --version {expected} --force")
+        }
+        "actionlint" => {
+            format!(
+                "go install github.com/rhysd/actionlint/cmd/actionlint@v{expected}; add $(go env GOPATH)/bin to PATH"
+            )
         }
         _ => doctor_tool_install_hint(tool_id),
     }
@@ -25091,6 +25101,10 @@ mod tests {
         assert_eq!(
             super::doctor_tool_version_fix("unsafe-review", "0.3.4"),
             "cargo install unsafe-review --locked --version 0.3.4 --force"
+        );
+        assert_eq!(
+            super::doctor_tool_version_fix("actionlint", "1.7.12"),
+            "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
         );
         assert!(super::command_version_matches("ripr 0.8.0", "0.8.0"));
         assert!(super::command_version_matches(
