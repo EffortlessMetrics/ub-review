@@ -1002,3 +1002,85 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_red_green.rs:226:error_path"
 owner = "ub-review/proof-broker"
 reason = "Reachable-unrevealed false-negative on the lease-guarded red/green HEAD command result propagation. proof_broker_v0_marks_base_plus_tests_pass_as_non_discriminating, proof_broker_v0_skips_base_plus_tests_when_head_fails, and proof_broker_v0_records_base_patch_failed_as_missing_proof assert red/green receipt outcomes, while command-level lease tests assert no runner execution without the matching granted lease. Line-keyed id; re-verify after edits near run_focused_red_green_proof_task."
+
+# setup-ci --open-pr CLI contract (#517): ripr probes integration-test fake
+# GitHub API plumbing in tests/cli.rs. The public behavior is pinned by
+# setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt, which drives the
+# real binary, asserts the exact request sequence, terminal receipt XOR,
+# payload parity with the no-network preview bytes, and no branch-protection or
+# ruleset API calls. The probes below are helper timeout / request parse /
+# fixture-response error paths; a test-helper `?` or timeout firing is itself a
+# test failure. Remove when ripr skips integration-test helper plumbing or
+# grows a stable non-line-keyed cfg(test) classification.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7118:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake GitHub API helper plumbing (ripr-swarm#1055): spawn_fake_setup_ci_api returning the collected requests is not product behavior. setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt drives the real binary through --open-pr and asserts the exact 9-request sequence plus terminal success receipt. Line-keyed CI ripr 0.8.0 id; re-verify after edits near the fake setup-ci API helper."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7121:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake GitHub API helper timeout diagnostics (ripr-swarm#1055). The open-pr CLI contract fails if the fake API receives too few requests, and otherwise asserts the exact request count and sequence; the timeout branch is fixture failure reporting, not product behavior. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7124:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake GitHub API helper timeout diagnostics (ripr-swarm#1055): expected_requests is only the fixture oracle for the public --open-pr request sequence. setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt asserts requests.len()==9 and every endpoint. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7125:error_path"
+owner = "ub-review/setup-ci"
+reason = "Twin of the fake setup-ci API timeout diagnostic probe above (ripr-swarm#1055). The exact request-count and endpoint assertions in setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt discriminate the public behavior; this branch only formats fixture failure output. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7126:error_path"
+owner = "ub-review/setup-ci"
+reason = "Twin of the fake setup-ci API timeout diagnostic probe above (ripr-swarm#1055). If this helper error path fires, the subprocess test fails before accepting any product behavior; the public contract is asserted through the collected requests and receipts. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7128:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake API accept-loop error propagation (ripr-swarm#1055). The helper exists only to expose the real CLI's GitHub API calls to setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt; a fixture IO failure is a test failure. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7130:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake API accept-loop control flow (ripr-swarm#1055). The real behavior is pinned by the subprocess test's endpoint sequence, payload receipts, PR URL, and branch-protection API absence assertions. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7131:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake API accept-loop control flow (ripr-swarm#1055). This is fixture plumbing around a real CLI subprocess test; if the branch is wrong the test fails through request-count or join errors. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7133:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on integration-test fake API thread closure plumbing (ripr-swarm#1055). setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt asserts the collected requests and terminal receipts from the real binary; helper thread completion is fixture infrastructure. Line-keyed CI ripr 0.8.0 id; re-verify after edits near spawn_fake_setup_ci_api."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7172:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on fake setup-ci API JSON response fixture construction (ripr-swarm#1055). The product contract is the CLI's handling of repo metadata/default branch requests and payload receipts; serde_json::to_vec failure inside the test fixture would fail the test, not mask product behavior. Line-keyed CI ripr 0.8.0 id; re-verify after edits near handle_fake_setup_ci_request."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7193:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on fake setup-ci API pull-response fixture construction (ripr-swarm#1055). The CLI contract asserts the opened PR URL in stdout and setup-pr-result.json; a fixture JSON serialization failure is test infrastructure failure. Line-keyed CI ripr 0.8.0 id; re-verify after edits near handle_fake_setup_ci_request."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7205:error_path"
+owner = "ub-review/setup-ci"
+reason = "Probe on fake setup-ci API response write path (ripr-swarm#1055). The subprocess test fails if the helper cannot serve requests, and separately asserts branch payload, file payload content parity, pull payload body, and no branch-protection/ruleset API calls. Line-keyed CI ripr 0.8.0 id; re-verify after edits near handle_fake_setup_ci_request."

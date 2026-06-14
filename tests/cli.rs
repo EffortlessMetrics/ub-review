@@ -470,6 +470,220 @@ fn setup_ci_print_pr_cli_materializes_accepted_preview_files() -> Result<()> {
 }
 
 #[test]
+fn setup_ci_open_pr_cli_creates_payloads_and_terminal_receipt() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let out = temp.path().join("target/ub-review");
+    write_setup_ci_cli_audit_fixture(&out.join("ci-audit"))?;
+
+    let action_sha = "e".repeat(40);
+    let out_arg = path_str(&out)?;
+    let integration_accept = "integration=cargo test --workspace --locked";
+    let mut preview = isolated_command(bin, temp.path());
+    preview
+        .env_remove("GITHUB_REPOSITORY")
+        .env_remove("GITHUB_TOKEN")
+        .args([
+            "setup-ci",
+            "--print-pr",
+            "--out",
+            out_arg,
+            "--accept",
+            integration_accept,
+            "--action-sha",
+            action_sha.as_str(),
+        ]);
+    let preview_output = preview.output()?;
+    let preview_stdout = String::from_utf8_lossy(&preview_output.stdout).to_string();
+    let preview_stderr = String::from_utf8_lossy(&preview_output.stderr).to_string();
+    assert!(
+        preview_output.status.success(),
+        "setup-ci --print-pr failed before open-pr contract\nstdout:\n{preview_stdout}\nstderr:\n{preview_stderr}"
+    );
+
+    let ci_audit = out.join("ci-audit");
+    fs::write(ci_audit.join("setup-pr-error.json"), "{}")?;
+    // Sequence: repo meta, base ref, base tree, create ref, 4 file PUTs,
+    // open PR = 9 requests.
+    let (api_url, handle) = spawn_fake_setup_ci_api(9, false)?;
+    let mut command = isolated_command(bin, temp.path());
+    command
+        .env_remove("GITHUB_REPOSITORY")
+        .env("GITHUB_TOKEN", "test-token")
+        .args([
+            "setup-ci",
+            "--open-pr",
+            "--out",
+            out_arg,
+            "--repo",
+            "acme/widgets",
+            "--github-api-url",
+            api_url.as_str(),
+            "--accept",
+            integration_accept,
+            "--action-sha",
+            action_sha.as_str(),
+        ]);
+    let output = command.output()?;
+    let requests = match handle.join() {
+        Ok(result) => result?,
+        Err(_) => bail!("fake setup-ci API thread panicked"),
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+    assert!(
+        output.status.success(),
+        "setup-ci --open-pr failed\nstdout:\n{stdout}\nstderr:\n{stderr}\nrequests:\n{requests:#?}"
+    );
+    assert!(
+        stdout.contains("# CI migration plan"),
+        "setup-ci --open-pr should render the migration plan before opening the PR:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("opened https://github.com/acme/widgets/pull/77"),
+        "setup-ci --open-pr should print the opened PR URL:\n{stdout}"
+    );
+    assert!(
+        stderr.contains("setup-pr-result.json"),
+        "setup-ci --open-pr should report the terminal success receipt:\n{stderr}"
+    );
+
+    assert_eq!(requests.len(), 9, "unexpected setup-ci API request count");
+    assert!(requests[0].starts_with("GET /repos/acme/widgets "));
+    assert!(requests[1].contains("GET /repos/acme/widgets/git/ref/heads/main "));
+    assert!(requests[2].contains("GET /repos/acme/widgets/git/trees/basesha"));
+    assert!(requests[3].starts_with("POST /repos/acme/widgets/git/refs "));
+    assert!(requests[3].contains("ub-review/setup-ci-migration"));
+    assert!(requests[4].contains("PUT /repos/acme/widgets/contents/.ub-review.toml "));
+    assert!(
+        requests[5]
+            .contains("PUT /repos/acme/widgets/contents/.github/workflows/ub-review-gate.yml ")
+    );
+    assert!(
+        requests[6].contains("PUT /repos/acme/widgets/contents/docs/ci/ub-review-migration.md ")
+    );
+    assert!(
+        requests[7]
+            .contains("PUT /repos/acme/widgets/contents/docs/ci/branch-protection-change.md ")
+    );
+    assert!(requests[8].starts_with("POST /repos/acme/widgets/pulls "));
+    let all_requests = requests.join("\n");
+    for forbidden in ["/branches/", "/rulesets"] {
+        assert!(
+            !all_requests.contains(forbidden),
+            "setup-ci --open-pr must not call branch-protection/ruleset APIs; saw `{forbidden}` in:\n{all_requests}"
+        );
+    }
+
+    let result = read_json(&ci_audit.join("setup-pr-result.json"))?;
+    assert_eq!(
+        json_str_field(&result, "schema")?,
+        "ub-review.setup_pr_result.v1"
+    );
+    assert_eq!(json_str_field(&result, "repo")?, "acme/widgets");
+    assert_eq!(json_str_field(&result, "base")?, "main");
+    assert_eq!(
+        json_str_field(&result, "branch")?,
+        "ub-review/setup-ci-migration"
+    );
+    assert_eq!(
+        json_str_field(&result, "pr_url")?,
+        "https://github.com/acme/widgets/pull/77"
+    );
+    assert_eq!(json_str_field(&result, "action_sha")?, action_sha);
+    assert_eq!(
+        json_array_field(&result, "files")?,
+        &[
+            serde_json::json!(".ub-review.toml"),
+            serde_json::json!(".github/workflows/ub-review-gate.yml"),
+            serde_json::json!("docs/ci/ub-review-migration.md"),
+            serde_json::json!("docs/ci/branch-protection-change.md"),
+        ]
+    );
+    assert!(
+        !ci_audit.join("setup-pr-error.json").exists(),
+        "successful setup-ci --open-pr must remove stale error receipts"
+    );
+
+    let branch_payload = read_json(&ci_audit.join("setup-pr-branch-payload.json"))?;
+    assert_eq!(
+        json_str_field(&branch_payload, "ref")?,
+        "refs/heads/ub-review/setup-ci-migration"
+    );
+    assert_eq!(
+        json_str_field(&branch_payload, "sha")?,
+        "basesha0000000000000000000000000000000000"
+    );
+    let pull_payload = read_json(&ci_audit.join("setup-pr-pull-payload.json"))?;
+    assert_eq!(
+        json_str_field(&pull_payload, "title")?,
+        "Adopt ub-review/gate from the CI audit"
+    );
+    assert_eq!(
+        json_str_field(&pull_payload, "head")?,
+        "ub-review/setup-ci-migration"
+    );
+    assert_eq!(json_str_field(&pull_payload, "base")?, "main");
+    assert_eq!(
+        json_str_field(&pull_payload, "body")?,
+        fs::read_to_string(ci_audit.join("migration-plan.md"))?
+    );
+
+    let expected_files = [
+        (
+            ".ub-review.toml",
+            "Add the ub-review gate policy from the CI audit",
+        ),
+        (
+            ".github/workflows/ub-review-gate.yml",
+            "Add the ub-review gate workflow",
+        ),
+        (
+            "docs/ci/ub-review-migration.md",
+            "Record the CI migration plan and its audit receipts",
+        ),
+        (
+            "docs/ci/branch-protection-change.md",
+            "Record the manual branch protection change",
+        ),
+    ];
+    for (index, (path, message)) in expected_files.iter().enumerate() {
+        let payload = read_json(&ci_audit.join(format!("setup-pr-file-payload-{index}.json")))?;
+        assert_eq!(
+            json_str_field(&payload, "message")?,
+            *message,
+            "{path} payload message"
+        );
+        assert_eq!(
+            json_str_field(&payload, "branch")?,
+            "ub-review/setup-ci-migration",
+            "{path} payload branch"
+        );
+        let preview_bytes = fs::read(ci_audit.join("preview").join(path))
+            .with_context(|| format!("read preview {path}"))?;
+        assert_eq!(
+            json_str_field(&payload, "content")?,
+            base64_standard_for_test(&preview_bytes),
+            "{path} payload must match the no-network preview bytes"
+        );
+    }
+    for relative in [
+        ".ub-review.toml",
+        ".github/workflows/ub-review-gate.yml",
+        "docs/ci/ub-review-migration.md",
+        "docs/ci/branch-protection-change.md",
+    ] {
+        assert!(
+            !temp.path().join(relative).exists(),
+            "setup-ci --open-pr must not write generated repo files locally as `{relative}`"
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
 fn audit_ci_tokenless_cli_writes_receipts_without_repo_side_effects() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -6887,6 +7101,115 @@ fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<Stri
     Ok((url, handle))
 }
 
+fn spawn_fake_setup_ci_api(
+    expected_requests: usize,
+    config_exists: bool,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let url = format!("http://{}", listener.local_addr()?);
+    let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut requests = Vec::new();
+        while requests.len() < expected_requests {
+            match listener.accept() {
+                Ok((stream, _addr)) => {
+                    requests.push(handle_fake_setup_ci_request(stream, config_exists)?);
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        bail!(
+                            "fake setup-ci API received {} of {} requests",
+                            requests.len(),
+                            expected_requests
+                        );
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(requests)
+    });
+    Ok((url, handle))
+}
+
+fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) -> Result<String> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut headers = String::new();
+    loop {
+        let mut line = String::new();
+        let bytes = reader.read_line(&mut line)?;
+        if bytes == 0 {
+            bail!("fake setup-ci request ended before headers finished");
+        }
+        headers.push_str(&line);
+        if line == "\r\n" || line == "\n" {
+            break;
+        }
+    }
+    let content_length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .unwrap_or_default();
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body)?;
+    let request_line = headers.lines().next().unwrap_or_default().to_owned();
+    let (status_line, response_body) =
+        if request_line.starts_with("GET /repos/") && request_line.contains("/git/ref/heads/") {
+            (
+                "HTTP/1.1 200 OK",
+                serde_json::to_vec(&serde_json::json!({
+                    "object": {"sha": "basesha0000000000000000000000000000000000"}
+                }))?,
+            )
+        } else if request_line.starts_with("GET /repos/") && request_line.contains("/git/trees/") {
+            let mut entries = vec![serde_json::json!({"path": "README.md"})];
+            if config_exists {
+                entries.push(serde_json::json!({"path": ".ub-review.toml"}));
+            }
+            (
+                "HTTP/1.1 200 OK",
+                serde_json::to_vec(&serde_json::json!({"tree": entries}))?,
+            )
+        } else if request_line.starts_with("GET /repos/") {
+            (
+                "HTTP/1.1 200 OK",
+                serde_json::to_vec(&serde_json::json!({"default_branch": "main"}))?,
+            )
+        } else if request_line.starts_with("POST ") && request_line.contains("/pulls") {
+            (
+                "HTTP/1.1 201 Created",
+                serde_json::to_vec(&serde_json::json!({
+                    "html_url": "https://github.com/acme/widgets/pull/77"
+                }))?,
+            )
+        } else {
+            (
+                "HTTP/1.1 201 Created",
+                serde_json::to_vec(&serde_json::json!({}))?,
+            )
+        };
+    write!(
+        stream,
+        "{status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        response_body.len()
+    )?;
+    stream.write_all(&response_body)?;
+    Ok(format!(
+        "{request_line}\n{}",
+        String::from_utf8_lossy(&body)
+    ))
+}
+
 fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -7222,6 +7545,30 @@ fn json_str_field<'a>(value: &'a serde_json::Value, field: &str) -> Result<&'a s
 
 fn read_json(path: &Path) -> Result<serde_json::Value> {
     Ok(serde_json::from_slice(&fs::read(path)?)?)
+}
+
+fn base64_standard_for_test(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut encoded = String::with_capacity(bytes.len().div_ceil(3) * 4);
+    for chunk in bytes.chunks(3) {
+        let b0 = u32::from(chunk[0]);
+        let b1 = chunk.get(1).copied().map(u32::from).unwrap_or(0);
+        let b2 = chunk.get(2).copied().map(u32::from).unwrap_or(0);
+        let triple = (b0 << 16) | (b1 << 8) | b2;
+        encoded.push(ALPHABET[((triple >> 18) & 0x3f) as usize] as char);
+        encoded.push(ALPHABET[((triple >> 12) & 0x3f) as usize] as char);
+        encoded.push(if chunk.len() > 1 {
+            ALPHABET[((triple >> 6) & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+        encoded.push(if chunk.len() > 2 {
+            ALPHABET[(triple & 0x3f) as usize] as char
+        } else {
+            '='
+        });
+    }
+    encoded
 }
 
 fn tool_entry<'a>(artifact: &'a serde_json::Value, tool_id: &str) -> Result<&'a serde_json::Value> {
