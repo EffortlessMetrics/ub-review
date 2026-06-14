@@ -7315,6 +7315,10 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
             "general bot output",
             "pr-body contract hardening",
             "actionlint ran ok",
+            "pre-existing, not a diff target",
+            "identical to prior pin",
+            "no widened attack surface",
+            "standing-repo concern",
             "lane transcript",
             "lane roster",
             "model lane roster",
@@ -7351,48 +7355,59 @@ fn is_refuted_only_pr_body(body: &str) -> bool {
 }
 
 fn contains_successful_lane_table(body: &str) -> bool {
-    [
-        "## Model lanes",
-        "## Model lane status",
-        "## Lane status",
-        "## Lane roster",
-    ]
-    .iter()
-    .any(|needle| body.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &[
+            "## model lanes",
+            "## model lane status",
+            "## lane status",
+            "## lane roster",
+        ],
+    )
 }
 
 fn contains_provider_status_table(body: &str) -> bool {
-    [
-        "## Provider preflights",
-        "## Provider status",
-        "## Model provider status",
-    ]
-    .iter()
-    .any(|needle| body.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &[
+            "## provider preflights",
+            "## provider status",
+            "## model provider status",
+        ],
+    )
 }
 
 fn contains_sensor_status_table(body: &str) -> bool {
-    ["## Sensors", "## Sensor status", "## Sensor receipts"]
-        .iter()
-        .any(|needle| body.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &["## sensors", "## sensor status", "## sensor receipts"],
+    )
 }
 
 fn contains_execution_summary(body: &str) -> bool {
-    [
-        "- Shared context:",
-        "- Profile:",
-        "- Base:",
-        "- Head:",
-        "- Changed files:",
-        "- Inline comments:",
-        "## Review efficiency",
-        "Runtime:",
-        "Terminal state:",
-        "Review payload:",
-        "Follow-up results:",
-    ]
-    .iter()
-    .any(|needle| body.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &[
+            "- shared context:",
+            "- profile:",
+            "- base:",
+            "- head:",
+            "- changed files:",
+            "- inline comments:",
+            "## review efficiency",
+            "runtime:",
+            "terminal state:",
+            "review payload:",
+            "follow-up results:",
+        ],
+    )
+}
+
+fn contains_case_insensitive_line_prefix(body: &str, needles: &[&str]) -> bool {
+    body.lines().any(|line| {
+        let lower = line.trim_start().to_ascii_lowercase();
+        needles.iter().any(|needle| lower.starts_with(needle))
+    })
 }
 
 fn pr_body_has_failure_context(body: &str) -> bool {
@@ -31886,6 +31901,53 @@ index 1111111..2222222 100644
             "{err:#}"
         );
 
+        assert!(super::contains_successful_lane_table(
+            "## model lanes\n\n- tests: ok"
+        ));
+        assert!(super::contains_provider_status_table(
+            "## provider preflights\n\n- minimax: ok"
+        ));
+        assert!(super::contains_sensor_status_table(
+            "## sensor receipts\n\n- ripr: ok"
+        ));
+        assert!(super::contains_execution_summary("runtime: 31s"));
+        assert!(!super::contains_execution_summary(
+            "## Evidence gaps\n\n- Check the `runtime:` field in the proof receipt."
+        ));
+
+        review.body = "## Decision\n\n- Needs proof.\n\n## model lanes\n\n- tests: ok".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("lowercase model lane table unexpectedly passed"))?;
+        assert!(err.to_string().contains("successful lane table"), "{err:#}");
+
+        review.body =
+            "## Decision\n\n- Needs proof.\n\n## provider preflights\n\n- minimax: ok".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("lowercase provider table unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        review.body =
+            "## Decision\n\n- Needs proof.\n\n## sensor receipts\n\n- ripr: ok".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("lowercase sensor table unexpectedly passed"))?;
+        assert!(err.to_string().contains("sensor status table"), "{err:#}");
+
+        review.body = "## Evidence gaps\n\nruntime: 31s".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("lowercase runtime summary unexpectedly passed"))?;
+        assert!(err.to_string().contains("execution summary"), "{err:#}");
+
+        review.body =
+            "## Evidence gaps\n\n- Check the `runtime:` field in the proof receipt.".to_owned();
+        validate_github_review_payload(&review)?;
+
         review.body = "## Residual risk\n\n- External trust risk remains.".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
@@ -32039,6 +32101,23 @@ index 1111111..2222222 100644
             err.to_string().contains("artifact-only boilerplate"),
             "{err:#}"
         );
+
+        for phrase in [
+            "pre-existing, not a diff target",
+            "identical to prior pin",
+            "no widened attack surface",
+            "standing-repo concern",
+        ] {
+            review.body =
+                format!("## Evidence gaps\n\n- This is {phrase}; leave it out of the PR body.");
+            let err = validate_github_review_payload(&review)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("{phrase:?} boilerplate unexpectedly passed"))?;
+            assert!(
+                err.to_string().contains("artifact-only boilerplate"),
+                "{phrase}: {err:#}"
+            );
+        }
         Ok(())
     }
 

@@ -4929,7 +4929,7 @@ fn post_receipt_rejects_boilerplate_review_body_before_payload_write() -> Result
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
             "event": "COMMENT",
-            "body": "## Model lanes\n\n- Lane: `ub`\n  Provider: `minimax`\n  Model: `MiniMax-M3`\n  Status: `ok` - completed",
+            "body": "## Decision\n\n- Needs proof.\n\n## model lanes\n\n- Lane: `ub`\n  Provider: `minimax`\n  Model: `MiniMax-M3`\n  Status: `ok` - completed",
             "comments": []
         }))?,
     )?;

@@ -788,7 +788,7 @@ def require_pr_review_body_policy(
         ]:
             if phrase in lowered:
                 fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
-        if "## Residual risk" in body:
+        if has_case_insensitive_line_prefix(body, ["## residual risk"]):
             fail(
                 f"{path} contains artifact-only status section: '## Residual risk'"
             )
@@ -809,7 +809,7 @@ def require_pr_review_body_policy(
         "## Sensor status",
         "## Sensor receipts",
     ]:
-        if heading in body:
+        if has_case_insensitive_line_prefix(body, [heading]):
             fail(f"{path} contains artifact-only status section: {heading!r}")
     for label in [
         "- Shared context:",
@@ -824,8 +824,17 @@ def require_pr_review_body_policy(
         "Review payload:",
         "Follow-up results:",
     ]:
-        if label in body:
+        if has_case_insensitive_line_prefix(body, [label]):
             fail(f"{path} contains execution summary boilerplate: {label!r}")
+
+
+def has_case_insensitive_line_prefix(body: str, prefixes: list[str]) -> bool:
+    lowered_prefixes = [prefix.lower() for prefix in prefixes]
+    return any(
+        line.lstrip().lower().startswith(prefix)
+        for line in body.splitlines()
+        for prefix in lowered_prefixes
+    )
 
 
 SUMMARY_ONLY_BODY_VALUES = {"suppress", "post_substantive", "post_all"}
@@ -10361,9 +10370,29 @@ def run_self_tests() -> None:
         "residual risk PR section",
         "artifact-only status section",
         lambda: require_pr_review_body_policy(
-            "## Residual risk\n\n- External trust risk remains.",
+            "## residual risk\n\n- External trust risk remains.",
             pathlib.Path("review/github-review.json"),
         ),
+    )
+    expect_self_test_failure(
+        "lowercase status section",
+        "artifact-only status section",
+        lambda: require_pr_review_body_policy(
+            "## Decision\n\n- Needs proof.\n\n## model lanes\n\n- tests: ok",
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "lowercase execution summary label",
+        "execution summary boilerplate",
+        lambda: require_pr_review_body_policy(
+            "## Evidence gaps\n\nruntime: 31s",
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    require_pr_review_body_policy(
+        "## Evidence gaps\n\n- Check the `runtime:` field in the proof receipt.",
+        pathlib.Path("review/github-review.json"),
     )
     expect_self_test_failure(
         "meta review prose",
@@ -10374,6 +10403,14 @@ def run_self_tests() -> None:
                 "- Confirm the cached prior observation still matches; "
                 "the refuter demoted inline candidate because Gate proof is pending."
             ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    expect_self_test_failure(
+        "stale no-action phrase",
+        "artifact-only boilerplate",
+        lambda: require_pr_review_body_policy(
+            "## Evidence gaps\n\n- This is pre-existing, not a diff target.",
             pathlib.Path("review/github-review.json"),
         ),
     )
