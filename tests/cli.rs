@@ -294,6 +294,52 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
 }
 
 #[test]
+fn adoption_docs_match_setup_ci_current_surface() {
+    let docs = [
+        (
+            "SPEC-0007",
+            include_str!("../docs/specs/UB-REVIEW-SPEC-0007-audit-ci.md"),
+        ),
+        (
+            "SPEC-0008",
+            include_str!("../docs/specs/UB-REVIEW-SPEC-0008-setup-ci.md"),
+        ),
+        (
+            "CI_AUDIT_WIZARD",
+            include_str!("../docs/CI_AUDIT_WIZARD.md"),
+        ),
+    ];
+    for (name, text) in &docs {
+        for stale in [
+            "spec 0008, unimplemented",
+            "the (future) `setup-ci` migration PR generator",
+            "Honest answer today: no.",
+            "Until it ships",
+            "the PR you write yourself",
+            "`setup-ci` ships only after",
+        ] {
+            assert!(
+                !text.contains(stale),
+                "{name} leaked stale setup-ci adoption claim `{stale}`"
+            );
+        }
+    }
+
+    let spec_0007 = docs[0].1;
+    assert!(spec_0007.contains("`setup-ci` migration PR generator"));
+    assert!(spec_0007.contains("`--open-pr` opens the new-files-only migration PR"));
+
+    let spec_0008 = docs[1].1;
+    assert!(spec_0008.contains("Honest answer today: yes, within the v0 boundary."));
+    assert!(spec_0008.contains("`setup-ci --open-pr` opens one new-files-only migration PR"));
+
+    let wizard = docs[2].1;
+    assert!(wizard.contains("`setup-ci --print-pr`"));
+    assert!(wizard.contains("new-files-only `setup-ci --open-pr`"));
+    assert!(wizard.contains("Never mutates branch protection itself."));
+}
+
+#[test]
 fn init_writes_file_driven_setup_guide_from_repo_scan() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
