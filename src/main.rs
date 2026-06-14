@@ -7355,52 +7355,59 @@ fn is_refuted_only_pr_body(body: &str) -> bool {
 }
 
 fn contains_successful_lane_table(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    [
-        "## model lanes",
-        "## model lane status",
-        "## lane status",
-        "## lane roster",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &[
+            "## model lanes",
+            "## model lane status",
+            "## lane status",
+            "## lane roster",
+        ],
+    )
 }
 
 fn contains_provider_status_table(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    [
-        "## provider preflights",
-        "## provider status",
-        "## model provider status",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &[
+            "## provider preflights",
+            "## provider status",
+            "## model provider status",
+        ],
+    )
 }
 
 fn contains_sensor_status_table(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    ["## sensors", "## sensor status", "## sensor receipts"]
-        .iter()
-        .any(|needle| lower.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &["## sensors", "## sensor status", "## sensor receipts"],
+    )
 }
 
 fn contains_execution_summary(body: &str) -> bool {
-    let lower = body.to_ascii_lowercase();
-    [
-        "- shared context:",
-        "- profile:",
-        "- base:",
-        "- head:",
-        "- changed files:",
-        "- inline comments:",
-        "## review efficiency",
-        "runtime:",
-        "terminal state:",
-        "review payload:",
-        "follow-up results:",
-    ]
-    .iter()
-    .any(|needle| lower.contains(needle))
+    contains_case_insensitive_line_prefix(
+        body,
+        &[
+            "- shared context:",
+            "- profile:",
+            "- base:",
+            "- head:",
+            "- changed files:",
+            "- inline comments:",
+            "## review efficiency",
+            "runtime:",
+            "terminal state:",
+            "review payload:",
+            "follow-up results:",
+        ],
+    )
+}
+
+fn contains_case_insensitive_line_prefix(body: &str, needles: &[&str]) -> bool {
+    body.lines().any(|line| {
+        let lower = line.trim_start().to_ascii_lowercase();
+        needles.iter().any(|needle| lower.starts_with(needle))
+    })
 }
 
 fn pr_body_has_failure_context(body: &str) -> bool {
@@ -31904,6 +31911,9 @@ index 1111111..2222222 100644
             "## sensor receipts\n\n- ripr: ok"
         ));
         assert!(super::contains_execution_summary("runtime: 31s"));
+        assert!(!super::contains_execution_summary(
+            "## Evidence gaps\n\n- Check the `runtime:` field in the proof receipt."
+        ));
 
         review.body = "## Decision\n\n- Needs proof.\n\n## model lanes\n\n- tests: ok".to_owned();
         let err = validate_github_review_payload(&review)
@@ -31928,11 +31938,15 @@ index 1111111..2222222 100644
             .ok_or_else(|| anyhow::anyhow!("lowercase sensor table unexpectedly passed"))?;
         assert!(err.to_string().contains("sensor status table"), "{err:#}");
 
-        review.body = "## Evidence gaps\n\n- runtime: 31s".to_owned();
+        review.body = "## Evidence gaps\n\nruntime: 31s".to_owned();
         let err = validate_github_review_payload(&review)
             .err()
             .ok_or_else(|| anyhow::anyhow!("lowercase runtime summary unexpectedly passed"))?;
         assert!(err.to_string().contains("execution summary"), "{err:#}");
+
+        review.body =
+            "## Evidence gaps\n\n- Check the `runtime:` field in the proof receipt.".to_owned();
+        validate_github_review_payload(&review)?;
 
         review.body = "## Residual risk\n\n- External trust risk remains.".to_owned();
         let err = validate_github_review_payload(&review)
