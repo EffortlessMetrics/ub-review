@@ -48,9 +48,10 @@ skipped-by-policy.
 #347  closed  sensors/ripr/exposure-gaps.json ships per-finding gap
             detail with verifier reconciliation against badge counts
             (train step 4)
-#312  keep  proof-broker edges; split into 4 slices: lease `absent` branch
-            (two-line fix + test), base_patch_failed lane surfacing,
-            manual-cost allowlist test, shell-token e2e
+#312  keep  proof-broker edges; lease `absent` branch now pins
+            profile-disabled focused test/build proof with receipt tests;
+            remaining: base_patch_failed lane surfacing, manual-cost
+            allowlist test, shell-token e2e
 #313  keep  coverage exit-101 trend issue by design; 2-week auto-close
             horizon, capture llvm-cov stderr on recurrence
 #317  keep  xtask run_capture buffers unbounded stdout (450 MB ripr.md);

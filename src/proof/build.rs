@@ -60,7 +60,7 @@ where
                 &task,
                 budget,
                 lease_budget,
-                "skipped_profile",
+                "absent",
                 "profile allows zero focused build leases",
             ));
             receipts.push(skipped_focused_build_receipt(
@@ -317,7 +317,7 @@ mod tests {
         assert_eq!(proof_result.proof_receipts[0].result, "skipped_profile");
         assert_eq!(proof_result.proof_receipts[0].commands[0].status, "skipped");
         assert_eq!(proof_result.resource_leases[0].kind, "focused-build");
-        assert_eq!(proof_result.resource_leases[0].status, "skipped_profile");
+        assert_eq!(proof_result.resource_leases[0].status, "absent");
         assert_eq!(
             proof_result.resource_leases[0].reason,
             "profile allows zero focused build leases"
