@@ -43,6 +43,8 @@ Everything else stays in artifacts:
 - terminal state;
 - command logs;
 - raw observations;
+- approval filler;
+- successful-tool announcements;
 - generic residual risk.
 
 ## Outcomes

@@ -7346,6 +7346,13 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
             "review payload status",
             "terminal state",
             "github-review-skip",
+            "command log",
+            "all checks passed",
+            "no issues found",
+            "looks good",
+            "lgtm",
+            "we ran ",
+            "i ran ",
         ]
         .iter()
         .any(|needle| lower.contains(needle))
@@ -22055,6 +22062,7 @@ fn has_standalone_approval_line(text: &str) -> bool {
                 | "no issues found"
                 | "no actionable findings"
                 | "no actionable"
+                | "all checks passed"
         )
     })
 }
@@ -32198,6 +32206,33 @@ index 1111111..2222222 100644
             let err = validate_github_review_payload(&review)
                 .err()
                 .ok_or_else(|| anyhow::anyhow!("{phrase:?} boilerplate unexpectedly passed"))?;
+            assert!(
+                err.to_string().contains("artifact-only boilerplate"),
+                "{phrase}: {err:#}"
+            );
+        }
+
+        review.body = "## Evidence gaps\n\n- Command log: cargo test focused_case exited 0; stdout says focused_case passed.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("command-log boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        for phrase in [
+            "All checks passed.",
+            "Looks good after we ran the focused proof.",
+            "No issues found in the changed files.",
+            "LGTM because the tests passed.",
+            "We ran cargo test and it passed.",
+            "I ran clippy and it passed.",
+        ] {
+            review.body = format!("## Decision\n\n- {phrase}");
+            let err = validate_github_review_payload(&review)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("{phrase:?} approval filler unexpectedly passed"))?;
             assert!(
                 err.to_string().contains("artifact-only boilerplate"),
                 "{phrase}: {err:#}"
