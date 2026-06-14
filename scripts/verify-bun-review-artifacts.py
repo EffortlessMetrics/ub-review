@@ -4363,9 +4363,6 @@ def expected_receipt_routes(
             for lease in resource_leases
             if lease.get("consumer") == receipt["id"]
         ]
-        source_artifacts = ["review/proof_receipts.json"]
-        if lease_ids:
-            source_artifacts.append("review/resource_leases.json")
         routes.append(
             {
                 "schema": "ub-review.receipt_route.v1",
@@ -4379,11 +4376,25 @@ def expected_receipt_routes(
                 "request_ids": receipt["request_ids"],
                 "consumers": receipt_route_consumers(receipt),
                 "lease_ids": lease_ids,
-                "source_artifacts": source_artifacts,
+                "source_artifacts": receipt_route_source_artifacts(
+                    receipt["id"], lease_ids
+                ),
                 "reason": receipt["reason"],
             }
         )
     return routes
+
+
+def receipt_route_source_artifacts(receipt_id: str, lease_ids: list[str]) -> list[str]:
+    source_artifacts = [
+        "review/proof_receipts.json",
+        f"review/proof_receipts.json#{receipt_id}",
+    ]
+    if lease_ids:
+        source_artifacts.append("review/resource_leases.json")
+        for lease_id in lease_ids:
+            append_unique(source_artifacts, f"review/resource_leases.json#{lease_id}")
+    return source_artifacts
 
 
 def receipt_route_phase(receipt: dict) -> str:
@@ -7911,6 +7922,77 @@ def self_test_absent_resource_lease_contract() -> None:
         )
 
 
+def self_test_receipt_route_source_anchor_contract() -> None:
+    import tempfile
+
+    receipt = {
+        "id": "focused-proof-route-anchor",
+        "kind": "focused-build",
+        "result": "head_passed",
+        "requested_by": ["proof-broker"],
+        "request_ids": ["proof-request-route-anchor"],
+        "reason": "focused build passed for the touched Rust module",
+    }
+    lease = {
+        "id": "lease-focused-proof-route-anchor",
+        "consumer": receipt["id"],
+    }
+    route = expected_receipt_routes([receipt], [lease])[0]
+    expected_sources = [
+        "review/proof_receipts.json",
+        "review/proof_receipts.json#focused-proof-route-anchor",
+        "review/resource_leases.json",
+        "review/resource_leases.json#lease-focused-proof-route-anchor",
+    ]
+    if route["source_artifacts"] != expected_sources:
+        fail("receipt route self-test did not include exact receipt and lease anchors")
+
+    no_lease_route = expected_receipt_routes([receipt], [])[0]
+    if no_lease_route["source_artifacts"] != expected_sources[:2]:
+        fail("receipt route self-test added lease sources without a matching lease")
+
+    def write_root(root: pathlib.Path, routes: list[dict]) -> pathlib.Path:
+        (root / "review").mkdir()
+        (root / "review/receipt_routes.json").write_text(
+            json.dumps(
+                {
+                    "schema": "ub-review.receipt_routes.v1",
+                    "source_artifacts": [
+                        "review/proof_receipts.json",
+                        "review/resource_leases.json",
+                    ],
+                    "routes": routes,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "receipt_routes.ndjson").write_text(
+            "".join(json.dumps(route) + "\n" for route in routes),
+            encoding="utf-8",
+        )
+        return root
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = write_root(pathlib.Path(temp_dir), [route])
+        require_receipt_route_artifacts(root, [receipt], [lease])
+
+    def old_route_sources_fail() -> None:
+        bad_route = dict(route)
+        bad_route["source_artifacts"] = [
+            "review/proof_receipts.json",
+            "review/resource_leases.json",
+        ]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = write_root(pathlib.Path(temp_dir), [bad_route])
+            require_receipt_route_artifacts(root, [receipt], [lease])
+
+    expect_self_test_failure(
+        "receipt route missing exact source anchors",
+        "routes do not match proof receipts and leases",
+        old_route_sources_fail,
+    )
+
+
 def self_test_noise_rule_phrase_parity_with_rust() -> None:
     """The artifact-only noise rules are mirrored Rust<->Python; phrase-set
     drift between them is exactly how run 27077850477 went red (the Rust
@@ -11104,6 +11186,7 @@ def run_self_tests() -> None:
     self_test_coverage_sidecar_receipts()
     self_test_non_discriminating_routes_as_missing_evidence()
     self_test_absent_resource_lease_contract()
+    self_test_receipt_route_source_anchor_contract()
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_proof_command_stream_bound_contract()
