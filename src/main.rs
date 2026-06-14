@@ -7962,6 +7962,7 @@ fn build_fill_ledger(input: FillLedgerInput<'_>) -> Result<FillLedger> {
                     request,
                     &proof_output.proof_tasks,
                     &input.review.proof_receipts,
+                    &input.review.resource_leases,
                     input.gate_outcome,
                 )
             }),
@@ -7982,6 +7983,7 @@ fn build_fill_ledger(input: FillLedgerInput<'_>) -> Result<FillLedger> {
             "review/proof_requests.json".to_owned(),
             "review/proof_planner_output.json".to_owned(),
             "review/proof_receipts.json".to_owned(),
+            "review/resource_leases.json".to_owned(),
             "review/tool-gate-outcomes.json".to_owned(),
             "review/gate_outcome.json".to_owned(),
             "review/metrics.json".to_owned(),
@@ -9488,6 +9490,7 @@ fn fill_proof_request_entry(
     request: &ProofRequest,
     proof_tasks: &[ProofTaskArtifact],
     proof_receipts: &[ProofReceipt],
+    resource_leases: &[ResourceLease],
     gate_outcome: &GateOutcome,
 ) -> FillLedgerEntry {
     let selected = request.status == "requested";
@@ -9519,6 +9522,17 @@ fn fill_proof_request_entry(
     ];
     if !receipts.is_empty() {
         source_artifacts.push("review/proof_receipts.json".to_owned());
+        for receipt in &receipts {
+            for lease in resource_leases
+                .iter()
+                .filter(|lease| lease.consumer == receipt.id)
+            {
+                push_unique(
+                    &mut source_artifacts,
+                    &format!("review/resource_leases.json#{}", lease.id),
+                );
+            }
+        }
     }
 
     FillLedgerEntry {
