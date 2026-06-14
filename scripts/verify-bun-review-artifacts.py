@@ -3218,8 +3218,16 @@ def require_orchestrator_plan(root: pathlib.Path) -> None:
     if plan != expected:
         fail("review/orchestrator_plan.json does not match pre-follow-up evidence routing")
     final_plan = load_json(root / "review/final_orchestrator_plan.json")
+    tool_gate_outcomes = load_json(root / "review/tool-gate-outcomes.json")
+    tool_gate_outcome_entries = tool_gate_outcomes.get("outcomes", [])
+    if not isinstance(tool_gate_outcome_entries, list):
+        fail("review/tool-gate-outcomes.json outcomes is not an array")
     final_expected = expected_final_orchestrator_plan(
-        candidates, observations, proof_receipts, resource_leases
+        candidates,
+        observations,
+        proof_receipts,
+        resource_leases,
+        tool_gate_outcome_entries,
     )
     if final_plan != final_expected:
         fail(
@@ -3246,7 +3254,10 @@ def expected_orchestrator_plan(
     observations: list[dict],
     proof_receipts: list[dict],
     resource_leases: list[dict],
+    tool_gate_outcomes: list[dict] | None = None,
 ) -> dict:
+    if tool_gate_outcomes is None:
+        tool_gate_outcomes = []
     grouped: dict[tuple[str, str], list[dict]] = {}
     for candidate in candidates:
         key = (candidate["disposition"], candidate_evidence_need(candidate))
@@ -3259,7 +3270,7 @@ def expected_orchestrator_plan(
         candidate_ids = [candidate["id"] for candidate in group_candidates]
         lanes = sorted({candidate["lane"] for candidate in group_candidates})
         routed_evidence = routed_evidence_for_group(
-            evidence_need, lanes, proof_receipts, resource_leases
+            evidence_need, lanes, proof_receipts, resource_leases, tool_gate_outcomes
         )
         group_id = "evidence-group-" + hashlib.sha256(
             f"{disposition}\n{evidence_need}".encode("utf-8")
@@ -3286,7 +3297,11 @@ def expected_orchestrator_plan(
     for observation in observations:
         evidence_need = observation_evidence_need(observation)
         routed_evidence = routed_evidence_for_group(
-            evidence_need, observation["lanes"], proof_receipts, resource_leases
+            evidence_need,
+            observation["lanes"],
+            proof_receipts,
+            resource_leases,
+            tool_gate_outcomes,
         )
         group_id = f"orchestrator-{observation['id']}"
         group = {
@@ -3325,9 +3340,10 @@ def expected_final_orchestrator_plan(
     observations: list[dict],
     proof_receipts: list[dict],
     resource_leases: list[dict],
+    tool_gate_outcomes: list[dict] | None = None,
 ) -> dict:
     plan = expected_orchestrator_plan(
-        candidates, observations, proof_receipts, resource_leases
+        candidates, observations, proof_receipts, resource_leases, tool_gate_outcomes
     )
     plan["follow_up_tasks"] = [
         task
@@ -3689,7 +3705,10 @@ def routed_evidence_for_group(
     lanes: list[str],
     proof_receipts: list[dict],
     resource_leases: list[dict],
+    tool_gate_outcomes: list[dict] | None = None,
 ) -> list[dict]:
+    if tool_gate_outcomes is None:
+        tool_gate_outcomes = []
     if evidence_need not in {
         "proof-confirmation",
         "test-oracle-confirmation",
@@ -3704,6 +3723,11 @@ def routed_evidence_for_group(
         for lease in resource_leases:
             if lease["consumer"] == receipt["id"]:
                 routed.append(resource_lease_routed_evidence(lease))
+    for outcome in tool_gate_outcomes:
+        if outcome.get("evaluated") is True and tool_gate_outcome_routes_to_lanes(
+            outcome, lanes
+        ):
+            routed.append(tool_gate_outcome_routed_evidence(outcome))
     return routed
 
 
@@ -3734,6 +3758,67 @@ def resource_lease_routed_evidence(lease: dict) -> dict:
         "result": lease["status"],
         "reason": lease["reason"],
     }
+
+
+def tool_gate_outcome_routes_to_lanes(outcome: dict, lanes: list[str]) -> bool:
+    consumers = work_queue_sensor_consumers(outcome["tool"])
+    return any(
+        consumer == "all-lanes" or any(lane == consumer for lane in lanes)
+        for consumer in consumers
+    )
+
+
+def work_queue_sensor_consumers(sensor_id: str) -> list[str]:
+    if sensor_id == "ripr":
+        return ["tests-oracle", "proof-planner", "compiler"]
+    if sensor_id == "coverage":
+        return ["tests-oracle", "source-route", "compiler"]
+    if sensor_id == "unsafe-review":
+        return ["ub-memory-lifetime", "security", "compiler"]
+    if sensor_id == "actionlint":
+        return [
+            "workflow-permissions",
+            "workflow-pinning",
+            "workflow-proof",
+            "workflow-opposition",
+            "compiler",
+        ]
+    if sensor_id == "ast-grep":
+        return ["source-route", "compiler"]
+    if sensor_id == "tokmd":
+        return ["all-lanes", "compiler"]
+    if sensor_id == "cargo-allow":
+        return ["security", "compiler"]
+    return ["compiler"]
+
+
+def tool_gate_outcome_routed_evidence(outcome: dict) -> dict:
+    reason = outcome["reason"]
+    new_unsuppressed = outcome.get("metrics", {}).get("new_unsuppressed")
+    if new_unsuppressed is not None:
+        reason += f"; new_unsuppressed={new_unsuppressed}"
+    source_artifacts = outcome.get("source_artifacts", [])
+    if source_artifacts:
+        reason += "; source_artifacts=" + ",".join(source_artifacts)
+    return {
+        "schema": "ub-review.orchestrator_routed_evidence.v1",
+        "id": outcome["tool"],
+        "kind": "tool-gate-outcome",
+        "artifact": f"review/tool-gate-outcomes.json#{outcome['tool']}",
+        "status": routed_status_for_tool_gate_outcome(outcome),
+        "result": outcome["outcome"],
+        "reason": reason,
+    }
+
+
+def routed_status_for_tool_gate_outcome(outcome: dict) -> str:
+    if outcome["outcome"] == "passed":
+        return "tool-gate-passed"
+    if outcome["outcome"] == "failed":
+        return "tool-gate-failed"
+    if outcome.get("evaluated") is True:
+        return "tool-gate-evaluated"
+    return "recorded"
 
 
 def routed_status_for_proof_receipt(receipt: dict) -> str:
@@ -5272,6 +5357,7 @@ def require_final_compiler_input(
         "review/resolved_candidates.json",
         "review/prior_resolved_candidates.json",
         "review/proof_receipts.json",
+        "review/tool-gate-outcomes.json",
         "review/receipt_routes.json",
         "review/final_orchestrator_plan.json",
     ]:
@@ -6769,9 +6855,16 @@ def require_orchestrator_routed_evidence_schema(evidence: dict) -> None:
     for field in ["id", "kind", "artifact", "status", "result", "reason"]:
         if not isinstance(evidence.get(field), str) or not evidence[field]:
             fail(f"routed evidence missing string field {field}: {evidence!r}")
-    if evidence["kind"] not in {"proof-receipt", "resource-lease"}:
+    if evidence["kind"] not in {
+        "proof-receipt",
+        "resource-lease",
+        "tool-gate-outcome",
+    }:
         fail(f"routed evidence has unsupported kind: {evidence!r}")
-    if evidence["artifact"] not in {"review/proof_receipts.json", "review/resource_leases.json"}:
+    if evidence["artifact"] not in {
+        "review/proof_receipts.json",
+        "review/resource_leases.json",
+    } and not evidence["artifact"].startswith("review/tool-gate-outcomes.json#"):
         fail(f"routed evidence has unsupported artifact path: {evidence!r}")
 
 
@@ -9943,6 +10036,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 "review/resolved_candidates.json",
                 "review/prior_resolved_candidates.json",
                 "review/proof_receipts.json",
+                "review/tool-gate-outcomes.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
             ],

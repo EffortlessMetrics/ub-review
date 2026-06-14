@@ -6540,6 +6540,7 @@ fn write_review_artifacts(
         &observation_summary.unique,
         &review.proof_receipts,
         &review.resource_leases,
+        &[],
     );
     write_observation_artifacts(out, &observations)?;
     write_orchestrator_artifacts(out, &orchestrator_plan, &review.proof_receipts)?;
@@ -6678,6 +6679,7 @@ fn write_review_artifacts(
         &observation_summary.unique,
         &review.proof_receipts,
         &review.resource_leases,
+        tool_gate_outcomes,
     );
     write_final_orchestrator_artifact(out, &final_orchestrator_plan)?;
     let final_compiler_loop =
@@ -6712,6 +6714,7 @@ fn write_review_artifacts(
                 "review/resolved_candidates.json",
                 PRIOR_RESOLVED_CANDIDATES_ARTIFACT,
                 "review/proof_receipts.json",
+                "review/tool-gate-outcomes.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
             ],
@@ -10870,6 +10873,7 @@ fn build_orchestrator_plan(
     observations: &[ObservationGroup],
     proof_receipts: &[ProofReceipt],
     resource_leases: &[ResourceLease],
+    tool_gate_outcomes: &[ToolGateOutcomeEntry],
 ) -> OrchestratorPlanArtifact {
     let mut grouped: BTreeMap<(String, String), Vec<&CandidateRecord>> = BTreeMap::new();
     for candidate in candidates {
@@ -10893,8 +10897,13 @@ fn build_orchestrator_plan(
                 .map(|candidate| candidate.lane.clone())
                 .collect(),
         );
-        let routed_evidence =
-            routed_evidence_for_group(&evidence_need, &lanes, proof_receipts, resource_leases);
+        let routed_evidence = routed_evidence_for_group(
+            &evidence_need,
+            &lanes,
+            proof_receipts,
+            resource_leases,
+            tool_gate_outcomes,
+        );
         let fingerprint = sha256_hex(format!("{disposition}\n{evidence_need}").as_bytes());
         let group_id = format!("evidence-group-{}", &fingerprint[..12]);
         let group = OrchestratorEvidenceGroup {
@@ -10928,6 +10937,7 @@ fn build_orchestrator_plan(
             &observation.lanes,
             proof_receipts,
             resource_leases,
+            tool_gate_outcomes,
         );
         let group_id = format!("orchestrator-{}", observation.id);
         let group = OrchestratorObservationGroup {
@@ -10972,9 +10982,15 @@ fn build_final_orchestrator_plan(
     observations: &[ObservationGroup],
     proof_receipts: &[ProofReceipt],
     resource_leases: &[ResourceLease],
+    tool_gate_outcomes: &[ToolGateOutcomeEntry],
 ) -> OrchestratorPlanArtifact {
-    let mut plan =
-        build_orchestrator_plan(candidates, observations, proof_receipts, resource_leases);
+    let mut plan = build_orchestrator_plan(
+        candidates,
+        observations,
+        proof_receipts,
+        resource_leases,
+        tool_gate_outcomes,
+    );
     plan.follow_up_tasks
         .retain(|task| !final_follow_up_task_resolved_by_tool_proof(task));
     plan
@@ -12271,6 +12287,7 @@ fn routed_evidence_for_group(
     lanes: &[String],
     proof_receipts: &[ProofReceipt],
     resource_leases: &[ResourceLease],
+    tool_gate_outcomes: &[ToolGateOutcomeEntry],
 ) -> Vec<OrchestratorRoutedEvidence> {
     if !matches!(
         evidence_need,
@@ -12289,6 +12306,11 @@ fn routed_evidence_for_group(
             .filter(|lease| lease.consumer == receipt.id)
         {
             routed.push(resource_lease_routed_evidence(lease));
+        }
+    }
+    for outcome in tool_gate_outcomes {
+        if outcome.evaluated && tool_gate_outcome_routes_to_lanes(outcome, lanes) {
+            routed.push(tool_gate_outcome_routed_evidence(outcome));
         }
     }
     routed
@@ -12417,6 +12439,42 @@ fn resource_lease_routed_evidence(lease: &ResourceLease) -> OrchestratorRoutedEv
         status: lease.status.clone(),
         result: lease.status.clone(),
         reason: lease.reason.clone(),
+    }
+}
+
+fn tool_gate_outcome_routes_to_lanes(outcome: &ToolGateOutcomeEntry, lanes: &[String]) -> bool {
+    let consumers = work_queue_sensor_consumers(&outcome.tool);
+    consumers
+        .iter()
+        .any(|consumer| consumer == "all-lanes" || lanes.iter().any(|lane| lane == consumer))
+}
+
+fn tool_gate_outcome_routed_evidence(outcome: &ToolGateOutcomeEntry) -> OrchestratorRoutedEvidence {
+    let mut reason = outcome.reason.clone();
+    if let Some(new_unsuppressed) = outcome.metrics.new_unsuppressed {
+        reason.push_str(&format!("; new_unsuppressed={new_unsuppressed}"));
+    }
+    if !outcome.source_artifacts.is_empty() {
+        reason.push_str("; source_artifacts=");
+        reason.push_str(&outcome.source_artifacts.join(","));
+    }
+    OrchestratorRoutedEvidence {
+        schema: ORCHESTRATOR_ROUTED_EVIDENCE_SCHEMA.to_owned(),
+        id: outcome.tool.clone(),
+        kind: "tool-gate-outcome".to_owned(),
+        artifact: format!("review/tool-gate-outcomes.json#{}", outcome.tool),
+        status: routed_status_for_tool_gate_outcome(outcome).to_owned(),
+        result: outcome.outcome.clone(),
+        reason,
+    }
+}
+
+fn routed_status_for_tool_gate_outcome(outcome: &ToolGateOutcomeEntry) -> &'static str {
+    match outcome.outcome.as_str() {
+        "passed" => "tool-gate-passed",
+        "failed" => "tool-gate-failed",
+        _ if outcome.evaluated => "tool-gate-evaluated",
+        _ => "recorded",
     }
 }
 
@@ -25869,18 +25927,19 @@ mod tests {
         ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
         RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
         SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TerminalStateInput, ToolClass, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
-        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
-        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
-        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
-        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
-        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
+        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_cost_receipt, build_final_orchestrator_plan,
+        build_issue_broker_plan, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_witness_records, builtin_profiles,
+        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
+        classify_diff, classify_diff_class, classify_issue_candidates, classify_proof_cost,
+        cmd_gate_check, cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues,
+        combined_observations, command_display, compile_review_surface, dedupe_inline_comments,
+        deep_minimax_lanes, default_lanes, direct_minimax_spec, execute_issue_broker,
+        extract_model_content, fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
         github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
@@ -30046,6 +30105,7 @@ index 3333333..4444444 100644
             "proof-confirmation",
             &["tests-oracle".to_owned()],
             std::slice::from_ref(&receipt),
+            &[],
             &[],
         );
         assert_eq!(routed.len(), 1);
@@ -38649,7 +38709,7 @@ index 1111111..2222222 100644
         let observation_summary = observation_summary_artifacts(&observations);
 
         let no_evidence_plan =
-            build_orchestrator_plan(&candidates, &observation_summary.unique, &[], &[]);
+            build_orchestrator_plan(&candidates, &observation_summary.unique, &[], &[], &[]);
         let no_evidence_proof_group = no_evidence_plan
             .evidence_groups
             .iter()
@@ -38732,6 +38792,7 @@ index 1111111..2222222 100644
             &observation_summary.unique,
             &proof_receipts,
             &resource_leases,
+            &[],
         );
         write_orchestrator_artifacts(temp.path(), &plan, &proof_receipts)?;
 
@@ -39162,6 +39223,7 @@ index 1111111..2222222 100644
                     "review/resolved_candidates.json",
                     "review/prior_resolved_candidates.json",
                     "review/proof_receipts.json",
+                    "review/tool-gate-outcomes.json",
                     "review/receipt_routes.json",
                     "review/final_orchestrator_plan.json",
                 ],
@@ -39197,6 +39259,7 @@ index 1111111..2222222 100644
                 "review/resolved_candidates.json",
                 "review/prior_resolved_candidates.json",
                 "review/proof_receipts.json",
+                "review/tool-gate-outcomes.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json"
             ])
@@ -39227,7 +39290,7 @@ index 1111111..2222222 100644
             side: None,
         }];
         let observations = Vec::new();
-        let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[]);
+        let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[], &[]);
         write_orchestrator_artifacts(temp.path(), &initial_plan, &[])?;
         let mut late_receipt = test_red_green_proof_receipt("discriminating", "failed");
         late_receipt.id = "proof-follow-up-late".to_owned();
@@ -39256,6 +39319,7 @@ index 1111111..2222222 100644
             &observations,
             &[late_receipt],
             &[late_lease],
+            &[],
         );
         write_final_orchestrator_artifact(temp.path(), &final_plan)?;
 
@@ -39302,7 +39366,7 @@ index 1111111..2222222 100644
             side: None,
         }];
         let observations = Vec::new();
-        let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[]);
+        let initial_plan = build_orchestrator_plan(&candidates, &observations, &[], &[], &[]);
         assert_eq!(initial_plan.follow_up_tasks.len(), 1);
         assert_eq!(
             initial_plan.follow_up_tasks[0].evidence_need,
@@ -39316,7 +39380,7 @@ index 1111111..2222222 100644
         late_receipt.reason = "Routed proof confirms the changed test oracle.".to_owned();
 
         let final_plan =
-            build_final_orchestrator_plan(&candidates, &observations, &[late_receipt], &[]);
+            build_final_orchestrator_plan(&candidates, &observations, &[late_receipt], &[], &[]);
 
         assert_eq!(
             final_plan.evidence_groups[0].routed_evidence[0].status,
@@ -39341,7 +39405,7 @@ index 1111111..2222222 100644
             "filehandle-write-route",
         );
         let observations = observation_summary_artifacts(&[observation]).unique;
-        let initial_plan = build_orchestrator_plan(&[], &observations, &[], &[]);
+        let initial_plan = build_orchestrator_plan(&[], &observations, &[], &[], &[]);
         assert_eq!(initial_plan.follow_up_tasks.len(), 1);
         assert_eq!(
             initial_plan.follow_up_tasks[0].evidence_need,
@@ -39360,7 +39424,8 @@ index 1111111..2222222 100644
         late_receipt.reason =
             "Routed proof confirms the changed helper reaches the patched path.".to_owned();
 
-        let final_plan = build_final_orchestrator_plan(&[], &observations, &[late_receipt], &[]);
+        let final_plan =
+            build_final_orchestrator_plan(&[], &observations, &[late_receipt], &[], &[]);
 
         assert_eq!(
             final_plan.observation_groups[0].routed_evidence[0].id,
@@ -39374,6 +39439,117 @@ index 1111111..2222222 100644
             final_plan.follow_up_tasks.is_empty(),
             "late routed proof should resolve source-route follow-up tasks"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn final_orchestrator_plan_routes_evaluated_tool_gate_to_relevant_lanes() -> Result<()> {
+        let candidates = vec![super::CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: "candidate-test-oracle-ripr".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            source: "summary-only-finding".to_owned(),
+            status: "summary-only".to_owned(),
+            disposition: "summary-only".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            claim: "The changed test oracle needs the ripr receipt before promotion.".to_owned(),
+            evidence: "test oracle lane asked for static mutation-exposure signal".to_owned(),
+            path: None,
+            line: None,
+            side: None,
+        }];
+        let unrelated_observation = test_observation(
+            "security",
+            "The changed test oracle still needs a security-only review.",
+            "test-gap",
+            "open",
+            "medium",
+            "medium",
+            "security-only-test-gap",
+        );
+        let observations = observation_summary_artifacts(&[unrelated_observation]).unique;
+        let ripr_outcome = ToolGateOutcomeEntry {
+            schema: TOOL_GATE_OUTCOME_SCHEMA,
+            tool: "ripr".to_owned(),
+            policy: ToolGatePolicy {
+                scope: Some("on-diff".to_owned()),
+                max_new_unsuppressed: Some(0),
+            },
+            required: false,
+            planned_run: true,
+            sensor_status: "ok".to_owned(),
+            sensor_reason: "ripr completed".to_owned(),
+            sensor_receipt_path: "sensors/ripr/ub-review-sensor-status.json".to_owned(),
+            status_source: "tool-status.json",
+            outcome: "passed".to_owned(),
+            evaluated: true,
+            reason: "ripr threshold passed".to_owned(),
+            metrics: ToolGateOutcomeMetrics {
+                new_unsuppressed: Some(0),
+            },
+            source_artifacts: vec![
+                "sensors/ripr/ub-review-sensor-status.json".to_owned(),
+                "tool-status.json".to_owned(),
+                "sensors/ripr/gate-decision.json".to_owned(),
+                "sensors/ripr/exposure-gaps.json".to_owned(),
+            ],
+            packet_policy: "gate-only",
+            gate_policy: "trust-affecting",
+        };
+
+        let final_plan =
+            build_final_orchestrator_plan(&candidates, &observations, &[], &[], &[ripr_outcome]);
+
+        let candidate_group = final_plan
+            .evidence_groups
+            .iter()
+            .find(|group| {
+                group
+                    .candidate_ids
+                    .iter()
+                    .map(String::as_str)
+                    .eq(["candidate-test-oracle-ripr"])
+            })
+            .ok_or_else(|| anyhow::anyhow!("candidate group should be present"))?;
+        assert_eq!(candidate_group.evidence_need, "test-oracle-confirmation");
+        assert_eq!(candidate_group.routed_evidence.len(), 1);
+        let routed = &candidate_group.routed_evidence[0];
+        assert_eq!(routed.kind, "tool-gate-outcome");
+        assert_eq!(routed.id, "ripr");
+        assert_eq!(routed.artifact, "review/tool-gate-outcomes.json#ripr");
+        assert_eq!(routed.status, "tool-gate-passed");
+        assert_eq!(routed.result, "passed");
+        assert!(routed.reason.contains("new_unsuppressed=0"));
+        assert!(routed.reason.contains("sensors/ripr/exposure-gaps.json"));
+
+        let candidate_task = final_plan
+            .follow_up_tasks
+            .iter()
+            .find(|task| task.group_id == candidate_group.id)
+            .ok_or_else(|| anyhow::anyhow!("candidate follow-up task should remain"))?;
+        assert_eq!(candidate_task.stage, "tertiary");
+        assert_eq!(
+            serde_json::to_value(&candidate_task.routed_evidence)?,
+            serde_json::to_value(&candidate_group.routed_evidence)?
+        );
+
+        let observation_group = final_plan
+            .observation_groups
+            .iter()
+            .find(|group| group.lanes.iter().map(String::as_str).eq(["security"]))
+            .ok_or_else(|| anyhow::anyhow!("security observation group should be present"))?;
+        assert!(
+            observation_group.routed_evidence.is_empty(),
+            "ripr should not route to a lane that does not receive ripr"
+        );
+        let observation_task = final_plan
+            .follow_up_tasks
+            .iter()
+            .find(|task| task.group_id == observation_group.id)
+            .ok_or_else(|| anyhow::anyhow!("security observation follow-up should remain"))?;
+        assert_eq!(observation_task.stage, "secondary");
+        assert!(observation_task.routed_evidence.is_empty());
         Ok(())
     }
 
