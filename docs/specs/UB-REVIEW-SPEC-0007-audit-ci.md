@@ -111,11 +111,11 @@ human review last: adaptive, move into ub-review/gate, keep required,
 advisory, nightly/release, label-gated, human review required, then an
 Unclassified catch-all (src/main.rs CI_AUDIT_REPORT_TIER_SECTIONS). Each job
 line with run history carries its receipts inline (confidence, p50, run
-count, independent failures, runner-minutes/month) plus a short note that
-never repeats them; jobs without history render confidence plus their
-positioned-to-catch scope instead. Evidence gaps from inventory and history
-are de-duplicated into one final "Evidence gaps" section (src/main.rs
-render_ci_audit_report).
+count, independent failures, runner-minutes/month, matrix fan-out when
+greater than one) plus a short note that never repeats them; jobs without
+history render confidence plus their positioned-to-catch scope instead.
+Evidence gaps from inventory and history are de-duplicated into one final
+"Evidence gaps" section (src/main.rs render_ci_audit_report).
 
 ## Required fields
 
