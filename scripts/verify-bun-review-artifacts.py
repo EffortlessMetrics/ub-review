@@ -8521,7 +8521,20 @@ def self_test_quality_backfill_contract() -> None:
         write_self_test_json(outcomes_path, outcomes)
         return root
 
+    def write_root_with_missing_quality_trend_source() -> pathlib.Path:
+        candidate = copy.deepcopy(artifact)
+        candidate["source_artifacts"].remove("review/quality-backfill-sources/run-a-trend.json")
+        candidate["missing"] = [
+            {
+                "field": "source_artifacts.quality_trend",
+                "reason": "quality trend artifact missing for run run-a; backfill kept the run receipt but trend provenance is incomplete",
+                "source_artifact": "review/quality-backfill-sources/run-a-receipt.json",
+            }
+        ]
+        return write_root(candidate)
+
     require_quality_backfill(write_root(), required=True)
+    require_quality_backfill(write_root_with_missing_quality_trend_source(), required=True)
     expect_self_test_failure(
         "quality backfill dangling source",
         "source_artifacts[0] missing file",

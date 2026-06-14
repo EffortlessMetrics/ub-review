@@ -154,7 +154,10 @@ quality-backfill.json          ub-review.quality_backfill.v1; rolling
                                artifact-only quality telemetry derived from
                                extracted gate quality receipts plus preserved
                                GitHub reviewer-state/commit query receipts;
-                               no quality score
+                               no quality score; historical gate artifacts
+                               that predate quality-trend.json remain
+                               usable with a source_artifacts.quality_trend
+                               missing[] receipt
 github-quality-outcomes.json   ub-review.github_quality_outcomes.v1; normalized
                                quality-backfill source receipt produced from
                                raw GitHub review-thread and changed-file API
@@ -606,7 +609,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1 | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |
 | review/quality-receipt.json | stable | quality_receipt.v1; run-completion telemetry with reviewer outcome fields null in v1 | downstream automation (quality/usefulness telemetry) | required (require_quality_receipt, #339) |
 | review/quality-trend.json | stable | quality_trend.v1; window_scope single_run_v1 | downstream automation (quality/usefulness telemetry seed) | required (require_quality_trend, #339) |
-| review/quality-backfill.json | stable | quality_backfill.v1; window_scope rolling_v1 | downstream automation (GitHub-backed quality/usefulness telemetry) | optional full-tree / required backfill verifier path (require_quality_backfill, #441) |
+| review/quality-backfill.json | stable | quality_backfill.v1; window_scope rolling_v1; missing historical quality-trend sources are receipted as source_artifacts.quality_trend | downstream automation (GitHub-backed quality/usefulness telemetry) | optional full-tree / required backfill verifier path (require_quality_backfill, #441) |
 | review/quality-backfill-sources/*github-quality-outcomes*.json | stable | github_quality_outcomes.v1; normalized GitHub review-thread outcomes plus receipt-backed adopted_generated_tests copied with raw API receipts | quality-backfill source trail | required when present (require_github_quality_outcomes_source, #441) |
 | review/scheduler.json | stable | scheduler.v1 | downstream automation | required (require_scheduler_artifact, mirror of metrics.run) |
 | review/review.json | stable | none on file; embedded mirrors contracted | downstream automation (action output review-json-path) | required (require_review) |

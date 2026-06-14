@@ -885,7 +885,7 @@ struct GithubQualityChangedFile {
 struct QualityBackfillRun {
     receipt: QualityReceiptSeed,
     receipt_source: String,
-    trend_source: String,
+    trend_source: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -8473,15 +8473,6 @@ fn load_quality_backfill_runs(args: &QualityBackfillArgs) -> Result<Vec<QualityB
                 receipt.schema
             );
         }
-        let trend: QualityTrendSeed = read_json_file(&trend_path)?;
-        if trend.schema != QUALITY_TREND_SCHEMA {
-            bail!(
-                "{} schema invalid: expected {}, got {}",
-                trend_path.display(),
-                QUALITY_TREND_SCHEMA,
-                trend.schema
-            );
-        }
         if !seen.insert(receipt.run_id.clone()) {
             bail!(
                 "duplicate quality run_id `{}` in {}",
@@ -8492,8 +8483,24 @@ fn load_quality_backfill_runs(args: &QualityBackfillArgs) -> Result<Vec<QualityB
         let label = sanitize_artifact_name(&format!("run-{}", receipt.run_id));
         let receipt_source =
             copy_quality_backfill_source(&args.out, &receipt_path, &format!("{label}-receipt"))?;
-        let trend_source =
-            copy_quality_backfill_source(&args.out, &trend_path, &format!("{label}-trend"))?;
+        let trend_source = if trend_path.exists() {
+            let trend: QualityTrendSeed = read_json_file(&trend_path)?;
+            if trend.schema != QUALITY_TREND_SCHEMA {
+                bail!(
+                    "{} schema invalid: expected {}, got {}",
+                    trend_path.display(),
+                    QUALITY_TREND_SCHEMA,
+                    trend.schema
+                );
+            }
+            Some(copy_quality_backfill_source(
+                &args.out,
+                &trend_path,
+                &format!("{label}-trend"),
+            )?)
+        } else {
+            None
+        };
         runs.push(QualityBackfillRun {
             receipt,
             receipt_source,
@@ -8580,7 +8587,18 @@ fn build_quality_backfill_artifact(
     let mut source_artifacts = Vec::new();
     for run in runs {
         quality_backfill_push_source(&mut source_artifacts, run.receipt_source.clone());
-        quality_backfill_push_source(&mut source_artifacts, run.trend_source.clone());
+        if let Some(trend_source) = &run.trend_source {
+            quality_backfill_push_source(&mut source_artifacts, trend_source.clone());
+        } else {
+            missing.push(quality_backfill_missing(
+                "source_artifacts.quality_trend",
+                &format!(
+                    "quality trend artifact missing for run {}; backfill kept the run receipt but trend provenance is incomplete",
+                    run.receipt.run_id
+                ),
+                &run.receipt_source,
+            ));
+        }
     }
     if let Some(outcomes) = outcomes {
         quality_backfill_push_source(&mut source_artifacts, outcomes.source_artifact.clone());
@@ -36258,7 +36276,7 @@ index 1111111..2222222 100644
                     llm_unavailable_events: 0,
                 },
                 receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
-                trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+                trend_source: Some("review/quality-backfill-sources/run-a-trend.json".to_owned()),
             },
             super::QualityBackfillRun {
                 receipt: super::QualityReceiptSeed {
@@ -36270,7 +36288,7 @@ index 1111111..2222222 100644
                     llm_unavailable_events: 1,
                 },
                 receipt_source: "review/quality-backfill-sources/run-b-receipt.json".to_owned(),
-                trend_source: "review/quality-backfill-sources/run-b-trend.json".to_owned(),
+                trend_source: Some("review/quality-backfill-sources/run-b-trend.json".to_owned()),
             },
         ];
         let outcomes = super::LoadedGithubQualityOutcomes {
@@ -36361,7 +36379,7 @@ index 1111111..2222222 100644
                 llm_unavailable_events: 0,
             },
             receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
-            trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+            trend_source: Some("review/quality-backfill-sources/run-a-trend.json".to_owned()),
         }];
         let outcomes = super::LoadedGithubQualityOutcomes {
             outcomes: super::GithubQualityOutcomes {
@@ -36419,7 +36437,7 @@ index 1111111..2222222 100644
                 llm_unavailable_events: 0,
             },
             receipt_source: "review/quality-backfill-sources/run-a-receipt.json".to_owned(),
-            trend_source: "review/quality-backfill-sources/run-a-trend.json".to_owned(),
+            trend_source: Some("review/quality-backfill-sources/run-a-trend.json".to_owned()),
         }];
 
         let artifact = super::build_quality_backfill_artifact(30, &runs, None, None);

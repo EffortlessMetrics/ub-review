@@ -625,6 +625,78 @@ fn quality_backfill_cli_writes_rolling_artifact_with_source_receipts() -> Result
 }
 
 #[test]
+fn quality_backfill_cli_records_missing_trend_without_failing() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    let run = temp.path().join("run-without-trend");
+    let review_dir = run.join("review");
+    fs::create_dir_all(&review_dir)?;
+    fs::write(
+        review_dir.join("quality-receipt.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.quality_receipt.v1",
+            "run_id": "run-without-trend",
+            "comments_prepared": 1,
+            "fills_with_signal": 0,
+            "fills_total": 0,
+            "llm_unavailable_events": 0
+        }))?,
+    )?;
+
+    let out = temp.path().join("out");
+    let output = Command::new(bin)
+        .arg("quality-backfill")
+        .arg("--out")
+        .arg(&out)
+        .arg("--run-dir")
+        .arg(&run)
+        .arg("--window-days")
+        .arg("30")
+        .output()?;
+    assert!(
+        output.status.success(),
+        "quality-backfill should keep receipt-only historical runs\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let artifact: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/quality-backfill.json"))?)?;
+    assert_eq!(artifact["window_runs"], 1);
+    assert_eq!(artifact["comments_prepared"], 1);
+    let source_artifacts = artifact["source_artifacts"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("source_artifacts is not an array"))?;
+    assert_eq!(
+        source_artifacts.len(),
+        1,
+        "missing trend provenance must not synthesize a source artifact"
+    );
+    let copied_receipt = source_artifacts[0]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("source_artifacts entry is not a string"))?;
+    assert!(
+        out.join(copied_receipt).is_file(),
+        "run receipt source should still be copied: {copied_receipt}"
+    );
+    let missing = artifact["missing"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("missing[] is not an array"))?;
+    assert!(
+        missing.iter().any(|entry| {
+            entry["field"] == "source_artifacts.quality_trend"
+                && entry["reason"]
+                    .as_str()
+                    .is_some_and(|reason| reason.contains("run-without-trend"))
+                && entry["source_artifact"] == copied_receipt
+        }),
+        "quality-backfill should receipt missing trend provenance: {missing:#?}"
+    );
+    Ok(())
+}
+
+#[test]
 fn plan_and_dry_run_write_expected_packet_tree() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
