@@ -302,8 +302,9 @@ Honest v0 limits, stated as limits:
   move-to-ub-review-required is emitted only when inventory proves the current
   required-check context that setup-ci can later remove manually.
 
-None of the open release issues (#306, #310, #312, #313, #317-#321, #347;
-#314 and #316 are closed) touch this surface; the audit-ci v0 gaps are
+None of the release/install and gate-hardening issues listed in the spec wave
+touch this surface; #306, #310, #312-#314, #316-#321, and #347 are closed.
+The audit-ci v0 gaps are
 recorded inside the artifacts as evidence_gaps strings and in this spec,
 and route through the spec-wave implementation plan (spec 0001).
 

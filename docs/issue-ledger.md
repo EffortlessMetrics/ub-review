@@ -51,20 +51,21 @@ skipped-by-policy.
 #312  closed  proof-broker edge cases are pinned: lease `absent`,
               base_patch_failed lane surfacing, manual-cost rejection,
               and shell-token rejection all have receipt-path tests
-#313  keep  coverage exit-101 trend issue by design; 2-week auto-close
-            horizon, capture llvm-cov stderr on recurrence
-#317  keep  xtask run_capture buffers unbounded stdout (450 MB ripr.md);
-            head+tail budget + stdout_truncated marker
+#313  closed  coverage exit-101 no longer reproduces on current main;
+              full llvm-cov-equivalent proof passed, reopen only on a fresh
+              coverage artifact with stderr
+#317  closed  xtask run_capture clips stdout/stderr with head+tail budget;
+              receipt markdown names truncation and tests pin the marker
 #318  closed  foreign-dialect policy/allow.toml skips with linked reason;
               CLI artifact test pins resolved/tool-status/gate parity
 #319  closed  tokmd version preflight fails before preset-bearing commands
               and names installed vs pinned version in the sensor receipt
 #396  closed  unsafe-review exit 1 is completed policy-finding evidence;
               exit 2/tool errors remain sensor failures
-#320  keep  xtask missing tools = success:true skipped; add distinct
-            `missing` status mirroring the main binary (pair with #321)
-#321  keep  missing-tool receipts lack install guidance; one shared hint
-            table for xtask precommit + doctor (pair with #320)
+#320  closed  xtask missing tools now write missing=true, success=false
+              receipts distinct from relevance skips
+#321  closed  xtask missing-tool receipts include install hints; doctor and
+              xtask hint tables are exact-value test-pinned
 ```
 
 Note #316 is already closed: #335 production-evaluated the ripr threshold

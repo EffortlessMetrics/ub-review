@@ -273,10 +273,10 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
     reason instead of producing a schema-red failure. #319 is covered by the
     tokmd run preflight: the sensor receipt names installed vs pinned
     versions before `--preset bun-ub` commands run.
-  - on the dev-side install surface, `cargo xtask precommit` records
-    missing sensors as `success: true` skipped receipts with exit 0,
-    indistinguishable from relevance skips (#320), and the receipts do not
-    say how to install the missing tool (#321).
+  - on the dev-side install surface, `cargo xtask precommit` now records
+    missing tools as `missing: true`, `success: false`, non-blocking
+    receipts with install guidance (#320/#321); relevance skips remain
+    `success: true` and `missing: false`.
 
 ## Trust boundary / non-claims
 
@@ -378,9 +378,10 @@ This spec is docs-only; it routes open work:
    install script and doctor (`expected_standard_image_tool_version`);
    the ripr gate-decision receipt landed under spec 0005. Remaining: pin
    cargo-allow itself; #318 covered only the foreign-ledger skip path.
-5. Make xtask precommit missing-tool receipts honest and actionable:
-   distinguish missing-tool skips from relevance skips (#320) and include
-   install instructions in the receipt (#321).
+5. DONE: Make xtask precommit missing-tool receipts honest and actionable:
+   distinguish missing-tool skips from relevance skips (#320), include
+   install instructions in the receipt (#321), and keep stdout/stderr
+   bounded with a truncation marker (#317).
 
 ## Release note claim
 

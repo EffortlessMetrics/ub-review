@@ -29,10 +29,10 @@ slice                                          spec    issue   proof obligation
    (prompt_cache/model/env/role config                         a rate-limited provider
    choices remain separate)                                    sheds load instead of
                                                                failing waves
-4  xtask precommit: missing tools exit         0005    #320    missing-tool receipt
-   distinctly, receipts say how to install,            #321    distinguishable from
-   bounded stdout embedding                            #317    relevance skip; ripr.md
-                                                       bounded on a loud diff
+4  DONE: xtask precommit missing tools        0005    #320    missing-tool receipt
+   exit distinctly, receipts say how to                #321    distinguishable from
+   install, bounded stdout/stderr                      #317    relevance skip; loud
+   embedding                                                   output clipped
 5  proof-broker edges: lease absent status,    0003    #312    each edge pinned by a test;
    base_patch_failed surfaced to requesting            base_patch_failed visible to
    lanes, manual-cost allowlist test,                  the lane that asked
@@ -56,8 +56,8 @@ slice                                          spec    issue   proof obligation
                                                        required_check_source
                                                        is delivered for
                                                        branch/ruleset receipts
-12 coverage flake trend: close or diagnose     0005    #313    second occurrence captures
-                                                       llvm-cov stderr, or issue closed
+12 DONE: coverage exit-101 no longer          0005    #313    current main passed
+   reproduces on current main                          llvm-cov-equivalent proof
 ```
 
 Tool-repo dependencies (filed upstream, tracked there, never absorbed
