@@ -43057,6 +43057,11 @@ jobs:
         let out = temp.path().join("run");
         write_setup_ci_fixture(&out.join("ci-audit"))?;
         fs::write(out.join("ci-audit/setup-pr-error.json"), "{}")?;
+        let mut preview_args =
+            setup_ci_args(&out, vec!["integration=cargo test --locked".to_owned()]);
+        preview_args.action_sha = Some("a".repeat(40));
+        super::cmd_setup_ci(preview_args)?;
+        let preview = out.join("ci-audit/preview");
         // Sequence: repo meta, base ref, base tree, create ref, 4 file PUTs,
         // open PR = 9 requests.
         let (api_url, handle) = spawn_fake_setup_ci_api(9, false)?;
@@ -43109,11 +43114,63 @@ jobs:
                 "docs/ci/branch-protection-change.md",
             ])
         );
+        let inventory: super::CiInventoryArtifact =
+            serde_json::from_slice(&fs::read(out.join("ci-audit/inventory.json"))?)?;
+        let recommendations: super::CiRecommendationsArtifact =
+            serde_json::from_slice(&fs::read(out.join("ci-audit/recommendations.json"))?)?;
+        let accepts =
+            super::parse_setup_ci_accepts(&["integration=cargo test --locked".to_owned()])?;
+        let plan = fs::read_to_string(out.join("ci-audit/migration-plan.md"))?;
+        let generated_config = super::render_setup_ci_gate_config(
+            &accepts,
+            &recommendations.jobs,
+            &inventory,
+            "ub-review/gate",
+        );
+        let branch_doc = super::render_setup_ci_branch_protection_doc(
+            &inventory,
+            &recommendations,
+            "ub-review/gate",
+        );
+        let expected_files = super::setup_ci_generated_files(
+            &plan,
+            &generated_config,
+            &branch_doc,
+            &"a".repeat(40),
+            "ub-review/gate",
+        );
+        for (index, file) in expected_files.iter().enumerate() {
+            let payload: serde_json::Value = serde_json::from_slice(&fs::read(
+                out.join(format!("ci-audit/setup-pr-file-payload-{index}.json")),
+            )?)?;
+            assert_eq!(
+                payload["message"]
+                    .as_str()
+                    .with_context(|| format!("{} payload message", file.path))?,
+                file.message
+            );
+            assert_eq!(
+                payload["branch"]
+                    .as_str()
+                    .with_context(|| format!("{} payload branch", file.path))?,
+                "ub-review/setup-ci-migration"
+            );
+            let preview_bytes = fs::read(preview.join(file.path))
+                .with_context(|| format!("read preview {}", file.path))?;
+            assert_eq!(
+                payload["content"]
+                    .as_str()
+                    .with_context(|| format!("{} payload content", file.path))?,
+                super::base64_standard(&preview_bytes),
+                "{} payload must match the print-pr preview bytes",
+                file.path
+            );
+        }
         // The generated workflow carries the pin and the zero-key posture.
         let payload: serde_json::Value = serde_json::from_slice(&fs::read(
             out.join("ci-audit/setup-pr-file-payload-1.json"),
         )?)?;
-        let content = payload["content"].as_str().unwrap_or_default();
+        let content = payload["content"].as_str().context("workflow content")?;
         let workflow = super::render_setup_ci_gate_workflow(&"a".repeat(40), "ub-review/gate");
         assert_eq!(super::base64_standard(workflow.as_bytes()), content);
         assert!(workflow.contains(&format!("EffortlessMetrics/ub-review@{}", "a".repeat(40))));
@@ -43128,7 +43185,9 @@ jobs:
             "ub-review/gate",
         );
         assert_eq!(
-            payload["content"].as_str().unwrap_or_default(),
+            payload["content"]
+                .as_str()
+                .context("branch-protection content")?,
             super::base64_standard(branch_doc.as_bytes())
         );
         assert!(branch_doc.contains("Branch protection remains manual"));
