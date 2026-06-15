@@ -791,11 +791,11 @@ def require_pr_review_body_policy(
             "no issues found",
             "looks good",
             "lgtm",
-            "we ran ",
-            "i ran ",
         ]:
             if phrase in lowered:
                 fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
+        if has_first_person_success_announcement(body):
+            fail(f"{path} contains artifact-only boilerplate: first-person success announcement")
         if has_case_insensitive_line_prefix(body, ["## residual risk"]):
             fail(
                 f"{path} contains artifact-only status section: '## Residual risk'"
@@ -843,6 +843,19 @@ def has_case_insensitive_line_prefix(body: str, prefixes: list[str]) -> bool:
         for line in body.splitlines()
         for prefix in lowered_prefixes
     )
+
+
+def has_first_person_success_announcement(body: str) -> bool:
+    for line in body.splitlines():
+        normalized = line.lstrip()
+        for prefix in ["- ", "* "]:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix) :].lstrip()
+                break
+        lowered = normalized.lower()
+        if lowered.startswith("we ran ") or lowered.startswith("i ran "):
+            return True
+    return False
 
 
 SUMMARY_ONLY_BODY_VALUES = {"suppress", "post_substantive", "post_all"}
@@ -10781,6 +10794,14 @@ def run_self_tests() -> None:
             ),
             pathlib.Path("review/github-review.json"),
         ),
+    )
+    require_pr_review_body_policy(
+        (
+            "## Verification questions\n\n"
+            "- Confirm `CI ran cargo test` stays valid evidence for the "
+            "literal `\"i ran \"` needle."
+        ),
+        pathlib.Path("review/github-review.json"),
     )
     for label, phrase in [
         ("all-checks-passed filler", "All checks passed."),

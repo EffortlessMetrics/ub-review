@@ -7351,11 +7351,28 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
             "no issues found",
             "looks good",
             "lgtm",
-            "we ran ",
-            "i ran ",
         ]
         .iter()
         .any(|needle| lower.contains(needle))
+        || has_first_person_success_announcement(&lower)
+}
+
+fn has_first_person_success_announcement(lower_body: &str) -> bool {
+    lower_body.lines().any(|line| {
+        let trimmed = trim_review_list_marker(line);
+        trimmed.starts_with("we ran ") || trimmed.starts_with("i ran ")
+    })
+}
+
+fn trim_review_list_marker(line: &str) -> &str {
+    let mut trimmed = line.trim_start();
+    for prefix in ["- ", "* "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            trimmed = rest.trim_start();
+            break;
+        }
+    }
+    trimmed
 }
 
 fn is_refuted_only_pr_body(body: &str) -> bool {
@@ -32238,6 +32255,9 @@ index 1111111..2222222 100644
                 "{phrase}: {err:#}"
             );
         }
+
+        review.body = "## Verification questions\n\n- Confirm `CI ran cargo test` stays valid evidence for the literal `\"i ran \"` needle.".to_owned();
+        validate_github_review_payload(&review)?;
         Ok(())
     }
 
@@ -32263,6 +32283,19 @@ index 1111111..2222222 100644
                 .contains("comment contains artifact-only boilerplate"),
             "{err:#}"
         );
+
+        let allowed = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the focused proof.".to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[contract-mirror] Raw `\"i ran \"` must not reject CI evidence such as `CI ran cargo test`.".to_owned(),
+                suggestion: None,
+            }],
+        };
+        validate_github_review_payload(&allowed)?;
         Ok(())
     }
 
