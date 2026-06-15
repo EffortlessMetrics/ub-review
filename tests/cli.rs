@@ -2396,6 +2396,7 @@ fn active_len_tracks_view_after_resize() {
                 && entry["selection_reason"]
                     .as_str()
                     .is_some_and(|reason| !reason.is_empty())
+                && entry["cost"].as_str().is_some_and(|cost| !cost.is_empty())
                 && entry["time_spent_sec"].as_f64().is_some()
         }),
         "fill ledger should record optional sensor selection receipts"
@@ -2421,6 +2422,7 @@ fn active_len_tracks_view_after_resize() {
                 entry["check_id"] == check_id
                     && entry["kind"] == "proof-skip"
                     && entry["selected"] == false
+                    && entry["cost"] == check_id
                     && entry["expected_signal"] == expected_signal
                     && entry["selection_reason"]
                         .as_str()
@@ -5016,6 +5018,7 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
             entry["artifact_path"].as_str(),
             Some(receipt_source.as_str())
         );
+        assert_eq!(entry["cost"].as_str(), Some("focused-test"));
         let sources = json_array_field(entry, "source_artifacts")?;
         assert!(
             sources

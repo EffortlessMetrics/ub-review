@@ -2482,6 +2482,7 @@ def require_fill_ledger(root: pathlib.Path) -> None:
     proof_requests = load_json(root / "review/proof_requests.json")
     if not isinstance(proof_requests, list):
         fail("review/proof_requests.json is not an array")
+    proof_request_costs: dict[str, str] = {}
     proof_receipts = load_json(root / "review/proof_receipts.json")
     if not isinstance(proof_receipts, list):
         fail("review/proof_receipts.json is not an array")
@@ -2507,6 +2508,9 @@ def require_fill_ledger(root: pathlib.Path) -> None:
         if not isinstance(request, dict):
             fail(f"review/proof_requests.json entry is not an object: {request!r}")
         request_id = require_non_empty_string_value(request.get("id"), "proof request id")
+        proof_request_costs[request_id] = require_non_empty_string_value(
+            request.get("cost"), f"proof request {request_id} cost"
+        )
         if request.get("required") is True and request.get("lane") == "intelligent-ci-policy":
             continue
         expected[("proof-request", request_id)] = request.get("status") == "requested"
@@ -2518,7 +2522,14 @@ def require_fill_ledger(root: pathlib.Path) -> None:
 
     seen: dict[tuple[str, str], bool] = {}
     for index, entry in enumerate(entries):
-        require_fill_ledger_entry(root, entry, index, proof_receipts, resource_leases)
+        require_fill_ledger_entry(
+            root,
+            entry,
+            index,
+            proof_receipts,
+            resource_leases,
+            proof_request_costs,
+        )
         key = (entry["kind"], entry["check_id"])
         if key in seen:
             fail(f"fill-ledger.json duplicate entry for {key}")
@@ -2535,6 +2546,7 @@ def require_fill_ledger_entry(
     index: int,
     proof_receipts: list,
     resource_leases: list,
+    proof_request_costs: dict[str, str],
 ) -> None:
     if not isinstance(entry, dict):
         fail(f"fill-ledger.json entries[{index}] is not an object")
@@ -2551,6 +2563,35 @@ def require_fill_ledger_entry(
         entry.get("selection_reason"),
         f"fill-ledger.json entries[{index}].selection_reason",
     )
+    cost = require_non_empty_string_value(
+        entry.get("cost"), f"fill-ledger.json entries[{index}].cost"
+    )
+    if kind == "proof-request":
+        expected_cost = proof_request_costs.get(check_id)
+        if expected_cost is None:
+            fail(f"fill-ledger.json entries[{index}] references unknown proof request {check_id!r}")
+        if cost != expected_cost:
+            fail(
+                f"fill-ledger.json entries[{index}].cost does not match review/proof_requests.json: "
+                f"{cost!r} != {expected_cost!r}"
+            )
+    elif kind == "proof-skip" and cost != check_id:
+        fail(
+            f"fill-ledger.json entries[{index}].cost must match skipped proof kind: "
+            f"{cost!r} != {check_id!r}"
+        )
+    elif kind == "sensor" and cost not in {
+        "packet",
+        "static",
+        "search",
+        "workflow",
+        "security",
+        "coverage",
+        "test",
+        "build",
+        "heavy-witness",
+    }:
+        fail(f"fill-ledger.json entries[{index}].cost invalid for sensor: {cost!r}")
     for field in ["expected_signal", "actual_signal", "artifact_path"]:
         value = entry.get(field)
         if value is not None:
@@ -8606,12 +8647,14 @@ def self_test_fill_ledger_contract() -> None:
                 {
                     "id": "proof-optional",
                     "lane": "tests-oracle",
+                    "cost": "focused-test",
                     "required": False,
                     "status": "requested",
                 },
                 {
                     "id": "proof-required",
                     "lane": "intelligent-ci-policy",
+                    "cost": "focused-build",
                     "required": True,
                     "status": "requested",
                 },
@@ -8665,6 +8708,7 @@ def self_test_fill_ledger_contract() -> None:
                     "kind": "sensor",
                     "selected": True,
                     "selection_reason": "Rust behavior or tests changed",
+                    "cost": "static",
                     "expected_signal": "static mutation-exposure signal",
                     "actual_signal": "ok: ripr completed",
                     "time_spent_sec": 0.01,
@@ -8682,6 +8726,7 @@ def self_test_fill_ledger_contract() -> None:
                     "kind": "proof-request",
                     "selected": True,
                     "selection_reason": "Need focused proof.",
+                    "cost": "focused-test",
                     "expected_signal": "Focused proof result",
                     "actual_signal": "head_passed: proof passed",
                     "time_spent_sec": 1.2,
@@ -8699,6 +8744,7 @@ def self_test_fill_ledger_contract() -> None:
                     "kind": "proof-skip",
                     "selected": False,
                     "selection_reason": "No unsafe/native risk.",
+                    "cost": "miri",
                     "expected_signal": None,
                     "actual_signal": None,
                     "time_spent_sec": 0,
@@ -8710,6 +8756,22 @@ def self_test_fill_ledger_contract() -> None:
         }
         if ledger_overrides:
             ledger.update(ledger_overrides)
+        write_self_test_json(root / "review/fill-ledger.json", ledger)
+        return root
+
+    def write_fill_ledger_without_cost() -> pathlib.Path:
+        root = write_valid_root()
+        ledger = load_json(root / "review/fill-ledger.json")
+        ledger["entries"][0].pop("cost", None)
+        write_self_test_json(root / "review/fill-ledger.json", ledger)
+        return root
+
+    def write_fill_ledger_with_proof_cost_mismatch() -> pathlib.Path:
+        root = write_valid_root()
+        ledger = load_json(root / "review/fill-ledger.json")
+        for entry in ledger["entries"]:
+            if entry.get("kind") == "proof-request" and entry.get("check_id") == "proof-optional":
+                entry["cost"] = "manual"
         write_self_test_json(root / "review/fill-ledger.json", ledger)
         return root
 
@@ -8747,6 +8809,16 @@ def self_test_fill_ledger_contract() -> None:
         "fill ledger missing planner skip",
         "entries do not match optional work queue/proof planner surface",
         lambda: require_fill_ledger(write_fill_ledger_without_skip()),
+    )
+    expect_self_test_failure(
+        "fill ledger missing cost",
+        "entries[0].cost is not a non-empty string",
+        lambda: require_fill_ledger(write_fill_ledger_without_cost()),
+    )
+    expect_self_test_failure(
+        "fill ledger proof cost mismatch",
+        "cost does not match review/proof_requests.json",
+        lambda: require_fill_ledger(write_fill_ledger_with_proof_cost_mismatch()),
     )
     expect_self_test_failure(
         "fill ledger missing proof lease source",

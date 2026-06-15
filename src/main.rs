@@ -654,6 +654,7 @@ struct FillLedgerEntry {
     kind: String,
     selected: bool,
     selection_reason: String,
+    cost: String,
     expected_signal: Option<String>,
     actual_signal: Option<String>,
     time_spent_sec: f64,
@@ -9513,6 +9514,7 @@ fn fill_sensor_entry(
         kind: "sensor".to_owned(),
         selected: sensor.run,
         selection_reason: sensor.reason.clone(),
+        cost: sensor_fill_cost(sensor).to_owned(),
         expected_signal: Some(sensor_expected_signal(&sensor.id).to_owned()),
         actual_signal,
         time_spent_sec,
@@ -9578,6 +9580,7 @@ fn fill_proof_request_entry(
         kind: "proof-request".to_owned(),
         selected,
         selection_reason: request.reason.clone(),
+        cost: request.cost.clone(),
         expected_signal: Some(proof_request_expected_signal(request, task)),
         actual_signal: proof_request_actual_signal(selected, &receipts),
         time_spent_sec: round_f64(time_spent_ms as f64 / 1000.0, 3),
@@ -9596,17 +9599,33 @@ fn fill_proof_request_entry(
 
 fn fill_proof_planner_skip_entry(skip: ProofPlannerSkip) -> FillLedgerEntry {
     let expected_signal = proof_skip_expected_signal(&skip.kind).map(str::to_owned);
+    let cost = skip.kind.clone();
     FillLedgerEntry {
         check_id: skip.kind,
         kind: "proof-skip".to_owned(),
         selected: false,
         selection_reason: skip.reason,
+        cost,
         expected_signal,
         actual_signal: None,
         time_spent_sec: 0.0,
         artifact_path: None,
         affected_merge: None,
         source_artifacts: vec!["review/proof_planner_output.json".to_owned()],
+    }
+}
+
+fn sensor_fill_cost(sensor: &SensorPlan) -> &'static str {
+    match sensor.class {
+        ToolClass::Packet => "packet",
+        ToolClass::Static => "static",
+        ToolClass::Search => "search",
+        ToolClass::Workflow => "workflow",
+        ToolClass::Security => "security",
+        ToolClass::Coverage => "coverage",
+        ToolClass::Test => "test",
+        ToolClass::Build => "build",
+        ToolClass::HeavyWitness => "heavy-witness",
     }
 }
 
@@ -37412,6 +37431,7 @@ index 1111111..2222222 100644
                     kind: "sensor".to_owned(),
                     selected: true,
                     selection_reason: "Rust behavior changed".to_owned(),
+                    cost: "static".to_owned(),
                     expected_signal: Some("static mutation-exposure signal".to_owned()),
                     actual_signal: Some("ok: ripr completed".to_owned()),
                     time_spent_sec: 0.1,
@@ -37424,6 +37444,7 @@ index 1111111..2222222 100644
                     kind: "proof-skip".to_owned(),
                     selected: false,
                     selection_reason: "No unsafe/native risk.".to_owned(),
+                    cost: "miri".to_owned(),
                     expected_signal: None,
                     actual_signal: None,
                     time_spent_sec: 0.0,
@@ -37476,6 +37497,7 @@ index 1111111..2222222 100644
 
         assert_eq!(mutation.kind, "proof-skip");
         assert!(!mutation.selected);
+        assert_eq!(mutation.cost, "mutation");
         assert_eq!(
             mutation.expected_signal.as_deref(),
             Some("runtime mutation check for targeted test oracle strength")
@@ -37584,6 +37606,7 @@ index 1111111..2222222 100644
             })
             .ok_or_else(|| anyhow::anyhow!("missing focused-build fill-ledger entry"))?;
         assert!(entry.selected);
+        assert_eq!(entry.cost, "focused-build");
         assert_eq!(
             entry.artifact_path.as_deref(),
             Some(format!("review/proof_receipts.json#{}", receipt.id).as_str())
