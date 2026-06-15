@@ -949,6 +949,7 @@ fn adoption_docs_match_setup_ci_current_surface() {
             "`setup-ci` ships only after",
             "three new files",
             "none of this exists",
+            "Contract intent (nothing here is implemented)",
             "must not present setup-ci as available until the slices below land",
         ] {
             assert!(

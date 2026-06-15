@@ -288,7 +288,9 @@ Human-review boundaries the contract fixes:
 
 ## Fail-closed behavior
 
-Contract intent (nothing here is implemented):
+Implemented v0 behavior, except the future admin-only
+`--apply-branch-protection` path remains intentionally outside the current
+adoption surface:
 
 ```text
 missing or schema-invalid ci-audit receipts      refuse to run; name the
