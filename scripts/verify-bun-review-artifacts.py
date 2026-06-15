@@ -83,6 +83,7 @@ APPROVAL_LINES = {
     "no issues found",
     "no actionable findings",
     "no actionable",
+    "all checks passed",
 }
 MAX_PR_REVIEW_BODY_BYTES = 6_000
 MAX_PR_REVIEW_BODY_BULLETS = 12
@@ -785,9 +786,16 @@ def require_pr_review_body_policy(
             "review payload status",
             "terminal state",
             "github-review-skip",
+            "command log",
+            "all checks passed",
+            "no issues found",
+            "looks good",
+            "lgtm",
         ]:
             if phrase in lowered:
                 fail(f"{path} contains artifact-only boilerplate: {phrase!r}")
+        if has_first_person_success_announcement(body):
+            fail(f"{path} contains artifact-only boilerplate: first-person success announcement")
         if has_case_insensitive_line_prefix(body, ["## residual risk"]):
             fail(
                 f"{path} contains artifact-only status section: '## Residual risk'"
@@ -835,6 +843,19 @@ def has_case_insensitive_line_prefix(body: str, prefixes: list[str]) -> bool:
         for line in body.splitlines()
         for prefix in lowered_prefixes
     )
+
+
+def has_first_person_success_announcement(body: str) -> bool:
+    for line in body.splitlines():
+        normalized = line.lstrip()
+        for prefix in ["- ", "* "]:
+            if normalized.startswith(prefix):
+                normalized = normalized[len(prefix) :].lstrip()
+                break
+        lowered = normalized.lower()
+        if lowered.startswith("we ran ") or lowered.startswith("i ran "):
+            return True
+    return False
 
 
 SUMMARY_ONLY_BODY_VALUES = {"suppress", "post_substantive", "post_all"}
@@ -10762,6 +10783,42 @@ def run_self_tests() -> None:
             pathlib.Path("review/github-review.json"),
         ),
     )
+    expect_self_test_failure(
+        "command-log PR body",
+        "artifact-only boilerplate",
+        lambda: require_pr_review_body_policy(
+            (
+                "## Evidence gaps\n\n"
+                "- Command log: cargo test focused_case exited 0; "
+                "stdout says focused_case passed."
+            ),
+            pathlib.Path("review/github-review.json"),
+        ),
+    )
+    require_pr_review_body_policy(
+        (
+            "## Verification questions\n\n"
+            "- Confirm `CI ran cargo test` stays valid evidence for the "
+            "literal `\"i ran \"` needle."
+        ),
+        pathlib.Path("review/github-review.json"),
+    )
+    for label, phrase in [
+        ("all-checks-passed filler", "All checks passed."),
+        ("looks-good filler", "Looks good after we ran the focused proof."),
+        ("no-issues-found filler", "No issues found in the changed files."),
+        ("lgtm filler", "LGTM because the tests passed."),
+        ("we-ran filler", "We ran cargo test and it passed."),
+        ("i-ran filler", "I ran clippy and it passed."),
+    ]:
+        expect_self_test_failure(
+            label,
+            "artifact-only boilerplate",
+            lambda phrase=phrase: require_pr_review_body_policy(
+                f"## Decision\n\n- {phrase}",
+                pathlib.Path("review/github-review.json"),
+            ),
+        )
     expect_self_test_failure(
         "too many PR body bullets",
         "not concise enough",

@@ -7346,9 +7346,33 @@ fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
             "review payload status",
             "terminal state",
             "github-review-skip",
+            "command log",
+            "all checks passed",
+            "no issues found",
+            "looks good",
+            "lgtm",
         ]
         .iter()
         .any(|needle| lower.contains(needle))
+        || has_first_person_success_announcement(&lower)
+}
+
+fn has_first_person_success_announcement(lower_body: &str) -> bool {
+    lower_body.lines().any(|line| {
+        let trimmed = trim_review_list_marker(line);
+        trimmed.starts_with("we ran ") || trimmed.starts_with("i ran ")
+    })
+}
+
+fn trim_review_list_marker(line: &str) -> &str {
+    let mut trimmed = line.trim_start();
+    for prefix in ["- ", "* "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            trimmed = rest.trim_start();
+            break;
+        }
+    }
+    trimmed
 }
 
 fn is_refuted_only_pr_body(body: &str) -> bool {
@@ -22055,6 +22079,7 @@ fn has_standalone_approval_line(text: &str) -> bool {
                 | "no issues found"
                 | "no actionable findings"
                 | "no actionable"
+                | "all checks passed"
         )
     })
 }
@@ -32203,6 +32228,36 @@ index 1111111..2222222 100644
                 "{phrase}: {err:#}"
             );
         }
+
+        review.body = "## Evidence gaps\n\n- Command log: cargo test focused_case exited 0; stdout says focused_case passed.".to_owned();
+        let err = validate_github_review_payload(&review)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("command-log boilerplate unexpectedly passed"))?;
+        assert!(
+            err.to_string().contains("artifact-only boilerplate"),
+            "{err:#}"
+        );
+
+        for phrase in [
+            "All checks passed.",
+            "Looks good after we ran the focused proof.",
+            "No issues found in the changed files.",
+            "LGTM because the tests passed.",
+            "We ran cargo test and it passed.",
+            "I ran clippy and it passed.",
+        ] {
+            review.body = format!("## Decision\n\n- {phrase}");
+            let err = validate_github_review_payload(&review)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("{phrase:?} approval filler unexpectedly passed"))?;
+            assert!(
+                err.to_string().contains("artifact-only boilerplate"),
+                "{phrase}: {err:#}"
+            );
+        }
+
+        review.body = "## Verification questions\n\n- Confirm `CI ran cargo test` stays valid evidence for the literal `\"i ran \"` needle.".to_owned();
+        validate_github_review_payload(&review)?;
         Ok(())
     }
 
@@ -32228,6 +32283,19 @@ index 1111111..2222222 100644
                 .contains("comment contains artifact-only boilerplate"),
             "{err:#}"
         );
+
+        let allowed = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "## Verification questions\n\n- Confirm the focused proof.".to_owned(),
+            comments: vec![GitHubReviewComment {
+                path: "src/lib.rs".to_owned(),
+                line: 2,
+                side: "RIGHT".to_owned(),
+                body: "[contract-mirror] Raw `\"i ran \"` must not reject CI evidence such as `CI ran cargo test`.".to_owned(),
+                suggestion: None,
+            }],
+        };
+        validate_github_review_payload(&allowed)?;
         Ok(())
     }
 
