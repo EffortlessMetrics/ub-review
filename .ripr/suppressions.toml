@@ -1107,3 +1107,650 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:17266:predicate"
 owner = "ub-review/core"
 reason = "Line-keyed id rot after providers extraction (ripr-swarm#1053): the runtime_fallback_retry_spec retry predicate moved to src/providers.rs:299 and is pinned by the same-module test runtime_fallback_retry_spec_only_retries_transient_primary_failures with exact oracles on every status/http combination. The line-keyed probe on the old main.rs location cannot trace the cross-module test path and stays weakly_exposed with a strong-oracle note. Re-verify the target after any edit that shifts code near src/main.rs:17266 or src/providers.rs:299."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:24:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:24:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:32:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:32:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:33:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:34:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:34:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:47:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:48:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:49:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:50:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:52:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:54:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:54:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:59:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:59:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:60:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:60:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:61:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:61:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:62:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:62:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:63:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:63:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:64:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:64:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:65:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:67:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:67:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:69:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:70:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:74:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:80:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:81:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:82:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:84:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:90:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:90:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:91:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:91:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:92:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:92:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:93:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:93:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:95:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:95:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:96:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:97:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:98:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:99:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:100:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:101:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:102:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:105:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:105:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:118:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:119:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:126:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:127:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:136:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:137:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:138:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:139:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:145:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:148:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:155:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:156:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:157:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:158:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:194:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: reachable_unrevealed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:216:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: reachable_unrevealed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:303:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:310:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:310:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:317:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:319:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:321:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:322:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:323:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:323:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:324:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:326:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:327:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:328:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:328:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:338:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:355:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:355:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:356:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:356:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:357:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:357:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:359:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:359:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:359:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:359:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:361:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:361:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:361:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:366:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:366:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:366:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:367:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:367:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:367:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:368:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:378:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:393:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
