@@ -1101,3 +1101,9 @@ kind = "exposure_gap"
 finding_id = "probe:tests_cli.rs:7205:error_path"
 owner = "ub-review/setup-ci"
 reason = "Probe on fake setup-ci API response write path (ripr-swarm#1055). The subprocess test fails if the helper cannot serve requests, and separately asserts branch payload, file payload content parity, pull payload body, and no branch-protection/ruleset API calls. Line-keyed CI ripr 0.8.0 id; re-verify after edits near handle_fake_setup_ci_request."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:17266:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed id rot after providers extraction (ripr-swarm#1053): the runtime_fallback_retry_spec retry predicate moved to src/providers.rs:299 and is pinned by the same-module test runtime_fallback_retry_spec_only_retries_transient_primary_failures with exact oracles on every status/http combination. The line-keyed probe on the old main.rs location cannot trace the cross-module test path and stays weakly_exposed with a strong-oracle note. Re-verify the target after any edit that shifts code near src/main.rs:17266 or src/providers.rs:299."
