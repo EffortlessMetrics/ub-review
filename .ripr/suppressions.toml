@@ -1754,3 +1754,608 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:393:return_value"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after proof/broker.rs extraction (ripr-swarm#1053): the code moved from main.rs to src/proof/broker.rs and is tested end-to-end via the run command integration tests in main.rs's test module. ripr's static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the broker functions."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:21:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:28:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:48:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:67:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:67:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:68:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:68:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:71:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:71:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:72:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:72:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:74:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:74:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:79:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:81:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:85:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:91:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:97:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:99:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:103:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:109:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:110:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:114:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:120:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:126:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:132:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:138:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:139:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:143:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:149:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:155:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:161:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:167:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:168:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:179:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:179:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:183:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:189:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:195:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:201:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:202:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:220:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:250:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:374:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:374:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:377:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:378:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:381:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:382:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:394:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:400:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:406:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:412:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:418:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:424:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:430:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:436:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:442:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:448:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:449:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:483:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:483:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:488:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:488:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:490:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_lanes.rs:490:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after lanes.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the lanes.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:66:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: weakly_exposed. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:130:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:130:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:130:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:142:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:142:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:158:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:158:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:158:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:166:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:169:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:169:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:169:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:170:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:170:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:170:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:173:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:173:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:174:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:174:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:174:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:178:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:187:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:191:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:191:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:191:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:192:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:192:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:192:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:193:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:193:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:193:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:204:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:204:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_observations.rs:206:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after observations.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests in main.rs`s test module. ripr`s static analysis cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the observations.rs functions."
