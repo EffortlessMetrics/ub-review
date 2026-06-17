@@ -36,6 +36,8 @@ mod tools;
 pub(crate) use tools::*;
 mod sensors;
 pub(crate) use sensors::*;
+mod prompt_cache;
+pub(crate) use prompt_cache::*;
 
 const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
@@ -1205,18 +1207,6 @@ struct ProviderPreflightReceipt {
     response_shape: Option<String>,
     #[serde(default)]
     cache_usage: ModelCacheUsage,
-}
-
-#[derive(Clone, Debug, Default, Deserialize, Serialize)]
-struct ModelCacheUsage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    input_tokens: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    output_tokens: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cache_creation_input_tokens: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    cache_read_input_tokens: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -14427,26 +14417,6 @@ fn shared_context_cache_lane(
         endpoint_kind: endpoint_kind.to_owned(),
         cache_mode: model_cache_mode_for_args(args, provider, endpoint_kind).to_owned(),
         shared_context_hash: shared_context_hash.to_owned(),
-    }
-}
-
-fn model_cache_mode_for_args(args: &RunArgs, provider: &str, endpoint_kind: &str) -> &'static str {
-    if provider == ModelProvider::MiniMaxDirect.key()
-        && endpoint_kind == ProviderEndpointKind::AnthropicMessages.key()
-        && args.minimax_prompt_cache == MinimaxPromptCache::Off
-    {
-        return "not-supported";
-    }
-    model_cache_mode(provider, endpoint_kind)
-}
-
-fn model_cache_mode(provider: &str, endpoint_kind: &str) -> &'static str {
-    if provider == ModelProvider::MiniMaxDirect.key()
-        && endpoint_kind == ProviderEndpointKind::AnthropicMessages.key()
-    {
-        "explicit-anthropic-cache-control"
-    } else {
-        "not-supported"
     }
 }
 
