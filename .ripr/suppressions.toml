@@ -6151,3 +6151,909 @@ kind = "exposure_gap"
 finding_id = "probe:src_noise.rs:611:return_value"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:10:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:17:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:17:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:19:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:19:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:22:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:22:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:24:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:27:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:30:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:32:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:32:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:34:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:37:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:40:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:47:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:54:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:54:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:55:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:55:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:61:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:67:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:68:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:76:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:84:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:105:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:108:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:113:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:121:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:121:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:121:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:125:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:125:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:125:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:128:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:128:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:128:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:129:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:129:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:129:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:130:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:130:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:130:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:132:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:156:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:173:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:196:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:196:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:196:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:199:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:199:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:199:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:200:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:200:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:200:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:203:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:203:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:203:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:204:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:204:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:212:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:212:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:216:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:216:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:217:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:217:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:235:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:247:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:247:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:251:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:252:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:253:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:254:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:256:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:260:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:280:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:284:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:284:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:284:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:285:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:285:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:287:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:288:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:289:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:289:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:290:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:290:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:293:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:293:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:295:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:296:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:297:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:297:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:298:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:298:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:301:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:301:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:305:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:306:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:306:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:307:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:307:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:310:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:310:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:385:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:389:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:392:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:397:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:403:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:427:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:431:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:435:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:453:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:459:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:460:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:460:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:494:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:494:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:495:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:495:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:496:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:496:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:497:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:497:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:498:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:498:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:503:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:507:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:510:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:515:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:516:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:517:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:520:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:523:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:526:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:531:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:532:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:533:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:536:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:556:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:557:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:557:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:558:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:558:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:559:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:559:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:560:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:560:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:561:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:561:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_fill_ledger.rs:562:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after fill_ledger.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
