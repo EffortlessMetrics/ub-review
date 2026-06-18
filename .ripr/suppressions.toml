@@ -4759,3 +4759,945 @@ kind = "exposure_gap"
 finding_id = "probe:src_model_exec.rs:612:return_value"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after model_exec.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end via the run command integration tests. ripr cannot trace the cross-module test path. Classification: no_static_path. Re-verify after any edit to the model_exec functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:184:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:184:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:191:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:191:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:191:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:196:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:196:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:196:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:198:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:198:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:206:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:211:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:214:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:214:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:219:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:220:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:223:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:224:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:229:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:230:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:231:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:233:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:234:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:246:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:247:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:249:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:253:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:253:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:254:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:254:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:254:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:255:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:255:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:255:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:259:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:259:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:259:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:260:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:260:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:260:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:264:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:264:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:266:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:266:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:274:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:274:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:276:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:276:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:277:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:277:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:281:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:281:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:283:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:283:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:290:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:290:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:293:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:293:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:294:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:294:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:313:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:313:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:321:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:321:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:329:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:329:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:333:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:333:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:334:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:334:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:337:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:337:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:358:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:358:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:370:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:370:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:370:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:372:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:372:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:378:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:387:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:387:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:388:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:392:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:392:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:393:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:393:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:416:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:416:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:460:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:464:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:464:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:474:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:484:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:491:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:495:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:495:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:501:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:519:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:520:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:538:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:583:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: reachable_unrevealed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:585:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: reachable_unrevealed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:604:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:606:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:621:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:621:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:627:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:627:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:627:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:629:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:629:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:641:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:643:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:646:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:649:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:650:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:651:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:655:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:662:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:662:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:671:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:671:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:685:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:689:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:694:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:696:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:698:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:707:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:710:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:719:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:724:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:725:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:730:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:731:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:732:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:734:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:740:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:741:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:742:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:744:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:749:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:766:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:774:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:793:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:793:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: no_static_path. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:808:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:838:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:846:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:847:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:848:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:849:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:850:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:851:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:852:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:853:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:855:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
