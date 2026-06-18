@@ -8062,10 +8062,13 @@ def self_test_noise_rule_phrase_parity_with_rust() -> None:
     of the day after run 27073001145). When the Rust source is present
     (repo CI / local dev), recompute phrase parity for every paired rule;
     consumer self-test runs without the source skip this check."""
-    rust_path = pathlib.Path(__file__).resolve().parent.parent / "src" / "main.rs"
-    if not rust_path.is_file():
+    rust_dir = pathlib.Path(__file__).resolve().parent.parent / "src"
+    rust_chunks = []
+    for rs in sorted(rust_dir.rglob("*.rs")):
+        rust_chunks.append(rs.read_text(encoding="utf-8"))
+    rust = "\n".join(rust_chunks)
+    if not rust:
         return
-    rust = rust_path.read_text(encoding="utf-8")
     here = pathlib.Path(__file__).read_text(encoding="utf-8")
     names = sorted(set(re.findall(r"fn (is_[a-z_]*noise[a-z_]*)\(", rust)))
     names.append("is_pr_body_artifact_only_observation")

@@ -5701,3 +5701,453 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:855:error_path"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after validate.rs extraction (ripr-swarm#1053): the code moved from main.rs and is tested end-to-end. Classification: weakly_exposed. Re-verify after edits to the validate functions."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:33:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:33:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:54:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:54:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:54:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:179:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:179:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:236:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:236:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:280:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:280:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:304:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:304:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:305:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:305:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:306:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:306:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:349:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:349:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:350:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:350:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:351:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:351:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:352:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:352:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:353:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:353:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:355:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:355:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:356:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:356:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:372:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:372:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:399:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:399:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:416:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:416:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:437:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:437:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:473:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:473:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:493:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:496:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:499:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:502:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:505:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:508:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:535:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:550:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:555:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:563:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:566:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:577:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:577:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:595:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:595:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:600:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:600:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:602:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:602:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:602:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:603:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:603:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:604:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:604:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:605:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:605:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:606:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:606:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:607:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:607:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:609:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:609:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:611:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:611:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after noise.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
