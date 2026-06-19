@@ -7825,3 +7825,1077 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_compiler.rs:584:field_construction"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after review_compiler.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:26:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:39:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:55:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:59:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:71:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:71:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:72:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:72:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:108:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:119:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:127:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:127:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:128:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:128:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:149:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:154:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:155:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:157:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:159:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:160:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:161:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:164:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:165:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:166:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:170:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:172:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:173:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:174:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:175:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:178:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:179:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:180:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:183:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:184:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:190:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:191:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:197:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:198:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:204:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:205:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:210:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:210:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:227:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:227:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:228:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:228:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:245:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:250:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:252:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:254:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:254:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:270:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:281:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:288:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:318:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:322:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:326:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:331:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:345:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:350:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:353:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:358:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:398:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:400:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:400:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:401:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:401:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:407:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:410:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:422:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:422:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:422:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:430:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:430:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:435:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:435:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:436:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:436:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:450:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:454:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:454:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:458:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:458:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:460:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:461:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:465:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:465:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:465:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:466:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:466:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:468:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:471:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:471:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:473:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:473:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:477:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:477:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:477:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:478:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:478:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:482:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:482:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:486:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:486:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:488:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:489:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:493:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:493:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:495:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:495:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:496:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:505:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:505:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:509:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:509:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:511:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:512:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:516:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:516:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:525:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:532:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:532:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:533:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:551:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:553:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:554:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:555:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:555:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:561:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:564:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:564:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:565:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:565:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:565:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:566:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:566:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:566:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:567:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:567:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:567:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:568:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:568:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:568:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:569:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:569:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:569:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:570:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:570:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:578:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:578:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:578:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:579:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:579:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:579:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:580:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:580:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:580:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:581:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:581:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:581:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:583:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:583:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:590:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:595:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:595:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:611:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:611:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:616:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:617:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:619:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:620:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:632:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:632:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:643:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:643:side_effect"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:646:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:654:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:655:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_quality_github.rs:655:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
