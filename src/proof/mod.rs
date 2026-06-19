@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::*;
 
+pub(crate) mod command_parse;
+pub(crate) use command_parse::*;
 pub(crate) mod broker;
 pub(crate) use broker::*;
 
