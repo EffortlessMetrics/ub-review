@@ -8899,3 +8899,675 @@ kind = "exposure_gap"
 finding_id = "probe:src_quality_github.rs:655:return_value"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after quality_github.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:5288:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after main.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:5293:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after main.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:27:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:27:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:35:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:35:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:50:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:50:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:73:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:78:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:78:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:81:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:96:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:106:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:106:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:109:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:109:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:117:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:129:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:132:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:139:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:155:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:155:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:155:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:156:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:156:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:161:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:161:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:162:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:162:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:166:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:166:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:166:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:167:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:167:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:171:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:171:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:172:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:172:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:173:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:173:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:174:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:174:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:175:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:175:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:178:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:178:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:179:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:179:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:180:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:180:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:181:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:181:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:182:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:182:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:183:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:183:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:187:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:187:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:188:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:188:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:189:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:189:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:190:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:190:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:191:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:191:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:192:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:192:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:199:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:199:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:199:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:201:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:201:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:201:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:202:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:202:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:202:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:204:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:204:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:205:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:205:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:221:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:221:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:260:call_deletion"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:260:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:270:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:276:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:276:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:278:field_construction"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:278:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:280:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:286:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:288:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:291:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:292:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:293:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:294:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:314:predicate"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:314:return_value"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:319:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:321:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: weakly_exposed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:327:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:337:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:342:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:343:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:346:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:347:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:351:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:352:error_path"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: reachable_unrevealed. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:358:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_receipt_builders.rs:360:match_arm"
+owner = "ub-review/core"
+reason = "Line-keyed cross-module gap after receipt_builders.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
