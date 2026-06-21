@@ -1,0 +1,21 @@
+# Normalize text files to LF in the repo index regardless of platform
+# checkout settings (core.autocrlf). Without this, Windows checkouts under
+# core.autocrlf=true get CRLF in the worktree, which breaks tests that match
+# literal "\n" against include_str!() output (e.g. workflow-YAML contract
+# tests in src/main.rs). See issue #584 / tracker UB-39.
+#
+# Git performs the LF<->CRLF conversion on checkout/commit per the platform;
+# this file forces the index to LF so include_str!() reads deterministic bytes.
+* text=auto eol=lf
+
+# Binary types (defensive — no such assets currently tracked).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.zip binary
+*.gz  binary
+*.tar binary
