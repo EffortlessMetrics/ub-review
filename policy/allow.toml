@@ -60,6 +60,17 @@ created = "2026-06-06"
 review_after = "2026-09-06"
 
 [[exception]]
+id = "non-rust-gitattributes"
+kind = "non-rust-file"
+path = ".gitattributes"
+category = "platform-required-config"
+language = "gitattributes"
+owner = "ub-review/core"
+reason = "Git attributes file enforces LF line endings in the index so include_str!()-based contract tests read deterministic bytes on every platform (issue #584)."
+created = "2026-06-21"
+review_after = "2026-09-21"
+
+[[exception]]
 id = "non-rust-ripr-suppressions"
 kind = "non-rust-file"
 glob = ".ripr/suppressions.toml"
