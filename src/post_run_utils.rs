@@ -198,6 +198,11 @@ pub(crate) const STANDARD_IMAGE_CARGO_ALLOW_VERSION: &str = "0.1.8";
 // scripts/install-review-image-tools.sh.
 pub(crate) const STANDARD_IMAGE_RIPR_VERSION: &str = "0.8.0";
 pub(crate) const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.4";
+// The actionlint version deliberately omits the `v` prefix: the doctor
+// version-matcher parses `actionlint version v1.7.12` and strips the `v`
+// before comparing to this constant. The install scripts and docs use the
+// `v`-prefixed form (`v1.7.12`) for `go install ...@v1.7.12`. Both spellings
+// are correct for their context; this is not drift (#610).
 pub(crate) const STANDARD_IMAGE_ACTIONLINT_VERSION: &str = "1.7.12";
 
 pub(crate) fn is_core_review_tool(tool_id: &str) -> bool {

@@ -257,6 +257,7 @@ runs:
       run: |
         set -euo pipefail
         if command -v rustup >/dev/null 2>&1; then
+          # Pinned to match rust-toolchain.toml + Cargo.toml (three sites, one fact — #610)
           rustup toolchain install 1.95.0 --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           rustup default 1.95.0
