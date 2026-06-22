@@ -15592,6 +15592,36 @@ UB_REVIEW_HTTP_STATUS:429
     }
 
     #[test]
+    fn post_error_classification_covers_403_429_500_statuses() {
+        // Property-style coverage of the HTTP status classification that the
+        // post error receipt depends on. Exercises 403/429/500 error responses
+        // through the real classification logic without a subprocess or fake
+        // server (avoiding the Linux CI timing issue that blocked the
+        // integration-test approach). See #612 / tracker UB-29.
+        for (status, expected_class) in [
+            (403u16, "auth_failed"),
+            (429u16, "rate_limited"),
+            (500u16, "failed"),
+            (502u16, "failed"),
+            (503u16, "failed"),
+        ] {
+            let err = anyhow::anyhow!(
+                "GitHub review post failed with exit code Some(22) and http status Some({status}): stderr: error"
+            );
+            assert_eq!(
+                http_status_from_error(&err),
+                Some(status),
+                "http_status_from_error must extract {status}"
+            );
+            assert_eq!(
+                super::classify_model_error(&err),
+                expected_class,
+                "classify_model_error must classify {status} as {expected_class}"
+            );
+        }
+    }
+
+    #[test]
     fn minimax_openai_payload_uses_chat_shape() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.minimax_provider_kind = ProviderKindArg::Openai;
