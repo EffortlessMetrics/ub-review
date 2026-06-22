@@ -246,17 +246,22 @@ python scripts/verify-bun-review-artifacts.py --self-test
 ## Implementation PR slices
 
 ```text
-1. wire [[lanes]] custom-lane consumption (config surface exists, unwired)
-2. declare this repo's lanes per doctrine: contract-mirror,
-   gate-semantics, spec-honesty; enrich [repo].ledger with the mirror-pair
-   map and the calibration corpus learnings
-3. compiler structural fixes the corpus demands: decision-line signal,
+1. DONE — wire [[lanes]] custom-lane consumption: merge_repo_lanes_into
+   (src/lanes.rs:36) + repo_lane_plans (src/plan_build.rs:375), test-pinned
+   by repo_lanes_merge_with_defaults_replacement_and_diff_class_gating.
+2. DONE — declare this repo's lanes per doctrine: contract-mirror,
+   gate-semantics, spec-honesty (.ub-review.toml [[lanes]]); [repo].ledger
+   mirror-pair map lives in docs/REVIEW_LEDGER.md.
+3. OPEN — compiler structural fixes the corpus demands: decision-line signal,
    cross-section dedupe, deliberate-silence item for high-risk surfaces
-4. refutation discipline: checkable objections route to proof requests or
-   verification questions instead of confident refutations
-5. preset-scoped calibration: Bun false-premise rules do not run on
-   non-Bun repos
-6. lane library + selection by id + init recommendations
+   (grep for these concepts returns no implementation).
+4. PARTIAL — refutation discipline: append_cross_lane_conflict_observations
+   (src/observation_build.rs:128) + summary_finding_has_cross_lane_conflict
+   (src/noise.rs:580) cover part of this; cross-lane conflict surfacing
+   remains narrowed per issue #147, not closed.
+5. OPEN — preset-scoped calibration: Bun false-premise rules do not run on
+   non-Bun repos.
+6. OPEN — lane library + selection by id + init recommendations.
 ```
 
 ## Release note claim

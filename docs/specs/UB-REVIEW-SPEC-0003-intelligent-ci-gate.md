@@ -74,7 +74,7 @@ this repository's own file is the production example):
 - The `intelligent-ci-policy` lane constraint: a proof request counts toward
   the gate only when `required = true` AND its lane is exactly
   `intelligent-ci-policy` — the lane the policy expander assigns to
-  `[[proof.required]]` entries (src/main.rs `proof_request_is_gate_required`,
+  `[[proof.required]]` entries (src/gate.rs `proof_request_is_gate_required`,
   `REQUIRED_PROOF_POLICY_LANE`). Model lanes can also mark proof requests
   required; those never gate-block. Model output cannot reach the verdict.
 - `[tools.<id>]` with `required = true` — required sensors. On this repo:
@@ -148,7 +148,7 @@ configurable.
 
 ## Required fields
 
-`gate_outcome.json` (schema `ub-review.gate_outcome.v1`, src/main.rs
+`gate_outcome.json` (schema `ub-review.gate_outcome.v1`, src/gate.rs
 `GateOutcome`; minimum shape in docs/adr/0002):
 
 ```text
@@ -207,7 +207,7 @@ reasons point at `review/tool-gate-outcomes.json#<tool>`, whose entry's
 sensor produced one. A red gate with no receipt is a bug in the gate, not a
 finding (docs/adr/0002).
 
-Proof receipt classification (src/main.rs `required_proof_receipt_class`):
+Proof receipt classification (src/gate.rs `required_proof_receipt_class`):
 
 ```text
 passed    head_passed | discriminating
@@ -239,7 +239,7 @@ required-proof-unproven / tool-gate-missing-evidence    (only when the repo
                                                          blocking-finding)
 ```
 
-Never reds (docs/adr/0002; src/main.rs gate outcome logic never reads
+Never reds (docs/adr/0002; src/gate.rs gate outcome logic never reads
 provider state):
 
 ```text
@@ -263,7 +263,7 @@ Posting policy (`[gate].post_review_on`): the gate verdict lands on every
 pass, but the grouped review posts only on passes whose `pull_request` event
 action is listed — `opened` and `ready_for_review` on this repo. Synchronize
 and reopened passes run the full gate and stay quiet, writing
-`review/github-review-skip.json` with `skipped_pass_policy` (src/main.rs
+`review/github-review-skip.json` with `skipped_pass_policy` (src/review_compiler.rs
 `pass_policy_permits_review_post`, honored for synchronize/reopened since PR
 #304). Manual runs are explicit operator requests and bypass the pass list;
 catch-all `pull_request_other` passes never post. Quiet-pass proof on PR
@@ -285,7 +285,7 @@ table policies in .ub-review.toml).
 ## Fail-closed behavior
 
 The gate check recognizes exactly the string `pass` in an artifact with
-exactly the schema `ub-review.gate_outcome.v1` (src/main.rs
+exactly the schema `ub-review.gate_outcome.v1` (src/gate.rs
 `cmd_gate_check`). When enforcement is on:
 
 ```text
