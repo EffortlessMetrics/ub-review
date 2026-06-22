@@ -19,6 +19,10 @@
 
 - Many issue comments or one comment per lane.
 - Replacement for Droid Action.
-- Blocking SAST gate.
+- A traditional blocking SAST gate that reds on lint/static-analysis rules
+  alone. (`ub-review/gate` *is* a blocking required check per ADR-0002, but
+  it blocks on deterministic proof receipts and explicitly-marked blocking
+  findings — a different posture from a SAST-only gate. See ADR-0002 for the
+  single-gate decision that supersedes the literal reading of this non-goal.)
 - Proof of memory safety, security, or test adequacy.
 - `cockpitctl` integration in this first scaffold.
