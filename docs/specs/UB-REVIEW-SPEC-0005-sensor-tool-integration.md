@@ -72,7 +72,7 @@ upstream tools     defect reports with receipts (see trust boundary)
 ```
 
 The six core sensors are a named constant: `CORE_REVIEW_TOOLS = [tokmd,
-cargo-allow, ripr, unsafe-review, ast-grep, actionlint]` (src/main.rs).
+cargo-allow, ripr, unsafe-review, ast-grep, actionlint]` (src/post_run_utils.rs).
 Coverage is not core; it is a leased heavy witness this repository chooses to
 lease on every PR.
 
@@ -154,7 +154,7 @@ repository's `.ub-review.toml` makes the five non-tokmd core sensors
   bails when a core tool is missing or a pinned version mismatches
   (src/main.rs `cmd_doctor`). The pin table covers tokmd (`1.12.0`),
   cargo-allow (`0.1.8`), ripr (`0.8.0`), unsafe-review (`0.3.4`),
-  and actionlint (`1.7.12`) (src/main.rs
+  and actionlint (`1.7.12`) (src/post_run_utils.rs
   `expected_standard_image_tool_version`); ast-grep remains unpinned.
 - The action's sensor install step (scripts/install-gh-runner-tools.sh)
   pins tokmd (default 1.12.0, `UB_REVIEW_TOKMD_VERSION`), cargo-allow
@@ -206,16 +206,16 @@ different tool plan (docs/ci/work-queue.md).
 ### Packet policy: how sensor output reaches model lanes
 
 Sensor queue tasks are generated from the registry. Each gets a packet
-policy (src/main.rs `work_queue_sensor_packet_policy`): required sensors are
+policy (src/work_queue.rs `work_queue_sensor_packet_policy`): required sensors are
 `must-run`, planned non-required sensors are `include-if-ready`, unplanned
 ones are `artifact-only`. Priority follows the same split
 (high/medium/low), and the queue gate policy string is `gate-required` for
 required sensors, `trust-affecting` for gate-threshold tools,
 `review-context` for other planned sensors, `artifact-only` otherwise
-(src/main.rs `work_queue_sensor_gate_policy`).
+(src/work_queue.rs `work_queue_sensor_gate_policy`).
 
 `initial_packet_status` records what the first model packet can know
-(docs/ci/work-queue.md; src/main.rs `work_queue_initial_packet_status`):
+(docs/ci/work-queue.md; src/work_queue.rs `work_queue_initial_packet_status`):
 `ready_for_initial_packet` when the receipt exists at queue-write time,
 `pending_initial_packet` when planned but not yet receipted,
 `not_initial_packet` when skipped or artifact-only. The contract sentence
@@ -233,7 +233,7 @@ ast-grep to source-route; cargo-allow to security; tokmd to all lanes. Each
 lane packet renders a "Routed sensor evidence" section listing each routed
 sensor's receipt status (`receipt-absent` when none exists) and instructs
 the model: "Do not infer safety from missing sensor receipts."
-(src/main.rs `write_lane_packets`).
+(src/lane_packets.rs `write_lane_packets`).
 
 ## Required fields
 
@@ -264,7 +264,7 @@ tool id, configured policy, `planned_run`, `sensor_status`/`sensor_reason`,
 
 `sensors/<tool>/gate-decision.json` is the threshold input the sensor side
 must produce; the evaluator reads a `new_unsuppressed` count from it
-(src/main.rs `ToolGateDecision`, `evaluate_tool_gate_threshold`). The ripr
+(src/tools.rs `ToolGateDecision`, `evaluate_tool_gate_threshold`). The ripr
 sensor produces it in production since #335: the verbatim badge-json stdout
 of `ripr check --diff --mode ready --format badge-json`, with
 `counts.unsuppressed_exposure_gaps` mapped to `new_unsuppressed`.
@@ -273,7 +273,7 @@ Coverage's own receipts state their epistemics in-band:
 `changed-lines.json` ships `status: "not_collected"` ("changed-line
 coverage is not computed by the local coverage sensor yet") and both it and
 `upload.json` carry `execution_surface_only: true` and
-`correctness_claim: false` (src/main.rs `write_coverage_status_receipt`).
+`correctness_claim: false` (src/sensors/coverage.rs `write_coverage_status_receipt`).
 The work-queue routing table names a changed-line coverage receipt route;
 the receipt honestly says the data is not collected yet.
 
@@ -284,10 +284,10 @@ Three paths from sensor to gate, all receipted; everything else is advisory:
 1. **Required sensor evidence** (`required = true`, trigger matched): the
    evidence-issue collector flags any status other than `ok` -
    `receipt-absent`, `failed`, `missing`, `timed-out`, and skips that should
-   have run (src/main.rs `collect_sensor_evidence_issues`,
+   have run (src/receipt_builders.rs `collect_sensor_evidence_issues`,
    `is_sensor_evidence_issue`). These gaps block **only in `intelligent-ci`
    mode**; `review-byok` records the same gaps as
-   `evidence_gaps_advisory` (spec 0003; src/main.rs gate outcome
+   `evidence_gaps_advisory` (spec 0003; src/gate.rs gate outcome
    construction).
 2. **Tool gate thresholds** (`[tools.<id>.gate]`, opt-in): only tools with a
    configured gate entry produce outcomes - a tool without one cannot redden

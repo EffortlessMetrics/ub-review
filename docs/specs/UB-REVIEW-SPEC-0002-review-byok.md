@@ -80,10 +80,10 @@ Provider secrets:
   value name — a raw `FACTORY_API_KEY` assignment in the packet fails
   verification (scripts/verify-bun-review-artifacts.py `SECRET_VALUE_NAMES`).
 
-Default lanes are diff-class adaptive (src/main.rs `review_lanes_for_width`,
-`default_lanes_for_diff_class`; the six builtin base lanes in
-src/builtin.rs, the widened 10/20 and non-UB diff-class lane sets in
-src/main.rs):
+Default lanes are diff-class adaptive (src/lanes.rs `review_lanes_for_width`,
+`standard_minimax_lanes`, `deep_minimax_lanes`; the six builtin base lanes in
+src/builtin.rs `default_lanes`, the diff-context routing in
+src/diff_posture.rs `default_lanes_for_diff_context`):
 
 ```text
 source-UB diffs      ub, source-route, tests, arch, opposition, security
@@ -185,7 +185,7 @@ passes regardless of the gate conclusion unless the repo sets
 
 `gate_outcome.json` is still written truthfully on every run — required-sensor
 evidence gaps that would block in intelligent-ci mode are advisory here
-(src/main.rs gate outcome construction). Model findings are never proof and
+(src/gate.rs gate outcome construction). Model findings are never proof and
 never feed the gate verdict (umbrella boundary).
 
 `fail-on-post-error` defaults to false: a failed review submission writes
@@ -206,7 +206,7 @@ never feed the gate verdict (umbrella boundary).
   `rate_limited`, `timed_out`, or HTTP 5xx gets one bounded retry on its
   fallback spec, inside the `max-model-calls` budget, receipted via
   `fallback_from`; the evidence issue is recorded only on terminal failure
-  (src/main.rs `runtime_fallback_retry_spec`). Honest constraint: the retry
+  (src/providers.rs `runtime_fallback_retry_spec`). Honest constraint: the retry
   needs a fallback spec to exist — under the default `minimax-primary` policy
   only the opposition canary has one; `primary-with-fallback` extends it to
   every lane. Retryable runtime provider failures also shed the next wave to
