@@ -144,24 +144,34 @@ trackers, not ub-review rollout infrastructure.
 
 ## Modularization status (June 2026)
 
-`main.rs` reduced from 45,547 to 35,208 lines (-22.7%) via 20 module
-extractions. All merged clean through the ub-review gate.
+`main.rs` reduced from 45,547 to 27,633 lines (-39.3%) via the cleanup train
+(one pure-code-motion extraction per PR, reached step 59). All merged clean
+through the ub-review gate.
 
-Extracted modules: `prompt_cache`, `providers`, `proof/broker`,
-`lanes`, `observations`, `init`, `model_api`, `model_exec`, `validate`,
-`render`, `decision_core`, `noise`, `diff_class`, `observation_build`,
-`candidate`, `issue_broker`, `quality_backfill_build`, `fill_ledger`,
-`follow_up_routing`, `plan_build`, `lane_packets`.
+49 top-level modules now live under `src/*.rs` (plus the `proof/` subtree of
+10 files and the `sensors/` subtree of 5 files). Extracted dispatchers include
+`cmd_init` (`init.rs`), `cmd_gate_check` (`gate.rs`), and the
+`cmd_quality_github_*` pair (`quality_github.rs`). Remaining seams worth
+extracting when next touched:
 
-Blocked: `audit_ci.rs` (2,628 lines) and `github.rs` (~1,400 lines)
-extraction blocked by ripr-swarm#1324 (runner OOM on large new-file
-diffs during ripr analysis).
+- the inline `mod tests` in `main.rs` (~19.6k lines, 337 tests) — co-locate
+  tests with the modules they exercise;
+- the CI subsystem (`cmd_audit_ci`, `cmd_setup_ci`, ~25 `ci_*` helpers, YAML
+  parse, GitHub REST, gate-workflow templating) — a ~2,300-line island
+  unrelated to the review pipeline;
+- the `pub(crate) use x::*` glob re-exports — replacing them with explicit
+  imports would create real module boundaries (currently modules are
+  physically split but logically one flat namespace).
 
 ## Known blockers
 
 - **ripr-swarm#1324:** runner OOM when a PR introduces a large new file
-  (~2,600+ lines). ripr's analysis of the full codebase exceeds the 7 GB
-  runner budget. Affects `audit_ci.rs` and `github.rs` extraction.
-- **Issue-ledger #343:** no published release tag yet.
+  (~2,600+ lines); ripr's analysis of the full codebase exceeds the 7 GB
+  runner budget. This drove the temporary `[tools.ripr.gate]
+  max_new_unsuppressed` raises during the cleanup train (now reverted to 0,
+  see #585) and still constrains any future large-file extraction or new
+  module addition.
+- **Issue-ledger #343:** no published `v0.1.0` release yet (`v0` and `v0.1`
+  tags exist for early pinning; no GitHub Release archive).
 - **Issue-ledger #147:** cross-lane contradiction reconciliation narrowed
   but not closed.
