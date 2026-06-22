@@ -11703,7 +11703,7 @@ index 1111111..2222222 100644
                 })
             },
             |_root, _out, _diff| {
-                unreachable!("base+tests worktree should not be prepared after budget is spent")
+                bail!("base+tests worktree should not be prepared after budget is spent")
             },
         )?;
 
@@ -12349,10 +12349,10 @@ index 3333333..4444444 100644
             },
             tasks,
             |_root, _argv, _env, _timeout, _stdout, _stderr| {
-                unreachable!("proof command should not run without a lease")
+                bail!("proof command should not run without a lease")
             },
             |_root, _out, _diff| {
-                unreachable!("base+tests worktree should not be prepared without a lease")
+                bail!("base+tests worktree should not be prepared without a lease")
             },
         )?;
 
@@ -12393,10 +12393,10 @@ index 3333333..4444444 100644
             },
             tasks,
             |_root, _argv, _env, _timeout, _stdout, _stderr| {
-                unreachable!("proof command should not run when proof budget is zero")
+                bail!("proof command should not run when proof budget is zero")
             },
             |_root, _out, _diff| {
-                unreachable!("base+tests worktree should not be prepared when proof budget is zero")
+                bail!("base+tests worktree should not be prepared when proof budget is zero")
             },
         )?;
 
