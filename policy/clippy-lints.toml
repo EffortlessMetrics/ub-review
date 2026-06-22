@@ -39,6 +39,12 @@ class = "panic"
 reason = "Unimplemented behavior must be tracked as work, not shipped as a panic path."
 
 [[active]]
+name = "clippy::unreachable"
+level = "deny"
+class = "panic"
+reason = "Unreachable-code assertions are panic-family; tests that must assert a code path is never reached should propagate an Err instead (#599)."
+
+[[active]]
 name = "clippy::dbg_macro"
 level = "deny"
 class = "debug-leak"
