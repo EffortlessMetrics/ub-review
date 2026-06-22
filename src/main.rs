@@ -8024,24 +8024,25 @@ mod tests {
         Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
         ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
         ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
-        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_cost_receipt, build_final_orchestrator_plan,
-        build_issue_broker_plan, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_witness_records, builtin_profiles,
-        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
-        classify_diff, classify_diff_class, classify_issue_candidates, classify_proof_cost,
-        cmd_gate_check, cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues,
-        combined_observations, command_display, compile_review_surface, dedupe_inline_comments,
-        deep_minimax_lanes, default_lanes, direct_minimax_spec, execute_issue_broker,
-        extract_model_content, fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
+        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
+        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
+        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
+        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
+        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
+        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
         github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
@@ -22867,6 +22868,111 @@ index 1111111..2222222 100644
             "parked-follow-up resolutions keep their surface for the parked section"
         );
         assert!(!resolved_away.contains(&candidates[0].id));
+    }
+
+    #[test]
+    fn resolved_candidate_record_serialization_round_trips_for_known_dispositions() -> Result<()> {
+        // Property-style test (no proptest dep): the four canonical resolved
+        // statuses must survive a serialize -> deserialize round-trip
+        // unchanged. This guards the schema invariant that
+        // prior-resolved-candidates (read back from the previous run's
+        // resolved_candidates.json) parse losslessly. See #611 / tracker UB-28.
+        let statuses = ["confirmed", "refuted", "dropped", "parked-follow-up"];
+        for status in statuses {
+            let record = ResolvedCandidateRecord {
+                schema: "ub-review.resolved_candidate.v1".to_owned(),
+                candidate_id: format!("cand-{status}"),
+                lane: "ub-memory-lifetime".to_owned(),
+                source: "proof-planner".to_owned(),
+                original_status: "open".to_owned(),
+                original_disposition: "needs-evidence".to_owned(),
+                resolved_status: status.to_owned(),
+                resolved_disposition: format!("resolved-{status}"),
+                resolution_source: "current-run".to_owned(),
+                source_artifacts: vec![
+                    "review/candidates.json".to_owned(),
+                    "review/follow_up_results.json".to_owned(),
+                ],
+                reason: format!("round-trip test for {status}"),
+                follow_up_task_ids: vec!["task-1".to_owned(), "task-2".to_owned()],
+                follow_up_stages: vec!["tertiary".to_owned()],
+                follow_up_statuses: vec![status.to_owned()],
+                evidence: vec!["proof_receipt_42".to_owned()],
+            };
+            let json = serde_json::to_string(&record)
+                .with_context(|| format!("serialize failed for {status}"))?;
+            let parsed: ResolvedCandidateRecord = serde_json::from_str(&json)
+                .with_context(|| format!("deserialize failed for {status}"))?;
+            assert_eq!(parsed.schema, record.schema, "schema mismatch for {status}");
+            assert_eq!(
+                parsed.candidate_id, record.candidate_id,
+                "candidate_id mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.resolved_status, record.resolved_status,
+                "resolved_status mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.resolved_disposition, record.resolved_disposition,
+                "resolved_disposition mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.source_artifacts, record.source_artifacts,
+                "source_artifacts mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.follow_up_task_ids, record.follow_up_task_ids,
+                "follow_up_task_ids mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.follow_up_stages, record.follow_up_stages,
+                "follow_up_stages mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.follow_up_statuses, record.follow_up_statuses,
+                "follow_up_statuses mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.evidence, record.evidence,
+                "evidence mismatch for {status}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_candidate_record_round_trips_unicode_and_empty_vectors() -> Result<()> {
+        // Edge cases: empty vectors and non-ASCII content must survive the
+        // round-trip. Guards against serde renames, skip_serializing_if, or
+        // encoding assumptions that would silently drop fields. See #611.
+        let record = ResolvedCandidateRecord {
+            schema: "ub-review.resolved_candidate.v1".to_owned(),
+            candidate_id: "cand-unicode-λ-Ω-日本語".to_owned(),
+            lane: String::new(),
+            source: String::new(),
+            original_status: String::new(),
+            original_disposition: String::new(),
+            resolved_status: "confirmed".to_owned(),
+            resolved_disposition: String::new(),
+            resolution_source: "prior-resolved-candidates".to_owned(),
+            source_artifacts: Vec::new(),
+            reason: "unicode + empty-vec edge case 🎯".to_owned(),
+            follow_up_task_ids: Vec::new(),
+            follow_up_stages: Vec::new(),
+            follow_up_statuses: Vec::new(),
+            evidence: Vec::new(),
+        };
+        let json =
+            serde_json::to_string(&record).context("serialize failed for unicode edge case")?;
+        let parsed: ResolvedCandidateRecord =
+            serde_json::from_str(&json).context("deserialize failed for unicode edge case")?;
+        assert_eq!(parsed.candidate_id, record.candidate_id);
+        assert_eq!(parsed.resolved_status, record.resolved_status);
+        assert_eq!(parsed.reason, record.reason);
+        assert!(parsed.source_artifacts.is_empty());
+        assert!(parsed.follow_up_task_ids.is_empty());
+        assert!(parsed.evidence.is_empty());
+        Ok(())
     }
 
     #[test]
