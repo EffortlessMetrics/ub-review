@@ -159,4 +159,4 @@ For the Bun profile:
 - missing tools on a generic hosted runner are missing evidence, not proof of a
   clean review;
 - sensor defects should be filed in the matching `*-swarm` repo, not hidden in
-  local glue.
+  local glue (canonical contract: `docs/specs/UB-REVIEW-SPEC-0016-sensor-upstream-boundary.md`).

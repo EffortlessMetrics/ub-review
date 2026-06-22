@@ -57,7 +57,8 @@ Miri/runtime receipts as retained exception policy.
 ## Sensor issue boundary
 
 `ub-review` owns orchestration, routing, model fanout, posting, and fallback
-behavior. It should not silently absorb sensor defects into local glue.
+behavior. It should not silently absorb sensor defects into local glue
+(canonical upstream-boundary contract + routing table: `docs/specs/UB-REVIEW-SPEC-0016-sensor-upstream-boundary.md`).
 
 When a real sensor issue blocks the Bun UB lane, file a focused upstream issue:
 
