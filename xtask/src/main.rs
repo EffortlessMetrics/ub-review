@@ -1533,6 +1533,158 @@ mod tests {
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         Ok(())
     }
+
+    #[test]
+    fn parse_policy_date_accepts_valid_yyyy_mm_dd() -> Result<()> {
+        assert_eq!(parse_policy_date("2026-06-03")?, (2026, 6, 3));
+        assert_eq!(parse_policy_date("2024-02-29")?, (2024, 2, 29)); // leap day
+        assert_eq!(parse_policy_date("1999-12-31")?, (1999, 12, 31));
+        Ok(())
+    }
+
+    #[test]
+    fn parse_policy_date_rejects_bad_shapes() -> Result<()> {
+        assert!(parse_policy_date("2026-6-3").is_err(), "non-zero-padded");
+        assert!(parse_policy_date("2026/06/03").is_err(), "wrong separator");
+        assert!(parse_policy_date("20260603").is_err(), "no separators");
+        assert!(parse_policy_date("").is_err(), "empty");
+        assert!(parse_policy_date("2026-13-01").is_err(), "month out of range");
+        assert!(parse_policy_date("2026-06-32").is_err(), "day out of range");
+        assert!(parse_policy_date("abcd-06-03").is_err(), "non-numeric year");
+        Ok(())
+    }
+
+    #[test]
+    fn epoch_to_ymd_matches_known_dates() {
+        // 1970-01-01 epoch = 0
+        assert_eq!(epoch_to_ymd(0), (1970, 1, 1));
+        // 2026-06-22 (today, per SOURCE_DATE_EPOCH-independent fallback):
+        // verify a well-known anchor. 2024-01-01 = epoch 1704067200.
+        assert_eq!(epoch_to_ymd(1_704_067_200), (2024, 1, 1));
+        // 2000-03-01 (the day after the 2000 leap day) = 951868800
+        assert_eq!(epoch_to_ymd(951_868_800), (2000, 3, 1));
+    }
+
+    #[test]
+    fn validate_allow_date_validation_rejects_review_before_created() -> Result<()> {
+        let root = temp_repo_root("date-order")?;
+        let allow = root.join("allow.toml");
+        fs::write(
+            &allow,
+            "schema_version = \"1\"\ntool = \"cargo-allow\"\n\n\
+             [[exception]]\n\
+             id = \"bad-order\"\n\
+             kind = \"clippy-suppression\"\n\
+             owner = \"test\"\n\
+             reason = \"created after review_after\"\n\
+             created = \"2026-06-10\"\n\
+             review_after = \"2026-06-01\"\n\
+             path = \"src/x.rs\"\n",
+        )?;
+        let mut report = PolicyReport::default();
+        let result = validate_allow(&allow, &mut report);
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        assert!(
+            result.is_err(),
+            "review_after before created must fail, got {result:?}"
+        );
+        let msg = match result {
+            Err(error) => format!("{error}"),
+            Ok(_) => String::new(),
+        };
+        assert!(
+            msg.contains("before `created`"),
+            "error should explain the ordering: {msg}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn validate_allow_date_validation_rejects_expires_before_review() -> Result<()> {
+        let root = temp_repo_root("date-expiry")?;
+        let allow = root.join("allow.toml");
+        fs::write(
+            &allow,
+            "schema_version = \"1\"\ntool = \"cargo-allow\"\n\n\
+             [[exception]]\n\
+             id = \"bad-expiry\"\n\
+             kind = \"clippy-suppression\"\n\
+             owner = \"test\"\n\
+             reason = \"expires before review_after\"\n\
+             created = \"2026-06-01\"\n\
+             review_after = \"2026-07-01\"\n\
+             expires = \"2026-06-15\"\n\
+             path = \"src/x.rs\"\n",
+        )?;
+        let mut report = PolicyReport::default();
+        let result = validate_allow(&allow, &mut report);
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        assert!(result.is_err(), "expires before review_after must fail");
+        let msg = match result {
+            Err(error) => format!("{error}"),
+            Ok(_) => String::new(),
+        };
+        assert!(
+            msg.contains("before `review_after`"),
+            "error should explain the ordering: {msg}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn validate_allow_date_validation_rejects_unparseable_dates() -> Result<()> {
+        let root = temp_repo_root("date-format")?;
+        let allow = root.join("allow.toml");
+        fs::write(
+            &allow,
+            "schema_version = \"1\"\ntool = \"cargo-allow\"\n\n\
+             [[exception]]\n\
+             id = \"bad-format\"\n\
+             kind = \"clippy-suppression\"\n\
+             owner = \"test\"\n\
+             reason = \"not a date\"\n\
+             created = \"June 3rd 2026\"\n\
+             review_after = \"2026-07-03\"\n\
+             path = \"src/x.rs\"\n",
+        )?;
+        let mut report = PolicyReport::default();
+        let result = validate_allow(&allow, &mut report);
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        assert!(result.is_err(), "unparseable created must fail");
+        let msg = match result {
+            Err(error) => format!("{error}"),
+            Ok(_) => String::new(),
+        };
+        assert!(
+            msg.contains("not YYYY-MM-DD"),
+            "error should name the format: {msg}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn validate_allow_date_validation_passes_valid_ordered_dates() -> Result<()> {
+        let root = temp_repo_root("date-good")?;
+        let allow = root.join("allow.toml");
+        fs::write(
+            &allow,
+            "schema_version = \"1\"\ntool = \"cargo-allow\"\n\n\
+             [[exception]]\n\
+             id = \"good\"\n\
+             kind = \"clippy-suppression\"\n\
+             owner = \"test\"\n\
+             reason = \"well-formed\"\n\
+             created = \"2026-06-01\"\n\
+             review_after = \"2026-07-01\"\n\
+             expires = \"2026-12-01\"\n\
+             path = \"src/x.rs\"\n",
+        )?;
+        let mut report = PolicyReport::default();
+        validate_allow(&allow, &mut report)?;
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        assert_eq!(report.exceptions, 1);
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
@@ -1818,11 +1970,121 @@ fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
         if let Some(expires) = item.get("expires") {
             non_empty_str(expires, path, "expires")?;
         }
+        // Date-shape validation: created / review_after / expires must parse
+        // as YYYY-MM-DD, ordering must hold (created <= review_after <=
+        // expires), and an overdue review_after or expires is a warning (not
+        // a failure) so a lapse does not red the gate. See #600.
+        let created = require_str(item, path, "created")?;
+        let review_after = require_str(item, path, "review_after")?;
+        let created_date = parse_policy_date(created).with_context(|| {
+            format!("{} exception `{id}` `created` is not YYYY-MM-DD", path.display())
+        })?;
+        let review_date = parse_policy_date(review_after).with_context(|| {
+            format!(
+                "{} exception `{id}` `review_after` is not YYYY-MM-DD",
+                path.display()
+            )
+        })?;
+        if review_date < created_date {
+            bail!(
+                "{} exception `{id}` `review_after` ({review_after}) is before `created` ({created})",
+                path.display()
+            );
+        }
+        if let Some(expires_value) = item.get("expires") {
+            let expires_str = expires_value
+                .as_str()
+                .with_context(|| format!("{} exception `{id}` `expires` is not a string", path.display()))?;
+            let expires_date = parse_policy_date(expires_str).with_context(|| {
+                format!("{} exception `{id}` `expires` is not YYYY-MM-DD", path.display())
+            })?;
+            if expires_date < review_date {
+                bail!(
+                    "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after})",
+                    path.display()
+                );
+            }
+            if expires_date < today() {
+                eprintln!(
+                    "warning: {} exception `{id}` `expires` ({expires_str}) is in the past — review or renew",
+                    path.display()
+                );
+            }
+        }
+        if review_date < today() {
+            eprintln!(
+                "warning: {} exception `{id}` `review_after` ({review_after}) is overdue — review or renew",
+                path.display()
+            );
+        }
         *report.exception_kinds.entry(kind.to_owned()).or_insert(0) += 1;
         report.exceptions += 1;
     }
 
     Ok(())
+}
+
+/// Parse a `YYYY-MM-DD` policy date into a comparable `(year, month, day)` triple.
+/// Avoids pulling in chrono to keep the xtask dependency surface tiny.
+fn parse_policy_date(value: &str) -> Result<(i32, u32, u32)> {
+    let bytes = value.as_bytes();
+    if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
+        bail!("expected YYYY-MM-DD, got `{value}`");
+    }
+    let year: i32 = value[0..4]
+        .parse()
+        .with_context(|| format!("year not numeric in `{value}`"))?;
+    let month: u32 = value[5..7]
+        .parse()
+        .with_context(|| format!("month not numeric in `{value}`"))?;
+    let day: u32 = value[8..10]
+        .parse()
+        .with_context(|| format!("day not numeric in `{value}`"))?;
+    if !(1..=12).contains(&month) {
+        bail!("month {month} out of range in `{value}`");
+    }
+    if !(1..=31).contains(&day) {
+        bail!("day {day} out of range in `{value}`");
+    }
+    Ok((year, month, day))
+}
+
+/// Today's date as a comparable `(year, month, day)` triple.
+/// Reads `Source-Date-Epoch` if set (for reproducible builds), else the
+/// system clock. The system-clock read is intentionally simple: the warning
+/// is advisory, not a correctness-critical comparison.
+fn today() -> (i32, u32, u32) {
+    if let Some(secs) = std::env::var("SOURCE_DATE_EPOCH")
+        .ok()
+        .and_then(|epoch| epoch.parse::<i64>().ok())
+    {
+        return epoch_to_ymd(secs);
+    }
+    // Fallback: system clock via std. This is intentionally a coarse
+    // day-resolution read for advisory warnings only.
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    epoch_to_ymd(secs)
+}
+
+/// Convert a Unix epoch second count to a (year, month, day) triple using the
+/// proleptic Gregorian calendar. Algorithm from Howard Hinnant's date library
+/// (civil_from_days), simplified to day resolution.
+fn epoch_to_ymd(secs: i64) -> (i32, u32, u32) {
+    let days = secs.div_euclid(86400);
+    // Days since 1970-01-01 -> civil date (Hinnant's algorithm).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z - era * 146_097; // [0, 146096]
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146_096) / 365; // [0, 399]
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // [0, 365]
+    let mp = (5 * doy + 2) / 153; // [0, 11]
+    let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // [1, 12]
+    (if m <= 2 { y + 1 } else { y } as i32, m as u32, d as u32)
 }
 
 fn validate_ci_budget(path: &Path) -> Result<()> {
