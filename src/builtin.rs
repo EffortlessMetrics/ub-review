@@ -6,8 +6,8 @@ use crate::{
 pub(crate) fn builtin_profiles() -> Vec<Profile> {
     [
         include_str!("../runtime/gh-runner.toml"),
-        include_str!("../configs/runtime/gh-runner-standard.toml"),
-        include_str!("../configs/runtime/gh-runner-full.toml"),
+        include_str!("../runtime/gh-runner-standard.toml"),
+        include_str!("../runtime/gh-runner-full.toml"),
         include_str!("../runtime/cx23.toml"),
         include_str!("../runtime/cx33.toml"),
         include_str!("../runtime/cx43.toml"),
