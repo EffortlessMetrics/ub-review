@@ -1,7 +1,10 @@
 # ub-review v0 readiness notes
 
 `ub-review` has moved past the initial artifact-only scaffold. The current
-`main` branch is the pre-`v0` Bun UB `review-byok` line.
+`main` branch is the Bun UB `review-byok` line. The `v0` and `v0.1` tags
+exist for early commit-SHA pinning (the Bun consumer workflow pins by full
+SHA); the first GitHub Release archive (`v0.1.0`, Linux x64 + checksums)
+is pending — see issue #343 and SPEC-0010.
 
 Current supported shape:
 
@@ -19,7 +22,7 @@ Current supported shape:
 - Bun consumer workflow example using
   `EffortlessMetrics/ub-review@804d198b5a15a0df94bb4f43750dba71165916cd`
 
-Before tagging `v0`, prove the same commit on:
+Before cutting the first release archive (`v0.1.0`), prove the same commit on:
 
 1. the locked CI gate;
 2. the local action smoke workflow;

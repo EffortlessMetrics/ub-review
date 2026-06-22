@@ -97,9 +97,11 @@ default. No invented quality score.
 ## 4. Adoption
 
 ```text
-#343  keep      zero releases exist; cut v0.1.0 with the Linux x64 archive
-                + checksums; SPEC-0010 specifies the surface; first
-                external consumer is already live
+#343  keep      no GitHub Release archive exists yet; cut v0.1.0 with the
+                Linux x64 archive + checksums. (The `v0` and `v0.1` tags
+                exist for early commit-SHA pinning but are not release
+                archives.) SPEC-0010 specifies the surface; first external
+                consumer is already live
 #327  narrowed  audit-ci/setup-ci ship the gate-generation half (#299,
                 #354, #355); file-driven ub-review-init.md guidance ships
                 with repo-scan candidates; remaining: LLM-guided/model-
