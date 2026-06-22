@@ -2,7 +2,9 @@
 name = "ub-review"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.95"
+# Pinned to match rust-toolchain.toml and action.yml (all three must move
+# together — #610). Standardized to the full semver "1.95.0" spelling.
+rust-version = "1.95.0"
 description = "No-token evidence packet runner for UB-focused PR review."
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/EffortlessMetrics/ub-review"

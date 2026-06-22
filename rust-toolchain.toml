@@ -1,3 +1,5 @@
+# Canonical Rust pin. Moves together with Cargo.toml [rust-version] and
+# action.yml (three sites for one fact — #610).
 [toolchain]
 channel = "1.95.0"
 components = ["rustfmt", "clippy"]
