@@ -1,4 +1,4 @@
-# Bun-specific GitHub runner profile.
+# Example consumer config for ub-review on a GitHub-hosted runner.
 # Safe base profile for GitHub-hosted runners. Action inputs decide whether to
 # post a grouped PR review and whether provider keys are available for model
 # lanes; missing keys remain missing evidence.
@@ -97,3 +97,45 @@ enabled = false
 
 [tools.gitleaks]
 enabled = false
+
+# ─────────────────────────────────────────────────────────────────────────────
+# The three surfaces below are NOT enabled in this lean example, but are shown
+# here so consumers can see the schema. Uncomment and adapt to use them. The
+# full-feature reference config configs/unsafe-review-swarm.ub-review.toml is
+# test-pinned (src/main.rs unsafe_review_swarm_recommended_config_loads_advisory_floor)
+# and demonstrates every feature parsing cleanly with zero policy_errors.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Repo-declared review lanes ([[lanes]]). These compose with (or replace) the
+# builtin lane set for the matched diff class. Each lane needs an id and a
+# role; diff_classes gates which diffs route to it. See SPEC-0011 for the
+# lane-doctrine contract.
+# [[lanes]]
+# id = "spec-honesty"
+# role = "Docs claims versus code review"
+# diff_classes = ["source-general", "source-ub"]
+
+# Required proof ([[proof.required]]). A matched entry with no passing receipt
+# blocks the gate when [gate.blocking].required_proof_unproven = true (or in
+# intelligent-ci mode). `command` runs through the proof broker under the
+# runtime profile's budget. See SPEC-0003 for the gate contract.
+# [[proof.required]]
+# id = "cargo-check"
+# languages = ["rust"]
+# diff_classes = ["all"]
+# command = "cargo check --workspace --locked"
+# reason = "Required Rust workspace check."
+# cost = "focused-build"
+# timeout_sec = 300
+
+# Provider policy ([providers]). Controls BYOK model-lane fanout, fallback,
+# and per-provider concurrency. env/model/role/models keys are parsed but
+# currently documentation of intent (see SPEC-0006); the live keys are
+# policy, max_concurrency, and prompt_cache. See SPEC-0002 / SPEC-0006.
+# [providers]
+# policy = "minimax-primary"
+# [providers.minimax]
+# max_concurrency = 8
+# prompt_cache = "explicit-anthropic"
+# [providers.opencode]
+# max_concurrency = 4
