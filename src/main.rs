@@ -8051,6 +8051,7 @@ mod tests {
         opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
         provider_concurrency_limits, provider_spec_for_lane_with_key_state,
         read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
+        ResolvedCandidateRecord,
         render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
         render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
         resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
@@ -22867,6 +22868,108 @@ index 1111111..2222222 100644
             "parked-follow-up resolutions keep their surface for the parked section"
         );
         assert!(!resolved_away.contains(&candidates[0].id));
+    }
+
+    #[test]
+    fn resolved_candidate_record_serialization_round_trips_for_known_dispositions() -> Result<()> {
+        // Property-style test (no proptest dep): the four canonical resolved
+        // statuses must survive a serialize -> deserialize round-trip
+        // unchanged. This guards the schema invariant that
+        // prior-resolved-candidates (read back from the previous run's
+        // resolved_candidates.json) parse losslessly. See #611 / tracker UB-28.
+        let statuses = ["confirmed", "refuted", "dropped", "parked-follow-up"];
+        for status in statuses {
+            let record = ResolvedCandidateRecord {
+                schema: "ub-review.resolved_candidate.v1".to_owned(),
+                candidate_id: format!("cand-{status}"),
+                lane: "ub-memory-lifetime".to_owned(),
+                source: "proof-planner".to_owned(),
+                original_status: "open".to_owned(),
+                original_disposition: "needs-evidence".to_owned(),
+                resolved_status: status.to_owned(),
+                resolved_disposition: format!("resolved-{status}"),
+                resolution_source: "current-run".to_owned(),
+                source_artifacts: vec![
+                    "review/candidates.json".to_owned(),
+                    "review/follow_up_results.json".to_owned(),
+                ],
+                reason: format!("round-trip test for {status}"),
+                follow_up_task_ids: vec!["task-1".to_owned(), "task-2".to_owned()],
+                follow_up_stages: vec!["tertiary".to_owned()],
+                follow_up_statuses: vec![status.to_owned()],
+                evidence: vec!["proof_receipt_42".to_owned()],
+            };
+            let json = serde_json::to_string(&record)
+                .with_context(|| format!("serialize failed for {status}"))?;
+            let parsed: ResolvedCandidateRecord = serde_json::from_str(&json)
+                .with_context(|| format!("deserialize failed for {status}"))?;
+            assert_eq!(parsed.schema, record.schema, "schema mismatch for {status}");
+            assert_eq!(
+                parsed.candidate_id, record.candidate_id,
+                "candidate_id mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.resolved_status, record.resolved_status,
+                "resolved_status mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.resolved_disposition, record.resolved_disposition,
+                "resolved_disposition mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.source_artifacts, record.source_artifacts,
+                "source_artifacts mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.follow_up_task_ids, record.follow_up_task_ids,
+                "follow_up_task_ids mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.follow_up_stages, record.follow_up_stages,
+                "follow_up_stages mismatch for {status}"
+            );
+            assert_eq!(
+                parsed.follow_up_statuses, record.follow_up_statuses,
+                "follow_up_statuses mismatch for {status}"
+            );
+            assert_eq!(parsed.evidence, record.evidence, "evidence mismatch for {status}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_candidate_record_round_trips_unicode_and_empty_vectors() -> Result<()> {
+        // Edge cases: empty vectors and non-ASCII content must survive the
+        // round-trip. Guards against serde renames, skip_serializing_if, or
+        // encoding assumptions that would silently drop fields. See #611.
+        let record = ResolvedCandidateRecord {
+            schema: "ub-review.resolved_candidate.v1".to_owned(),
+            candidate_id: "cand-unicode-λ-Ω-日本語".to_owned(),
+            lane: String::new(),
+            source: String::new(),
+            original_status: String::new(),
+            original_disposition: String::new(),
+            resolved_status: "confirmed".to_owned(),
+            resolved_disposition: String::new(),
+            resolution_source: "prior-resolved-candidates".to_owned(),
+            source_artifacts: Vec::new(),
+            reason: "unicode + empty-vec edge case 🎯".to_owned(),
+            follow_up_task_ids: Vec::new(),
+            follow_up_stages: Vec::new(),
+            follow_up_statuses: Vec::new(),
+            evidence: Vec::new(),
+        };
+        let json =
+            serde_json::to_string(&record).context("serialize failed for unicode edge case")?;
+        let parsed: ResolvedCandidateRecord =
+            serde_json::from_str(&json).context("deserialize failed for unicode edge case")?;
+        assert_eq!(parsed.candidate_id, record.candidate_id);
+        assert_eq!(parsed.resolved_status, record.resolved_status);
+        assert_eq!(parsed.reason, record.reason);
+        assert!(parsed.source_artifacts.is_empty());
+        assert!(parsed.follow_up_task_ids.is_empty());
+        assert!(parsed.evidence.is_empty());
+        Ok(())
     }
 
     #[test]
