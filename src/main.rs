@@ -8024,24 +8024,25 @@ mod tests {
         Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
         ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
         ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResourceLease, ReviewArgs, ReviewBodyAudience,
-        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
-        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
-        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
-        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
-        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
-        build_candidate_records, build_cost_receipt, build_final_orchestrator_plan,
-        build_issue_broker_plan, build_orchestrator_plan, build_review_metrics,
-        build_review_terminal_state, build_witness_records, builtin_profiles,
-        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
-        classify_diff, classify_diff_class, classify_issue_candidates, classify_proof_cost,
-        cmd_gate_check, cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues,
-        combined_observations, command_display, compile_review_surface, dedupe_inline_comments,
-        deep_minimax_lanes, default_lanes, direct_minimax_spec, execute_issue_broker,
-        extract_model_content, fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
+        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
+        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
+        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
+        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
+        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
+        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
+        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
+        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
+        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
+        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
+        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
         github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
@@ -8051,7 +8052,6 @@ mod tests {
         opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
         provider_concurrency_limits, provider_spec_for_lane_with_key_state,
         read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
-        ResolvedCandidateRecord,
         render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
         render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
         resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
@@ -22932,7 +22932,10 @@ index 1111111..2222222 100644
                 parsed.follow_up_statuses, record.follow_up_statuses,
                 "follow_up_statuses mismatch for {status}"
             );
-            assert_eq!(parsed.evidence, record.evidence, "evidence mismatch for {status}");
+            assert_eq!(
+                parsed.evidence, record.evidence,
+                "evidence mismatch for {status}"
+            );
         }
         Ok(())
     }
