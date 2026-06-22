@@ -11,6 +11,8 @@ use clap::ValueEnum as _;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct Config {
+    /// ECHO-ONLY: propagated to resolved-plan/profile artifacts but never
+    /// branched on. Selects no behavior; the `profile` field is the live one.
     pub(crate) review_profile: String,
     pub(crate) profile: String,
     pub(crate) repo: RepoConfig,
@@ -125,8 +127,11 @@ pub(crate) struct PolicyError {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct RepoConfig {
+    /// ECHO-ONLY: free-text propagated to the `repo_kind` artifact key; not
+    /// validated against any allowlist and never branched on (#609).
     pub(crate) kind: String,
     pub(crate) ledger: String,
+    /// ECHO-ONLY: diff context comes from DiffContext, not these fields.
     pub(crate) base: String,
     pub(crate) head: String,
 }
@@ -134,9 +139,15 @@ pub(crate) struct RepoConfig {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ReviewConfig {
+    /// ECHO-ONLY: propagated to resolved-plan artifacts but never branched on.
     pub(crate) posting_engine: String,
+    /// INERT: parsed and stored but no non-test code consumes it (#609).
     pub(crate) custom_poster: bool,
+    /// INERT: the name implies security posture but enforces nothing (#609).
+    /// Do NOT rely on this to block standalone-approval findings.
     pub(crate) ban_standalone_approval: bool,
+    /// INERT: the name implies security posture but enforces nothing (#609).
+    /// Do NOT rely on this to require a zero-finding audit.
     pub(crate) require_zero_finding_audit: bool,
     pub(crate) enable_default_lanes: bool,
     pub(crate) github_summary: bool,
@@ -330,6 +341,9 @@ pub(crate) struct RuntimeBudgetsFile {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(default)]
+/// INERT: all three fields are parsed and echoed to artifacts but drive no
+/// behavior (#609). The doc comments suggest these should gate the trusted-repo
+/// path, but they currently do not. See SPEC-0013 for the full liveness table.
 pub(crate) struct TrustedRepo {
     pub(crate) pass_triggers: Vec<String>,
     pub(crate) synchronize: bool,
