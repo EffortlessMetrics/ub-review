@@ -1548,7 +1548,10 @@ mod tests {
         assert!(parse_policy_date("2026/06/03").is_err(), "wrong separator");
         assert!(parse_policy_date("20260603").is_err(), "no separators");
         assert!(parse_policy_date("").is_err(), "empty");
-        assert!(parse_policy_date("2026-13-01").is_err(), "month out of range");
+        assert!(
+            parse_policy_date("2026-13-01").is_err(),
+            "month out of range"
+        );
         assert!(parse_policy_date("2026-06-32").is_err(), "day out of range");
         assert!(parse_policy_date("abcd-06-03").is_err(), "non-numeric year");
         Ok(())
@@ -1977,7 +1980,10 @@ fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
         let created = require_str(item, path, "created")?;
         let review_after = require_str(item, path, "review_after")?;
         let created_date = parse_policy_date(created).with_context(|| {
-            format!("{} exception `{id}` `created` is not YYYY-MM-DD", path.display())
+            format!(
+                "{} exception `{id}` `created` is not YYYY-MM-DD",
+                path.display()
+            )
         })?;
         let review_date = parse_policy_date(review_after).with_context(|| {
             format!(
@@ -1992,11 +1998,17 @@ fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
             );
         }
         if let Some(expires_value) = item.get("expires") {
-            let expires_str = expires_value
-                .as_str()
-                .with_context(|| format!("{} exception `{id}` `expires` is not a string", path.display()))?;
+            let expires_str = expires_value.as_str().with_context(|| {
+                format!(
+                    "{} exception `{id}` `expires` is not a string",
+                    path.display()
+                )
+            })?;
             let expires_date = parse_policy_date(expires_str).with_context(|| {
-                format!("{} exception `{id}` `expires` is not YYYY-MM-DD", path.display())
+                format!(
+                    "{} exception `{id}` `expires` is not YYYY-MM-DD",
+                    path.display()
+                )
             })?;
             if expires_date < review_date {
                 bail!(

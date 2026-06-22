@@ -51,6 +51,18 @@ reason = "RIPR discriminate false-negative (ripr-swarm#1054): predicate probe on
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:2031:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on parse_policy_date's range check in xtask policy-check date validation (#600). The same-file tests parse_policy_date_accepts_valid_yyyy_mm_dd and parse_policy_date_rejects_bad_shapes pin both branches with exact assertions (valid dates return expected triples; bad shapes return Err). Line-keyed id; re-verify the target after any edit to xtask/src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:xtask_src_main.rs:2086:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on epoch_to_ymd's date arithmetic in xtask policy-check date validation (#600). The same-file test epoch_to_ymd_matches_known_dates pins three anchors (epoch 0 = 1970-01-01, 2024-01-01, 2000-03-01) with exact triple assertions. Line-keyed id; re-verify the target after any edit to xtask/src/main.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_gate.rs:59:side_effect"
 owner = "ub-review/core"
 reason = "Discriminate false-negative on moved-not-modified code (ripr-swarm#1054, PR #362 motion): side_effect probe on a GateReason push or informational println in build_gate_outcome/cmd_gate_check, asserted field-by-field by the 19 colocated gate tests (gate_outcome_fail_reasons_always_carry_receipts iterates every reason). The identical code probed clean in src/main.rs before the move. Line-keyed id; re-verify after any edit to gate.rs."
