@@ -301,8 +301,17 @@ max_concurrency = 8
 
 [tools.ripr.gate]
 scope = "on-diff"
-# Temporary: raised from 0 for init.rs extraction (PR #538). ripr finds 295
-# cross-module gaps in the new file but only lists 200 in exposure-gaps.json
-# (max-entries cap); 95 remain unsuppressable via the suppression file.
-# Revert to 0 after merge. Owner: ub-review/core.
-max_new_unsuppressed = 100
+# Strict zero posture restored (PR for #585; previously 100, raised for the
+# init.rs extraction in PR #538 and left unreverted). The cleanup train is
+# complete (step 59); the blanket 100 ceiling no longer has an ongoing
+# justification.
+#
+# Known blocker if a future PR touches src/init.rs: ripr finds ~295 cross-
+# module gaps there but only lists 200 in exposure-gaps.json (max-entries
+# cap), so ~95 cannot be suppressed via the suppression file. That is a ripr
+# tool limitation (ripr-swarm#1053/#1054/#1055 track the related false-
+# negative and cfg(test)-skipping work), not a code defect. A PR that touches
+# init.rs must either wait for the upstream fix or temporarily raise this
+# ceiling with a fresh dated receipt in policy/allow.toml (the #538 pattern).
+# Owner: ub-review/core.
+max_new_unsuppressed = 0
