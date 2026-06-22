@@ -3,6 +3,14 @@ schema_version = 1
 # Durable RIPR suppressions. Suppressed findings stay visible as suppressed;
 # every entry carries owner + reason per the suppression-health contract.
 #
+# Dating obligation: ripr 0.8.0's suppressions schema does not support
+# per-entry created/review_after fields (issue #586 — adding them makes ripr
+# reject the whole file with exit 2, taking down the sensor). The file-level
+# dating obligation (last-reviewed, next-review) is carried by the
+# non-rust-ripr-suppressions receipt in policy/allow.toml, which xtask
+# policy-check validates (review_after/expires warnings). When ripr-swarm
+# lands per-entry dating support, backfill created/review_after on each entry.
+#
 # Ledger history (line-keyed ids rot when src/config.rs moves, ripr-swarm#1053):
 # - 2026-06-07 (instance 1-3): the probe:src_config.rs:40 entry was written
 #   for RepoLane (#342), silently transferred to IssuesConfig (PR #346),
