@@ -37,6 +37,14 @@ finding_id = "probe:src_config.rs:1362:error_path"
 owner = "ub-review/core"
 reason = "Twin of the test-code error_path above (ripr-swarm#1055): toml::from_str(...)? inside the test issues_section_parses_exact_field_defaults. Line-keyed id; re-verify after any edit to config.rs. Rot instance 5 (ripr-swarm#1053): the id was written pre-rustfmt at line 1363 and the formatter moved it - ripr must be the last local check, after fmt."
 
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:774:predicate"
+owner = "ub-review/core"
+created = "2026-06-22"
+review_after = "2026-09-22"
+reason = "RIPR discriminate false-negative (ripr-swarm#1054): predicate probe on the `&& config.profile != \"gh-runner\"` short-circuit in the unknown-profile fallback receipt added for #608. The same-file tests unknown_profile_override_records_policy_error_not_silent_fallback and known_profile_override_records_no_fallback_receipt pin both branches with exact policy_errors assertions (receipt present for the typoed name, absent for the valid name). Line-keyed id; re-verify the target after any edit to config.rs."
+
 # PR #362 (extract gate.rs) - 17 entries from pure code motion: ripr re-probes
 # moved lines as new (no move detection; ripr-swarm#1054 covers the 14
 # production-side probes, ripr-swarm#1055 the 3 test-side probes). The
