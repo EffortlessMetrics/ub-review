@@ -8437,8 +8437,8 @@ mod tests {
         );
         let from_files = vec![
             runtime_profile_from_toml(include_str!("../runtime/gh-runner.toml"))?,
-            runtime_profile_from_toml(include_str!("../configs/runtime/gh-runner-standard.toml"))?,
-            runtime_profile_from_toml(include_str!("../configs/runtime/gh-runner-full.toml"))?,
+            runtime_profile_from_toml(include_str!("../runtime/gh-runner-standard.toml"))?,
+            runtime_profile_from_toml(include_str!("../runtime/gh-runner-full.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx23.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx33.toml"))?,
             runtime_profile_from_toml(include_str!("../runtime/cx43.toml"))?,
@@ -8467,31 +8467,6 @@ mod tests {
         assert_eq!(gh_runner.budgets, standard.budgets);
         assert_eq!(gh_runner.trusted_repo, standard.trusted_repo);
         assert_eq!(gh_runner.tool_timeouts, standard.tool_timeouts);
-        Ok(())
-    }
-
-    #[test]
-    fn runtime_config_presets_match_embedded_profiles_for_shared_names() -> Result<()> {
-        let shared = [
-            (
-                include_str!("../runtime/cx23.toml"),
-                include_str!("../configs/runtime/cx23.toml"),
-            ),
-            (
-                include_str!("../runtime/cx33.toml"),
-                include_str!("../configs/runtime/cx33.toml"),
-            ),
-            (
-                include_str!("../runtime/cx43.toml"),
-                include_str!("../configs/runtime/cx43.toml"),
-            ),
-        ];
-        for (embedded, config) in shared {
-            assert_eq!(
-                serde_json::to_value(runtime_profile_from_toml(embedded)?)?,
-                serde_json::to_value(runtime_profile_from_toml(config)?)?
-            );
-        }
         Ok(())
     }
 

@@ -2,8 +2,8 @@
 
 The Bun review profile lives in `profiles/bun-ub-v0.toml`. Runtime profiles are
 documented in `docs/RUNTIME_PROFILES.md` and encoded as technical presets under
-`runtime/*.toml` and `configs/runtime/*.toml`: `gh-runner`,
-`gh-runner-standard`, `gh-runner-full`, `cx23`, `cx33`, and `cx43`.
+`runtime/*.toml`: `gh-runner`, `gh-runner-standard`, `gh-runner-full`, `cx23`,
+`cx33`, and `cx43`.
 
 Use `--runtime-profile` for box budgets explicitly, while the older `--profile`
 option remains a compatibility alias for those runtime budgets. The action's
