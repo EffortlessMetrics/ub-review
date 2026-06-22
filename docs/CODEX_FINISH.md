@@ -50,7 +50,7 @@ Keep sensors advisory:
 ## Sensor issue rule
 
 If `ub-review` exposes a real gap in a sensor, file it upstream instead of
-papering over it locally:
+papering over it locally (canonical contract + routing table: `docs/specs/UB-REVIEW-SPEC-0016-sensor-upstream-boundary.md`):
 
 | Sensor issue | File in |
 |---|---|

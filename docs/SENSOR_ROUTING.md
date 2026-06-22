@@ -27,7 +27,8 @@ without assuming every repository is Bun/Rust-only.
 
 Sensors are receipts, not local subsystems to fork inside `ub-review`. If a
 real sensor issue blocks the Bun UB lane, file it upstream in the matching
-`*-swarm` repo instead of hiding it behind local glue:
+`*-swarm` repo instead of hiding it behind local glue (canonical contract:
+`docs/specs/UB-REVIEW-SPEC-0016-sensor-upstream-boundary.md`):
 
 | Issue type | Upstream repo |
 |---|---|

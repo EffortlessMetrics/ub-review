@@ -13,7 +13,8 @@
 - No rubber-stamp review language.
 - No fake verification from missing evidence.
 - Sensor defects are filed upstream in the matching `*-swarm` repo instead of
-  silently forked into local `ub-review` behavior.
+  silently forked into local `ub-review` behavior (canonical statement + routing
+  table: `docs/specs/UB-REVIEW-SPEC-0016-sensor-upstream-boundary.md`).
 
 ## Non-goals
 
