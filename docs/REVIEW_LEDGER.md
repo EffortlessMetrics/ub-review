@@ -19,18 +19,19 @@ Both 2026-06-06 contract drifts lived here; check that both sides moved
 together when either side changes:
 
 ```text
-src/main.rs render_follow_up_question_prompt
+src/follow_up_routing.rs render_follow_up_question_prompt
   <-> scripts/verify-bun-review-artifacts.py follow_up_question_prompt
-src/main.rs routed_proof_receipt_excerpt
+src/follow_up_routing.rs routed_proof_receipt_excerpt
   <-> scripts/verify-bun-review-artifacts.py routed_proof_receipt_excerpt
-src/main.rs is_*_noise rules + is_pr_body_artifact_only_observation
+src/noise.rs + src/decision_core.rs is_*_noise rules
+  + is_pr_body_artifact_only_observation
   <-> verifier twins (phrase parity pinned by
       self_test_noise_rule_phrase_parity_with_rust)
-src/main.rs build_orchestrator_plan / build_final_orchestrator_plan
+src/candidate.rs build_orchestrator_plan / build_final_orchestrator_plan
   <-> verifier expected_orchestrator_plan / expected_final_orchestrator_plan
-src/main.rs FinalCompilerInputArtifact (v2 filter contract)
+src/review_compiler.rs FinalCompilerInputArtifact (v2 filter contract)
   <-> verifier require_final_compiler_input
-src/main.rs follow_up_resolved_away_candidate_ids + surface matchers
+src/issue_broker.rs follow_up_resolved_away_candidate_ids + surface matchers
   <-> verifier mirrors (pinned by self-tests)
 schema strings ub-review.<name>.vN in Rust
   <-> exact strings the verifier pins
