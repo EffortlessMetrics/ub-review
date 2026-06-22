@@ -8,7 +8,10 @@ one-sentence next action. Umbrella issues are not worked as written - they
 are converted into one-promise-one-verifier slices. Re-triage whenever a
 bucket-2 item merges.
 
-Tally this pass: 5 closed, 7 narrowed, 15 kept.
+Tally this pass (net-new triage actions at main @ 26bd160, 2026-06-07):
+5 newly-closed, 7 narrowed, 15 kept-this-pass. The body below accumulates
+entries across all passes; the per-line status is the latest known state,
+which may include later closures not part of this pass's net-new count.
 
 ## Closed this pass (receipts on the issues)
 

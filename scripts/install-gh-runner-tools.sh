@@ -91,7 +91,7 @@ case "$bundle" in
     install_cargo_bin tokmd tokmd "$tokmd_version"
     install_cargo_bin cargo-allow cargo-allow "$cargo_allow_version"
     # Pinned so doctor --require-core-tools can detect image/local drift;
-    # versions move together with STANDARD_IMAGE_*_VERSION in src/main.rs
+    # versions move together with STANDARD_IMAGE_*_VERSION in src/post_run_utils.rs
     # (#316 - unpinned installs let the gate-receipt subcommand drift apart).
     install_cargo_bin ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.8.0}"
     install_cargo_bin unsafe-review unsafe-review "${UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4}"
