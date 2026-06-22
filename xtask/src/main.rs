@@ -32,6 +32,10 @@ fn run() -> Result<()> {
             let report = check_policy(&root)?;
             print!("{}", report.inventory());
         }
+        "audit" => {
+            reject_extra_args(args)?;
+            run_cargo_audit(&root)?;
+        }
         "precommit" => {
             let options = PrecommitOptions::parse(args)?;
             let report = run_precommit(&root, options)?;
@@ -50,7 +54,7 @@ fn run() -> Result<()> {
         }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, precommit, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, or help"
             )
         }
     }
@@ -72,6 +76,7 @@ cargo xtask commands
 
   cargo xtask policy-check      parse and validate repo policy receipts
   cargo xtask policy-inventory  print receipt and CI policy counts
+  cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
 
 precommit options
@@ -97,6 +102,65 @@ impl PrecommitOptions {
         }
         Ok(options)
     }
+}
+
+/// Run `cargo audit` to check the dependency tree for RUSTSEC advisories.
+/// Advisory (non-blocking) by default: the function reports findings but does
+/// not bail on them — the repo's cost-discipline doctrine treats supply-chain
+/// advisories as a monitored signal, not a merge gate. A missing `cargo-audit`
+/// install is a notice, not an error, so the xtask stays runnable without it.
+/// See issue #621 / tracker UB-40.
+fn run_cargo_audit(root: &Path) -> Result<()> {
+    let cargo = env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let result = Command::new(&cargo)
+        .arg("audit")
+        .arg("--locked")
+        .current_dir(root)
+        .output();
+    let output = match result {
+        Ok(output) => output,
+        Err(error) => {
+            eprintln!(
+                "notice: could not invoke `cargo audit` ({error}); \
+                 install with `cargo install cargo-audit` to enable RUSTSEC monitoring"
+            );
+            return Ok(());
+        }
+    };
+    // cargo-audit exits 0 if clean, non-zero if vulnerabilities found. We
+    // surface the output either way but do not propagate the failure — the
+    // caller decides whether to act. Print stdout/stderr verbatim so the
+    // advisory detail is visible.
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stdout.is_empty() {
+        print!("{stdout}");
+    }
+    if !stderr.is_empty() {
+        eprint!("{stderr}");
+    }
+    // Detect "command not found" style errors (older cargo emits to stderr).
+    let combined = format!("{stdout}{stderr}");
+    if combined.contains("no such command: `audit`")
+        || combined.contains("no such command: `cargo-audit`")
+        || combined.contains("is not installed")
+    {
+        eprintln!(
+            "notice: `cargo audit` is not installed; \
+             run `cargo install cargo-audit` to enable RUSTSEC monitoring"
+        );
+        return Ok(());
+    }
+    if !output.status.success() {
+        eprintln!(
+            "warning: cargo audit reported vulnerabilities (exit {:?}); \
+             review the output above and update affected dependencies",
+            output.status.code()
+        );
+    } else {
+        println!("cargo audit: no advisories found");
+    }
+    Ok(())
 }
 
 #[derive(Debug)]
