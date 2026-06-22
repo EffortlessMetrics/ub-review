@@ -8955,6 +8955,45 @@ mod tests {
     }
 
     #[test]
+    fn ub_review_example_config_loads_clean_and_demonstrates_schema() -> Result<()> {
+        // The nominal consumer example (configs/ub-review.example.toml) must
+        // parse with zero policy_errors, like the test-pinned full-feature
+        // reference (unsafe_review_swarm). See #607 / tracker UB-24.
+        let mut config = Config::from_toml_with_policy_receipts(include_str!(
+            "../configs/ub-review.example.toml"
+        ))?;
+        config.merge_defaults();
+        assert!(
+            config.policy_errors.is_empty(),
+            "example config should not rely on stripped or deprecated keys: {:?}",
+            config.policy_errors
+        );
+        assert_eq!(config.review_profile, "bun-ub-v0");
+        assert_eq!(config.profile, "gh-runner");
+        assert_eq!(config.gate.required_check, "ub-review/gate");
+        assert_eq!(
+            config.gate.post_review_on,
+            vec!["opened".to_owned(), "ready_for_review".to_owned()]
+        );
+        // The example demonstrates the ripr gate threshold and the disabled-
+        // tool set; the three richest surfaces ([[lanes]], [[proof.required]],
+        // [providers]) are shown as commented documentation, so this config
+        // exercises none of them by value — that is intentional (lean first
+        // pass) and the comments point at unsafe-review-swarm for the full
+        // feature set.
+        assert!(config.lanes.is_empty(), "example keeps lanes commented");
+        assert!(
+            config.proof.required.is_empty(),
+            "example keeps required proof commented"
+        );
+        assert!(
+            config.providers.policy.is_empty(),
+            "example keeps provider policy commented"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn work_queue_includes_baseline_sensor_packet_policies() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
         config.merge_defaults();
