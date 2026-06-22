@@ -766,6 +766,24 @@ impl Config {
         if config.profile == "auto" {
             config.profile = BoxState::detect()?.suggested_profile();
         }
+        // Surface an unknown profile name as a receipt rather than letting the
+        // silent gh-runner fallback in selected_profile() hide a typo. A
+        // misspelled profile (e.g. "gh-runner-fuill") would otherwise silently
+        // downgrade a gh-runner-full repo to gh-runner budgets with no signal.
+        if !config.profiles.contains_key(&config.profile)
+            && config.profile != "gh-runner"
+            && config.profiles.contains_key("gh-runner")
+        {
+            config.policy_errors.push(PolicyError {
+                section: "profile".to_owned(),
+                detail: format!(
+                    "unknown profile `{}` not in the profiles map; falling back to `gh-runner` \
+                     silently. Correct the profile name or declare [profiles.{}] to remove this \
+                     receipt.",
+                    config.profile, config.profile
+                ),
+            });
+        }
         Ok(config)
     }
 
@@ -1683,6 +1701,61 @@ mod tests {
             vec!["EffortlessMetrics/ripr-swarm".to_owned()]
         );
         assert_eq!(explicit.issues.open_cap, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_profile_override_records_policy_error_not_silent_fallback() -> anyhow::Result<()> {
+        // A typoed profile name (e.g. "gh-runner-fuill") must surface as a
+        // PolicyError receipt, not silently downgrade to gh-runner budgets.
+        // See issue #608 / tracker UB-25.
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("config.toml");
+        std::fs::write(&path, "profile = \"auto\"\n")?;
+        let config = Config::load_or_default(&path, Some("gh-runner-fuill"))?;
+        assert_eq!(
+            config.profile, "gh-runner-fuill",
+            "the typoed name is retained for the receipt"
+        );
+        let profile_receipts: Vec<&PolicyError> = config
+            .policy_errors
+            .iter()
+            .filter(|error| error.section == "profile")
+            .collect();
+        assert_eq!(
+            profile_receipts.len(),
+            1,
+            "exactly one profile-fallback receipt expected"
+        );
+        let detail = &profile_receipts[0].detail;
+        assert!(
+            detail.contains("gh-runner-fuill"),
+            "receipt must name the unknown profile: {detail}"
+        );
+        assert!(
+            detail.contains("gh-runner"),
+            "receipt must name the fallback: {detail}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn known_profile_override_records_no_fallback_receipt() -> anyhow::Result<()> {
+        // A valid profile name produces no fallback receipt.
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().join("config.toml");
+        std::fs::write(&path, "profile = \"auto\"\n")?;
+        let config = Config::load_or_default(&path, Some("gh-runner-full"))?;
+        assert_eq!(config.profile, "gh-runner-full");
+        let profile_receipts: Vec<&PolicyError> = config
+            .policy_errors
+            .iter()
+            .filter(|error| error.section == "profile")
+            .collect();
+        assert!(
+            profile_receipts.is_empty(),
+            "known profile must not produce a fallback receipt"
+        );
         Ok(())
     }
 }
