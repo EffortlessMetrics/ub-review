@@ -11385,3 +11385,105 @@ kind = "exposure_gap"
 finding_id = "probe:src_post_command.rs:405:return_value"
 owner = "ub-review/core"
 reason = "Line-keyed cross-module gap after post_command.rs extraction (ripr-swarm#1053). Classification: no_static_path. Re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7241:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7242:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7266:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7267:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7279:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7330:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7351:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7363:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7404:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7409:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7446:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7447:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7464:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7544:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7549:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7596:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:7615:error_path"
+owner = "ub-review/tests"
+reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."

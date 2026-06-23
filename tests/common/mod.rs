@@ -530,7 +530,10 @@ pub fn base64_standard_for_test(bytes: &[u8]) -> String {
     encoded
 }
 
-pub fn tool_entry<'a>(artifact: &'a serde_json::Value, tool_id: &str) -> Result<&'a serde_json::Value> {
+pub fn tool_entry<'a>(
+    artifact: &'a serde_json::Value,
+    tool_id: &str,
+) -> Result<&'a serde_json::Value> {
     json_array_field(artifact, "tools")?
         .iter()
         .find(|tool| tool["id"] == tool_id)
