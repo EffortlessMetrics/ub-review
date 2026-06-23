@@ -1,5 +1,9 @@
 schema_version = 1
-summary_check = "PR Gate Success"
+# The actual required check is `ub-review/gate` (the workflow name). The
+# seed contract originally named a future `PR Gate Success` summary check
+# that does not exist yet; updated to match reality (#602). If a summary
+# check is ever implemented, update this field to its name.
+summary_check = "ub-review/gate"
 
 # Seed contract only. Existing GitHub workflow checks remain authoritative until
 # a summary workflow and policy checker land.
@@ -31,3 +35,10 @@ when = "main/nightly/label"
 target_required = false
 implemented = false
 reason = "Coverage, mutation, fuzz, feature matrix, Docker, and release dry-run lanes stay strong but are label or schedule gated."
+
+[[lane]]
+id = "release-dry-run"
+when = "release/label"
+target_required = false
+implemented = false
+reason = "Release archive build + checksum verification without publishing; referenced by the release risk pack (#603)."

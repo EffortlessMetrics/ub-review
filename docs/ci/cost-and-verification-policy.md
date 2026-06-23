@@ -16,6 +16,14 @@ deterministic, Rust-native proof that is cheap enough to run continuously.
 Default PR lanes should be sharp autofocus. Main, nightly, release, and labeled
 lanes should preserve the high-resolution scan.
 
+> **Current enforcement state (#601):** the label-gating model described below
+> is documented but **not yet wired into the workflow**. The actual posture is
+> that `ub-review/gate` runs with `allow-heavy: 'true'` on every PR push (no
+> label gate). The LEM budget bands, risk packs, and label-selectable deep
+> lanes in `policy/ci-{budget,lanes,risk-packs}.toml` are seed contracts.
+> Wiring label-gating is a future product decision; until then, this document
+> describes the target posture, not the enforced one.
+
 ## PR-time posture
 
 The target default PR posture is:
