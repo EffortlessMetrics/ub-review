@@ -1,7 +1,15 @@
 //! Sensor command building: argv construction for tokmd and generic
 //! sensors (cleanup train step 35, pure code motion from sensors/mod.rs).
 
-use super::*;
+// Explicit imports replacing the former `use super::*;` glob (#598 first
+// module). Each symbol resolves directly to its defining module via the
+// crate-root re-exports.
+use crate::{
+    CARGO_ALLOW_NATIVE_LEDGER, Plan, SensorPlan, SensorSubcommand, TOKMD_ANALYZE_PRESET,
+    UNSAFE_REVIEW_OUTPUT_SUBDIR, absolute_path, changed_paths_for_tokmd_context,
+    is_github_workflow_file,
+};
+use std::path::Path;
 
 pub(crate) fn sensor_run_input_path(sensor_dir: &Path, name: &str) -> String {
     sensor_dir

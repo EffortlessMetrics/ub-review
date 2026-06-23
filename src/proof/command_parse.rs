@@ -2,7 +2,11 @@
 //! arg validation, filter extraction, and build command spec derivation
 //! (cleanup train step 36, pure code motion from proof/tasks.rs).
 
-use super::*;
+// Explicit imports replacing the former `use super::*;` glob (#598 second
+// module). Types from proof siblings + functions from the crate root.
+use super::{FocusedBuildTask, ProofCommandSpec};
+use crate::{has_shell_control_token, is_repo_relative_path, normalize_repo_path};
+use std::collections::BTreeMap;
 
 pub(crate) fn is_bun_focused_test_file(path: &str) -> bool {
     let path = normalize_repo_path(path);
