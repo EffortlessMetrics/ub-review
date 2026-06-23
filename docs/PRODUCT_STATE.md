@@ -82,10 +82,14 @@ Lane definitions and width routing exist. Sufficient terminal state
 works. Late receipt routing reconciles receipts back into candidates.
 Per-comment and same-claim dedupe is implemented.
 
-**Gap:** Cross-lane contradiction reconciliation is open
-(issue-ledger #147 narrowed). Diff-irrelevance is guidance text, not
-enforced routing. Cross-section body dedupe is doctrine but not
-structurally implemented.
+**Status:** Cross-lane contradiction detection and suppression are DONE
+(issue-ledger #147 closed by PRs #459/#460: surface-aware lane gating +
+explicit cross-lane conflict receipts). Conflicted findings are suppressed
+and replaced with a verification question. Deeper evidence-precedence
+adjudication (resolving which side wins using proof receipts) is the open
+next step (tracked in epic #655, milestone 4). Diff-irrelevance is
+guidance text, not enforced routing. Cross-section body dedupe is doctrine
+but not structurally implemented.
 
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
@@ -144,7 +148,7 @@ trackers, not ub-review rollout infrastructure.
 
 ## Modularization status (June 2026)
 
-`main.rs` reduced from 45,547 to 27,633 lines (-39.3%) via the cleanup train
+`main.rs` reduced from 45,547 to 21,764 lines (-52.2%) via the cleanup train
 (one pure-code-motion extraction per PR, reached step 59). All merged clean
 through the ub-review gate.
 
@@ -171,7 +175,11 @@ extracting when next touched:
   max_new_unsuppressed` raises during the cleanup train (now reverted to 0,
   see #585) and still constrains any future large-file extraction or new
   module addition.
-- **Issue-ledger #343:** no published `v0.1.0` release yet (`v0` and `v0.1`
-  tags exist for early pinning; no GitHub Release archive).
-- **Issue-ledger #147:** cross-lane contradiction reconciliation narrowed
+- **Issue-ledger #343:** no published `v0.1.0` GitHub Release yet (`v0` and `v0.1`
+  tags exist for early commit-SHA pinning; no release archive with checksums).
+  The release runbook (#629) documents the cut procedure; the tag is pending
+  maintainer authorization.
+- **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
+  and suppression shipped; deeper evidence-precedence adjudication is the open
+  next step (epic #655 milestone 4).
   but not closed.
