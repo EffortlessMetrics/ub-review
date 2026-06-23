@@ -24408,7 +24408,6 @@ index 1111111..2222222 100644
     #[path = "ci_audit_tests.rs"]
     mod ci_audit_tests;
 
-
     #[test]
     fn ci_repo_slug_parses_remote_url_variants() {
         assert_eq!(
