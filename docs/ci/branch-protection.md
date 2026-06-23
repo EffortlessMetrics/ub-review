@@ -1,10 +1,13 @@
 # Branch protection
 
-Target branch protection should require one summary check after the summary
-workflow exists:
+Branch protection requires exactly one check: the `ub-review/gate` workflow
+(#602 — updated from the seed-contract name `PR Gate Success`, which never
+existed as a GitHub check). This is the single meta-gate that runs the
+deterministic tool registry plus the `[[proof.required]]` tasks and produces
+the `gate_outcome.v1` verdict.
 
 ```text
-PR Gate Success
+ub-review/gate
 ```
 
 Do not require individual matrix leaves such as macOS, Windows, coverage,

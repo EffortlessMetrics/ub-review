@@ -15,6 +15,14 @@ generated files, executable files, workflows, process spawning, network access,
 dependency surfaces, expensive CI lanes, `ripr` suppressions, and
 `unsafe-review` suppressions.
 
+> **Current coverage state (#604):** `allow.toml` currently covers Clippy
+> suppressions and non-Rust files (9 receipt categories). The remaining
+> surfaces (generated files, executables, process spawning, network access,
+> dependency surfaces, expensive CI lanes) have **no receipts yet** because
+> the repo has no retained debt on those surfaces. When debt accrues, add a
+> receipt per the schema; until then, "no receipt" means "no exception
+> needed," not "exception missing."
+
 ## Ledgers
 
 The seed policy kit lives under `policy/`:
