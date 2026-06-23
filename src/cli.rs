@@ -201,7 +201,9 @@ pub(crate) enum RunMode {
     #[value(alias = "review-direct")]
     ReviewByok,
     IntelligentCi,
+    #[value(hide = true)]
     AgentInvestigate,
+    #[value(hide = true)]
     AgentPatch,
 }
 
