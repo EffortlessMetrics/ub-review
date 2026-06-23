@@ -4,12 +4,14 @@
 
 use crate::*;
 
-/// Execute the run-written broker plan, never fatally: read
-/// review/issue_broker_plan.json next to the review payload, perform the
-/// remote duplicate search and opens for `attempt` entries, and write
-/// issue_broker_results artifacts. Absent plan means the broker was not
-/// opted in; any whole-step error is reported to stderr and swallowed
-/// (broker outcomes never affect the gate or the post exit code).
+/// Read the unsafe-review repair queue into a per-card map.
+///
+/// Loads `repair-queue.json` from the unsafe-review output dir (the relative
+/// path the gate artifacts record under `repair_queue`, defaulting to
+/// `repair-queue.json`), flattens its buckets, and keys entries by `card_id`
+/// (the first entry seen for a card wins). A missing file or parse error
+/// yields an empty map: the repair queue is optional evidence and its absence
+/// is never fatal.
 pub(crate) fn read_repair_queue(
     sensor_dir: &Path,
     artifacts: &UnsafeReviewGate,
