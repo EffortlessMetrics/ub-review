@@ -3500,7 +3500,7 @@ fn write_review_artifacts(
     // Shadow-mode impact plan (Order 1 of epic #655). Emitted but not consumed
     // for execution decisions. As Order 1 PRs land, this gains Cargo metadata,
     // package resolution, reverse-dep closure, and candidate ranking.
-    let shadow_impact_plan = build_shadow_impact_plan(&diff.changed_files);
+    let shadow_impact_plan = build_shadow_impact_plan(root, &diff.changed_files);
     write_impact_plan(out, &shadow_impact_plan)?;
     if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
