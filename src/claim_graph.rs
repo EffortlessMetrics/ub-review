@@ -383,6 +383,152 @@ fn subjects_overlap(a: &str, b: &str) -> bool {
     shared >= 3 // Same threshold as observation_build.rs
 }
 
+/// Result of adjudicating a conflict between two claims.
+/// (Order 4 of epic #655.)
+#[cfg(test)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+pub(crate) struct AdjudicationResult {
+    /// The winning claim ID (if any).
+    pub(crate) winner: Option<String>,
+    /// The losing claim ID (if any).
+    pub(crate) loser: Option<String>,
+    /// How the conflict was resolved.
+    pub(crate) resolution: ConflictResolution,
+    /// Human-readable explanation of why this side won (or why it's inconclusive).
+    pub(crate) reason: String,
+    /// The new state for the winning claim.
+    pub(crate) winner_state: ClaimState,
+    /// The new state for the losing claim.
+    pub(crate) loser_state: ClaimState,
+}
+
+/// Adjudicate a conflict between two claims using evidence precedence.
+///
+/// Precedence ladder (lower = stronger):
+///   ProofReceipt(0) > ValidatedFact(1) > ExactCitation(2)
+///   > ModelInterpretation(3) > UnsupportedAssertion(4)
+///
+/// Rules:
+/// - If one side has strictly higher-precedence evidence, that side wins.
+///   Winner → Confirmed, Loser → Refuted.
+/// - If both sides have equal-precedence evidence, the conflict stays
+///   Unresolved and both claims become Conflicted.
+/// - If neither side has any evidence, both become Inconclusive.
+/// - A ProofReceipt always wins (ResolvedByProof); other wins are
+///   ResolvedByPrecedence.
+#[cfg(test)]
+pub(crate) fn adjudicate_conflict(claim_a: &ClaimNode, claim_b: &ClaimNode) -> AdjudicationResult {
+    let best_a = best_evidence_class(&claim_a.supporting_evidence);
+    let best_b = best_evidence_class(&claim_b.supporting_evidence);
+
+    match (best_a, best_b) {
+        (None, None) => AdjudicationResult {
+            winner: None,
+            loser: None,
+            resolution: ConflictResolution::SurfacedAsVerification,
+            reason: "Neither claim has supporting evidence; both remain inconclusive".to_owned(),
+            winner_state: ClaimState::Inconclusive,
+            loser_state: ClaimState::Inconclusive,
+        },
+        (Some(a_class), None) => AdjudicationResult {
+            winner: Some(claim_a.id.clone()),
+            loser: Some(claim_b.id.clone()),
+            resolution: resolution_for_class(&a_class),
+            reason: format!(
+                "Claim `{}` wins: has {} evidence; claim `{}` has none",
+                claim_a.id,
+                a_class.key(),
+                claim_b.id
+            ),
+            winner_state: ClaimState::Confirmed,
+            loser_state: ClaimState::Refuted,
+        },
+        (None, Some(b_class)) => AdjudicationResult {
+            winner: Some(claim_b.id.clone()),
+            loser: Some(claim_a.id.clone()),
+            resolution: resolution_for_class(&b_class),
+            reason: format!(
+                "Claim `{}` wins: has {} evidence; claim `{}` has none",
+                claim_b.id,
+                b_class.key(),
+                claim_a.id
+            ),
+            winner_state: ClaimState::Confirmed,
+            loser_state: ClaimState::Refuted,
+        },
+        (Some(a_class), Some(b_class)) => {
+            let a_prec = a_class.precedence();
+            let b_prec = b_class.precedence();
+            if a_prec < b_prec {
+                AdjudicationResult {
+                    winner: Some(claim_a.id.clone()),
+                    loser: Some(claim_b.id.clone()),
+                    resolution: resolution_for_class(&a_class),
+                    reason: format!(
+                        "Claim `{}` wins: {} (precedence {}) beats {} (precedence {})",
+                        claim_a.id,
+                        a_class.key(),
+                        a_prec,
+                        b_class.key(),
+                        b_prec
+                    ),
+                    winner_state: ClaimState::Confirmed,
+                    loser_state: ClaimState::Refuted,
+                }
+            } else if b_prec < a_prec {
+                AdjudicationResult {
+                    winner: Some(claim_b.id.clone()),
+                    loser: Some(claim_a.id.clone()),
+                    resolution: resolution_for_class(&b_class),
+                    reason: format!(
+                        "Claim `{}` wins: {} (precedence {}) beats {} (precedence {})",
+                        claim_b.id,
+                        b_class.key(),
+                        b_prec,
+                        a_class.key(),
+                        a_prec
+                    ),
+                    winner_state: ClaimState::Confirmed,
+                    loser_state: ClaimState::Refuted,
+                }
+            } else {
+                // Equal precedence — cannot resolve by precedence alone
+                AdjudicationResult {
+                    winner: None,
+                    loser: None,
+                    resolution: ConflictResolution::Unresolved,
+                    reason: format!(
+                        "Both claims have {} evidence (precedence {}); \
+                         cannot resolve by precedence alone",
+                        a_class.key(),
+                        a_prec
+                    ),
+                    winner_state: ClaimState::Conflicted,
+                    loser_state: ClaimState::Conflicted,
+                }
+            }
+        }
+    }
+}
+
+/// Get the highest-precedence (lowest ordinal) evidence class from a list.
+#[cfg(test)]
+fn best_evidence_class(evidence: &[EvidenceRef]) -> Option<EvidenceClass> {
+    evidence
+        .iter()
+        .map(|e| e.class.clone())
+        .min_by_key(|c| c.precedence())
+}
+
+/// Determine the ConflictResolution based on the winning evidence class.
+#[cfg(test)]
+fn resolution_for_class(class: &EvidenceClass) -> ConflictResolution {
+    match class {
+        EvidenceClass::ProofReceipt => ConflictResolution::ResolvedByProof,
+        _ => ConflictResolution::ResolvedByPrecedence,
+    }
+}
+
 /// Write the claim graph as a shadow artifact.
 pub(crate) fn write_claim_graph(out: &Path, graph: &ClaimGraph) -> anyhow::Result<()> {
     let path = out.join("review").join("claim_graph.json");
@@ -514,5 +660,92 @@ mod tests {
             "reverse-dependent-package"
         );
         assert_eq!(RelevanceKind::Unresolved.key(), "unresolved");
+    }
+
+    fn make_claim(id: &str, lane: &str, evidence_classes: &[EvidenceClass]) -> ClaimNode {
+        ClaimNode {
+            id: id.to_owned(),
+            subject: format!("test claim {id}"),
+            source_lane: lane.to_owned(),
+            state: ClaimState::NeedsEvidence,
+            supporting_evidence: evidence_classes
+                .iter()
+                .map(|c| EvidenceRef {
+                    class: c.clone(),
+                    reference: format!("ref-{id}"),
+                    detail: format!("evidence for {id}"),
+                })
+                .collect(),
+            contradicting_evidence: Vec::new(),
+            relevance: RelevancePath {
+                kind: RelevanceKind::ChangedLine,
+                explanation: "test".to_owned(),
+            },
+            severity: "medium".to_owned(),
+        }
+    }
+
+    #[test]
+    fn adjudicate_proof_beats_model_interpretation() {
+        let a = make_claim("a", "lane-a", &[EvidenceClass::ProofReceipt]);
+        let b = make_claim("b", "lane-b", &[EvidenceClass::ModelInterpretation]);
+        let result = adjudicate_conflict(&a, &b);
+        assert_eq!(result.winner.as_deref(), Some("a"));
+        assert_eq!(result.loser.as_deref(), Some("b"));
+        assert_eq!(result.resolution, ConflictResolution::ResolvedByProof);
+        assert_eq!(result.winner_state, ClaimState::Confirmed);
+        assert_eq!(result.loser_state, ClaimState::Refuted);
+    }
+
+    #[test]
+    fn adjudicate_citation_beats_unsupported() {
+        let a = make_claim("a", "lane-a", &[EvidenceClass::ExactCitation]);
+        let b = make_claim("b", "lane-b", &[EvidenceClass::UnsupportedAssertion]);
+        let result = adjudicate_conflict(&a, &b);
+        assert_eq!(result.winner.as_deref(), Some("a"));
+        assert_eq!(result.resolution, ConflictResolution::ResolvedByPrecedence);
+    }
+
+    #[test]
+    fn adjudicate_equal_precedence_stays_conflicted() {
+        let a = make_claim("a", "lane-a", &[EvidenceClass::ModelInterpretation]);
+        let b = make_claim("b", "lane-b", &[EvidenceClass::ModelInterpretation]);
+        let result = adjudicate_conflict(&a, &b);
+        assert!(result.winner.is_none());
+        assert_eq!(result.resolution, ConflictResolution::Unresolved);
+        assert_eq!(result.winner_state, ClaimState::Conflicted);
+        assert_eq!(result.loser_state, ClaimState::Conflicted);
+    }
+
+    #[test]
+    fn adjudicate_no_evidence_on_either_is_inconclusive() {
+        let a = make_claim("a", "lane-a", &[]);
+        let b = make_claim("b", "lane-b", &[]);
+        let result = adjudicate_conflict(&a, &b);
+        assert!(result.winner.is_none());
+        assert_eq!(
+            result.resolution,
+            ConflictResolution::SurfacedAsVerification
+        );
+        assert_eq!(result.winner_state, ClaimState::Inconclusive);
+    }
+
+    #[test]
+    fn adjudicate_best_evidence_wins_not_first_listed() {
+        // Claim A has ModelInterpretation + ProofReceipt; B has ExactCitation.
+        // A's best evidence is ProofReceipt (precedence 0), which beats B's
+        // ExactCitation (precedence 2).
+        let a = make_claim(
+            "a",
+            "lane-a",
+            &[
+                EvidenceClass::ModelInterpretation,
+                EvidenceClass::ProofReceipt,
+            ],
+        );
+        let b = make_claim("b", "lane-b", &[EvidenceClass::ExactCitation]);
+        let result = adjudicate_conflict(&a, &b);
+        assert_eq!(result.winner.as_deref(), Some("a"));
+        assert_eq!(result.resolution, ConflictResolution::ResolvedByProof);
     }
 }
