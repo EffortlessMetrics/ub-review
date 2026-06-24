@@ -47,6 +47,8 @@ mod providers;
 pub(crate) use providers::*;
 mod init;
 pub(crate) use init::*;
+mod claim_graph;
+pub(crate) use claim_graph::*;
 mod impact_plan;
 pub(crate) use impact_plan::*;
 mod model_api;
@@ -3510,6 +3512,11 @@ fn write_review_artifacts(
         let v2_path = out.join("review").join("proof_requests_v2.json");
         std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
     }
+    // Shadow-mode claim graph (Order 3 of epic #655). Emitted but not consumed
+    // for review compilation — the compiler still uses raw observations and
+    // candidates. Future PRs populate claims, evidence, conflicts, and states.
+    let shadow_claim_graph = build_shadow_claim_graph();
+    write_claim_graph(out, &shadow_claim_graph)?;
     if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
             event_log,
