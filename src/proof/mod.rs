@@ -48,6 +48,109 @@ pub(crate) struct ProofRequest {
     pub(crate) status: String,
 }
 
+/// Typed proof intent (Order 2 of epic #655). Replaces the command-string +
+/// cost-classification model with a semantic kind that the executor maps to
+/// allowlisted repository-approved commands. Models submit typed intents;
+/// the broker resolves them to commands. A model cannot submit arbitrary shell.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) enum ProofKind {
+    FocusedTest,
+    FocusedBuild,
+    BasePlusTests,
+    SanitizerWitness,
+    MutationWitness,
+    MiriWitness,
+    SourceRouteProbe,
+    ExternalCheck,
+}
+
+impl ProofKind {
+    pub(crate) fn key(&self) -> &'static str {
+        match self {
+            ProofKind::FocusedTest => "focused-test",
+            ProofKind::FocusedBuild => "focused-build",
+            ProofKind::BasePlusTests => "base-plus-tests",
+            ProofKind::SanitizerWitness => "sanitizer-witness",
+            ProofKind::MutationWitness => "mutation-witness",
+            ProofKind::MiriWitness => "miri-witness",
+            ProofKind::SourceRouteProbe => "source-route-probe",
+            ProofKind::ExternalCheck => "external-check",
+        }
+    }
+}
+
+/// A typed proof request (v2). Carries semantic intent instead of a raw
+/// command string. The executor adapter (Order 2 PR 2) maps the kind + target
+/// to a repository-approved command template.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct ProofRequestV2 {
+    pub(crate) schema: String,
+    pub(crate) id: String,
+    pub(crate) kind: ProofKind,
+    /// The test target, module, or symbol the proof targets.
+    pub(crate) target: String,
+    /// Claim IDs this proof would confirm or refute.
+    pub(crate) claim_ids: Vec<String>,
+    /// Lane IDs that requested this proof.
+    pub(crate) requested_by: Vec<String>,
+    /// What outcome would confirm vs refute the associated claims.
+    pub(crate) expected_interpretation: String,
+    pub(crate) priority: String,
+    pub(crate) timeout_sec: u64,
+    pub(crate) status: String,
+}
+
+/// Classify an existing v1 ProofRequest into a ProofKind for the v2 shadow.
+/// This is a best-effort mapping from cost + command pattern to typed intent.
+pub(crate) fn classify_proof_kind(cost: &str, command: &str) -> ProofKind {
+    match cost {
+        "focused-test" => {
+            if command.contains("base") || command.contains("red-green") {
+                ProofKind::BasePlusTests
+            } else {
+                ProofKind::FocusedTest
+            }
+        }
+        "focused-build" => ProofKind::FocusedBuild,
+        "manual" => {
+            if command.contains("asan") || command.contains("sanitizer") {
+                ProofKind::SanitizerWitness
+            } else if command.contains("mutants") || command.contains("mutation") {
+                ProofKind::MutationWitness
+            } else if command.contains("miri") {
+                ProofKind::MiriWitness
+            } else {
+                ProofKind::ExternalCheck
+            }
+        }
+        _ => ProofKind::ExternalCheck,
+    }
+}
+
+/// Convert v1 proof requests into v2 typed-intent shadow requests.
+/// Writes review/proof_requests_v2.json as a shadow artifact (Order 2 PR 1).
+pub(crate) fn build_v2_shadow_requests(v1_requests: &[ProofRequest]) -> Vec<ProofRequestV2> {
+    v1_requests
+        .iter()
+        .map(|req| {
+            let kind = classify_proof_kind(&req.cost, &req.command);
+            let kind_key = kind.key();
+            ProofRequestV2 {
+                schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+                id: format!("{}-v2", req.id),
+                kind,
+                target: format!("[{}] {}", kind_key, req.command),
+                claim_ids: Vec::new(),
+                requested_by: req.requested_by.clone(),
+                expected_interpretation: String::new(),
+                priority: if req.required { "high" } else { "medium" }.to_owned(),
+                timeout_sec: req.timeout_sec,
+                status: req.status.clone(),
+            }
+        })
+        .collect()
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ProofRequestGroup {
     pub(crate) schema: String,
@@ -242,4 +345,86 @@ pub(crate) fn proof_policy_diff_class_matches(diff_classes: &[String], diff_clas
         let candidate = normalize_policy_selector(candidate);
         matches!(candidate.as_str(), "*" | "any" | "all") || candidate == diff_class
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn proof_kind_keys_are_stable() {
+        assert_eq!(ProofKind::FocusedTest.key(), "focused-test");
+        assert_eq!(ProofKind::FocusedBuild.key(), "focused-build");
+        assert_eq!(ProofKind::BasePlusTests.key(), "base-plus-tests");
+        assert_eq!(ProofKind::SanitizerWitness.key(), "sanitizer-witness");
+        assert_eq!(ProofKind::MutationWitness.key(), "mutation-witness");
+        assert_eq!(ProofKind::MiriWitness.key(), "miri-witness");
+        assert_eq!(ProofKind::SourceRouteProbe.key(), "source-route-probe");
+        assert_eq!(ProofKind::ExternalCheck.key(), "external-check");
+    }
+
+    #[test]
+    fn classify_proof_kind_maps_focused_test() {
+        assert_eq!(
+            classify_proof_kind("focused-test", "cargo test --locked"),
+            ProofKind::FocusedTest
+        );
+        assert_eq!(
+            classify_proof_kind("focused-test", "bun test base+tests"),
+            ProofKind::BasePlusTests
+        );
+    }
+
+    #[test]
+    fn classify_proof_kind_maps_heavy_witnesses() {
+        assert_eq!(
+            classify_proof_kind("manual", "cargo-mutants --in-place"),
+            ProofKind::MutationWitness
+        );
+        assert_eq!(
+            classify_proof_kind("manual", "RUSTFLAGS=-Zsanitizer=address cargo test"),
+            ProofKind::SanitizerWitness
+        );
+        assert_eq!(
+            classify_proof_kind("manual", "cargo +nightly miri test"),
+            ProofKind::MiriWitness
+        );
+    }
+
+    #[test]
+    fn classify_proof_kind_defaults_to_external_check() {
+        assert_eq!(
+            classify_proof_kind("unknown", "some random command"),
+            ProofKind::ExternalCheck
+        );
+    }
+
+    #[test]
+    fn v2_shadow_preserves_id_and_requesters() {
+        let v1 = ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "req-42".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["lane-a".to_owned()],
+            command: "cargo test --locked".to_owned(),
+            reason: "test".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: true,
+            status: "requested".to_owned(),
+        };
+        let v2_list = build_v2_shadow_requests(&[v1]);
+        assert_eq!(v2_list.len(), 1);
+        let v2 = &v2_list[0];
+        assert_eq!(v2.id, "req-42-v2");
+        assert_eq!(v2.kind, ProofKind::FocusedTest);
+        assert_eq!(v2.requested_by, vec!["lane-a".to_owned()]);
+        assert_eq!(v2.priority, "high");
+        assert_eq!(v2.schema, "ub-review.proof_request.v2");
+    }
+
+    #[test]
+    fn v2_shadow_handles_empty_requests() {
+        assert!(build_v2_shadow_requests(&[]).is_empty());
+    }
 }

@@ -3502,6 +3502,14 @@ fn write_review_artifacts(
     // package resolution, reverse-dep closure, and candidate ranking.
     let shadow_impact_plan = build_shadow_impact_plan(root, &diff.changed_files);
     write_impact_plan(out, &shadow_impact_plan)?;
+    // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
+    // existing v1 requests to typed intents. Emitted but not consumed for
+    // execution — the broker still uses v1 command-string requests.
+    let v2_shadow_requests = build_v2_shadow_requests(&proof_requests);
+    if !v2_shadow_requests.is_empty() {
+        let v2_path = out.join("review").join("proof_requests_v2.json");
+        std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
+    }
     if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
             event_log,
