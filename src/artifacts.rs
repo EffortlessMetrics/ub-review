@@ -25,6 +25,7 @@ pub(crate) const FINAL_COMPILER_INPUT_V2_SCHEMA: &str = "ub-review.final_compile
 pub(crate) const FILL_LEDGER_SCHEMA: &str = "ub-review.fill_ledger.v1";
 pub(crate) const FLOOR_TREND_SCHEMA: &str = "ub-review.floor_trend.v1";
 pub(crate) const FOLLOW_UP_EVIDENCE_SCHEMA: &str = "ub-review.follow_up_evidence.v1";
+pub(crate) const IMPACT_PLAN_SCHEMA: &str = "ub-review.impact_plan.v1";
 pub(crate) const FOLLOW_UP_OUTPUT_SCHEMA: &str = "ub-review.follow_up_output.v1";
 pub(crate) const FOLLOW_UP_QUESTION_PACKET_SCHEMA: &str = "ub-review.follow_up_question_packet.v1";
 pub(crate) const FOLLOW_UP_QUESTION_SCHEMA: &str = "ub-review.follow_up_question.v1";
