@@ -392,3 +392,270 @@ pub(crate) fn focused_build_resource_lease(
         command: Some(format!("head: {}", task.command)),
     }
 }
+
+/// Execute a single sanitizer witness proof task (Order 2 PR 3 of epic #655).
+/// Resolves ProofKind::SanitizerWitness via the executor adapter, runs the
+/// approved command under a resource lease, and produces a ProofReceipt.
+#[cfg(test)]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_sanitizer_witness_with_runner<F>(
+    _out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    dry_run: bool,
+    target: &str,
+    timeout_sec: u64,
+    nightly_available: bool,
+    mut runner: F,
+) -> Result<(ProofReceipt, ResourceLease)>
+where
+    F: FnMut(&[String], &BTreeMap<String, String>, u64) -> Result<CommandStatus>,
+{
+    let lease_budget = proof_lease_budget(profile)?;
+    let resource_lease = ResourceLease {
+        schema: RESOURCE_LEASE_SCHEMA.to_owned(),
+        id: format!("sanitizer-lease-{}", target.len()),
+        kind: "sanitizer-witness".to_owned(),
+        consumer: format!("sanitizer-witness:{target}"),
+        status: "granted".to_owned(),
+        reason: "sanitizer witness lease granted".to_owned(),
+        cpu: lease_budget.cpu,
+        memory_mb: lease_budget.memory_mb,
+        disk_mb: lease_budget.disk_mb,
+        timeout_sec,
+        network: lease_budget.network,
+        scratch: lease_budget.scratch,
+        worktree: None,
+        command: None,
+    };
+
+    if dry_run {
+        return Ok(skip_receipt(
+            &resource_lease,
+            diff,
+            target,
+            "skipped_profile",
+            "dry-run; sanitizer witness not executed",
+        ));
+    }
+
+    if !nightly_available {
+        return Ok(skip_receipt(
+            &resource_lease,
+            diff,
+            target,
+            "skipped_nightly",
+            "nightly Rust not available; sanitizer witness requires nightly",
+        ));
+    }
+
+    let resolved = resolve_proof_command(&ProofKind::SanitizerWitness, target, true);
+    let Some(cmd) = resolved else {
+        return Ok(skip_receipt(
+            &resource_lease,
+            diff,
+            target,
+            "skipped_unresolved",
+            "executor adapter could not resolve sanitizer-witness intent",
+        ));
+    };
+
+    let env_map: BTreeMap<String, String> = cmd.env.into_iter().collect();
+    let status = runner(&cmd.argv, &env_map, timeout_sec)?;
+
+    let (result, cmd_status, reason) = if status.timed_out {
+        (
+            "timed_out",
+            "timed_out",
+            format!("timed out after {timeout_sec}s"),
+        )
+    } else if status.success {
+        ("sanitizer_clean", "passed", "no UB detected".to_owned())
+    } else {
+        (
+            "sanitizer_ub_detected",
+            "failed",
+            "potential UB or runtime error".to_owned(),
+        )
+    };
+
+    Ok((
+        ProofReceipt {
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: format!("sanitizer-receipt-{}", target.len()),
+            kind: "sanitizer-witness".to_owned(),
+            base: diff.base.clone(),
+            head: diff.head.clone(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: Vec::new(),
+            request_ids: Vec::new(),
+            commands: vec![ProofCommandReceipt {
+                side: "head".to_owned(),
+                command: cmd.argv.join(" "),
+                env: env_map,
+                status: cmd_status.to_owned(),
+                exit_code: status.exit_code,
+                timed_out: status.timed_out,
+                timeout_sec,
+                duration_ms: status.duration_ms,
+                stdout: String::new(),
+                stderr: String::new(),
+                reason,
+            }],
+            result: result.to_owned(),
+            reason: format!("sanitizer witness: {result}"),
+        },
+        resource_lease,
+    ))
+}
+
+#[cfg(test)]
+fn skip_receipt(
+    lease_base: &ResourceLease,
+    diff: &DiffContext,
+    target: &str,
+    result: &str,
+    reason: &str,
+) -> (ProofReceipt, ResourceLease) {
+    let mut lease = lease_base.clone();
+    if result == "skipped_nightly" || result == "skipped_unresolved" {
+        lease.status = "absent".to_owned();
+    } else {
+        lease.status = "skipped_profile".to_owned();
+    }
+    lease.reason = reason.to_owned();
+    (
+        ProofReceipt {
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: format!("sanitizer-receipt-{}", target.len()),
+            kind: "sanitizer-witness".to_owned(),
+            base: diff.base.clone(),
+            head: diff.head.clone(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: Vec::new(),
+            request_ids: Vec::new(),
+            commands: Vec::new(),
+            result: result.to_owned(),
+            reason: reason.to_owned(),
+        },
+        lease,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CommandStatus, DiffContext, DiffFlags};
+
+    fn test_diff() -> DiffContext {
+        DiffContext {
+            base: "HEAD~1".to_owned(),
+            head: "HEAD".to_owned(),
+            changed_files: vec!["src/main.rs".to_owned()],
+            patch: String::new(),
+            flags: DiffFlags {
+                source_changed: true,
+                rust_changed: true,
+                rust_tests_changed: false,
+                workflow_changed: false,
+                dependency_changed: false,
+                shell_changed: false,
+                cpp_changed: false,
+                docs_only: false,
+                unsafe_or_native_risk: true,
+            },
+            diff_class: crate::DiffClass::SourceUb,
+        }
+    }
+
+    fn runner_clean(
+        _argv: &[String],
+        _env: &BTreeMap<String, String>,
+        _timeout: u64,
+    ) -> Result<CommandStatus> {
+        Ok(CommandStatus {
+            exit_code: Some(0),
+            timed_out: false,
+            success: true,
+            reason: "clean".to_owned(),
+            duration_ms: 1000,
+        })
+    }
+
+    fn runner_asan(
+        _argv: &[String],
+        _env: &BTreeMap<String, String>,
+        _timeout: u64,
+    ) -> Result<CommandStatus> {
+        Ok(CommandStatus {
+            exit_code: Some(1),
+            timed_out: false,
+            success: false,
+            reason: "ASAN detected heap-buffer-overflow".to_owned(),
+            duration_ms: 2000,
+        })
+    }
+
+    #[test]
+    fn sanitizer_skips_when_no_nightly() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff = test_diff();
+        let profile = Profile::default();
+        let (receipt, lease) = run_sanitizer_witness_with_runner(
+            temp.path(),
+            &diff,
+            &profile,
+            false,
+            "test_target",
+            60,
+            false,
+            runner_clean,
+        )?;
+        assert_eq!(receipt.result, "skipped_nightly");
+        assert_eq!(lease.status, "absent");
+        Ok(())
+    }
+
+    #[test]
+    fn sanitizer_records_clean_when_passes() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff = test_diff();
+        let profile = Profile::default();
+        let (receipt, lease) = run_sanitizer_witness_with_runner(
+            temp.path(),
+            &diff,
+            &profile,
+            false,
+            "test_target",
+            60,
+            true,
+            runner_clean,
+        )?;
+        assert_eq!(receipt.result, "sanitizer_clean");
+        assert_eq!(lease.status, "granted");
+        assert_eq!(receipt.commands.len(), 1);
+        assert_eq!(receipt.commands[0].status, "passed");
+        Ok(())
+    }
+
+    #[test]
+    fn sanitizer_records_ub_when_fails() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff = test_diff();
+        let profile = Profile::default();
+        let (receipt, _lease) = run_sanitizer_witness_with_runner(
+            temp.path(),
+            &diff,
+            &profile,
+            false,
+            "test_target",
+            60,
+            true,
+            runner_asan,
+        )?;
+        assert_eq!(receipt.result, "sanitizer_ub_detected");
+        assert_eq!(receipt.commands[0].status, "failed");
+        assert!(receipt.commands[0].reason.contains("UB"));
+        Ok(())
+    }
+}
