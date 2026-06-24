@@ -51,6 +51,94 @@ pub(crate) struct ClaimNode {
     pub(crate) severity: String,
 }
 
+/// Result of checking whether the convergence loop should continue.
+/// (Order 7 of epic #655.)
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConvergenceDecision {
+    /// Whether to continue to the next round.
+    pub(crate) should_continue: bool,
+    /// Human-readable reason for the decision.
+    pub(crate) reason: String,
+}
+
+/// Decide whether the follow-up convergence loop should continue.
+///
+/// The loop continues only when ALL of:
+/// - Material unresolved claims exist (Hypothesized, NeedsEvidence, Conflicted)
+/// - New evidence arrived in the previous round (at least one state transition)
+/// - Model/proof budget remains
+/// - Maximum rounds not exceeded
+///
+/// The loop stops when ANY of:
+/// - All material claims resolved (Confirmed, Refuted, Parked, Dropped)
+/// - No new evidence arrived (no state transition in previous round)
+/// - Budget exhausted
+/// - Maximum rounds exceeded
+#[cfg(test)]
+pub(crate) fn should_continue_convergence(
+    claims: &[ClaimNode],
+    previous_states: &[(String, ClaimState)],
+    budget_remaining: usize,
+    rounds_completed: usize,
+    max_rounds: usize,
+) -> ConvergenceDecision {
+    // Check budget.
+    if budget_remaining == 0 {
+        return ConvergenceDecision {
+            should_continue: false,
+            reason: "Model/proof budget exhausted".to_owned(),
+        };
+    }
+
+    // Check max rounds.
+    if rounds_completed >= max_rounds {
+        return ConvergenceDecision {
+            should_continue: false,
+            reason: format!("Maximum rounds ({max_rounds}) reached"),
+        };
+    }
+
+    // Check for unresolved material claims.
+    let has_unresolved = claims.iter().any(|c| {
+        matches!(
+            c.state,
+            ClaimState::Hypothesized | ClaimState::NeedsEvidence | ClaimState::Conflicted
+        )
+    });
+    if !has_unresolved {
+        return ConvergenceDecision {
+            should_continue: false,
+            reason: "All material claims resolved".to_owned(),
+        };
+    }
+
+    // Check for state transitions (evidence produced meaningful change).
+    let current_states: std::collections::HashMap<&str, &ClaimState> =
+        claims.iter().map(|c| (c.id.as_str(), &c.state)).collect();
+    let transitions = previous_states
+        .iter()
+        .filter(|(id, prev_state)| {
+            current_states
+                .get(id.as_str())
+                .map_or(false, |curr| *curr != prev_state)
+        })
+        .count();
+    if transitions == 0 && rounds_completed > 0 {
+        return ConvergenceDecision {
+            should_continue: false,
+            reason: "No state transitions in previous round; convergence reached".to_owned(),
+        };
+    }
+
+    ConvergenceDecision {
+        should_continue: true,
+        reason: format!(
+            "{transitions} state transition(s) in round {rounds_completed}; {budget_remaining} budget remaining",
+        ),
+    }
+}
+
 /// The adjudication state of a claim.
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) enum ClaimState {
@@ -726,6 +814,82 @@ mod tests {
             "reverse-dependent-package"
         );
         assert_eq!(RelevanceKind::Unresolved.key(), "unresolved");
+    }
+
+    #[test]
+    fn convergence_stops_when_budget_exhausted() {
+        let decision = should_continue_convergence(&[], &[], 0, 0, 3);
+        assert!(!decision.should_continue);
+        assert!(decision.reason.contains("budget"));
+    }
+
+    #[test]
+    fn convergence_stops_at_max_rounds() {
+        let decision = should_continue_convergence(&[], &[], 10, 3, 3);
+        assert!(!decision.should_continue);
+        assert!(decision.reason.contains("Maximum rounds"));
+    }
+
+    #[test]
+    fn convergence_stops_when_all_resolved() {
+        let claims = vec![ClaimNode {
+            id: "c1".to_owned(),
+            subject: "test".to_owned(),
+            source_lane: "lane".to_owned(),
+            state: ClaimState::Confirmed,
+            supporting_evidence: Vec::new(),
+            contradicting_evidence: Vec::new(),
+            relevance: RelevancePath {
+                kind: RelevanceKind::ChangedLine,
+                explanation: "test".to_owned(),
+            },
+            severity: "low".to_owned(),
+        }];
+        let decision = should_continue_convergence(&claims, &[], 10, 0, 3);
+        assert!(!decision.should_continue);
+        assert!(decision.reason.contains("resolved"));
+    }
+
+    #[test]
+    fn convergence_continues_with_unresolved_and_transitions() {
+        let claims = vec![ClaimNode {
+            id: "c1".to_owned(),
+            subject: "test".to_owned(),
+            source_lane: "lane".to_owned(),
+            state: ClaimState::NeedsEvidence,
+            supporting_evidence: Vec::new(),
+            contradicting_evidence: Vec::new(),
+            relevance: RelevancePath {
+                kind: RelevanceKind::ChangedLine,
+                explanation: "test".to_owned(),
+            },
+            severity: "high".to_owned(),
+        }];
+        let prev = vec![("c1".to_owned(), ClaimState::Hypothesized)];
+        let decision = should_continue_convergence(&claims, &prev, 10, 1, 3);
+        assert!(decision.should_continue);
+        assert!(decision.reason.contains("transition"));
+    }
+
+    #[test]
+    fn convergence_stops_when_no_state_change() {
+        let claims = vec![ClaimNode {
+            id: "c1".to_owned(),
+            subject: "test".to_owned(),
+            source_lane: "lane".to_owned(),
+            state: ClaimState::NeedsEvidence,
+            supporting_evidence: Vec::new(),
+            contradicting_evidence: Vec::new(),
+            relevance: RelevancePath {
+                kind: RelevanceKind::ChangedLine,
+                explanation: "test".to_owned(),
+            },
+            severity: "high".to_owned(),
+        }];
+        let prev = vec![("c1".to_owned(), ClaimState::NeedsEvidence)];
+        let decision = should_continue_convergence(&claims, &prev, 10, 2, 3);
+        assert!(!decision.should_continue);
+        assert!(decision.reason.contains("No state transitions"));
     }
 
     #[test]
