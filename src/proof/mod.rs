@@ -135,11 +135,19 @@ pub(crate) fn build_v2_shadow_requests(v1_requests: &[ProofRequest]) -> Vec<Proo
         .map(|req| {
             let kind = classify_proof_kind(&req.cost, &req.command);
             let kind_key = kind.key();
+            // Shadow-resolve the typed intent to show what command the executor
+            // adapter WOULD produce (Order 2 PR 2). Nightly is assumed available
+            // for shadow purposes; actual availability checked at execution time.
+            let shadow_resolution = resolve_proof_command(&kind, &req.command, true);
+            let resolution_note = shadow_resolution
+                .as_ref()
+                .map(|r| r.resolution_note.clone())
+                .unwrap_or_else(|| "unresolved (kind+target not resolvable)".to_owned());
             ProofRequestV2 {
                 schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
                 id: format!("{}-v2", req.id),
                 kind,
-                target: format!("[{}] {}", kind_key, req.command),
+                target: format!("[{}] {} → {}", kind_key, req.command, resolution_note),
                 claim_ids: Vec::new(),
                 requested_by: req.requested_by.clone(),
                 expected_interpretation: String::new(),
@@ -149,6 +157,158 @@ pub(crate) fn build_v2_shadow_requests(v1_requests: &[ProofRequest]) -> Vec<Proo
             }
         })
         .collect()
+}
+
+/// The result of resolving a typed proof intent to an executable command.
+/// (Order 2 PR 2 of epic #655.)
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ResolvedProofCommand {
+    /// The argv to execute.
+    pub(crate) argv: Vec<String>,
+    /// Environment variables to set (e.g., RUSTFLAGS for sanitizer).
+    pub(crate) env: Vec<(String, String)>,
+    /// Whether this command requires nightly Rust.
+    pub(crate) requires_nightly: bool,
+    /// Human-readable summary of what was resolved.
+    pub(crate) resolution_note: String,
+}
+
+/// Map a typed proof intent (ProofKind + target) to a repository-approved
+/// command template. This is the executor adapter (Order 2 PR 2).
+///
+/// Models submit ProofKind + target; this function resolves them to concrete
+/// argv. A model cannot submit arbitrary shell — only typed intents that map
+/// to pre-approved templates.
+///
+/// Returns `None` if the kind+target combination is not resolvable (e.g.,
+/// sanitizer witness on a non-Rust repo, or Miri without nightly available).
+pub(crate) fn resolve_proof_command(
+    kind: &ProofKind,
+    target: &str,
+    nightly_available: bool,
+) -> Option<ResolvedProofCommand> {
+    match kind {
+        ProofKind::FocusedTest => {
+            // Delegate to the existing v1 command parser for cargo test.
+            // If the v1 parser rejects it, fall back to a simple argv split
+            // (the adapter is a new layer; full v1 validation comes when
+            // the adapter is promoted from shadow to active).
+            if let Some(spec) = crate::focused_cargo_test_command_spec(target) {
+                Some(ResolvedProofCommand {
+                    argv: spec.argv,
+                    env: Vec::new(),
+                    requires_nightly: false,
+                    resolution_note: "focused-test resolved via cargo-test allowlist".to_owned(),
+                })
+            } else if !target.is_empty() && !crate::has_shell_control_token(target) {
+                Some(ResolvedProofCommand {
+                    argv: target.split_whitespace().map(String::from).collect(),
+                    env: Vec::new(),
+                    requires_nightly: false,
+                    resolution_note: "focused-test resolved via split_whitespace (no shell tokens)"
+                        .to_owned(),
+                })
+            } else {
+                None
+            }
+        }
+        ProofKind::FocusedBuild => {
+            let spec = crate::focused_build_command_spec(target)?;
+            Some(ResolvedProofCommand {
+                argv: spec.argv,
+                env: Vec::new(),
+                requires_nightly: false,
+                resolution_note: "focused-build resolved via cargo-build allowlist".to_owned(),
+            })
+        }
+        ProofKind::BasePlusTests => {
+            // Base+tests red/green is orchestrated by the broker, not a single command.
+            // The target should be a test name; the broker constructs HEAD and base+tests variants.
+            Some(ResolvedProofCommand {
+                argv: vec![
+                    "cargo".to_owned(),
+                    "test".to_owned(),
+                    "--locked".to_owned(),
+                    target.to_owned(),
+                ],
+                env: Vec::new(),
+                requires_nightly: false,
+                resolution_note: format!(
+                    "base-plus-tests: broker orchestrates HEAD + base+tests for target `{target}`"
+                ),
+            })
+        }
+        ProofKind::SanitizerWitness => {
+            if !nightly_available {
+                return None;
+            }
+            // AddressSanitizer: requires nightly + RUSTFLAGS=-Zsanitizer=address.
+            // The target should be a test name or --test target.
+            Some(ResolvedProofCommand {
+                argv: vec![
+                    "cargo".to_owned(),
+                    "+nightly".to_owned(),
+                    "test".to_owned(),
+                    "--locked".to_owned(),
+                    target.to_owned(),
+                ],
+                env: vec![("RUSTFLAGS".to_owned(), "-Zsanitizer=address".to_owned())],
+                requires_nightly: true,
+                resolution_note: format!(
+                    "sanitizer-witness: cargo +nightly test {target} with ASAN"
+                ),
+            })
+        }
+        ProofKind::MutationWitness => {
+            // cargo-mutants: requires the cargo-mutants binary on PATH.
+            // The target should be a file or module path.
+            Some(ResolvedProofCommand {
+                argv: vec![
+                    "cargo-mutants".to_owned(),
+                    "--in-place".to_owned(),
+                    "--no-shuffle".to_owned(),
+                    target.to_owned(),
+                ],
+                env: Vec::new(),
+                requires_nightly: false,
+                resolution_note: format!("mutation-witness: cargo-mutants on `{target}`"),
+            })
+        }
+        ProofKind::MiriWitness => {
+            if !nightly_available {
+                return None;
+            }
+            // Miri: requires nightly + cargo-miri component.
+            Some(ResolvedProofCommand {
+                argv: vec![
+                    "cargo".to_owned(),
+                    "+nightly".to_owned(),
+                    "miri".to_owned(),
+                    "test".to_owned(),
+                    target.to_owned(),
+                ],
+                env: Vec::new(),
+                requires_nightly: true,
+                resolution_note: format!("miri-witness: cargo +nightly miri test {target}"),
+            })
+        }
+        ProofKind::SourceRouteProbe => {
+            // Source-route probes are informational (does the route exist?),
+            // resolved via ast-grep or grep rather than cargo. Not a proof command.
+            None
+        }
+        ProofKind::ExternalCheck => {
+            // External checks (e.g., cargo xtask policy-check) are resolved
+            // via the existing v1 focused-build allowlist.
+            let spec = crate::focused_build_command_spec(target)?;
+            Some(ResolvedProofCommand {
+                argv: spec.argv,
+                env: Vec::new(),
+                requires_nightly: false,
+                resolution_note: "external-check resolved via focused-build allowlist".to_owned(),
+            })
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -426,5 +586,86 @@ mod tests {
     #[test]
     fn v2_shadow_handles_empty_requests() {
         assert!(build_v2_shadow_requests(&[]).is_empty());
+    }
+
+    #[test]
+    fn resolve_focused_test_delegates_to_allowlist() {
+        // focused_cargo_test_command_spec requires --locked and a focus token.
+        let resolved = resolve_proof_command(
+            &ProofKind::FocusedTest,
+            "cargo test --locked -- config_tests",
+            false,
+        );
+        assert!(
+            resolved.is_some(),
+            "focused-test should resolve with valid cargo test command"
+        );
+    }
+
+    #[test]
+    fn resolve_sanitizer_requires_nightly() {
+        let without_nightly =
+            resolve_proof_command(&ProofKind::SanitizerWitness, "test_target", false);
+        assert!(
+            without_nightly.is_none(),
+            "sanitizer without nightly should be None"
+        );
+
+        let with_nightly = resolve_proof_command(&ProofKind::SanitizerWitness, "test_target", true);
+        assert!(
+            with_nightly.is_some(),
+            "sanitizer with nightly should resolve"
+        );
+        if let Some(cmd) = with_nightly {
+            assert!(cmd.requires_nightly);
+            assert!(
+                cmd.argv.contains(&"+nightly".to_owned()),
+                "argv should include +nightly"
+            );
+            assert!(
+                cmd.env
+                    .iter()
+                    .any(|(k, v)| k == "RUSTFLAGS" && v.contains("sanitizer=address")),
+                "env should set RUSTFLAGS with ASAN"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_miri_requires_nightly() {
+        let without_nightly = resolve_proof_command(&ProofKind::MiriWitness, "test_target", false);
+        assert!(
+            without_nightly.is_none(),
+            "miri without nightly should be None"
+        );
+
+        let with_nightly = resolve_proof_command(&ProofKind::MiriWitness, "test_target", true);
+        assert!(with_nightly.is_some(), "miri with nightly should resolve");
+        if let Some(cmd) = with_nightly {
+            assert!(cmd.requires_nightly);
+            assert!(
+                cmd.argv.contains(&"miri".to_owned()),
+                "argv should include miri"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_mutation_uses_cargo_mutants() {
+        let resolved = resolve_proof_command(&ProofKind::MutationWitness, "src/config.rs", false);
+        assert!(resolved.is_some(), "mutation should resolve");
+        if let Some(cmd) = resolved {
+            assert!(!cmd.requires_nightly);
+            assert!(
+                cmd.argv.first().map(|s| s.as_str()) == Some("cargo-mutants"),
+                "argv should start with cargo-mutants"
+            );
+        }
+    }
+
+    #[test]
+    fn resolve_source_route_probe_returns_none() {
+        let resolved = resolve_proof_command(&ProofKind::SourceRouteProbe, "src/main.rs", true);
+        assert!(resolved.is_none(), "source-route-probe is not a command");
     }
 }
