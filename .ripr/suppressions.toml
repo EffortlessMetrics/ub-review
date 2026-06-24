@@ -11487,3 +11487,21 @@ kind = "exposure_gap"
 finding_id = "probe:tests_cli.rs:7615:error_path"
 owner = "ub-review/tests"
 reason = "RIPR test-code false-negative (ripr-swarm#1055): error_path probe on a bail! in the fake-server/shared-helper test infrastructure (#613, tests/common/mod.rs). The bail! guards against malformed HTTP requests or missing test fixtures; the integration tests exercise the real curl path. Line-keyed id; re-verify after edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:150:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on the reverse-dependency closure boolean logic in the impact planner (#662). The same-file tests shadow_impact_plan_populates_candidates_for_source_changes and shadow_impact_plan_no_candidates_for_docs_only pin both branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:156:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on the reverse-dependency closure boolean logic in the impact planner (#662). The same-file tests shadow_impact_plan_populates_candidates_for_source_changes and shadow_impact_plan_no_candidates_for_docs_only pin both branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:179:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on the reverse-dependency closure boolean logic in the impact planner (#662). The same-file tests shadow_impact_plan_populates_candidates_for_source_changes and shadow_impact_plan_no_candidates_for_docs_only pin both branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
