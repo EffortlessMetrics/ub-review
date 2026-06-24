@@ -11535,3 +11535,165 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_broker.rs:655:error_path"
 owner = "ub-review/core"
 reason = "RIPR false-negative (ripr-swarm#1055): error_path probe on a bail! in the sanitizer witness test runner (#666). The same-file tests sanitizer_records_clean_when_passes and sanitizer_records_ub_when_fails pin both branches with exact assertions. Line-keyed id; re-verify after edits to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:301:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:302:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:304:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:305:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:308:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:310:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:313:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:315:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:319:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:320:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:321:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:324:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:327:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:328:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:329:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:332:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:333:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:335:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:336:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:341:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:343:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:344:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:345:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:356:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:359:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:360:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_claim_graph.rs:362:side_effect"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
