@@ -11505,3 +11505,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_impact_plan.rs:179:predicate"
 owner = "ub-review/core"
 reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on the reverse-dependency closure boolean logic in the impact planner (#662). The same-file tests shadow_impact_plan_populates_candidates_for_source_changes and shadow_impact_plan_no_candidates_for_docs_only pin both branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:177:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on impact planner logic (Order 1, epic #655). The same-file tests pin the branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_impact_plan.rs:398:predicate"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on impact planner logic (Order 1, epic #655). The same-file tests pin the branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
