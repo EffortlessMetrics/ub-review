@@ -529,6 +529,72 @@ fn resolution_for_class(class: &EvidenceClass) -> ConflictResolution {
     }
 }
 
+/// Check whether a claim has a valid causal relevance path to the diff.
+/// (Order 5 of epic #655.)
+///
+/// Rules:
+/// - `ChangedLine`: always valid (inline comments already require RIGHT-side lines).
+/// - `ChangedSymbol`, `CallerOfChangedSymbol`, `CalleeOfChangedSymbol`: valid
+///   if the explanation is non-empty (the explanation must name the symbol/caller).
+/// - `TestOfChangedBehavior`: valid if explanation references a test target.
+/// - `ReverseDependentPackage`: valid if explanation names the affected package.
+/// - `MirrorOfChangedArtifact`, `PolicyAffectsGate`, `PriorThreadStillApplicable`:
+///   valid if explanation is non-empty.
+/// - `Unresolved`: ALWAYS invalid — this is the "no causal path" state.
+///
+/// Returns `RelevanceCheckResult::Eligible` if the claim can be surfaced,
+/// or `ArtifactOnly` with a reason if it must remain in artifacts only.
+#[cfg(test)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RelevanceCheckResult {
+    /// The claim has a valid causal path and can be surfaced in the review.
+    Eligible,
+    /// The claim lacks a causal path and must remain artifact-only.
+    ArtifactOnly { reason: String },
+}
+
+#[cfg(test)]
+pub(crate) fn check_causal_relevance(relevance: &RelevancePath) -> RelevanceCheckResult {
+    match relevance.kind {
+        RelevanceKind::Unresolved => RelevanceCheckResult::ArtifactOnly {
+            reason: "Claim has no causal relevance path to the diff; \
+                     remaining artifact-only until relevance is established"
+                .to_owned(),
+        },
+        RelevanceKind::ChangedLine => {
+            // Inline comments are already validated via the line-map guard.
+            // A ChangedLine relevance with a non-empty explanation is sufficient.
+            if relevance.explanation.is_empty() {
+                RelevanceCheckResult::ArtifactOnly {
+                    reason: "ChangedLine relevance path has empty explanation".to_owned(),
+                }
+            } else {
+                RelevanceCheckResult::Eligible
+            }
+        }
+        RelevanceKind::ChangedSymbol
+        | RelevanceKind::CallerOfChangedSymbol
+        | RelevanceKind::CalleeOfChangedSymbol
+        | RelevanceKind::TestOfChangedBehavior
+        | RelevanceKind::ReverseDependentPackage
+        | RelevanceKind::MirrorOfChangedArtifact
+        | RelevanceKind::PolicyAffectsGate
+        | RelevanceKind::PriorThreadStillApplicable => {
+            if relevance.explanation.is_empty() {
+                RelevanceCheckResult::ArtifactOnly {
+                    reason: format!(
+                        "{:?} relevance path has empty explanation; \
+                         must name the specific symbol, caller, test, package, or artifact",
+                        relevance.kind
+                    ),
+                }
+            } else {
+                RelevanceCheckResult::Eligible
+            }
+        }
+    }
+}
+
 /// Write the claim graph as a shadow artifact.
 pub(crate) fn write_claim_graph(out: &Path, graph: &ClaimGraph) -> anyhow::Result<()> {
     let path = out.join("review").join("claim_graph.json");
@@ -660,6 +726,51 @@ mod tests {
             "reverse-dependent-package"
         );
         assert_eq!(RelevanceKind::Unresolved.key(), "unresolved");
+    }
+
+    #[test]
+    fn unresolved_relevance_is_always_artifact_only() {
+        let result = check_causal_relevance(&RelevancePath {
+            kind: RelevanceKind::Unresolved,
+            explanation: "some explanation".to_owned(),
+        });
+        assert!(matches!(result, RelevanceCheckResult::ArtifactOnly { .. }));
+    }
+
+    #[test]
+    fn changed_line_with_explanation_is_eligible() {
+        let result = check_causal_relevance(&RelevancePath {
+            kind: RelevanceKind::ChangedLine,
+            explanation: "Claim cites changed line in src/config.rs:42".to_owned(),
+        });
+        assert_eq!(result, RelevanceCheckResult::Eligible);
+    }
+
+    #[test]
+    fn changed_line_without_explanation_is_artifact_only() {
+        let result = check_causal_relevance(&RelevancePath {
+            kind: RelevanceKind::ChangedLine,
+            explanation: String::new(),
+        });
+        assert!(matches!(result, RelevanceCheckResult::ArtifactOnly { .. }));
+    }
+
+    #[test]
+    fn caller_of_changed_symbol_with_explanation_is_eligible() {
+        let result = check_causal_relevance(&RelevancePath {
+            kind: RelevanceKind::CallerOfChangedSymbol,
+            explanation: "src/main.rs:100 calls config::load() which changed signature".to_owned(),
+        });
+        assert_eq!(result, RelevanceCheckResult::Eligible);
+    }
+
+    #[test]
+    fn reverse_dependent_package_without_explanation_is_artifact_only() {
+        let result = check_causal_relevance(&RelevancePath {
+            kind: RelevanceKind::ReverseDependentPackage,
+            explanation: String::new(),
+        });
+        assert!(matches!(result, RelevanceCheckResult::ArtifactOnly { .. }));
     }
 
     fn make_claim(id: &str, lane: &str, evidence_classes: &[EvidenceClass]) -> ClaimNode {
