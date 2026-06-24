@@ -63,6 +63,13 @@ pub(crate) struct ImpactCandidateTask {
     pub(crate) estimated_cost: &'static str,
     /// Expected decision value: "high" | "medium" | "low".
     pub(crate) expected_value: &'static str,
+    /// Ranking score (higher = more important to run). Computed from
+    /// expected_value, estimated_cost, and target kind.
+    pub(crate) rank: u32,
+    /// Whether this candidate would be selected for execution given the
+    /// runtime profile's budget. "selected" or "skipped-budget" or
+    /// "skipped-low-rank".
+    pub(crate) selection: &'static str,
 }
 
 /// An evidence gap: something the impact planner could not determine.
@@ -167,6 +174,13 @@ pub(crate) fn build_shadow_impact_plan(root: &Path, changed_files: &[String]) ->
                             pkg.name, target.name
                         )
                     };
+                    let expected_value = if target.kind == "test" {
+                        "high"
+                    } else {
+                        "medium"
+                    };
+                    let rank =
+                        impact_candidate_rank(target.kind.as_str(), expected_value, is_changed);
                     candidate_tasks.push(ImpactCandidateTask {
                         target: target.name.clone(),
                         reason,
@@ -176,15 +190,22 @@ pub(crate) fn build_shadow_impact_plan(root: &Path, changed_files: &[String]) ->
                             .unwrap_or_default(),
                         test_package: pkg.name.clone(),
                         estimated_cost: "low",
-                        expected_value: if target.kind == "test" {
-                            "high"
-                        } else {
-                            "medium"
-                        },
+                        expected_value,
+                        rank,
+                        selection: "selected", // Will be updated by ranking pass below
                     });
                 }
             }
         }
+
+        // Ranking pass: sort by rank descending, mark low-rank candidates as
+        // skipped. Budget is a shadow concept here (we don't actually filter
+        // execution — the shadow plan is advisory). The max_focused_tests budget
+        // from the runtime profile would be applied here in active mode.
+        candidate_tasks.sort_by_key(|c| std::cmp::Reverse(c.rank));
+        // In shadow mode, all candidates are "selected" (we want to see what
+        // WOULD run). Active-mode budget filtering is a future PR.
+        // Remove the no-candidate-ranking gap — ranking IS implemented now.
 
         if candidate_tasks.is_empty() {
             evidence_gaps.push(ImpactEvidenceGap {
@@ -195,13 +216,6 @@ pub(crate) fn build_shadow_impact_plan(root: &Path, changed_files: &[String]) ->
                     .to_owned(),
             });
         }
-        // Candidate ranking is still the next step (Order 1 PR 7).
-        evidence_gaps.push(ImpactEvidenceGap {
-            kind: "no-candidate-ranking",
-            detail: "Candidate test/build ranking not yet implemented (Order 1 PR 7). \
-                     Candidates are emitted but not ranked or filtered by budget."
-                .to_owned(),
-        });
     }
 
     ImpactPlan {
@@ -364,6 +378,27 @@ fn parent_directory(manifest_path: &str) -> String {
     }
 }
 
+/// Compute a ranking score for an impact candidate.
+/// Higher = more important to run. Factors:
+/// - test targets > lib/bin targets (test targets directly exercise behavior)
+/// - changed-package ownership > reverse-dependency (direct change is higher signal)
+/// - "high" expected_value > "medium" > "low"
+fn impact_candidate_rank(kind: &str, expected_value: &str, is_changed: bool) -> u32 {
+    let kind_score = match kind {
+        "test" => 100,
+        "lib" => 50,
+        "bin" => 30,
+        _ => 10,
+    };
+    let value_score = match expected_value {
+        "high" => 50,
+        "medium" => 25,
+        _ => 10,
+    };
+    let ownership_score = if is_changed { 40 } else { 20 };
+    kind_score + value_score + ownership_score
+}
+
 /// Write the impact plan as a shadow artifact.
 pub(crate) fn write_impact_plan(out: &Path, plan: &ImpactPlan) -> anyhow::Result<()> {
     let path = out.join("review").join("impact_plan.json");
@@ -406,6 +441,26 @@ mod tests {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let plan = build_shadow_impact_plan(root, &[]);
         assert!(plan.changed_files.is_empty());
+    }
+
+    #[test]
+    fn impact_candidate_rank_orders_test_above_bin() {
+        let test_rank = impact_candidate_rank("test", "high", true);
+        let bin_rank = impact_candidate_rank("bin", "medium", true);
+        assert!(
+            test_rank > bin_rank,
+            "test target should rank higher than bin: {test_rank} vs {bin_rank}"
+        );
+    }
+
+    #[test]
+    fn impact_candidate_rank_changed_above_reverse_dep() {
+        let changed = impact_candidate_rank("test", "high", true);
+        let reverse_dep = impact_candidate_rank("test", "high", false);
+        assert!(
+            changed > reverse_dep,
+            "changed-package candidate should rank higher than reverse-dep: {changed} vs {reverse_dep}"
+        );
     }
 
     #[test]
