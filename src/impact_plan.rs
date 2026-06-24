@@ -125,7 +125,8 @@ mod tests {
 
     #[test]
     fn shadow_impact_plan_records_changed_files_and_gaps() {
-        let plan = build_shadow_impact_plan(&["src/config.rs".to_owned(), "src/gate.rs".to_owned()]);
+        let plan =
+            build_shadow_impact_plan(&["src/config.rs".to_owned(), "src/gate.rs".to_owned()]);
         assert_eq!(plan.schema, "ub-review.impact_plan.v1");
         assert_eq!(plan.changed_files.len(), 2);
         assert!(plan.changed_packages.is_empty());
