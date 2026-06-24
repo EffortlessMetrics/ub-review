@@ -114,6 +114,25 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
             println!("::error::{message}");
             bail!("{message}");
         }
+        Some("inconclusive") => {
+            let mut reason_ids = outcome
+                .reasons
+                .iter()
+                .map(|reason| reason.id.as_str())
+                .filter(|id| !id.trim().is_empty())
+                .collect::<Vec<_>>()
+                .join(", ");
+            if reason_ids.is_empty() {
+                reason_ids = "none".to_owned();
+            }
+            let message = format!(
+                "ub-review gate is inconclusive (required evidence unavailable: {reason_ids}); \
+                 receipts are in {}; check the artifact tree for what was missing",
+                path.display()
+            );
+            println!("::error::{message}");
+            bail!("{message}");
+        }
         other => {
             let value = other
                 .map(|value| format!("`{value}`"))
@@ -362,7 +381,24 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
     // gap stays visible through `evidence_gaps_advisory`. Genuine internal
     // failures abort the run with a non-zero exit through `anyhow` before
     // gate construction, so they never reach this point.
-    let conclusion = if reasons.is_empty() { "pass" } else { "fail" };
+    let conclusion = if reasons.is_empty() {
+        "pass"
+    } else if reasons.iter().all(|r| {
+        // If ALL reasons are evidence-unavailable (not a demonstrated defect),
+        // the gate is inconclusive rather than fail. This distinguishes
+        // "we couldn't check" from "we checked and found a bug".
+        // Evidence-unavailable reason kinds: required-sensor gaps, required-tool
+        // timeouts, missing required sensor evidence. Defect reason kinds:
+        // required-proof failures, tool-gate threshold exceeded, blocking findings.
+        matches!(
+            r.kind.as_str(),
+            "required-sensor" | "required-tool-timeout" | "required-evidence-unavailable"
+        )
+    }) {
+        "inconclusive"
+    } else {
+        "fail"
+    };
 
     GateOutcome {
         schema: GATE_OUTCOME_SCHEMA.to_owned(),
@@ -830,7 +866,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
         });
 
-        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.evidence_gaps_blocking, 1);
         assert_eq!(gate.evidence_gaps_advisory, 0);
         assert_eq!(gate.reasons.len(), 1);
@@ -862,6 +898,39 @@ mod tests {
     }
 
     #[test]
+    fn gate_outcome_inconclusive_when_only_evidence_unavailable() {
+        // A gate with ONLY evidence-unavailable reasons should be inconclusive,
+        // not fail. This distinguishes "we couldn't check" from "we checked
+        // and found a bug" (Order 6 of epic #655).
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_sensor = sensor_plan("tokmd", "tokmd", false);
+        required_sensor.required = true;
+        let plan = test_plan(vec![required_sensor]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "tokmd".to_owned(),
+            status: "timed_out".to_owned(),
+            reason: "sensor timed out".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("failed-to-review");
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+        assert_eq!(
+            gate.conclusion, "inconclusive",
+            "evidence-unavailable-only gate should be inconclusive, not fail"
+        );
+    }
+
+    #[test]
     fn gate_outcome_points_receipt_absent_sensor_gap_at_terminal_state() {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.mode = RunMode::IntelligentCi;
@@ -887,7 +956,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
         });
 
-        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.reasons.len(), 1);
         assert_eq!(gate.reasons[0].kind, "required-sensor");
         assert_eq!(gate.reasons[0].id, "actionlint");
@@ -925,7 +994,7 @@ mod tests {
             missing_or_failed_model_evidence: &[],
         });
 
-        assert_eq!(gate.conclusion, "fail");
+        assert_eq!(gate.conclusion, "inconclusive");
         assert_eq!(gate.evidence_gaps_blocking, 1);
         assert_eq!(gate.reasons.len(), 1);
         let reason = &gate.reasons[0];
