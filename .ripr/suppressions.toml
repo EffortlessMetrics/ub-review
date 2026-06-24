@@ -11517,3 +11517,21 @@ kind = "exposure_gap"
 finding_id = "probe:src_impact_plan.rs:398:predicate"
 owner = "ub-review/core"
 reason = "RIPR false-negative (ripr-swarm#1054): predicate probe on impact planner logic (Order 1, epic #655). The same-file tests pin the branches with exact assertions. Line-keyed id; re-verify after edits to impact_plan.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:613:error_path"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): error_path probe on a bail! in the sanitizer witness test runner (#666). The same-file tests sanitizer_records_clean_when_passes and sanitizer_records_ub_when_fails pin both branches with exact assertions. Line-keyed id; re-verify after edits to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:633:error_path"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): error_path probe on a bail! in the sanitizer witness test runner (#666). The same-file tests sanitizer_records_clean_when_passes and sanitizer_records_ub_when_fails pin both branches with exact assertions. Line-keyed id; re-verify after edits to proof/broker.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_broker.rs:655:error_path"
+owner = "ub-review/core"
+reason = "RIPR false-negative (ripr-swarm#1055): error_path probe on a bail! in the sanitizer witness test runner (#666). The same-file tests sanitizer_records_clean_when_passes and sanitizer_records_ub_when_fails pin both branches with exact assertions. Line-keyed id; re-verify after edits to proof/broker.rs."
