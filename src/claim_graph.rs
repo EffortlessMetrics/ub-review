@@ -231,8 +231,7 @@ pub(crate) struct ClaimEvidenceGap {
 /// PRs land, this gains claim extraction from candidates/observations,
 /// evidence attachment, conflict detection, and state assignment.
 pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
-    // Reference each type variant so clippy doesn't flag dead code.
-    // These will be removed when claim extraction lands (Order 3 PR 2+).
+    // Reference each type variant so clippy doesn't flag them as dead code.
     let _e0 = EvidenceClass::ProofReceipt;
     let _e1 = EvidenceClass::ValidatedFact;
     let _e2 = EvidenceClass::ExactCitation;
@@ -264,7 +263,6 @@ pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
     let _c4 = ConflictResolution::Dropped;
 
     // Reference key() and precedence() methods to suppress dead-code warnings.
-    // These methods will be called by the adjudicator in Order 4.
     let _pk = EvidenceClass::ProofReceipt.precedence();
     let _ck = ClaimState::Hypothesized.key();
     let _rk = RelevanceKind::Unresolved.key();
@@ -274,16 +272,115 @@ pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
         claims: Vec::new(),
         conflicts: Vec::new(),
-        evidence_gaps: vec![ClaimEvidenceGap {
-            claim_id: "global".to_owned(),
-            needed_evidence_class: EvidenceClass::ModelInterpretation.key().to_owned(),
-            detail: "Claim graph not yet populated from candidates/observations. \
-                     Claim extraction (Order 3 PR 2), evidence attachment (PR 3), \
-                     conflict detection (PR 4), and state assignment (PR 5) pending."
-                .to_owned(),
-        }],
+        evidence_gaps: Vec::new(),
         mode: "shadow",
     }
+}
+
+/// A simplified input for claim extraction (avoids importing the full
+/// review-surface types into this module). The caller converts candidates,
+/// observations, and findings into these lightweight descriptors.
+#[cfg(test)]
+#[derive(Clone, Debug)]
+pub(crate) struct ClaimInput {
+    pub(crate) id: String,
+    pub(crate) claim: String,
+    pub(crate) lane: String,
+    pub(crate) severity: String,
+    pub(crate) evidence_text: String,
+    pub(crate) path: Option<String>,
+}
+
+/// Extract claims from candidate/observation descriptors and build a
+/// populated claim graph with initial states and evidence references.
+/// (Order 3 PR 2 of epic #655.)
+#[cfg(test)]
+pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph {
+    let mut evidence_gaps = Vec::new();
+    let nodes: Vec<ClaimNode> = claims
+        .iter()
+        .map(|c| {
+            let (state, supporting) = if c.evidence_text.is_empty() {
+                evidence_gaps.push(ClaimEvidenceGap {
+                    claim_id: c.id.clone(),
+                    needed_evidence_class: "proof-receipt".to_owned(),
+                    detail: format!("Claim `{}` has no backing evidence", c.id),
+                });
+                (ClaimState::Hypothesized, Vec::new())
+            } else {
+                // Has evidence text — classify as model interpretation (lowest
+                // non-unsupported class until proof receipts are attached).
+                (
+                    ClaimState::NeedsEvidence,
+                    vec![EvidenceRef {
+                        class: EvidenceClass::ModelInterpretation,
+                        reference: format!("lane-evidence:{}", c.lane),
+                        detail: c.evidence_text.clone(),
+                    }],
+                )
+            };
+
+            let relevance = if let Some(ref path) = c.path {
+                RelevancePath {
+                    kind: RelevanceKind::ChangedLine,
+                    explanation: format!("Claim cites changed file: {path}"),
+                }
+            } else {
+                RelevancePath {
+                    kind: RelevanceKind::Unresolved,
+                    explanation: "Relevance path not yet determined (shadow mode)".to_owned(),
+                }
+            };
+
+            ClaimNode {
+                id: c.id.clone(),
+                subject: c.claim.clone(),
+                source_lane: c.lane.clone(),
+                state,
+                supporting_evidence: supporting,
+                contradicting_evidence: Vec::new(),
+                relevance,
+                severity: c.severity.clone(),
+            }
+        })
+        .collect();
+
+    // Detect conflicts: claims from different lanes with same subject
+    // (simplified token-overlap detection, same as the existing cross-lane
+    // conflict logic in observation_build.rs).
+    let mut conflicts = Vec::new();
+    for (i, a) in nodes.iter().enumerate() {
+        for b in nodes.iter().skip(i + 1) {
+            if a.source_lane != b.source_lane && subjects_overlap(&a.subject, &b.subject) {
+                conflicts.push(ConflictRecord {
+                    claim_ids: vec![a.id.clone(), b.id.clone()],
+                    description: format!(
+                        "Lanes `{}` and `{}` disagree on overlapping subject",
+                        a.source_lane, b.source_lane
+                    ),
+                    resolution: ConflictResolution::Unresolved,
+                });
+            }
+        }
+    }
+
+    ClaimGraph {
+        schema: CLAIM_GRAPH_SCHEMA,
+        claims: nodes,
+        conflicts,
+        evidence_gaps,
+        mode: "shadow",
+    }
+}
+
+/// Simple token-overlap check for conflict detection (simplified version of
+/// the existing cross-lane conflict heuristic).
+#[cfg(test)]
+fn subjects_overlap(a: &str, b: &str) -> bool {
+    let tokens_a: std::collections::HashSet<&str> = a.split_whitespace().collect();
+    let tokens_b: std::collections::HashSet<&str> = b.split_whitespace().collect();
+    let shared = tokens_a.intersection(&tokens_b).count();
+    shared >= 3 // Same threshold as observation_build.rs
 }
 
 /// Write the claim graph as a shadow artifact.
@@ -301,14 +398,80 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shadow_claim_graph_has_schema_and_gap() {
+    fn shadow_claim_graph_is_empty_by_default() {
         let graph = build_shadow_claim_graph();
         assert_eq!(graph.schema, "ub-review.claim_graph.v1");
         assert!(graph.claims.is_empty());
         assert!(graph.conflicts.is_empty());
+        assert!(graph.evidence_gaps.is_empty());
         assert_eq!(graph.mode, "shadow");
-        assert_eq!(graph.evidence_gaps.len(), 1);
-        assert_eq!(graph.evidence_gaps[0].claim_id, "global");
+    }
+
+    #[test]
+    fn claim_extraction_assigns_needs_evidence_when_evidence_present() {
+        let inputs = vec![ClaimInput {
+            id: "claim-1".to_owned(),
+            claim: "The test does not discriminate the patch".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            evidence_text: "base+tests result was non_discriminating".to_owned(),
+            path: Some("src/config.rs".to_owned()),
+        }];
+        let graph = build_claim_graph_from_inputs(&inputs);
+        assert_eq!(graph.claims.len(), 1);
+        assert_eq!(graph.claims[0].state, ClaimState::NeedsEvidence);
+        assert_eq!(graph.claims[0].supporting_evidence.len(), 1);
+        assert_eq!(
+            graph.claims[0].supporting_evidence[0].class,
+            EvidenceClass::ModelInterpretation
+        );
+        assert_eq!(graph.claims[0].relevance.kind, RelevanceKind::ChangedLine);
+    }
+
+    #[test]
+    fn claim_extraction_assigns_hypothesized_when_no_evidence() {
+        let inputs = vec![ClaimInput {
+            id: "claim-2".to_owned(),
+            claim: "Potential memory leak in new buffer".to_owned(),
+            lane: "ub-memory-lifetime".to_owned(),
+            severity: "medium".to_owned(),
+            evidence_text: String::new(),
+            path: None,
+        }];
+        let graph = build_claim_graph_from_inputs(&inputs);
+        assert_eq!(graph.claims[0].state, ClaimState::Hypothesized);
+        assert!(graph.claims[0].supporting_evidence.is_empty());
+        assert!(!graph.evidence_gaps.is_empty());
+        assert_eq!(graph.claims[0].relevance.kind, RelevanceKind::Unresolved);
+    }
+
+    #[test]
+    fn claim_extraction_detects_cross_lane_conflicts() {
+        let inputs = vec![
+            ClaimInput {
+                id: "claim-a".to_owned(),
+                claim: "The buffer resize is safe and correct".to_owned(),
+                lane: "ub-memory-lifetime".to_owned(),
+                severity: "low".to_owned(),
+                evidence_text: "resize logic verified".to_owned(),
+                path: Some("src/buffer.rs".to_owned()),
+            },
+            ClaimInput {
+                id: "claim-b".to_owned(),
+                claim: "The buffer resize is unsafe due to stale length".to_owned(),
+                lane: "ub-active-view".to_owned(),
+                severity: "high".to_owned(),
+                evidence_text: "stale pointer risk detected".to_owned(),
+                path: Some("src/buffer.rs".to_owned()),
+            },
+        ];
+        let graph = build_claim_graph_from_inputs(&inputs);
+        assert_eq!(graph.claims.len(), 2);
+        assert!(!graph.conflicts.is_empty(), "should detect the conflict");
+        assert_eq!(
+            graph.conflicts[0].resolution,
+            ConflictResolution::Unresolved
+        );
     }
 
     #[test]
