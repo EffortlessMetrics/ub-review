@@ -121,7 +121,7 @@ pub(crate) fn should_continue_convergence(
         .filter(|(id, prev_state)| {
             current_states
                 .get(id.as_str())
-                .map_or(false, |curr| *curr != prev_state)
+                .is_some_and(|curr| *curr != prev_state)
         })
         .count();
     if transitions == 0 && rounds_completed > 0 {
