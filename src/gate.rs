@@ -358,6 +358,17 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
     let mut evidence_gaps_advisory = input.missing_or_failed_model_evidence.len();
     for issue in input.missing_or_failed_sensor_evidence {
         if enforce_required_sensors && sensor_issue_is_required(input.plan, issue) {
+            // A required sensor that RAN and DEMONSTRATED a failure (status
+            // `failed`, e.g. cargo-clippy exiting 101 with a real lint) is a
+            // demonstrated defect, not missing evidence. It gets a
+            // `sensor-finding` reason that contributes to a `fail` conclusion.
+            // Only statuses that mean "we could not check" (missing,
+            // receipt-absent, artifact-gap, timed_out, detail_unavailable,
+            // ...) stay evidence-unavailable -> inconclusive.
+            if sensor_status_is_demonstrated_finding(&issue.status) {
+                reasons.push(sensor_finding_reason(issue));
+                continue;
+            }
             evidence_gaps_blocking += 1;
             let required_sensor = input
                 .plan
@@ -389,7 +400,9 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
         // "we couldn't check" from "we checked and found a bug".
         // Evidence-unavailable reason kinds: required-sensor gaps, required-tool
         // timeouts, missing required sensor evidence. Defect reason kinds:
-        // required-proof failures, tool-gate threshold exceeded, blocking findings.
+        // required-proof failures, tool-gate threshold exceeded, blocking
+        // findings, and sensor-finding (a required sensor that ran and
+        // demonstrated a failure, e.g. cargo-clippy exit 101).
         matches!(
             r.kind.as_str(),
             "required-sensor" | "required-tool-timeout" | "required-evidence-unavailable"
@@ -490,6 +503,37 @@ pub(crate) fn required_sensor_gap_reason(issue: &SensorEvidenceIssue) -> GateRea
         receipt: required_sensor_gap_receipt(issue),
         next_action: None,
     }
+}
+
+/// A required sensor ran and demonstrated a failure (status `failed`, e.g.
+/// cargo-clippy exiting 101 with a real lint). This is a demonstrated defect,
+/// not missing evidence: the gate should `fail`, not stay `inconclusive`. The
+/// reason kind `sensor-finding` is deliberately not in the evidence-unavailable
+/// set, so it contributes to a `fail` conclusion.
+pub(crate) fn sensor_finding_reason(issue: &SensorEvidenceIssue) -> GateReason {
+    GateReason {
+        kind: "sensor-finding".to_owned(),
+        id: issue.sensor.clone(),
+        detail: format!(
+            "required sensor demonstrated a failure (status `{}`): {}",
+            issue.status, issue.reason
+        ),
+        receipt: required_sensor_gap_receipt(issue),
+        next_action: Some(format!(
+            "address the `{}` sensor failure, then re-run",
+            issue.sensor
+        )),
+    }
+}
+
+/// A sensor status represents a *demonstrated failure* — the sensor ran,
+/// evaluated the change, and exited with a failure (e.g. a lint, a build
+/// break, a tool-gate-style nonzero exit). Such a status is a defect finding,
+/// distinct from evidence-unavailable statuses (`missing`, `receipt-absent`,
+/// `artifact-gap`, `detail_unavailable`, `timed_out`) where the sensor could
+/// not produce a verdict.
+pub(crate) fn sensor_status_is_demonstrated_finding(status: &str) -> bool {
+    matches!(status, "failed")
 }
 
 pub(crate) fn tool_gate_failure_next_action(entry: &ToolGateOutcomeEntry) -> String {
@@ -1060,9 +1104,13 @@ mod tests {
         let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
         required_actionlint.required = true;
         let plan = test_plan(vec![required_actionlint]);
+        // A `missing` status is a genuine evidence gap (sensor did not produce
+        // a verdict), so it must keep the evidence-unavailable `required-sensor`
+        // kind. (`failed` is now a demonstrated finding — see the sibling test
+        // gate_outcome_required_sensor_failure_is_fail.)
         let issues = vec![SensorEvidenceIssue {
             sensor: "actionlint".to_owned(),
-            status: "failed".to_owned(),
+            status: "missing".to_owned(),
             reason: "exit 1".to_owned(),
         }];
         let terminal_state = test_terminal_state("failed-to-review");
@@ -1087,7 +1135,7 @@ mod tests {
         assert_eq!(reason.kind, "required-sensor");
         assert_eq!(
             reason.detail,
-            "required sensor evidence gap (status `failed`): exit 1"
+            "required sensor evidence gap (status `missing`): exit 1"
         );
         assert_eq!(reason.detail, direct_reason.detail);
         assert_eq!(
@@ -1098,7 +1146,108 @@ mod tests {
         assert_eq!(reason.next_action, direct_reason.next_action);
         let serialized = serde_json::to_value(reason)?;
         assert!(serialized.get("next_action").is_none());
+        assert_eq!(gate.conclusion, "inconclusive");
         Ok(())
+    }
+
+    /// Order 2: a required sensor that RAN and DEMONSTRATED a failure
+    /// (status `failed`, e.g. cargo-clippy exiting 101 with a real lint) is a
+    /// demonstrated defect. The gate must `fail`, not stay `inconclusive`.
+    /// This is the regression for the gate failure on PR #675, where clippy
+    /// ran, found a lint, and the gate said `inconclusive`.
+    #[test]
+    fn gate_outcome_required_sensor_failure_is_fail() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut required_clippy = sensor_plan("cargo-clippy", "cargo-clippy", false);
+        required_clippy.required = true;
+        let plan = test_plan(vec![required_clippy]);
+        let issues = vec![SensorEvidenceIssue {
+            sensor: "cargo-clippy".to_owned(),
+            status: "failed".to_owned(),
+            reason: "clippy::expect_used (exit 101)".to_owned(),
+        }];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        assert_eq!(gate.reasons.len(), 1);
+        let reason = &gate.reasons[0];
+        assert_eq!(
+            reason.kind, "sensor-finding",
+            "a demonstrated sensor failure is a finding, not an evidence gap"
+        );
+        assert_eq!(reason.id, "cargo-clippy");
+        assert_eq!(
+            gate.conclusion, "fail",
+            "a demonstrated sensor finding must fail the gate, not be inconclusive"
+        );
+        assert!(reason.next_action.is_some());
+    }
+
+    /// Mixed: one demonstrated sensor finding + one evidence gap. The finding
+    /// makes the gate `fail` (not all reasons are evidence-unavailable).
+    #[test]
+    fn gate_outcome_sensor_finding_overrides_inconclusive_when_mixed() {
+        let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        args.mode = RunMode::IntelligentCi;
+        let mut clippy = sensor_plan("cargo-clippy", "cargo-clippy", false);
+        clippy.required = true;
+        let mut audit = sensor_plan("cargo-audit", "cargo-audit", false);
+        audit.required = true;
+        let plan = test_plan(vec![clippy, audit]);
+        let issues = vec![
+            SensorEvidenceIssue {
+                sensor: "cargo-audit".to_owned(),
+                status: "missing".to_owned(),
+                reason: "sensor not installed".to_owned(),
+            },
+            SensorEvidenceIssue {
+                sensor: "cargo-clippy".to_owned(),
+                status: "failed".to_owned(),
+                reason: "clippy lint (exit 101)".to_owned(),
+            },
+        ];
+        let terminal_state = test_terminal_state("needs-reviewer-attention");
+
+        let gate = build_gate_outcome(GateOutcomeInput {
+            args: &args,
+            config: &Config::default(),
+            tool_gate_outcomes: &[],
+            plan: &plan,
+            terminal_state: &terminal_state,
+            proof_requests: &[],
+            proof_receipts: &[],
+            missing_or_failed_sensor_evidence: &issues,
+            missing_or_failed_model_evidence: &[],
+        });
+
+        // Two reasons: one evidence-gap (missing), one finding (failed).
+        assert_eq!(gate.reasons.len(), 2);
+        assert_eq!(
+            gate.conclusion, "fail",
+            "a demonstrated finding among mixed reasons must fail the gate"
+        );
+        assert!(
+            gate.reasons
+                .iter()
+                .any(|r| r.kind == "sensor-finding" && r.id == "cargo-clippy")
+        );
+        assert!(
+            gate.reasons
+                .iter()
+                .any(|r| r.kind == "required-sensor" && r.id == "cargo-audit")
+        );
     }
 
     #[test]
