@@ -667,7 +667,7 @@ mod tests {
     /// (`SanitizerWitness`), breaking the v2 request file the planner emits
     /// and the worker consumes.
     #[test]
-    fn proof_kind_serializes_to_kebab_case() {
+    fn proof_kind_serializes_to_kebab_case() -> Result<()> {
         // Round-trip every variant and confirm the on-wire name matches key().
         for (variant, expected) in [
             (ProofKind::FocusedTest, "focused-test"),
@@ -679,23 +679,24 @@ mod tests {
             (ProofKind::SourceRouteProbe, "source-route-probe"),
             (ProofKind::ExternalCheck, "external-check"),
         ] {
-            let wire = serde_json::to_string(&variant).expect("serialize kind");
+            let wire = serde_json::to_string(&variant)?;
             assert_eq!(
                 wire.trim_matches('"'),
                 expected,
                 "ProofKind::{variant:?} serializes to {wire}, expected \"{expected}\""
             );
-            let back: ProofKind = serde_json::from_str(&wire).expect("deserialize kebab-case kind");
+            let back: ProofKind = serde_json::from_str(&wire)?;
             assert_eq!(back, variant, "round-trip failed for {variant:?}");
             assert_eq!(variant.key(), expected, "key() must match wire name");
         }
+        Ok(())
     }
 
     /// The full ProofRequestV2 struct round-trips through JSON with the
     /// kebab-case kind on the wire — this is the exact contract between the
     /// planner (emitter) and the worker (consumer).
     #[test]
-    fn proof_request_v2_round_trips_with_kebab_kind() {
+    fn proof_request_v2_round_trips_with_kebab_kind() -> Result<()> {
         let req = ProofRequestV2 {
             schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
             id: "req-1-v2".to_owned(),
@@ -708,15 +709,16 @@ mod tests {
             timeout_sec: 600,
             status: "requested".to_owned(),
         };
-        let json = serde_json::to_string(&req).expect("serialize v2 request");
+        let json = serde_json::to_string(&req)?;
         assert!(
             json.contains("\"kind\":\"sanitizer-witness\""),
             "serialized request must carry kebab-case kind: {json}"
         );
-        let back: ProofRequestV2 = serde_json::from_str(&json).expect("deserialize v2 request");
+        let back: ProofRequestV2 = serde_json::from_str(&json)?;
         assert_eq!(back.kind, ProofKind::SanitizerWitness);
         assert_eq!(back.id, "req-1-v2");
         assert_eq!(back.target, "config_rejects_unknown_fields");
+        Ok(())
     }
 
     /// Negative serialization: an unknown kind string must fail to deserialize.
