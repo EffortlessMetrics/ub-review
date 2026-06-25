@@ -105,6 +105,15 @@ pub(crate) struct ProofRequestV2 {
     pub(crate) priority: String,
     pub(crate) timeout_sec: u64,
     pub(crate) status: String,
+    /// Base commit SHA the proof is evaluated against (for red/green, the
+    /// base the test patch is applied to). Empty when the proof is head-only.
+    /// Carried on the request so the worker can stamp a canonical `ProofReceipt`
+    /// with the same `base`/`head` identity the planner emitted.
+    #[serde(default)]
+    pub(crate) base: String,
+    /// Head commit SHA the proof is evaluated against (the PR HEAD).
+    #[serde(default)]
+    pub(crate) head: String,
 }
 
 /// Classify an existing v1 ProofRequest into a ProofKind for the v2 shadow.
@@ -161,6 +170,12 @@ pub(crate) fn build_v2_shadow_requests(v1_requests: &[ProofRequest]) -> Vec<Proo
                 priority: if req.required { "high" } else { "medium" }.to_owned(),
                 timeout_sec: req.timeout_sec,
                 status: req.status.clone(),
+                // v1 ProofRequest carries no commit identity; the shadow
+                // stamps empty base/head. The production producer (planner)
+                // fills these from the diff so the worker's canonical
+                // receipt matches local execution.
+                base: String::new(),
+                head: String::new(),
             }
         })
         .collect()
@@ -708,6 +723,8 @@ mod tests {
             priority: "high".to_owned(),
             timeout_sec: 600,
             status: "requested".to_owned(),
+            base: "abc1234".to_owned(),
+            head: "def5678".to_owned(),
         };
         let json = serde_json::to_string(&req)?;
         assert!(
@@ -718,6 +735,8 @@ mod tests {
         assert_eq!(back.kind, ProofKind::SanitizerWitness);
         assert_eq!(back.id, "req-1-v2");
         assert_eq!(back.target, "config_rejects_unknown_fields");
+        assert_eq!(back.base, "abc1234");
+        assert_eq!(back.head, "def5678");
         Ok(())
     }
 
