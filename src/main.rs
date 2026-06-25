@@ -161,7 +161,124 @@ fn main() -> Result<()> {
         Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
         Command::QualityGithubCollect(args) => cmd_quality_github_collect(args),
         Command::GateCheck(args) => cmd_gate_check(args),
+        Command::Worker(args) => cmd_worker(args),
     }
+}
+
+/// Execute a single proof request and write its receipt.
+/// (Order 8 of epic #655 — the execution-plane worker command.)
+///
+/// Reads a proof request JSON, resolves it via the executor adapter,
+/// executes the approved command, and writes the receipt to the output
+/// directory. This enables distributed proof execution: a `plan` job
+/// emits proof requests, `worker` jobs execute them (locally or remotely),
+/// and a `finalize` job (currently `run`) collects receipts and produces
+/// the gate verdict.
+fn cmd_worker(args: WorkerArgs) -> Result<()> {
+    let request_path = Path::new(&args.proof_request);
+    let out = Path::new(&args.out);
+    let root = Path::new(&args.root);
+
+    // Read the proof request JSON.
+    let request_json = fs::read_to_string(request_path)
+        .with_context(|| format!("read proof request: {}", request_path.display()))?;
+    let request: serde_json::Value =
+        serde_json::from_str(&request_json).context("parse proof request JSON")?;
+
+    // Extract kind and target from the request.
+    let kind_str = request
+        .get("kind")
+        .and_then(|v| v.as_str())
+        .context("proof request missing 'kind' field")?;
+    let target = request
+        .get("target")
+        .and_then(|v| v.as_str())
+        .context("proof request missing 'target' field")?;
+
+    // Parse the kind.
+    let kind = match kind_str {
+        "focused-test" => ProofKind::FocusedTest,
+        "focused-build" => ProofKind::FocusedBuild,
+        "base-plus-tests" => ProofKind::BasePlusTests,
+        "sanitizer-witness" => ProofKind::SanitizerWitness,
+        "mutation-witness" => ProofKind::MutationWitness,
+        "miri-witness" => ProofKind::MiriWitness,
+        "source-route-probe" => ProofKind::SourceRouteProbe,
+        "external-check" => ProofKind::ExternalCheck,
+        other => bail!("unknown proof kind: {other}"),
+    };
+
+    // Check nightly availability.
+    let nightly = std::process::Command::new("cargo")
+        .args(["+nightly", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+
+    // Resolve via the executor adapter.
+    let resolved = resolve_proof_command(&kind, target, nightly);
+    let Some(cmd) = resolved else {
+        let receipt = serde_json::json!({
+            "schema": "ub-review.proof_receipt.v1",
+            "kind": kind_str,
+            "result": "skipped_unresolved",
+            "reason": format!("executor adapter could not resolve {kind_str} intent"),
+        });
+        let receipt_path = out.join("proof_receipt.json");
+        if let Some(dir) = receipt_path.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        fs::write(&receipt_path, serde_json::to_string_pretty(&receipt)?)?;
+        println!(
+            "worker: proof request {kind_str} unresolved, receipt written to {}",
+            receipt_path.display()
+        );
+        return Ok(());
+    };
+
+    // Execute the command.
+    let env_pairs: Vec<(String, String)> = cmd.env.clone();
+    let mut command = std::process::Command::new(&cmd.argv[0]);
+    command.args(&cmd.argv[1..]).current_dir(root);
+    for (k, v) in &env_pairs {
+        command.env(k, v);
+    }
+    let output = command.output().context("execute proof command")?;
+
+    let result = if !output.status.success() {
+        if cmd.requires_nightly {
+            "sanitizer_ub_detected"
+        } else {
+            "failed"
+        }
+    } else {
+        "passed"
+    };
+
+    let receipt = serde_json::json!({
+        "schema": "ub-review.proof_receipt.v1",
+        "kind": kind_str,
+        "target": target,
+        "command": cmd.argv.join(" "),
+        "env": env_pairs.into_iter().collect::<std::collections::BTreeMap<_, _>>(),
+        "requires_nightly": cmd.requires_nightly,
+        "exit_code": output.status.code(),
+        "result": result,
+        "resolution_note": cmd.resolution_note,
+        "stdout": String::from_utf8_lossy(&output.stdout).to_string(),
+        "stderr": String::from_utf8_lossy(&output.stderr).to_string(),
+    });
+
+    let receipt_path = out.join("proof_receipt.json");
+    if let Some(dir) = receipt_path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    fs::write(&receipt_path, serde_json::to_string_pretty(&receipt)?)?;
+    println!(
+        "worker: proof request {kind_str} completed with result '{result}'; receipt written to {}",
+        receipt_path.display()
+    );
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
