@@ -46,6 +46,29 @@ pub(crate) enum Command {
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
     GateCheck(GateCheckArgs),
+    /// Execute a single proof request and write its receipt. Designed for
+    /// distributed execution: a `plan` job emits proof requests, `worker`
+    /// jobs execute them (locally or remotely), and a `finalize` job
+    /// collects receipts and produces the gate verdict.
+    /// (Order 8 of epic #655.)
+    Worker(WorkerArgs),
+}
+
+/// Arguments for the `worker` subcommand (Order 8 of epic #655).
+#[derive(Clone, Debug, clap::Args)]
+pub(crate) struct WorkerArgs {
+    /// Path to the proof request JSON file to execute.
+    #[arg(long)]
+    pub(crate) proof_request: String,
+    /// Output directory for the receipt.
+    #[arg(long)]
+    pub(crate) out: String,
+    /// Repository root for command execution.
+    #[arg(long, default_value = ".")]
+    pub(crate) root: String,
+    /// Timeout in seconds for the proof command.
+    #[arg(long, default_value_t = 300)]
+    pub(crate) timeout_sec: u64,
 }
 
 #[derive(Clone, Debug, ValueEnum)]
