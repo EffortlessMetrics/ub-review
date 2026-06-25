@@ -52,7 +52,14 @@ pub(crate) struct ProofRequest {
 /// cost-classification model with a semantic kind that the executor maps to
 /// allowlisted repository-approved commands. Models submit typed intents;
 /// the broker resolves them to commands. A model cannot submit arbitrary shell.
+//
+// `rename_all = "kebab-case"` keeps the on-disk serialization identical to
+// `ProofKind::key()` (`focused-test`, `sanitizer-witness`, ...). Without it the
+// derived serializer would emit Rust variant names (`SanitizerWitness`), which
+// the `worker` subcommand (which reads serialized v2 request files) cannot
+// parse. This is the on-the-wire contract for distributed proof execution.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
 pub(crate) enum ProofKind {
     FocusedTest,
     FocusedBuild,
@@ -190,27 +197,24 @@ pub(crate) fn resolve_proof_command(
     match kind {
         ProofKind::FocusedTest => {
             // Delegate to the existing v1 command parser for cargo test.
-            // If the v1 parser rejects it, fall back to a simple argv split
-            // (the adapter is a new layer; full v1 validation comes when
-            // the adapter is promoted from shadow to active).
-            if let Some(spec) = crate::focused_cargo_test_command_spec(target) {
-                Some(ResolvedProofCommand {
-                    argv: spec.argv,
-                    env: Vec::new(),
-                    requires_nightly: false,
-                    resolution_note: "focused-test resolved via cargo-test allowlist".to_owned(),
-                })
-            } else if !target.is_empty() && !crate::has_shell_control_token(target) {
-                Some(ResolvedProofCommand {
-                    argv: target.split_whitespace().map(String::from).collect(),
-                    env: Vec::new(),
-                    requires_nightly: false,
-                    resolution_note: "focused-test resolved via split_whitespace (no shell tokens)"
-                        .to_owned(),
-                })
-            } else {
-                None
-            }
+            // The allowlist is the ONLY resolution path: a focused-test
+            // intent that the cargo-test parser rejects (no `--locked`, no
+            // focus token, disallowed args) is unresolved, full stop.
+            //
+            // There is deliberately NO `split_whitespace` fallback. A
+            // previous fallback turned any nonempty target without shell
+            // metacharacters into arbitrary argv (e.g. a `focused-test`
+            // request with `target: "rm -rf some-directory"` resolved to
+            // `["rm","-rf","some-directory"]` and executed `rm`). The
+            // executor adapter is a security boundary: typed intent must map
+            // to an approved command template, or it must not execute.
+            let spec = crate::focused_cargo_test_command_spec(target)?;
+            Some(ResolvedProofCommand {
+                argv: spec.argv,
+                env: Vec::new(),
+                requires_nightly: false,
+                resolution_note: "focused-test resolved via cargo-test allowlist".to_owned(),
+            })
         }
         ProofKind::FocusedBuild => {
             let spec = crate::focused_build_command_spec(target)?;
@@ -591,14 +595,150 @@ mod tests {
     #[test]
     fn resolve_focused_test_delegates_to_allowlist() {
         // focused_cargo_test_command_spec requires --locked and a focus token.
+        // `--test config_tests` is a genuinely allowlisted focus (the allowlist
+        // accepts `--test <value>`); this resolves without any argv fallback.
         let resolved = resolve_proof_command(
             &ProofKind::FocusedTest,
-            "cargo test --locked -- config_tests",
+            "cargo test --locked --test config_tests",
             false,
         );
         assert!(
             resolved.is_some(),
-            "focused-test should resolve with valid cargo test command"
+            "focused-test should resolve with valid, allowlisted cargo test command"
+        );
+        if let Some(cmd) = resolved {
+            assert_eq!(cmd.argv[0], "cargo");
+            assert!(cmd.argv.iter().any(|a| a == "--locked"));
+            assert!(!cmd.requires_nightly);
+        }
+    }
+
+    /// Security regression: a focused-test intent whose target is NOT an
+    /// allowlisted cargo test command must be unresolved. The previous
+    /// implementation fell back to `split_whitespace` for any nonempty,
+    /// shell-meta-free target, turning e.g. `rm -rf some-directory` into the
+    /// argv `["rm","-rf","some-directory"]` and executing `rm`. The executor
+    /// adapter is a security boundary: typed intent maps to an approved
+    /// template, or it does not execute.
+    #[test]
+    fn resolve_focused_test_rejects_arbitrary_argv_fallback() {
+        // An arbitrary program that contains no shell metacharacters. Under the
+        // old fallback this became executable argv. It must now be unresolved.
+        let malicious = "rm -rf some-directory";
+        assert!(
+            !has_shell_control_token(malicious),
+            "test fixture premise: target has no shell-control tokens"
+        );
+        let resolved = resolve_proof_command(&ProofKind::FocusedTest, malicious, false);
+        assert!(
+            resolved.is_none(),
+            "focused-test must not fall back to split_whitespace for non-allowlisted targets; \
+             got {resolved:?}"
+        );
+    }
+
+    #[test]
+    fn resolve_focused_test_rejects_cargo_test_without_locked() {
+        // cargo test without --locked is rejected by the allowlist and must not
+        // resolve via any fallback.
+        let resolved = resolve_proof_command(
+            &ProofKind::FocusedTest,
+            "cargo test --test config_tests",
+            false,
+        );
+        assert!(
+            resolved.is_none(),
+            "focused-test without --locked must be unresolved"
+        );
+    }
+
+    #[test]
+    fn resolve_focused_test_rejects_empty_target() {
+        let resolved = resolve_proof_command(&ProofKind::FocusedTest, "", false);
+        assert!(
+            resolved.is_none(),
+            "empty focused-test target must be unresolved"
+        );
+    }
+
+    /// Serialization contract: `ProofKind` must serialize to the kebab-case
+    /// names the `worker` subcommand parses (`sanitizer-witness`, ...). The
+    /// derived serializer would otherwise emit Rust variant names
+    /// (`SanitizerWitness`), breaking the v2 request file the planner emits
+    /// and the worker consumes.
+    #[test]
+    fn proof_kind_serializes_to_kebab_case() -> Result<()> {
+        // Round-trip every variant and confirm the on-wire name matches key().
+        for (variant, expected) in [
+            (ProofKind::FocusedTest, "focused-test"),
+            (ProofKind::FocusedBuild, "focused-build"),
+            (ProofKind::BasePlusTests, "base-plus-tests"),
+            (ProofKind::SanitizerWitness, "sanitizer-witness"),
+            (ProofKind::MutationWitness, "mutation-witness"),
+            (ProofKind::MiriWitness, "miri-witness"),
+            (ProofKind::SourceRouteProbe, "source-route-probe"),
+            (ProofKind::ExternalCheck, "external-check"),
+        ] {
+            let wire = serde_json::to_string(&variant)?;
+            assert_eq!(
+                wire.trim_matches('"'),
+                expected,
+                "ProofKind::{variant:?} serializes to {wire}, expected \"{expected}\""
+            );
+            let back: ProofKind = serde_json::from_str(&wire)?;
+            assert_eq!(back, variant, "round-trip failed for {variant:?}");
+            assert_eq!(variant.key(), expected, "key() must match wire name");
+        }
+        Ok(())
+    }
+
+    /// The full ProofRequestV2 struct round-trips through JSON with the
+    /// kebab-case kind on the wire — this is the exact contract between the
+    /// planner (emitter) and the worker (consumer).
+    #[test]
+    fn proof_request_v2_round_trips_with_kebab_kind() -> Result<()> {
+        let req = ProofRequestV2 {
+            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+            id: "req-1-v2".to_owned(),
+            kind: ProofKind::SanitizerWitness,
+            target: "config_rejects_unknown_fields".to_owned(),
+            claim_ids: vec!["claim-7".to_owned()],
+            requested_by: vec!["tests-oracle".to_owned()],
+            expected_interpretation: "asan abort => UB present".to_owned(),
+            priority: "high".to_owned(),
+            timeout_sec: 600,
+            status: "requested".to_owned(),
+        };
+        let json = serde_json::to_string(&req)?;
+        assert!(
+            json.contains("\"kind\":\"sanitizer-witness\""),
+            "serialized request must carry kebab-case kind: {json}"
+        );
+        let back: ProofRequestV2 = serde_json::from_str(&json)?;
+        assert_eq!(back.kind, ProofKind::SanitizerWitness);
+        assert_eq!(back.id, "req-1-v2");
+        assert_eq!(back.target, "config_rejects_unknown_fields");
+        Ok(())
+    }
+
+    /// Negative serialization: an unknown kind string must fail to deserialize.
+    #[test]
+    fn proof_kind_rejects_unknown_wire_name() {
+        let bad = serde_json::from_str::<ProofKind>("\"not-a-real-kind\"");
+        assert!(
+            bad.is_err(),
+            "unknown kind wire name must be rejected at deserialization"
+        );
+    }
+
+    /// Negative serialization: a Rust-style variant name must now be rejected
+    /// (regression guard for the rename_all change).
+    #[test]
+    fn proof_kind_rejects_rust_variant_name() {
+        let bad = serde_json::from_str::<ProofKind>("\"SanitizerWitness\"");
+        assert!(
+            bad.is_err(),
+            "Rust variant name must no longer be accepted; worker expects kebab-case"
         );
     }
 

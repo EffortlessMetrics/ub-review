@@ -168,45 +168,50 @@ fn main() -> Result<()> {
 /// Execute a single proof request and write its receipt.
 /// (Order 8 of epic #655 — the execution-plane worker command.)
 ///
-/// Reads a proof request JSON, resolves it via the executor adapter,
-/// executes the approved command, and writes the receipt to the output
-/// directory. This enables distributed proof execution: a `plan` job
+/// Reads a typed `proof_request.v2` JSON, deserializes it into a
+/// `ProofRequestV2`, validates the schema tag, resolves it via the executor
+/// adapter, executes the approved command, and writes the receipt to the
+/// output directory. This enables distributed proof execution: a `plan` job
 /// emits proof requests, `worker` jobs execute them (locally or remotely),
 /// and a `finalize` job (currently `run`) collects receipts and produces
 /// the gate verdict.
+///
+/// Security contract: the worker only executes commands produced by
+/// `resolve_proof_command` from a typed, allowlisted intent. It never parses
+/// a free-form `target` string into argv. An intent that does not resolve to
+/// an approved command template is written as a `skipped_unresolved` receipt
+/// and never executed. This is the boundary that keeps distributed workers
+/// safe to run on untrusted-but-typed requests: the type system + allowlist
+/// are the trust root, not the request string.
 fn cmd_worker(args: WorkerArgs) -> Result<()> {
     let request_path = Path::new(&args.proof_request);
     let out = Path::new(&args.out);
     let root = Path::new(&args.root);
 
-    // Read the proof request JSON.
+    // Read and deserialize the typed proof request. A `serde_json::Value`
+    // grab of `kind`/`target` would bypass schema validation and is
+    // deliberately not used: the worker must consume the same `ProofRequestV2`
+    // struct the planner emits, so a malformed or foreign-shaped request is
+    // rejected at deserialization rather than reaching the executor adapter.
     let request_json = fs::read_to_string(request_path)
         .with_context(|| format!("read proof request: {}", request_path.display()))?;
-    let request: serde_json::Value =
-        serde_json::from_str(&request_json).context("parse proof request JSON")?;
+    let request: ProofRequestV2 =
+        serde_json::from_str(&request_json).context("parse proof_request.v2 JSON")?;
 
-    // Extract kind and target from the request.
-    let kind_str = request
-        .get("kind")
-        .and_then(|v| v.as_str())
-        .context("proof request missing 'kind' field")?;
-    let target = request
-        .get("target")
-        .and_then(|v| v.as_str())
-        .context("proof request missing 'target' field")?;
+    // Enforce the schema tag so a v1 request (or arbitrary JSON) cannot be
+    // processed as v2. `deny_unknown_fields` is intentionally NOT set on the
+    // struct (it serializes extra metadata for the planner); the schema field
+    // is the explicit version gate.
+    anyhow::ensure!(
+        request.schema == crate::artifacts::PROOF_REQUEST_V2_SCHEMA,
+        "worker requires {}, got `{}`",
+        crate::artifacts::PROOF_REQUEST_V2_SCHEMA,
+        request.schema,
+    );
 
-    // Parse the kind.
-    let kind = match kind_str {
-        "focused-test" => ProofKind::FocusedTest,
-        "focused-build" => ProofKind::FocusedBuild,
-        "base-plus-tests" => ProofKind::BasePlusTests,
-        "sanitizer-witness" => ProofKind::SanitizerWitness,
-        "mutation-witness" => ProofKind::MutationWitness,
-        "miri-witness" => ProofKind::MiriWitness,
-        "source-route-probe" => ProofKind::SourceRouteProbe,
-        "external-check" => ProofKind::ExternalCheck,
-        other => bail!("unknown proof kind: {other}"),
-    };
+    let kind = request.kind;
+    let kind_str = kind.key().to_owned();
+    let target = request.target.as_str();
 
     // Check nightly availability.
     let nightly = std::process::Command::new("cargo")
@@ -215,7 +220,10 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
         .map(|o| o.status.success())
         .unwrap_or(false);
 
-    // Resolve via the executor adapter.
+    // Resolve via the executor adapter. `None` means the typed intent does
+    // not map to an approved command template — this is the only path to an
+    // executable argv. There is no fallback that turns a raw target string
+    // into argv.
     let resolved = resolve_proof_command(&kind, target, nightly);
     let Some(cmd) = resolved else {
         let receipt = serde_json::json!({
@@ -245,6 +253,13 @@ fn cmd_worker(args: WorkerArgs) -> Result<()> {
     }
     let output = command.output().context("execute proof command")?;
 
+    // NOTE: result classification here is deliberately conservative and is a
+    // known gap closed by a follow-up PR (canonical receipts + lease/timeout/
+    // bounding + per-kind classification). It labels any failure of a
+    // nightly-requiring command as `sanitizer_ub_detected`, which over-claims
+    // for Miri / compile errors / missing components. Until the canonical
+    // receipt path is reused here, the worker receipt is also not equivalent
+    // to the broker's `ProofReceipt`. Both are tracked in epic #655.
     let result = if !output.status.success() {
         if cmd.requires_nightly {
             "sanitizer_ub_detected"
