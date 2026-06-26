@@ -11,6 +11,7 @@ pub(crate) const CACHE_MANIFEST_SCHEMA: &str = "ub-review.cache_manifest.v1";
 pub(crate) const SHARED_PREFIX_MANIFEST_SCHEMA: &str = "ub-review.shared_prefix_manifest.v1";
 pub(crate) const LANE_THREAD_SCHEMA: &str = "ub-review.lane_thread.v1";
 pub(crate) const CROSS_LANE_MESSAGE_SCHEMA: &str = "ub-review.cross_lane_message.v1";
+pub(crate) const REPORTER_THREAD_SCHEMA: &str = "ub-review.reporter_thread.v1";
 pub(crate) const CANDIDATE_SCHEMA: &str = "ub-review.candidate.v1";
 pub(crate) const CI_CORRELATION_SCHEMA: &str = "ub-review.ci_correlation.v1";
 pub(crate) const CLAIM_GRAPH_SCHEMA: &str = "ub-review.claim_graph.v1";

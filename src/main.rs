@@ -85,6 +85,8 @@ mod lane_threads;
 pub(crate) use lane_threads::*;
 mod cross_lane_messages;
 pub(crate) use cross_lane_messages::*;
+mod reporter;
+pub(crate) use reporter::*;
 mod review_compiler;
 pub(crate) use review_compiler::*;
 mod cost_artifact;
@@ -4181,6 +4183,39 @@ fn write_review_artifacts(
             "completed",
         )?;
     }
+    // Order 9 (#678): the live reporter — the same-model coordinator. Runs
+    // after the primary wave, reads lane digests, makes one same-model
+    // distillation call (same cohort, same cached prefix), and records its
+    // conclusion as a reporter thread artifact + messages. Advisory: feeds the
+    // compiler, does not post or gate.
+    let reporter_loop =
+        start_run_loop(event_log, run_started, "model", "investigation", "reporter")?;
+    let reporter_status = match run_reporter_coordination(
+        root,
+        &review_dir,
+        &shared_context,
+        &model_lanes,
+        args,
+        model_calls_used,
+        event_log,
+        &message_log,
+    ) {
+        Ok(()) => "completed",
+        Err(e) => {
+            let _ = event_log.append(
+                "reporter_error",
+                serde_json::json!({"error": format!("{e:#}")}),
+            );
+            "failed"
+        }
+    };
+    finish_run_loop(
+        event_log,
+        run_started,
+        run_loop_tracker,
+        reporter_loop,
+        reporter_status,
+    )?;
     attach_request_metadata_to_focused_receipts(
         diff,
         &proof_requests,

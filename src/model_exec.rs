@@ -174,6 +174,110 @@ pub(crate) fn run_refuter_pass(
     Ok(1)
 }
 
+/// Order 9 (#678): the live reporter — same-model coordinator. Runs after the
+/// primary wave, reads lane digests, makes one same-model distillation call
+/// (same cohort, same cached prefix), records the conclusion as a reporter
+/// thread artifact, and emits reporter messages. Advisory (feeds the compiler;
+/// does not post or gate). Errors are logged, not propagated.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "reporter coordination mirrors the refuter/proof run context inputs; tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
+pub(crate) fn run_reporter_coordination(
+    root: &Path,
+    review_dir: &Path,
+    shared_context: &str,
+    model_lanes: &[ModelLaneReceipt],
+    args: &RunArgs,
+    model_calls_used: usize,
+    event_log: &EventLog,
+    message_log: &MessageLog,
+) -> Result<()> {
+    let digests = lane_digests_from_receipts(model_lanes);
+    if digests.is_empty() || model_calls_used >= args.max_model_calls {
+        let reason = if digests.is_empty() {
+            "no lane digests"
+        } else {
+            "budget exhausted"
+        };
+        let _ = message_log.append(
+            CrossLaneMessageKind::TopicUpdate,
+            "reporter",
+            "all-lanes",
+            0,
+            vec![],
+            serde_json::json!({"topic": "reporter_skipped", "reason": reason}),
+        );
+        return Ok(());
+    }
+    let spec = direct_minimax_spec(args);
+    let prefix_hash = sha256_hex(shared_context.as_bytes());
+    let cohort_id = cohort_id_for(spec.provider.key(), &spec.model, &prefix_hash);
+    let thread_id = format!("{cohort_id}:reporter");
+    let prompt = reporter_prompt(&digests);
+    let reporter_dir = review_dir.join("threads").join("reporter");
+    fs::create_dir_all(&reporter_dir)?;
+    fs::write(reporter_dir.join("prompt.md"), &prompt)?;
+    let content = match call_model_prompt_content(
+        root,
+        &reporter_dir,
+        &spec,
+        Some(shared_context),
+        true,
+        &prompt,
+        args,
+    ) {
+        Ok(c) => c,
+        Err(e) => {
+            let _ = event_log.append(
+                "reporter_call_failed",
+                serde_json::json!({"error": format!("{e:#}")}),
+            );
+            let _ = message_log.append(
+                CrossLaneMessageKind::TopicUpdate,
+                "reporter",
+                "all-lanes",
+                0,
+                vec![],
+                serde_json::json!({"topic": "reporter_failed", "error": format!("{e:#}")}),
+            );
+            return Ok(());
+        }
+    };
+    let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
+    write_reporter_thread(review_dir, &conclusion)?;
+    let _ = message_log.append(
+        CrossLaneMessageKind::LaneReport,
+        "reporter",
+        "all-lanes",
+        0,
+        vec!["review/threads/reporter/turn-000.json".to_owned()],
+        serde_json::json!({"distillation": conclusion.distillation, "cohort_id": conclusion.cohort_id}),
+    );
+    for question in &conclusion.proposed_follow_ups {
+        let (target, q_text) = question
+            .split_once(':')
+            .map(|(t, q)| (t.trim().to_owned(), q.trim().to_owned()))
+            .unwrap_or((String::new(), question.clone()));
+        let _ = message_log.append(
+            CrossLaneMessageKind::ReporterQuestion,
+            "reporter",
+            &target,
+            0,
+            vec![],
+            serde_json::json!({"question": q_text}),
+        );
+    }
+    let _ = event_log.append(
+        "reporter_completed",
+        serde_json::json!({
+            "distillation_length": conclusion.distillation.len(),
+            "proposed_follow_ups": conclusion.proposed_follow_ups.len(),
+        }),
+    );
+    Ok(())
+}
+
 pub(crate) fn demote_inline_candidates_for_refuter_unavailable(
     reason: &str,
     inline_comments: &mut Vec<ReviewInlineComment>,
@@ -553,12 +657,12 @@ pub(crate) fn model_cacheable_prefix<'a>(
 }
 
 pub(crate) struct ModelPromptContent {
-    json_payload: String,
-    parse_path: PathBuf,
-    duration_ms: u128,
-    http_status: Option<u16>,
-    response_shape: String,
-    cache_usage: ModelCacheUsage,
+    pub(crate) json_payload: String,
+    pub(crate) parse_path: PathBuf,
+    pub(crate) duration_ms: u128,
+    pub(crate) http_status: Option<u16>,
+    pub(crate) response_shape: String,
+    pub(crate) cache_usage: ModelCacheUsage,
 }
 
 pub(crate) fn call_model_prompt_content(
