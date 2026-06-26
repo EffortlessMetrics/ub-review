@@ -3878,11 +3878,15 @@ fn write_review_artifacts(
         &pr_thread_context,
         &proof_requests,
     )?;
-    // Shadow-mode impact plan (Order 1 of epic #655). Emitted but not consumed
-    // for execution decisions. As Order 1 PRs land, this gains Cargo metadata,
-    // package resolution, reverse-dep closure, and candidate ranking.
-    let shadow_impact_plan = build_shadow_impact_plan(root, &diff.changed_files);
-    write_impact_plan(out, &shadow_impact_plan)?;
+    // Impact plan (Order 3 of epic #655). Computes the Cargo workspace graph,
+    // changed/affected package ownership, reverse-dep closure, and ranked
+    // candidate tasks. selection_mode reflects [impact].mode (shadow by
+    // default, active when the repo opts in); both modes are advisory-only for
+    // execution today, which keeps this behavior-preserving. A follow-up PR
+    // wires active candidate_tasks into the proof planner.
+    let impact_mode = config.impact.resolved_mode();
+    let impact_plan = build_impact_plan(root, &diff.changed_files, impact_mode);
+    write_impact_plan(out, &impact_plan)?;
     // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
     // existing v1 requests to typed intents. Emitted but not consumed for
     // execution — the broker still uses v1 command-string requests.
