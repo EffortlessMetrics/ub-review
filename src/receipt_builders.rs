@@ -201,6 +201,15 @@ pub(crate) fn build_model_lane_receipts(
                 response_shape: None,
                 fallback_from: None,
                 cache_usage: ModelCacheUsage::default(),
+                // Preflight/planned receipts carry empty cohort provenance;
+                // the cohort is stamped when the lane executes (model_exec /
+                // proof_planner_lane), since shared_prefix_hash is known only
+                // at run time. (Order 5 of #678.)
+                cohort_id: String::new(),
+                shared_prefix_hash: String::new(),
+                thread_id: String::new(),
+                turn: 0,
+                cohort_broken: false,
             }
         })
         .collect()

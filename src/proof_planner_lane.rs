@@ -40,6 +40,11 @@ pub(crate) fn run_proof_planner_model_lane(
         response_shape: None,
         fallback_from: None,
         cache_usage: ModelCacheUsage::default(),
+        cohort_id: String::new(),
+        shared_prefix_hash: String::new(),
+        thread_id: String::new(),
+        turn: 0,
+        cohort_broken: false,
     };
 
     if context.model_calls_used >= context.args.max_model_calls {
@@ -65,6 +70,29 @@ pub(crate) fn run_proof_planner_model_lane(
     if let Some(original) = fallback_from {
         receipt.fallback_from = Some(original);
     }
+    // Stamp cohort provenance from the actual (post-fallback) provider/model
+    // against the cohort primary (assignment.spec). The shared prefix hash is
+    // the run's cache-coherence proof; cohort_broken is true when the lane
+    // used a different provider/model than the cohort primary. (Order 5 #678)
+    let prefix_hash = sha256_hex(context.shared_context.as_bytes());
+    let primary = &assignment.spec;
+    let fb = receipt
+        .fallback_from
+        .as_ref()
+        .map(|_| (spec.provider.key(), spec.model.as_str()));
+    let (cohort_id, shared_prefix_hash, thread_id, turn, cohort_broken) = cohort_stamp(
+        primary.provider.key(),
+        &primary.model,
+        &prefix_hash,
+        &lane.id,
+        0,
+        fb,
+    );
+    receipt.cohort_id = cohort_id;
+    receipt.shared_prefix_hash = shared_prefix_hash;
+    receipt.thread_id = thread_id;
+    receipt.turn = turn;
+    receipt.cohort_broken = cohort_broken;
     if let Some(reason) = preflight_reason {
         receipt.reason = reason;
     }

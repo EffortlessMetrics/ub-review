@@ -62,6 +62,15 @@ pub(crate) fn run_refuter_pass(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
 ) -> Result<usize> {
     let spec = direct_minimax_spec(context.args);
+    let prefix_hash = sha256_hex(context.shared_context.as_bytes());
+    let (cohort_id, shared_prefix_hash, thread_id, turn, cohort_broken) = cohort_stamp(
+        spec.provider.key(),
+        &spec.model,
+        &prefix_hash,
+        "refuter",
+        0,
+        None,
+    );
     let mut receipt = ModelLaneReceipt {
         lane: "refuter".to_owned(),
         provider: spec.provider.key().to_owned(),
@@ -74,6 +83,11 @@ pub(crate) fn run_refuter_pass(
         response_shape: None,
         fallback_from: None,
         cache_usage: ModelCacheUsage::default(),
+        cohort_id,
+        shared_prefix_hash,
+        thread_id,
+        turn,
+        cohort_broken,
     };
 
     if inline_comments.is_empty() {
