@@ -937,6 +937,44 @@ struct SharedContextCacheLane {
     shared_context_hash: String,
 }
 
+/// One ordered section of the shared PR/repo prefix, with its byte range.
+/// Recorded as the prefix is built (not re-parsed) so the manifest's view of
+/// what the cohort shares is exact and drift-free. (Order 6 of #678.)
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PrefixSection {
+    name: String,
+    byte_start: usize,
+    byte_end: usize,
+}
+
+/// `review/shared-prefix-manifest.json` — the byte-stable shared-prefix
+/// contract for a cohort. Records the hash, byte length, base/head identity,
+/// the ordered source sections composing the prefix (with byte ranges), the
+/// cache policy, and truncations. Makes the cohort's cache-coherence claim
+/// (one immutable prefix, byte-stable across lanes) inspectable rather than
+/// assumed. (Order 6 of #678.)
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SharedPrefixManifest {
+    schema: String,
+    hash: String,
+    byte_length: usize,
+    base: String,
+    head: String,
+    ordered_source_sections: Vec<PrefixSection>,
+    cache_policy: SharedPrefixCachePolicy,
+    /// Truncations applied while building the prefix. Empty today; future
+    /// slices record any capped section (e.g. an oversized diff patch).
+    truncations: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct SharedPrefixCachePolicy {
+    provider: String,
+    endpoint_kind: String,
+    mode: String,
+    lifetime: String,
+}
+
 #[derive(Clone, Debug, Serialize)]
 struct SharedContextCacheEvent {
     schema: &'static str,
@@ -3850,7 +3888,7 @@ fn write_review_artifacts(
     let provider_concurrency = provider_concurrency_limits(config);
     let mut proof_requests = Vec::new();
     append_configured_required_proof_requests(config, diff, args, &mut proof_requests);
-    let shared_context = render_shared_context(
+    let (shared_context, prefix_sections) = render_shared_context(
         root,
         out,
         config,
@@ -3863,12 +3901,24 @@ fn write_review_artifacts(
         &proof_requests,
     )?;
     fs::write(review_dir.join("shared_context.md"), &shared_context)?;
+    // Shared-prefix manifest (Order 6 of #678): records the byte-stable
+    // shared-prefix contract — hash, byte length, base/head, ordered source
+    // sections with byte ranges, cache policy, truncations — so the cohort's
+    // cache-coherence claim is inspectable.
+    let shared_context_id = sha256_hex(shared_context.as_bytes());
+    write_shared_prefix_manifest(
+        &review_dir,
+        &shared_context_id,
+        shared_context.len(),
+        diff,
+        &prefix_sections,
+        args,
+    )?;
     fs::write(
         review_dir.join("pr_thread_context.json"),
         serde_json::to_vec_pretty(&pr_thread_context)?,
     )?;
     let prior_resolved_candidates = load_prior_resolved_candidates(root, out, args)?;
-    let shared_context_id = sha256_hex(shared_context.as_bytes());
     let line_map = right_side_diff_lines(&diff.patch);
     let assignments = model_assignments(plan, args)?;
     let mut provider_preflights = build_provider_preflight_receipts(&assignments, args);
