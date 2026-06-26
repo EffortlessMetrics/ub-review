@@ -8,6 +8,7 @@
 
 pub(crate) const CACHE_EVENT_SCHEMA: &str = "ub-review.cache_event.v1";
 pub(crate) const CACHE_MANIFEST_SCHEMA: &str = "ub-review.cache_manifest.v1";
+pub(crate) const SHARED_PREFIX_MANIFEST_SCHEMA: &str = "ub-review.shared_prefix_manifest.v1";
 pub(crate) const CANDIDATE_SCHEMA: &str = "ub-review.candidate.v1";
 pub(crate) const CI_CORRELATION_SCHEMA: &str = "ub-review.ci_correlation.v1";
 pub(crate) const CLAIM_GRAPH_SCHEMA: &str = "ub-review.claim_graph.v1";

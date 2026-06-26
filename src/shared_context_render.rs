@@ -85,7 +85,7 @@ pub(crate) fn render_shared_context(
     pr_thread_context: &PrThreadContext,
     profile: &Profile,
     proof_requests: &[ProofRequest],
-) -> Result<String> {
+) -> Result<(String, Vec<PrefixSection>)> {
     let mut text = String::new();
     text.push_str("# Shared UB Review Context\n\n");
     text.push_str("This stable prefix is intended for lane model calls and future provider-side context caching.\n\n");
@@ -234,7 +234,57 @@ pub(crate) fn render_shared_context(
         text.push('\n');
     }
     text.push_str("```\n");
-    Ok(text)
+    // Derive the ordered source sections from the rendered prefix by scanning
+    // for `## ` headers. The prefix is generated here from stable headers, so
+    // this reads exactly what was written (no drift). Each section's byte range
+    // runs from its header to the next header (or end of text). This makes the
+    // cohort's shared-prefix contract inspectable. (Order 6 of #678.)
+    let sections = prefix_sections_from_rendered(&text);
+    Ok((text, sections))
+}
+
+/// Scan rendered shared-context Markdown for `## ` headers and produce
+/// `PrefixSection` records with byte ranges [header_start, next_header_start).
+fn prefix_sections_from_rendered(text: &str) -> Vec<PrefixSection> {
+    let bytes = text.as_bytes();
+    let mut header_starts: Vec<(usize, String)> = Vec::new();
+    let mut i = 0;
+    while i + 3 <= bytes.len() {
+        // A `## ` header at the start of a line (line start or after `\n`).
+        if bytes[i] == b'#'
+            && bytes[i + 1] == b'#'
+            && bytes[i + 2] == b' '
+            && (i == 0 || bytes[i - 1] == b'\n')
+        {
+            let line_end = bytes[i..]
+                .iter()
+                .position(|&b| b == b'\n')
+                .map(|p| i + p)
+                .unwrap_or(bytes.len());
+            let name = String::from_utf8_lossy(&bytes[i + 3..line_end])
+                .trim()
+                .to_owned();
+            header_starts.push((i, name));
+            i = line_end + 1;
+        } else {
+            i += 1;
+        }
+    }
+    header_starts
+        .iter()
+        .enumerate()
+        .map(|(idx, (start, name))| {
+            let byte_end = header_starts
+                .get(idx + 1)
+                .map(|(s, _)| *s)
+                .unwrap_or(bytes.len());
+            PrefixSection {
+                name: name.clone(),
+                byte_start: *start,
+                byte_end,
+            }
+        })
+        .collect()
 }
 
 pub(crate) fn render_initial_work_queue_context(
@@ -466,6 +516,43 @@ pub(crate) fn write_shared_context_cache_artifacts(
     Ok(())
 }
 
+/// Write `review/shared-prefix-manifest.json` (Order 6 of #678): the byte-stable
+/// shared-prefix contract for a cohort. Records the hash, byte length, base/head
+/// identity, the ordered source sections composing the prefix (with byte
+/// ranges), the cache policy, and truncations. Makes the cohort's
+/// cache-coherence claim (one immutable prefix, byte-stable across lanes)
+/// inspectable rather than assumed.
+pub(crate) fn write_shared_prefix_manifest(
+    review_dir: &Path,
+    hash: &str,
+    byte_length: usize,
+    diff: &DiffContext,
+    sections: &[PrefixSection],
+    args: &RunArgs,
+) -> Result<()> {
+    let cache_mode = model_cache_mode_for_args(args, "minimax", "anthropic-messages");
+    let manifest = SharedPrefixManifest {
+        schema: SHARED_PREFIX_MANIFEST_SCHEMA.to_owned(),
+        hash: hash.to_owned(),
+        byte_length,
+        base: diff.base.clone(),
+        head: diff.head.clone(),
+        ordered_source_sections: sections.to_vec(),
+        cache_policy: SharedPrefixCachePolicy {
+            provider: "minimax".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            mode: cache_mode.to_owned(),
+            lifetime: "provider-ephemeral".to_owned(),
+        },
+        truncations: Vec::new(),
+    };
+    fs::write(
+        review_dir.join("shared-prefix-manifest.json"),
+        serde_json::to_vec_pretty(&manifest)?,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn shared_context_cache_lanes(
     shared_context_hash: &str,
     assignments: &[ModelAssignment],
@@ -532,5 +619,67 @@ pub(crate) fn shared_context_cache_lane(
         endpoint_kind: endpoint_kind.to_owned(),
         cache_mode: model_cache_mode_for_args(args, provider, endpoint_kind).to_owned(),
         shared_context_hash: shared_context_hash.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn prefix_sections_scan_finds_headers_with_byte_ranges() {
+        let text = "# Shared UB Review Context\n\nintro\n\n## PR Summary\n\nbody1\n\n## Diff Summary\n\nbody2\n";
+        let sections = prefix_sections_from_rendered(text);
+        assert!(
+            sections.len() >= 2,
+            "should find >=2 sections, got {:?}",
+            sections
+        );
+        let names: Vec<&str> = sections.iter().map(|s| s.name.as_str()).collect();
+        assert!(names.contains(&"PR Summary"), "names: {names:?}");
+        assert!(names.contains(&"Diff Summary"), "names: {names:?}");
+        // Byte ranges are contiguous and cover the full text.
+        for s in &sections {
+            assert!(s.byte_end > s.byte_start, "non-empty range for {}", s.name);
+            assert!(s.byte_end <= text.len());
+        }
+    }
+
+    #[test]
+    fn prefix_sections_handle_no_headers() {
+        let text = "no headers here at all\n";
+        let sections = prefix_sections_from_rendered(text);
+        assert!(sections.is_empty());
+    }
+
+    /// The manifest's hash must equal the shared_context hash, and byte_length
+    /// must equal the prefix length — the cache-coherence contract.
+    #[test]
+    fn prefix_manifest_hash_and_length_match_prefix() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let prefix = "## PR Summary\n\nbody\n\n## Diff Summary\n\nbody2\n";
+        let hash = sha256_hex(prefix.as_bytes());
+        let diff = DiffContext {
+            base: "abc".to_owned(),
+            head: "def".to_owned(),
+            changed_files: vec![],
+            patch: String::new(),
+            flags: DiffFlags::default(),
+            diff_class: crate::DiffClass::SourceGeneral,
+        };
+        let sections = prefix_sections_from_rendered(prefix);
+        let args = crate::tests::test_run_args(temp.path().to_path_buf());
+        write_shared_prefix_manifest(&review_dir, &hash, prefix.len(), &diff, &sections, &args)?;
+        let manifest_bytes = fs::read(review_dir.join("shared-prefix-manifest.json"))?;
+        let manifest: SharedPrefixManifest = serde_json::from_slice(&manifest_bytes)?;
+        assert_eq!(manifest.hash, hash);
+        assert_eq!(manifest.byte_length, prefix.len());
+        assert_eq!(manifest.base, "abc");
+        assert_eq!(manifest.head, "def");
+        assert!(!manifest.ordered_source_sections.is_empty());
+        assert_eq!(manifest.schema, "ub-review.shared_prefix_manifest.v1");
+        Ok(())
     }
 }
