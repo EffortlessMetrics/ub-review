@@ -1,0 +1,278 @@
+//! Live reporter coordination (Order 9 of #678) — the product center.
+//!
+//! The same-model coordinator that runs after the primary investigation wave,
+//! reads what each lane concluded, and makes one same-model distillation call
+//! (same cohort provider/model, same cached shared prefix) to identify the
+//! most important findings, flag contradictions/gaps, and propose a verdict
+//! direction.
+//!
+//! This is single-turn (turn 0) in this slice: it proves the same-model
+//! distillation loop end-to-end. Multi-turn continuation (reporter asks → lane
+//! answers → reporter refines) is the natural extension built on the
+//! persistent threads (#692) and message queue (#694).
+//!
+//! The reporter's output is advisory: it feeds the compiler and the message
+//! queue; it does not itself post or gate (Orders 10/11).
+
+use std::path::Path;
+
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+
+use crate::artifacts::REPORTER_THREAD_SCHEMA;
+
+/// A lane's conclusion as the reporter sees it — a compact digest built from
+/// the lane's ModelLaneReceipt.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct LaneDigest {
+    pub(crate) lane: String,
+    pub(crate) status: String,
+    pub(crate) conclusion: String,
+    pub(crate) thread_id: String,
+}
+
+/// The reporter's distilled conclusion, parsed from its model response.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct ReporterConclusion {
+    pub(crate) schema: String,
+    /// The reporter's free-form distillation text (what it would say to a
+    /// human reviewer about the PR).
+    pub(crate) distillation: String,
+    /// Follow-up questions the reporter proposes (emitted as
+    /// reporter_question messages). Empty if none.
+    pub(crate) proposed_follow_ups: Vec<String>,
+    pub(crate) cohort_id: String,
+    pub(crate) thread_id: String,
+}
+
+/// Build the reporter's prompt: the shared cached prefix is provided
+/// separately (as the cacheable prefix to the model call); this returns the
+/// reporter *suffix* — the compact digest of what each lane concluded plus the
+/// reporter's task instruction.
+pub(crate) fn reporter_prompt(digests: &[LaneDigest]) -> String {
+    let mut prompt = String::new();
+    prompt.push_str("# Reporter Coordination Task\n\n");
+    prompt.push_str(
+        "You are the same-model reporter coordinating this review. Below are the \
+         conclusions of each specialist investigation lane. Your job:\n\n",
+    );
+    prompt.push_str("1. Identify the most important findings worth surfacing.\n");
+    prompt.push_str("2. Flag contradictions or gaps between lanes.\n");
+    prompt.push_str("3. Propose a verdict direction (clear / changes_requested / uncertain).\n");
+    prompt.push_str("4. List any targeted follow-up questions for named lanes.\n\n");
+    prompt.push_str("## Lane conclusions\n\n");
+    if digests.is_empty() {
+        prompt.push_str("- No lanes reported (model mode off or all skipped).\n");
+    }
+    for d in digests {
+        let conclusion = if d.conclusion.is_empty() {
+            "(no detail)"
+        } else {
+            d.conclusion.as_str()
+        };
+        prompt.push_str(&format!(
+            "### `{}` (status: `{}`)\n{}\n\n",
+            d.lane, d.status, conclusion
+        ));
+    }
+    prompt.push_str(
+        "## Output\n\nReturn a JSON object: {\"distillation\": \"...\", \
+         \"proposed_follow_ups\": [\"question for lane X\", ...]}. The distillation \
+         is what you would tell a human reviewer in 2-4 sentences.\n",
+    );
+    prompt
+}
+
+/// Build a lane digest from the executed receipts (only lanes with a
+/// non-empty thread_id — i.e., that actually investigated).
+pub(crate) fn lane_digests_from_receipts(receipts: &[crate::ModelLaneReceipt]) -> Vec<LaneDigest> {
+    receipts
+        .iter()
+        .filter(|r| !r.thread_id.is_empty())
+        .map(|r| LaneDigest {
+            lane: r.lane.clone(),
+            status: r.status.clone(),
+            conclusion: r.reason.clone(),
+            thread_id: r.thread_id.clone(),
+        })
+        .collect()
+}
+
+/// Parse the reporter's model response into a ReporterConclusion. Tolerant of
+/// non-JSON responses (uses the raw text as the distillation).
+pub(crate) fn parse_reporter_conclusion(
+    content: &str,
+    cohort_id: &str,
+    thread_id: &str,
+) -> ReporterConclusion {
+    // Try to parse as JSON {distillation, proposed_follow_ups}.
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) {
+        let distillation = parsed
+            .get("distillation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_owned();
+        let proposed_follow_ups = parsed
+            .get("proposed_follow_ups")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(str::to_owned))
+                    .collect()
+            })
+            .unwrap_or_default();
+        return ReporterConclusion {
+            schema: REPORTER_THREAD_SCHEMA.to_owned(),
+            distillation,
+            proposed_follow_ups,
+            cohort_id: cohort_id.to_owned(),
+            thread_id: thread_id.to_owned(),
+        };
+    }
+    // Fallback: the raw response text is the distillation.
+    ReporterConclusion {
+        schema: REPORTER_THREAD_SCHEMA.to_owned(),
+        distillation: content.to_owned(),
+        proposed_follow_ups: Vec::new(),
+        cohort_id: cohort_id.to_owned(),
+        thread_id: thread_id.to_owned(),
+    }
+}
+
+/// Write the reporter's conclusion as a thread artifact
+/// (review/threads/reporter/turn-000.json + thread.json), reusing the
+/// Order 7 lane-thread writer for consistency.
+pub(crate) fn write_reporter_thread(
+    review_dir: &Path,
+    conclusion: &ReporterConclusion,
+) -> Result<()> {
+    let turn = crate::LaneThreadTurn {
+        schema: REPORTER_THREAD_SCHEMA.to_owned(),
+        thread_id: conclusion.thread_id.clone(),
+        turn: 0,
+        stage: "reporter".to_owned(),
+        prompt_packet_path: "review/threads/reporter/prompt.md".to_owned(),
+        response_summary: conclusion.distillation.clone(),
+        routed_evidence_refs: conclusion
+            .proposed_follow_ups
+            .iter()
+            .map(|q| format!("follow-up: {q}"))
+            .collect(),
+        receipt_ref: "review/threads/reporter/turn-000.json".to_owned(),
+    };
+    crate::write_lane_thread_turn(
+        review_dir,
+        "reporter",
+        &turn,
+        &conclusion.cohort_id,
+        "reporter_completed",
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reporter_prompt_lists_lanes_and_includes_task() {
+        let digests = vec![
+            LaneDigest {
+                lane: "tests-oracle".to_owned(),
+                status: "ok".to_owned(),
+                conclusion: "test discriminates the patch".to_owned(),
+                thread_id: "tid1".to_owned(),
+            },
+            LaneDigest {
+                lane: "opposition".to_owned(),
+                status: "degraded".to_owned(),
+                conclusion: "strongest objection: missing error path".to_owned(),
+                thread_id: "tid2".to_owned(),
+            },
+        ];
+        let prompt = reporter_prompt(&digests);
+        assert!(prompt.contains("Reporter Coordination Task"));
+        assert!(prompt.contains("tests-oracle"));
+        assert!(prompt.contains("discriminates"));
+        assert!(prompt.contains("opposition"));
+        assert!(prompt.contains("missing error path"));
+        assert!(prompt.contains("proposed_follow_ups"));
+    }
+
+    #[test]
+    fn reporter_prompt_handles_no_lanes() {
+        let prompt = reporter_prompt(&[]);
+        assert!(prompt.contains("No lanes reported"));
+    }
+
+    #[test]
+    fn parse_reporter_conclusion_json() {
+        let content = r#"{"distillation": "PR is safe; one minor test gap.", "proposed_follow_ups": ["tests-oracle: confirm edge case"]}"#;
+        let c = parse_reporter_conclusion(content, "cid", "tid");
+        assert_eq!(c.distillation, "PR is safe; one minor test gap.");
+        assert_eq!(
+            c.proposed_follow_ups,
+            vec!["tests-oracle: confirm edge case"]
+        );
+        assert_eq!(c.cohort_id, "cid");
+    }
+
+    #[test]
+    fn parse_reporter_conclusion_fallback_for_non_json() {
+        let content = "This is just prose, not JSON.";
+        let c = parse_reporter_conclusion(content, "cid", "tid");
+        assert_eq!(c.distillation, content);
+        assert!(c.proposed_follow_ups.is_empty());
+    }
+
+    #[test]
+    fn lane_digests_skip_unexecuted_lanes() {
+        let mut receipt = crate::ModelLaneReceipt {
+            lane: "x".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "done".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: "cid".to_owned(),
+            shared_prefix_hash: "h".to_owned(),
+            thread_id: "tid".to_owned(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        let digests = lane_digests_from_receipts(std::slice::from_ref(&receipt));
+        assert_eq!(digests.len(), 1);
+        // A preflight-only receipt (empty thread_id) is skipped.
+        receipt.thread_id = String::new();
+        let digests = lane_digests_from_receipts(std::slice::from_ref(&receipt));
+        assert!(digests.is_empty());
+    }
+
+    #[test]
+    fn write_reporter_thread_creates_artifact() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let conclusion = ReporterConclusion {
+            schema: REPORTER_THREAD_SCHEMA.to_owned(),
+            distillation: "PR is safe to merge.".to_owned(),
+            proposed_follow_ups: vec!["tests-oracle: edge case?".to_owned()],
+            cohort_id: "cid".to_owned(),
+            thread_id: "tid".to_owned(),
+        };
+        write_reporter_thread(&review_dir, &conclusion)?;
+        let turn_path = review_dir.join("threads/reporter/turn-000.json");
+        assert!(turn_path.exists());
+        let thread_path = review_dir.join("threads/reporter/thread.json");
+        assert!(thread_path.exists());
+        let session: crate::LaneThreadSession =
+            serde_json::from_slice(&std::fs::read(&thread_path)?)?;
+        assert_eq!(session.lane, "reporter");
+        assert!(session.latest_conclusion.contains("safe to merge"));
+        Ok(())
+    }
+}
