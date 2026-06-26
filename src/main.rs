@@ -1653,6 +1653,196 @@ struct ModelLaneReceipt {
     fallback_from: Option<String>,
     #[serde(default)]
     cache_usage: ModelCacheUsage,
+    /// Run-level cohort identity: one value per strict-cohort run, derived
+    /// from provider + model + a prefix of the shared_prefix_hash. Every
+    /// same-model lane in a strict cohort carries the same cohort_id; a
+    /// mixed-provider run records the cohort break on `cohort_broken` rather
+    /// than silently presenting as cache-coherent. (Order 5 of #678.)
+    #[serde(default)]
+    cohort_id: String,
+    /// sha256 of the immutable shared PR/repo context prefix the cohort
+    /// shares. Proves cache coherence: every lane in a strict cohort reads
+    /// the same prefix and can reuse the provider's prompt cache. Sourced
+    /// from the run's `shared_context_id`. (Order 5 of #678.)
+    #[serde(default)]
+    shared_prefix_hash: String,
+    /// Logical lane thread identity (`<cohort_id>:<lane>`). Stateless today
+    /// (one turn per lane); becomes a persistent multi-turn thread id in
+    /// Order 7. (Order 5 of #678.)
+    #[serde(default)]
+    thread_id: String,
+    /// Execution turn within the lane's logical thread. 0 for the first
+    /// investigation wave; follow-up and reporter turns increment it once
+    /// Order 7 lands persistent sessions. (Order 5 of #678.)
+    #[serde(default)]
+    turn: u32,
+    /// True only when this lane left the cohort — i.e. its provider/model
+    /// differs from the cohort's primary (a cross-provider fallback under
+    /// `PrimaryWithFallback`, or mixed routing under `Auto`/`OpencodeGoWide`).
+    /// Default false. This makes a cache-coherence break observable on the
+    /// receipt rather than silent. (Order 5 of #678.)
+    #[serde(default)]
+    cohort_broken: bool,
+}
+
+/// Deterministic run-level cohort identity. One value per strict-cohort run,
+/// derived from provider + model + a short prefix of the shared-prefix hash.
+/// Every same-model lane in a strict cohort carries the same cohort_id; a
+/// receipt whose provider/model differ from the cohort's primary records the
+/// break on `cohort_broken` rather than presenting as cache-coherent.
+/// (Order 5 of #678.)
+fn cohort_id_for(provider: &str, model: &str, shared_prefix_hash: &str) -> String {
+    let prefix = &shared_prefix_hash.chars().take(12).collect::<String>();
+    format!("cohort:{provider}:{model}:{prefix}")
+}
+
+/// Build the cohort stamp (cohort_id, shared_prefix_hash, thread_id, turn,
+/// cohort_broken) that every lane receipt carries. Centralized so all
+/// construction sites stamp identically. `fallback_spec` is the provider+model
+/// the lane actually used if it fell back (None = primary); when the fallback
+/// is a different provider, that is a cohort break.
+fn cohort_stamp(
+    cohort_provider: &str,
+    cohort_model: &str,
+    shared_prefix_hash: &str,
+    lane: &str,
+    turn: u32,
+    fallback_spec: Option<(&str, &str)>,
+) -> (String, String, String, u32, bool) {
+    let cohort_id = cohort_id_for(cohort_provider, cohort_model, shared_prefix_hash);
+    let cohort_broken = match fallback_spec {
+        Some((fp, fm)) => fp != cohort_provider || fm != cohort_model,
+        None => false,
+    };
+    let thread_id = format!("{cohort_id}:{lane}");
+    (
+        cohort_id,
+        shared_prefix_hash.to_owned(),
+        thread_id,
+        turn,
+        cohort_broken,
+    )
+}
+
+#[cfg(test)]
+mod cohort_contract_tests {
+    use super::*;
+
+    #[test]
+    fn cohort_id_is_deterministic_and_stable() {
+        let a = cohort_id_for("minimax", "MiniMax-M3", "abcdef0123456789");
+        let b = cohort_id_for("minimax", "MiniMax-M3", "abcdef0123456789");
+        assert_eq!(a, b, "same inputs => same cohort id");
+        // Only the first 12 chars of the prefix hash contribute, matching the
+        // focused-proof id convention.
+        assert!(a.starts_with("cohort:minimax:MiniMax-M3:abcdef012345"));
+        // Different provider or model => different cohort.
+        assert_ne!(
+            a,
+            cohort_id_for("opencode-go", "MiniMax-M3", "abcdef0123456789")
+        );
+        assert_ne!(
+            a,
+            cohort_id_for("minimax", "OtherModel", "abcdef0123456789")
+        );
+    }
+
+    /// A strict cohort (same provider+model+prefix, no fallback) stamps
+    /// cohort_broken = false and identical cohort_id/thread_id per lane.
+    #[test]
+    fn strict_cohort_stamp_is_unbroken_and_consistent() {
+        let prefix = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let (id_a, hash_a, thread_a, turn_a, broken_a) =
+            cohort_stamp("minimax", "MiniMax-M3", prefix, "tests-oracle", 0, None);
+        let (id_b, _hash_b, thread_b, turn_b, broken_b) =
+            cohort_stamp("minimax", "MiniMax-M3", prefix, "opposition", 0, None);
+        assert_eq!(id_a, id_b, "strict cohort: same cohort_id across lanes");
+        assert_eq!(hash_a, prefix);
+        assert!(!broken_a && !broken_b, "strict cohort: never broken");
+        assert_ne!(thread_a, thread_b, "thread_id is lane-distinct");
+        assert!(thread_a.ends_with(":tests-oracle"));
+        assert_eq!(turn_a, 0);
+        assert_eq!(turn_b, 0);
+    }
+
+    /// A cross-provider fallback (the lane ran on a different provider than the
+    /// cohort primary) is a cohort break: cohort_broken = true. This is the
+    /// observable provenance for a cache-coherence break under
+    /// PrimaryWithFallback / Auto / OpencodeGoWide.
+    #[test]
+    fn cross_provider_fallback_is_a_cohort_break() {
+        let (.., broken) = cohort_stamp(
+            "minimax", // cohort primary
+            "MiniMax-M3",
+            "deadbeef",
+            "tests-oracle",
+            0,
+            Some(("opencode-go", "mimo-v2.5")), // lane actually ran elsewhere
+        );
+        assert!(broken, "a cross-provider fallback must mark cohort_broken");
+    }
+
+    /// A same-provider fallback (same provider+model as primary) is NOT a
+    /// cohort break even though fallback_from is set.
+    #[test]
+    fn same_provider_fallback_is_not_a_cohort_break() {
+        let (.., broken) = cohort_stamp(
+            "minimax",
+            "MiniMax-M3",
+            "deadbeef",
+            "tests-oracle",
+            0,
+            Some(("minimax", "MiniMax-M3")), // same provider+model
+        );
+        assert!(
+            !broken,
+            "a same-provider/model fallback is not a cohort break"
+        );
+    }
+
+    /// New receipt fields round-trip through JSON; old receipts (without the
+    /// fields) deserialize via #[serde(default)] (backward compat).
+    #[test]
+    fn model_lane_receipt_round_trips_and_back_compat() -> Result<()> {
+        let receipt = ModelLaneReceipt {
+            lane: "tests-oracle".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "completed".to_owned(),
+            duration_ms: Some(1234),
+            http_status: Some(200),
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: ModelCacheUsage::default(),
+            cohort_id: "cohort:minimax:MiniMax-M3:abcdef012345".to_owned(),
+            shared_prefix_hash: "abcdef0123456789".to_owned(),
+            thread_id: "cohort:minimax:MiniMax-M3:abcdef012345:tests-oracle".to_owned(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        let json = serde_json::to_string(&receipt)?;
+        assert!(json.contains("\"cohort_id\":\"cohort:minimax:MiniMax-M3:abcdef012345\""));
+        assert!(json.contains("\"shared_prefix_hash\":\"abcdef0123456789\""));
+        assert!(json.contains("\"cohort_broken\":false"));
+        let back: ModelLaneReceipt = serde_json::from_str(&json)?;
+        assert_eq!(back.cohort_id, receipt.cohort_id);
+        assert_eq!(back.thread_id, receipt.thread_id);
+
+        // Backward compat: an old receipt JSON (no cohort fields) parses with
+        // defaults — existing artifacts on disk stay readable.
+        let old_json = r#"{
+            "lane":"x","provider":"minimax","model":"M3","endpoint_kind":"openai-chat",
+            "status":"ok","reason":"done","cache_usage":{}
+        }"#;
+        let legacy: ModelLaneReceipt = serde_json::from_str(old_json)?;
+        assert_eq!(legacy.cohort_id, "");
+        assert_eq!(legacy.shared_prefix_hash, "");
+        assert!(!legacy.cohort_broken);
+        assert_eq!(legacy.turn, 0);
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -20690,6 +20880,11 @@ index 1111111..2222222 100644
             response_shape: None,
             fallback_from: None,
             cache_usage: super::ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn: 0,
+            cohort_broken: false,
         }
     }
 

@@ -658,6 +658,11 @@ mod tests {
             response_shape: None,
             fallback_from: None,
             cache_usage: ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn: 0,
+            cohort_broken: false,
         }
     }
 
