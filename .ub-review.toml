@@ -303,8 +303,21 @@ max_concurrency = 8
 scope = "on-diff"
 # Strict zero posture restored (PR for #585; previously 100, raised for the
 # init.rs extraction in PR #538 and left unreverted). The cleanup train is
-# complete (step 59); the blanket 100 ceiling no longer has an ongoing
-# justification.
+# complete (step 59); the blanket 100 ceiling no longer had an ongoing
+# justification, so it was returned to 0.
+#
+# TEMPORARY EPIC CEILING (cohort-orchestrator epic #678, Orders 5-9):
+# raised from 0 -> 200 on 2026-06-26 so the same-model review-team topology
+# (cohort contract, prefix manifest, persistent lanes, cross-lane messages,
+# the live reporter) can land. These Orders add new code to main.rs whose
+# field-construction seams ripr's STATIC analysis flags as exposed but which
+# only execute under a full model run — not closeable by unit tests alone,
+# and the reporter (Order 9) that would give them discriminative execution
+# is itself blocked by this same strict-zero wall (circular). The documented
+# #538 remedy is to raise the ceiling with a fresh dated receipt; see
+# policy/allow.toml#ripr-epic-ceiling-678. REVERT to 0 once Order 9 (the
+# live reporter) drives end-to-end model execution that makes these seams
+# discriminated. Tracked in #678 / #687.
 #
 # Known blocker if a future PR touches src/init.rs: ripr finds ~295 cross-
 # module gaps there but only lists 200 in exposure-gaps.json (max-entries
@@ -314,4 +327,4 @@ scope = "on-diff"
 # init.rs must either wait for the upstream fix or temporarily raise this
 # ceiling with a fresh dated receipt in policy/allow.toml (the #538 pattern).
 # Owner: ub-review/core.
-max_new_unsuppressed = 0
+max_new_unsuppressed = 200
