@@ -81,6 +81,8 @@ mod plan_build;
 pub(crate) use plan_build::*;
 mod lane_packets;
 pub(crate) use lane_packets::*;
+mod lane_threads;
+pub(crate) use lane_threads::*;
 mod review_compiler;
 pub(crate) use review_compiler::*;
 mod cost_artifact;
@@ -4009,6 +4011,37 @@ fn write_review_artifacts(
                 &mut proof_requests,
                 &mut issue_candidates,
             )?;
+            // Order 7 (#678): record each executed lane's primary-wave turn as a
+            // persistent thread artifact (review/threads/<lane>/turn-000.json +
+            // thread.json). This makes a lane's logical history inspectable and
+            // gives the reporter (Order 9) a thread to address. Written from the
+            // executed receipts; lanes that only reached preflight/planned
+            // (empty thread_id) are skipped.
+            for receipt in &model_lanes {
+                if receipt.thread_id.is_empty() {
+                    continue;
+                }
+                let routed: Vec<String> = assignments
+                    .iter()
+                    .find(|a| a.lane.id == receipt.lane)
+                    .map(|a| a.lane.receives.clone())
+                    .unwrap_or_default();
+                let receipt_ref = format!("review/model/{}/content.json", receipt.lane);
+                let turn = primary_turn(
+                    &receipt.thread_id,
+                    &receipt.lane,
+                    &receipt.reason,
+                    routed,
+                    &receipt_ref,
+                );
+                let _ = write_lane_thread_turn(
+                    &review_dir,
+                    &receipt.lane,
+                    &turn,
+                    &receipt.cohort_id,
+                    &receipt.status,
+                );
+            }
             dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
             apply_unsafe_review_comment_plan_candidates(
                 &out.join("sensors").join("unsafe-review"),
