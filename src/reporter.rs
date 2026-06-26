@@ -170,6 +170,19 @@ pub(crate) fn write_reporter_thread(
     Ok(())
 }
 
+/// Read the reporter's distillation from review/threads/reporter/turn-000.json.
+/// Returns None if the reporter didn't run or the artifact is absent.
+pub(crate) fn read_reporter_distillation(review_dir: &Path) -> Option<String> {
+    let turn_path = review_dir.join("threads/reporter/turn-000.json");
+    let bytes = std::fs::read(&turn_path).ok()?;
+    let turn: crate::LaneThreadTurn = serde_json::from_slice(&bytes).ok()?;
+    if turn.response_summary.is_empty() {
+        None
+    } else {
+        Some(turn.response_summary)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -273,6 +286,34 @@ mod tests {
             serde_json::from_slice(&std::fs::read(&thread_path)?)?;
         assert_eq!(session.lane, "reporter");
         assert!(session.latest_conclusion.contains("safe to merge"));
+        Ok(())
+    }
+
+    #[test]
+    fn read_reporter_distillation_returns_none_when_absent() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        assert!(read_reporter_distillation(&review_dir).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn read_reporter_distillation_reads_conclusion() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let conclusion = ReporterConclusion {
+            schema: REPORTER_THREAD_SCHEMA.to_owned(),
+            distillation: "PR is safe to merge; tests cover the change.".to_owned(),
+            proposed_follow_ups: vec![],
+            cohort_id: "cid".to_owned(),
+            thread_id: "tid".to_owned(),
+        };
+        write_reporter_thread(&review_dir, &conclusion)?;
+        let distillation = read_reporter_distillation(&review_dir);
+        let distillation = distillation
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("reporter distillation missing"))?;
+        assert!(distillation.contains("safe to merge"));
         Ok(())
     }
 }
