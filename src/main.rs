@@ -83,6 +83,8 @@ mod lane_packets;
 pub(crate) use lane_packets::*;
 mod lane_threads;
 pub(crate) use lane_threads::*;
+mod cross_lane_messages;
+pub(crate) use cross_lane_messages::*;
 mod review_compiler;
 pub(crate) use review_compiler::*;
 mod cost_artifact;
@@ -3886,6 +3888,9 @@ fn write_review_artifacts(
 ) -> Result<GateOutcome> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
+    // Order 8 (#678): cross-lane message queue — the lossless working-memory
+    // surface the reporter (Order 9) reads from. Sibling to the event log.
+    let message_log = MessageLog::open(&review_dir.join("messages.ndjson"))?;
     let profile = config.selected_profile()?;
     let provider_concurrency = provider_concurrency_limits(config);
     let mut proof_requests = Vec::new();
@@ -4041,6 +4046,45 @@ fn write_review_artifacts(
                     &receipt.cohort_id,
                     &receipt.status,
                 );
+                // Order 8 (#678): emit a lane_report message to the cross-lane
+                // queue so the reporter (Order 9) can consume the lane's
+                // conclusion. Also emit thread_terminal when the lane is done.
+                // Message-log errors are logged to the event log, not
+                // propagated (the queue is observability, not a run dependency).
+                let turn_ref = format!("review/threads/{}/turn-000.json", receipt.lane);
+                if let Err(e) = message_log.append(
+                    CrossLaneMessageKind::LaneReport,
+                    &receipt.lane,
+                    "reporter",
+                    0,
+                    vec![turn_ref.clone()],
+                    serde_json::json!({
+                        "status": receipt.status,
+                        "conclusion": receipt.reason,
+                        "cohort_id": receipt.cohort_id,
+                    }),
+                ) {
+                    let _ = event_log.append(
+                        "message_log_error",
+                        serde_json::json!({"lane": receipt.lane, "kind": "lane_report", "error": format!("{e:#}")}),
+                    );
+                }
+                if matches!(
+                    receipt.status.as_str(),
+                    "ok" | "degraded" | "failed" | "skipped_budget" | "preflight_failed"
+                ) && let Err(e) = message_log.append(
+                    CrossLaneMessageKind::ThreadTerminal,
+                    &receipt.lane,
+                    "reporter",
+                    0,
+                    vec![turn_ref],
+                    serde_json::json!({"terminal_reason": receipt.status}),
+                ) {
+                    let _ = event_log.append(
+                        "message_log_error",
+                        serde_json::json!({"lane": receipt.lane, "kind": "thread_terminal", "error": format!("{e:#}")}),
+                    );
+                }
             }
             dedupe_inline_comments(&mut inline_comments, &mut summary_only_findings);
             apply_unsafe_review_comment_plan_candidates(
