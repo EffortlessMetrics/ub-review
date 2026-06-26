@@ -203,8 +203,9 @@ pub(crate) fn run_request_proof_broker_v0(
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    let sanitizer_timeout = profile.budgets.proof_command_timeout_sec.max(120);
-    let existing_targets: BTreeSet<String> = result
+    // Dedupe by the content-hash receipt id (sanitizer-receipt-<sha256[..12]>),
+    // NOT target byte length — distinct equal-length targets must not collapse.
+    let existing_sanitizer_receipts: BTreeSet<String> = result
         .proof_receipts
         .iter()
         .filter(|r| r.kind == "sanitizer-witness")
@@ -214,10 +215,16 @@ pub(crate) fn run_request_proof_broker_v0(
         .iter()
         .filter(|r| matches!(r.kind, ProofKind::SanitizerWitness))
     {
-        let receipt_key = format!("sanitizer-receipt-{}", req.target.len());
-        if existing_targets.contains(&receipt_key) {
+        let target_fp = &sha256_hex(req.target.as_bytes())[..12];
+        let receipt_key = format!("sanitizer-receipt-{target_fp}");
+        if existing_sanitizer_receipts.contains(&receipt_key) {
             continue;
         }
+        // Per-request timeout wins over the profile budget; floor at the
+        // profile's per-command cap so a runaway request cannot exceed policy.
+        let sanitizer_timeout = req
+            .timeout_sec
+            .max(profile.budgets.proof_command_timeout_sec);
         let (receipt, lease) = run_sanitizer_witness(
             root,
             out,
@@ -490,9 +497,14 @@ where
     F: FnMut(&[String], &BTreeMap<String, String>, u64) -> Result<CommandStatus>,
 {
     let lease_budget = proof_lease_budget(profile)?;
+    // Content-hash fingerprint of the target (not its byte length) so two
+    // distinct targets of equal length cannot collide on the lease/receipt id
+    // or on the on-disk witness stream files. Matches the focused-proof id
+    // convention (sha256_hex(..)[..12]).
+    let target_fp = &sha256_hex(target.as_bytes())[..12];
     let resource_lease = ResourceLease {
         schema: RESOURCE_LEASE_SCHEMA.to_owned(),
-        id: format!("sanitizer-lease-{}", target.len()),
+        id: format!("sanitizer-lease-{target_fp}"),
         kind: "sanitizer-witness".to_owned(),
         consumer: format!("sanitizer-witness:{target}"),
         status: "granted".to_owned(),
@@ -560,7 +572,7 @@ where
     Ok((
         ProofReceipt {
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
-            id: format!("sanitizer-receipt-{}", target.len()),
+            id: format!("sanitizer-receipt-{target_fp}"),
             kind: "sanitizer-witness".to_owned(),
             base: diff.base.clone(),
             head: diff.head.clone(),
@@ -608,10 +620,13 @@ pub(crate) fn run_sanitizer_witness(
 ) -> Result<(ProofReceipt, ResourceLease)> {
     let witness_dir = out.join("sanitizer-witness");
     fs::create_dir_all(&witness_dir)?;
+    // Content-hash fingerprint so distinct equal-length targets get distinct
+    // on-disk stream files (no collision).
+    let target_fp = sha256_hex(target.as_bytes())[..12].to_owned();
     let mut runner =
         |argv: &[String], env: &BTreeMap<String, String>, timeout: u64| -> Result<CommandStatus> {
-            let stdout_path = witness_dir.join(format!("sanitizer-{}-stdout.log", target.len()));
-            let stderr_path = witness_dir.join(format!("sanitizer-{}-stderr.log", target.len()));
+            let stdout_path = witness_dir.join(format!("sanitizer-{target_fp}-stdout.log"));
+            let stderr_path = witness_dir.join(format!("sanitizer-{target_fp}-stderr.log"));
             let status =
                 crate::run_command_to_files(root, argv, env, timeout, &stdout_path, &stderr_path)?;
             Ok(status)
@@ -644,10 +659,11 @@ fn skip_receipt(
         lease.status = "skipped_profile".to_owned();
     }
     lease.reason = reason.to_owned();
+    let target_fp = &sha256_hex(target.as_bytes())[..12];
     (
         ProofReceipt {
             schema: PROOF_RECEIPT_SCHEMA.to_owned(),
-            id: format!("sanitizer-receipt-{}", target.len()),
+            id: format!("sanitizer-receipt-{target_fp}"),
             kind: "sanitizer-witness".to_owned(),
             base: diff.base.clone(),
             head: diff.head.clone(),
@@ -852,6 +868,60 @@ mod tests {
                 .all(|r| r.kind != "focused-test" && r.kind != "focused-build"),
             "a sanitizer request must not produce focused-test/build receipts"
         );
+        Ok(())
+    }
+
+    /// Regression for the self-review finding on PR #684: distinct sanitizer
+    /// targets of EQUAL byte length must NOT collapse to one receipt. The old
+    /// code keyed the receipt id and dedup on target.len(); two targets of the
+    /// same length silently dropped one witness. The fix keys on a sha256
+    /// content-hash fingerprint, so distinct content always gets distinct
+    /// receipts and on-disk stream files.
+    #[test]
+    fn sanitizer_distinct_equal_length_targets_do_not_collide() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff = test_diff();
+        let profile = Profile::default();
+        let args = crate::tests::test_run_args(temp.path().to_path_buf());
+        // Two distinct targets, both exactly 12 bytes long.
+        let req = |id: &str, target: &str| ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: id.to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: format!("cargo +nightly test asan {target}"),
+            reason: "confirm no UB".to_owned(),
+            cost: "manual".to_owned(),
+            timeout_sec: 120,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let requests = vec![
+            req("req-a", "config_tests"),  // 12 bytes
+            req("req-b", "other_xtests_"), // 12 bytes — distinct content
+        ];
+        let result = run_request_proof_broker_v0(
+            temp.path(),
+            temp.path(),
+            &diff,
+            &profile,
+            &requests,
+            &[],
+            &[],
+            &args,
+        )?;
+        let sanitizer_ids: Vec<String> = result
+            .proof_receipts
+            .iter()
+            .filter(|r| r.kind == "sanitizer-witness")
+            .map(|r| r.id.clone())
+            .collect();
+        assert_eq!(
+            sanitizer_ids.len(),
+            2,
+            "two distinct equal-length targets must produce two distinct receipts, got {sanitizer_ids:?}"
+        );
+        assert_ne!(sanitizer_ids[0], sanitizer_ids[1]);
         Ok(())
     }
 }
