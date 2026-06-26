@@ -105,6 +105,29 @@ pub(crate) fn run_seeded_proof_stream_v0(
     Ok((proof_result, phases))
 }
 
+/// Normalize a v1 `ProofRequest` to a typed `ProofRequestV2` (Order 4b of
+/// #678). This is the single v1→v2 normalization point for the broker: it
+/// infers the `ProofKind` from the v1 `cost`/`command` via the existing
+/// `classify_proof_kind`, carries the command as the v2 `target`, and maps
+/// the remaining fields. After this, the broker works in v2.
+pub(crate) fn proof_request_to_v2(req: &ProofRequest) -> ProofRequestV2 {
+    let kind = classify_proof_kind(&req.cost, &req.command);
+    ProofRequestV2 {
+        schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+        id: format!("{}-v2", req.id),
+        kind,
+        target: req.command.clone(),
+        claim_ids: Vec::new(),
+        requested_by: req.requested_by.clone(),
+        expected_interpretation: req.reason.clone(),
+        priority: if req.required { "high" } else { "medium" }.to_owned(),
+        timeout_sec: req.timeout_sec,
+        status: req.status.clone(),
+        base: String::new(),
+        head: String::new(),
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "primary request proof broker mirrors follow-up broker inputs"
@@ -119,10 +142,18 @@ pub(crate) fn run_request_proof_broker_v0(
     existing_leases: &[ResourceLease],
     args: &RunArgs,
 ) -> Result<ProofBrokerResult> {
+    // Native v2 proof flow (Order 4b of #678): normalize v1 requests to typed
+    // v2 once at ingestion, then extract candidates from v2. v2 is now the
+    // internal contract; the candidate extractors key off ProofKind, so only
+    // FocusedTest/FocusedBuild requests reach test/build execution and other
+    // kinds (SanitizerWitness/MiriWitness/...) are routed by their own paths
+    // (Order 4c, #681). The v2 extractors re-run the allowlist on the command
+    // string, so the security boundary is preserved byte-for-byte.
+    let v2_requests: Vec<ProofRequestV2> = proof_requests.iter().map(proof_request_to_v2).collect();
     let total_budget = proof_budget(profile)?;
     let budget = remaining_focused_proof_budget(total_budget, existing_leases);
     let tasks = unreceipted_focused_test_tasks(
-        focused_test_candidates_from_requests(proof_requests),
+        focused_test_candidates_from_v2(&v2_requests),
         existing_receipts,
     );
     let mut result = run_follow_up_proof_broker_v0_with_runner(
@@ -144,7 +175,7 @@ pub(crate) fn run_request_proof_broker_v0(
         .chain(result.proof_receipts.iter())
         .cloned()
         .collect::<Vec<_>>();
-    let build_tasks = focused_build_candidates_from_requests(proof_requests);
+    let build_tasks = focused_build_candidates_from_v2(&v2_requests);
     let build_tasks = unreceipted_focused_build_tasks(build_tasks, &existing_and_new_receipts);
     let build_result = run_focused_build_proof_tasks_with_runner(
         root,
