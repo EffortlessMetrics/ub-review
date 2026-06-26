@@ -189,6 +189,49 @@ pub(crate) fn run_request_proof_broker_v0(
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
+
+    // SanitizerWitness dispatch (Order 4c of #678). v2 requests with kind
+    // SanitizerWitness execute via the production sanitizer path
+    // (`run_sanitizer_witness`), which resolves the typed intent to an
+    // allowlisted cargo +nightly test command, runs it under a lease with a
+    // wall-clock timeout and bounded stdout/stderr files, and produces a
+    // canonical ProofReceipt. Skips (no nightly / dry-run / unresolved) emit a
+    // skip receipt rather than executing. Each witness is deduped against
+    // existing receipts so a re-run does not re-execute.
+    let nightly_available = std::process::Command::new("cargo")
+        .args(["+nightly", "--version"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    let sanitizer_timeout = profile.budgets.proof_command_timeout_sec.max(120);
+    let existing_targets: BTreeSet<String> = result
+        .proof_receipts
+        .iter()
+        .filter(|r| r.kind == "sanitizer-witness")
+        .map(|r| r.id.clone())
+        .collect();
+    for req in v2_requests
+        .iter()
+        .filter(|r| matches!(r.kind, ProofKind::SanitizerWitness))
+    {
+        let receipt_key = format!("sanitizer-receipt-{}", req.target.len());
+        if existing_targets.contains(&receipt_key) {
+            continue;
+        }
+        let (receipt, lease) = run_sanitizer_witness(
+            root,
+            out,
+            diff,
+            profile,
+            args.dry_run,
+            &req.target,
+            sanitizer_timeout,
+            nightly_available,
+        )?;
+        result.proof_receipts.push(receipt);
+        result.resource_leases.push(lease);
+    }
+
     Ok(result)
 }
 
@@ -424,10 +467,14 @@ pub(crate) fn focused_build_resource_lease(
     }
 }
 
-/// Execute a single sanitizer witness proof task (Order 2 PR 3 of epic #655).
-/// Resolves ProofKind::SanitizerWitness via the executor adapter, runs the
-/// approved command under a resource lease, and produces a ProofReceipt.
-#[cfg(test)]
+/// Execute a single sanitizer witness proof task.
+/// Resolves `ProofKind::SanitizerWitness` via the executor adapter, runs the
+/// approved command under a resource lease, and produces a `ProofReceipt`.
+///
+/// Production sanitizer-witness path (Order 4c of #678). Previously
+/// `#[cfg(test)]`-gated; now reachable from production via the `SanitizerWitness`
+/// dispatch in `run_request_proof_broker_v0` and via `run_sanitizer_witness`.
+/// The `with_runner` variant is the dependency-injection seam used by tests.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn run_sanitizer_witness_with_runner<F>(
     _out: &Path,
@@ -540,7 +587,49 @@ where
     ))
 }
 
-#[cfg(test)]
+/// Production entry for a sanitizer witness (Order 4c of #678). Supplies the
+/// bounded, file-backed runner (`run_command_to_files`) to
+/// `run_sanitizer_witness_with_runner`, bridging its `(argv, env, timeout)`
+/// runner contract to the production runner that writes stdout/stderr to
+/// bounded files under `out/sanitizer-witness/`. This is what the
+/// `SanitizerWitness` dispatch in `run_request_proof_broker_v0` calls in a
+/// real run; it executes only when a `SanitizerWitness` v2 request is present
+/// and nightly is available.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn run_sanitizer_witness(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    dry_run: bool,
+    target: &str,
+    timeout_sec: u64,
+    nightly_available: bool,
+) -> Result<(ProofReceipt, ResourceLease)> {
+    let witness_dir = out.join("sanitizer-witness");
+    fs::create_dir_all(&witness_dir)?;
+    let mut runner =
+        |argv: &[String], env: &BTreeMap<String, String>, timeout: u64| -> Result<CommandStatus> {
+            let stdout_path = witness_dir.join(format!("sanitizer-{}-stdout.log", target.len()));
+            let stderr_path = witness_dir.join(format!("sanitizer-{}-stderr.log", target.len()));
+            let status =
+                crate::run_command_to_files(root, argv, env, timeout, &stdout_path, &stderr_path)?;
+            Ok(status)
+        };
+    run_sanitizer_witness_with_runner(
+        out,
+        diff,
+        profile,
+        dry_run,
+        target,
+        timeout_sec,
+        nightly_available,
+        &mut runner,
+    )
+}
+
+/// Build a canonical `ProofReceipt` that records a sanitizer-witness skip
+/// (dry-run, nightly unavailable, unresolved intent) without executing.
 fn skip_receipt(
     lease_base: &ResourceLease,
     diff: &DiffContext,
@@ -687,6 +776,82 @@ mod tests {
         assert_eq!(receipt.result, "sanitizer_ub_detected");
         assert_eq!(receipt.commands[0].status, "failed");
         assert!(receipt.commands[0].reason.contains("UB"));
+        Ok(())
+    }
+
+    /// Production sanitizer dispatch (Order 4c of #678): a v1 `ProofRequest`
+    /// whose cost/command infers `ProofKind::SanitizerWitness` (via
+    /// `classify_proof_kind`) must, when run through the request proof broker,
+    /// produce a `sanitizer-witness` receipt. This proves the typed dispatch
+    /// added in Order 4b routes sanitizer requests to the production sanitizer
+    /// path rather than dropping them or misrouting to test/build. The exact
+    /// result (`sanitizer_clean`/`sanitizer_ub_detected`/`skipped_nightly`) is
+    /// environment-dependent (nightly availability); the test asserts the
+    /// kind and a valid result vocabulary.
+    #[test]
+    fn request_broker_dispatches_sanitizer_witness() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let diff = test_diff();
+        let profile = Profile::default();
+        let args = crate::tests::test_run_args(temp.path().to_path_buf());
+        // cost="manual" + command containing "asan" => classify_proof_kind
+        // infers SanitizerWitness.
+        let sanitizer_request = ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "req-san-1".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo +nightly test asan config_tests".to_owned(),
+            reason: "confirm no UB".to_owned(),
+            cost: "manual".to_owned(),
+            timeout_sec: 120,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let result = run_request_proof_broker_v0(
+            temp.path(),
+            temp.path(),
+            &diff,
+            &profile,
+            std::slice::from_ref(&sanitizer_request),
+            &[],
+            &[],
+            &args,
+        )?;
+        let sanitizer_receipts: Vec<_> = result
+            .proof_receipts
+            .iter()
+            .filter(|r| r.kind == "sanitizer-witness")
+            .collect();
+        assert_eq!(
+            sanitizer_receipts.len(),
+            1,
+            "the broker must dispatch exactly one sanitizer-witness receipt"
+        );
+        let receipt = sanitizer_receipts[0];
+        assert_eq!(receipt.kind, "sanitizer-witness");
+        assert!(
+            matches!(
+                receipt.result.as_str(),
+                "sanitizer_clean"
+                    | "sanitizer_ub_detected"
+                    | "skipped_nightly"
+                    | "skipped_profile"
+                    | "skipped_unresolved"
+                    | "timed_out"
+            ),
+            "sanitizer receipt result must be a valid witness outcome, got `{}`",
+            receipt.result
+        );
+        // No focused-test/build receipt should be produced for a sanitizer
+        // request — the typed dispatch must not misroute it.
+        assert!(
+            result
+                .proof_receipts
+                .iter()
+                .all(|r| r.kind != "focused-test" && r.kind != "focused-build"),
+            "a sanitizer request must not produce focused-test/build receipts"
+        );
         Ok(())
     }
 }
