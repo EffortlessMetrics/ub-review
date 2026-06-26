@@ -214,6 +214,84 @@ pub(crate) fn focused_test_candidates_from_requests(
     tasks
 }
 
+/// Native v2 proof flow (Order 4b of #678): extract focused-test candidates
+/// from typed `ProofRequestV2`s. Only `ProofKind::FocusedTest` requests map to
+/// focused-test candidates; other kinds (SanitizerWitness, MiriWitness, ...)
+/// are ignored here — they are not test/build candidates and must not be
+/// misrouted. For a `FocusedTest` request the `target` carries the cargo-test
+/// command string, which the existing allowlist (`focused_cargo_test_command
+/// _spec`) and bun detector validate. This preserves the v1 security boundary
+/// while making v2 the input contract.
+///
+/// The v2 request is normalized to a v1 `ProofRequest` and run through the
+/// existing v1 extractor so the candidate output is byte-identical to a v1
+/// request with the same command — pinned by `v2_focused_test_candidates_*
+/// match_v1` in tests.
+pub(crate) fn focused_test_candidates_from_v2(
+    v2_requests: &[ProofRequestV2],
+) -> Vec<FocusedTestTask> {
+    let v1_requests = v2_requests
+        .iter()
+        .filter_map(proof_request_v2_to_v1_for_test)
+        .collect::<Vec<_>>();
+    focused_test_candidates_from_requests(&v1_requests)
+}
+
+/// Native v2 proof flow (Order 4b of #678): extract focused-build candidates
+/// from typed `ProofRequestV2`s. Only `ProofKind::FocusedBuild` requests map
+/// here; the `target` carries the cargo-build command string, validated by the
+/// existing `focused_build_command_spec` allowlist.
+pub(crate) fn focused_build_candidates_from_v2(
+    v2_requests: &[ProofRequestV2],
+) -> Vec<FocusedBuildTask> {
+    let v1_requests = v2_requests
+        .iter()
+        .filter_map(proof_request_v2_to_v1_for_build)
+        .collect::<Vec<_>>();
+    focused_build_candidates_from_requests(&v1_requests)
+}
+
+/// Normalize a v2 `FocusedTest` request to a v1 `ProofRequest` for the
+/// existing allowlist-backed extractor. Returns `None` for any other kind.
+fn proof_request_v2_to_v1_for_test(req: &ProofRequestV2) -> Option<ProofRequest> {
+    if !matches!(req.kind, ProofKind::FocusedTest) {
+        return None;
+    }
+    Some(proof_request_v2_to_v1(req, "focused-test"))
+}
+
+/// Normalize a v2 `FocusedBuild` request to a v1 `ProofRequest`. Returns
+/// `None` for any other kind.
+fn proof_request_v2_to_v1_for_build(req: &ProofRequestV2) -> Option<ProofRequest> {
+    if !matches!(req.kind, ProofKind::FocusedBuild) {
+        return None;
+    }
+    Some(proof_request_v2_to_v1(req, "focused-build"))
+}
+
+/// Shared v2→v1 normalization. The v2 `target` is the command string; `cost`
+/// is the v1 proof-class label for the kind. Other v1 fields are mapped from
+/// their v2 equivalents.
+fn proof_request_v2_to_v1(req: &ProofRequestV2, cost: &str) -> ProofRequest {
+    ProofRequest {
+        schema: "ub-review.proof_request.v1".to_owned(),
+        // Drop the "-v2" suffix the shadow converter adds so dedup keys match.
+        id: req.id.strip_suffix("-v2").unwrap_or(&req.id).to_owned(),
+        lane: req
+            .requested_by
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "proof-planner".to_owned()),
+        requested_by: req.requested_by.clone(),
+        command: req.target.clone(),
+        reason: req.expected_interpretation.clone(),
+        cost: cost.to_owned(),
+        timeout_sec: req.timeout_sec,
+        required: req.priority == "high",
+        status: req.status.clone(),
+    }
+}
+
 pub(crate) fn focused_build_plans_from_requests(
     proof_requests: &[ProofRequest],
     budget: ProofBudget,
@@ -562,6 +640,143 @@ mod tests {
         assert_eq!(FocusedProofMode::HeadOnly.command_count(), 1);
         assert_eq!(FocusedProofMode::RedGreen.key(), "red-green");
         assert_eq!(FocusedProofMode::RedGreen.command_count(), 2);
+    }
+
+    fn v2_focused_test_request(command: &str) -> ProofRequestV2 {
+        ProofRequestV2 {
+            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+            id: "req-1-v2".to_owned(),
+            kind: ProofKind::FocusedTest,
+            target: command.to_owned(),
+            claim_ids: vec!["claim-1".to_owned()],
+            requested_by: vec!["tests-oracle".to_owned()],
+            expected_interpretation: "confirm test discriminates the patch".to_owned(),
+            priority: "high".to_owned(),
+            timeout_sec: 300,
+            status: "requested".to_owned(),
+            base: String::new(),
+            head: String::new(),
+        }
+    }
+
+    fn v2_focused_build_request(command: &str) -> ProofRequestV2 {
+        ProofRequestV2 {
+            schema: crate::artifacts::PROOF_REQUEST_V2_SCHEMA.to_owned(),
+            id: "req-2-v2".to_owned(),
+            kind: ProofKind::FocusedBuild,
+            target: command.to_owned(),
+            claim_ids: Vec::new(),
+            requested_by: vec!["correctness".to_owned()],
+            expected_interpretation: String::new(),
+            priority: "medium".to_owned(),
+            timeout_sec: 120,
+            status: "requested".to_owned(),
+            base: String::new(),
+            head: String::new(),
+        }
+    }
+
+    /// Native v2 flow (Order 4b): a v2 `FocusedTest` request yields the SAME
+    /// focused-test candidate the v1 extractor produces for the equivalent v1
+    /// command. This pins the v2→v1 normalization so the security boundary
+    /// (allowlist) is preserved byte-for-byte.
+    #[test]
+    fn v2_focused_test_candidates_match_v1() {
+        let command = "cargo test --locked --test config_tests";
+        let v1 = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "req-1".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: command.to_owned(),
+            reason: String::new(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: true,
+            status: "requested".to_owned(),
+        }];
+        let v2 = vec![v2_focused_test_request(command)];
+        let from_v1 = focused_test_candidates_from_requests(&v1);
+        let from_v2 = focused_test_candidates_from_v2(&v2);
+        assert_eq!(
+            from_v1.len(),
+            from_v2.len(),
+            "v1 and v2 extractors must produce the same candidate count"
+        );
+        assert_eq!(from_v1.len(), 1, "the allowlisted command must resolve");
+        // The task identity keys off (file, test_name, mode) and must match.
+        assert_eq!(from_v1[0].id, from_v2[0].id);
+        assert_eq!(from_v1[0].file, from_v2[0].file);
+        assert_eq!(from_v1[0].test_name, from_v2[0].test_name);
+        assert_eq!(from_v1[0].mode, from_v2[0].mode);
+        assert_eq!(
+            from_v1[0].command_specs.is_some(),
+            from_v2[0].command_specs.is_some()
+        );
+    }
+
+    /// v2 build candidates match v1 for the same command.
+    #[test]
+    fn v2_focused_build_candidates_match_v1() {
+        let command = "cargo check --workspace --all-targets --locked";
+        let v1 = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "req-2".to_owned(),
+            lane: "correctness".to_owned(),
+            requested_by: vec!["correctness".to_owned()],
+            command: command.to_owned(),
+            reason: String::new(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 120,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+        let v2 = vec![v2_focused_build_request(command)];
+        let from_v1 = focused_build_candidates_from_requests(&v1);
+        let from_v2 = focused_build_candidates_from_v2(&v2);
+        assert_eq!(from_v1.len(), from_v2.len());
+        assert_eq!(from_v1.len(), 1, "the allowlisted build must resolve");
+        assert_eq!(from_v1[0].command, from_v2[0].command);
+        assert_eq!(from_v1[0].argv, from_v2[0].argv);
+    }
+
+    /// Typed dispatch: a v2 request with a non-test/build kind
+    /// (SanitizerWitness, MiriWitness) must produce NO focused-test or
+    /// focused-build candidates — it must not be misrouted to test/build
+    /// execution. This is the property that lets Order 4c wire sanitizer
+    /// without disturbing test/build dispatch.
+    #[test]
+    fn v2_non_test_build_kinds_produce_no_test_build_candidates() {
+        let sanitizer = ProofRequestV2 {
+            kind: ProofKind::SanitizerWitness,
+            target: "config_tests".to_owned(),
+            ..v2_focused_test_request("unused")
+        };
+        let miri = ProofRequestV2 {
+            kind: ProofKind::MiriWitness,
+            target: "config_tests".to_owned(),
+            ..v2_focused_test_request("unused")
+        };
+        let requests = vec![sanitizer, miri];
+        assert!(
+            focused_test_candidates_from_v2(&requests).is_empty(),
+            "non-focused-test kinds must not produce focused-test candidates"
+        );
+        assert!(
+            focused_build_candidates_from_v2(&requests).is_empty(),
+            "non-focused-build kinds must not produce focused-build candidates"
+        );
+    }
+
+    /// A v2 FocusedTest whose target is NOT allowlisted resolves to no
+    /// candidate (the security boundary holds for v2 just as for v1).
+    #[test]
+    fn v2_focused_test_rejects_non_allowlisted_command() {
+        let v2 = vec![v2_focused_test_request("rm -rf some-directory")];
+        assert!(
+            focused_test_candidates_from_v2(&v2).is_empty(),
+            "a non-allowlisted command must produce no candidate (security boundary)"
+        );
     }
 
     #[test]
