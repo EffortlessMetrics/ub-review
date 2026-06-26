@@ -65,6 +65,14 @@ What it never claims: code correctness, UB-freedom, replacing security
 tooling, or model findings as proof. Missing evidence is recorded as missing
 evidence, never as clean evidence.
 
+> **Advisory only, no required gate?** The path above ends at one required
+> check. To adopt `ub-review` as a **non-blocking advisory reviewer** instead
+> (one grouped PR review, never blocks merge), see
+> [docs/ADOPTION_ADVISORY.md](docs/ADOPTION_ADVISORY.md) — two copy-paste files
+> and one org secret. This is the recommended starting point for downstream
+> Rust repos (e.g. `perl-lsp-swarm`, `ripr-swarm`) before calibrating toward a
+> blocking gate.
+
 ## Why this exists
 
 Most review bots do this:
