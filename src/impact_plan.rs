@@ -79,11 +79,31 @@ pub(crate) struct ImpactEvidenceGap {
     pub(crate) detail: String,
 }
 
-/// Build the initial shadow impact plan. This is a placeholder that records
-/// what we know (changed files) and what we don't (everything else). As
-/// Order 1 PRs land, this function gains Cargo metadata parsing, package
-/// resolution, reverse-dependency closure, and candidate ranking.
-pub(crate) fn build_shadow_impact_plan(root: &Path, changed_files: &[String]) -> ImpactPlan {
+/// Build the impact plan. This records what we know (changed files,
+/// Cargo workspace graph, package ownership, reverse-dependency closure,
+/// ranked candidate tasks) and what we don't (evidence gaps).
+///
+/// `selection_mode` is the resolved `[impact].mode` ("shadow" by default,
+/// "active" when the repo opts in). In both modes the full plan is computed
+/// and written to `review/impact_plan.json`. The difference is recorded in
+/// `selection_mode` so consumers (and the dogfood comparison) can tell
+/// advisory shadow selection from active selection. A follow-up PR wires
+/// `active` candidate tasks into the proof planner; today both modes are
+/// advisory-only for execution, which keeps this change behavior-preserving.
+pub(crate) fn build_impact_plan(
+    root: &Path,
+    changed_files: &[String],
+    selection_mode: &str,
+) -> ImpactPlan {
+    // Normalize the caller-supplied mode to one of the two valid &'static
+    // strs the ImpactPlan.selection_mode field holds. Anything other than
+    // "active" resolves to "shadow" — matching ImpactConfig::resolved_mode —
+    // so an invalid mode can never be recorded as active selection.
+    let selection_mode: &'static str = if selection_mode == "active" {
+        "active"
+    } else {
+        "shadow"
+    };
     // Attempt to parse the Cargo workspace graph. If unavailable, record it
     // as an evidence gap. (Order 1 PR 4: this now populates changed_packages
     // from the workspace graph when available.)
@@ -225,7 +245,7 @@ pub(crate) fn build_shadow_impact_plan(root: &Path, changed_files: &[String]) ->
         affected_packages,
         candidate_tasks,
         evidence_gaps,
-        selection_mode: "shadow",
+        selection_mode,
     }
 }
 
@@ -418,9 +438,10 @@ mod tests {
     #[test]
     fn shadow_impact_plan_records_changed_files_and_gaps() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let plan = build_shadow_impact_plan(
+        let plan = build_impact_plan(
             root,
             &["src/config.rs".to_owned(), "src/gate.rs".to_owned()],
+            "shadow",
         );
         assert_eq!(plan.schema, "ub-review.impact_plan.v1");
         assert_eq!(plan.changed_files.len(), 2);
@@ -439,7 +460,7 @@ mod tests {
     #[test]
     fn shadow_impact_plan_handles_empty_diff() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let plan = build_shadow_impact_plan(root, &[]);
+        let plan = build_impact_plan(root, &[], "shadow");
         assert!(plan.changed_files.is_empty());
     }
 
@@ -467,7 +488,7 @@ mod tests {
     fn shadow_impact_plan_populates_candidates_for_source_changes() {
         // Changing a source file should produce test-target candidates.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let plan = build_shadow_impact_plan(root, &["src/main.rs".to_owned()]);
+        let plan = build_impact_plan(root, &["src/main.rs".to_owned()], "shadow");
         assert!(
             !plan.changed_packages.is_empty(),
             "changing src/main.rs should identify the owning package"
@@ -507,7 +528,7 @@ mod tests {
     fn shadow_impact_plan_no_candidates_for_docs_only() {
         // Docs-only changes should not map to any package (no Cargo.toml ownership).
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-        let plan = build_shadow_impact_plan(root, &["README.md".to_owned()]);
+        let plan = build_impact_plan(root, &["README.md".to_owned()], "shadow");
         // README.md is in the root directory but isn't a source file.
         // It may still match the root package ownership check, but no test
         // targets should be particularly relevant. This test verifies the

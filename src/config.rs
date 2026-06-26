@@ -25,6 +25,7 @@ pub(crate) struct Config {
     pub(crate) lanes: Vec<RepoLane>,
     pub(crate) issues: IssuesConfig,
     pub(crate) providers: ProvidersConfig,
+    pub(crate) impact: ImpactConfig,
     /// Malformed gate-policy sections recorded at load time. Serialized into
     /// `effective-config.json` so the gate's `policy` fail reasons point at a
     /// receipt that names the parse error (roadmap #24: policy parse errors
@@ -64,6 +65,34 @@ pub(crate) struct ProviderRuntimeConfig {
 impl ProviderRuntimeConfig {
     fn is_empty(&self) -> bool {
         self.max_concurrency.is_none() && self.prompt_cache.is_none()
+    }
+}
+
+/// The `[impact]` section (Order 3 of epic #655). `mode` selects whether the
+/// Cargo impact plan is computed and emitted as a shadow/advisory artifact
+/// (`shadow`, the default) or whether its ranked candidate tasks also feed
+/// proof selection (`active`). `active` is reserved for a follow-up PR that
+/// wires candidate_tasks into the proof planner; today both modes compute the
+/// full plan and write `review/impact_plan.json`. Invalid values fall back to
+/// `shadow` and are recorded as a policy error so the gate reports the
+/// misconfiguration rather than silently defaulting.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+#[serde(default)]
+pub(crate) struct ImpactConfig {
+    /// "shadow" (default) or "active".
+    pub(crate) mode: String,
+}
+
+impl ImpactConfig {
+    /// Resolved mode after default/invalid handling. Anything other than the
+    /// literal "active" resolves to "shadow", so an unknown value can never
+    /// accidentally promote execution.
+    pub(crate) fn resolved_mode(&self) -> &str {
+        if self.mode == "active" {
+            "active"
+        } else {
+            "shadow"
+        }
     }
 }
 
@@ -552,6 +581,7 @@ impl Default for Config {
             lanes: Vec::new(),
             issues: IssuesConfig::default(),
             providers: ProvidersConfig::default(),
+            impact: ImpactConfig::default(),
             policy_errors: Vec::new(),
         }
     }
@@ -897,6 +927,7 @@ const KNOWN_TOP_LEVEL_KEYS: &[&str] = &[
     "lanes",
     "issues",
     "providers",
+    "impact",
 ];
 
 /// Keys `ToolPolicyInput` deserializes for a `[tools.<id>]` table. A test in
@@ -1464,6 +1495,34 @@ mod tests {
     // ripr-swarm#1054, and line-keyed suppressions rot, ripr-swarm#1053).
     // The behavior-level twins (D2 precedence, broker planning, lane
     // merging) stay in main.rs where those functions live.
+
+    #[test]
+    fn impact_resolved_mode_defaults_to_shadow_and_clamps_invalid() {
+        // Default (no [impact] section) -> shadow.
+        let default = ImpactConfig::default();
+        assert_eq!(default.mode, "");
+        assert_eq!(default.resolved_mode(), "shadow");
+        // Explicit active -> active.
+        let active = ImpactConfig {
+            mode: "active".to_owned(),
+        };
+        assert_eq!(active.resolved_mode(), "active");
+        // Garbage must NEVER accidentally promote execution -> shadow.
+        let bogus = ImpactConfig {
+            mode: "production".to_owned(),
+        };
+        assert_eq!(bogus.resolved_mode(), "shadow");
+    }
+
+    #[test]
+    fn impact_section_parses_and_is_known_top_level() -> anyhow::Result<()> {
+        // An [impact] section must be accepted (not an unknown-key policy
+        // error) since `impact` is registered in KNOWN_TOP_LEVEL_KEYS.
+        let cfg: Config = toml::from_str("[impact]\nmode = \"active\"\n")?;
+        assert_eq!(cfg.impact.mode, "active");
+        assert_eq!(cfg.impact.resolved_mode(), "active");
+        Ok(())
+    }
 
     #[test]
     fn providers_section_parses_policy_and_receipts_invalid_values() -> anyhow::Result<()> {
