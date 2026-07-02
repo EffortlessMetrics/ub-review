@@ -434,7 +434,34 @@ pub(crate) fn run_available_model_lanes_with_runner(
             }
         }
     }
-    for receipt in model_lanes {
+    for (index, receipt) in model_lanes.iter_mut().enumerate() {
+        // Stamp cohort provenance on every lane that has a provider assigned
+        // (Order 5 of #678). Lanes that never reached execution (still
+        // "planned") get stamped too if they have a provider, so the receipt
+        // always carries cohort identity for downstream consumers.
+        if !receipt.provider.is_empty() {
+            let assignment = &context.assignments[index];
+            let prefix_hash = sha256_hex(context.shared_context.as_bytes());
+            let primary = &assignment.spec;
+            let fb_spec = if receipt.fallback_from.is_some() {
+                Some((receipt.provider.as_str(), receipt.model.as_str()))
+            } else {
+                None
+            };
+            let (cohort_id, shared_prefix_hash, thread_id, turn, cohort_broken) = cohort_stamp(
+                primary.provider.key(),
+                &primary.model,
+                &prefix_hash,
+                &assignment.lane.id,
+                0,
+                fb_spec,
+            );
+            receipt.cohort_id = cohort_id;
+            receipt.shared_prefix_hash = shared_prefix_hash;
+            receipt.thread_id = thread_id;
+            receipt.turn = turn;
+            receipt.cohort_broken = cohort_broken;
+        }
         if receipt.status == "planned" {
             receipt.status = "skipped".to_owned();
             receipt.reason = "model call budget reached before lane execution".to_owned();
