@@ -31,6 +31,25 @@ pub(crate) struct LaneDigest {
     pub(crate) thread_id: String,
 }
 
+/// The reporter's verdict on the PR (Order 11 of #678). Only meaningful when
+/// `[gate].review_forward = true`; otherwise it is advisory and never feeds
+/// the gate.
+#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ReporterVerdict {
+    /// The reporter finds the PR safe to merge.
+    Clear,
+    /// The reporter requests changes before merge.
+    ChangesRequested,
+    /// The reporter cannot determine whether the PR is safe (insufficient
+    /// evidence, conflicting lanes, etc.).
+    Uncertain,
+    /// No verdict was produced (model mode off, reporter skipped, or the model
+    /// did not return a verdict).
+    #[default]
+    None,
+}
+
 /// The reporter's distilled conclusion, parsed from its model response.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub(crate) struct ReporterConclusion {
@@ -43,6 +62,10 @@ pub(crate) struct ReporterConclusion {
     pub(crate) proposed_follow_ups: Vec<String>,
     pub(crate) cohort_id: String,
     pub(crate) thread_id: String,
+    /// The reporter's structured verdict (Order 11). Only affects the gate
+    /// when `[gate].review_forward = true`.
+    #[serde(default)]
+    pub(crate) verdict: ReporterVerdict,
 }
 
 /// Build the reporter's prompt: the shared cached prefix is provided
@@ -77,6 +100,7 @@ pub(crate) fn reporter_prompt(digests: &[LaneDigest]) -> String {
     }
     prompt.push_str(
         "## Output\n\nReturn a JSON object: {\"distillation\": \"...\", \
+         \"verdict\": \"clear\"|\"changes_requested\"|\"uncertain\", \
          \"proposed_follow_ups\": [\"question for lane X\", ...]}. The distillation \
          is what you would tell a human reviewer in 2-4 sentences.\n",
     );
@@ -125,6 +149,7 @@ pub(crate) fn parse_reporter_conclusion(
             schema: REPORTER_THREAD_SCHEMA.to_owned(),
             distillation,
             proposed_follow_ups,
+            verdict: parse_verdict(&parsed),
             cohort_id: cohort_id.to_owned(),
             thread_id: thread_id.to_owned(),
         };
@@ -134,8 +159,28 @@ pub(crate) fn parse_reporter_conclusion(
         schema: REPORTER_THREAD_SCHEMA.to_owned(),
         distillation: content.to_owned(),
         proposed_follow_ups: Vec::new(),
+        verdict: ReporterVerdict::None,
         cohort_id: cohort_id.to_owned(),
         thread_id: thread_id.to_owned(),
+    }
+}
+
+/// Parse the reporter's verdict from a JSON value. Recognizes the
+/// snake_case strings from the prompt: "clear", "changes_requested",
+/// "uncertain". Falls back to None for missing or unrecognized values.
+fn parse_verdict(value: &serde_json::Value) -> ReporterVerdict {
+    match value
+        .get("verdict")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "clear" => ReporterVerdict::Clear,
+        "changes_requested" => ReporterVerdict::ChangesRequested,
+        "uncertain" => ReporterVerdict::Uncertain,
+        _ => ReporterVerdict::None,
     }
 }
 
@@ -181,6 +226,21 @@ pub(crate) fn read_reporter_distillation(review_dir: &Path) -> Option<String> {
     } else {
         Some(turn.response_summary)
     }
+}
+
+/// Read the reporter's verdict from the distillation text. The verdict is
+/// embedded in the response_summary (which is the parsed JSON distillation
+/// written by write_reporter_thread). Returns None if no reporter artifact
+/// exists; returns Some(None) if the reporter ran but produced no verdict.
+pub(crate) fn read_reporter_verdict(review_dir: &Path) -> Option<ReporterVerdict> {
+    let distillation = read_reporter_distillation(review_dir)?;
+    // The response_summary may be the raw distillation text or the JSON. Try
+    // parsing as JSON first (the reporter's structured output).
+    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&distillation) {
+        return Some(parse_verdict(&parsed));
+    }
+    // If it's not JSON, the reporter didn't produce a structured verdict.
+    Some(ReporterVerdict::None)
 }
 
 #[cfg(test)]
@@ -274,6 +334,7 @@ mod tests {
             schema: REPORTER_THREAD_SCHEMA.to_owned(),
             distillation: "PR is safe to merge.".to_owned(),
             proposed_follow_ups: vec!["tests-oracle: edge case?".to_owned()],
+            verdict: ReporterVerdict::Clear,
             cohort_id: "cid".to_owned(),
             thread_id: "tid".to_owned(),
         };
@@ -305,6 +366,7 @@ mod tests {
             schema: REPORTER_THREAD_SCHEMA.to_owned(),
             distillation: "PR is safe to merge; tests cover the change.".to_owned(),
             proposed_follow_ups: vec![],
+            verdict: ReporterVerdict::None,
             cohort_id: "cid".to_owned(),
             thread_id: "tid".to_owned(),
         };
