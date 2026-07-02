@@ -209,6 +209,9 @@ pub(crate) struct GateOutcomeInput<'a> {
     pub(crate) tool_gate_outcomes: &'a [ToolGateOutcomeEntry],
     pub(crate) missing_or_failed_sensor_evidence: &'a [SensorEvidenceIssue],
     pub(crate) missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
+    /// The reporter's verdict (Order 11 of #678). Only affects the gate when
+    /// `[gate].review_forward == true`. None when the reporter didn't run.
+    pub(crate) reporter_verdict: Option<crate::ReporterVerdict>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -382,6 +385,43 @@ pub(crate) fn build_gate_outcome(input: GateOutcomeInput<'_>) -> GateOutcome {
             }
         } else {
             evidence_gaps_advisory += 1;
+        }
+    }
+
+    // Order 11 (#678): review-forward gate policy. When the repo explicitly
+    // opts in via [gate].review_forward = true, the reporter's verdict may
+    // affect the gate. ChangesRequested and Uncertain produce a gate reason;
+    // Clear does not. When review_forward is false (the default), the
+    // reporter's verdict has zero effect — model output never feeds the gate.
+    if input.config.gate.review_forward
+        && let Some(ref verdict) = input.reporter_verdict
+    {
+        match verdict {
+            crate::ReporterVerdict::ChangesRequested => {
+                reasons.push(GateReason {
+                    kind: "reporter-verdict".to_owned(),
+                    id: "reporter-changes-requested".to_owned(),
+                    detail: "the reporter model verdict is `changes_requested`; \
+                             [gate].review_forward is enabled"
+                        .to_owned(),
+                    receipt: "review/threads/reporter/turn-000.json".to_owned(),
+                    next_action: Some("address the reporter's concerns, then re-run".to_owned()),
+                });
+            }
+            crate::ReporterVerdict::Uncertain => {
+                reasons.push(GateReason {
+                    kind: "reporter-verdict".to_owned(),
+                    id: "reporter-uncertain".to_owned(),
+                    detail: "the reporter model verdict is `uncertain`; \
+                             [gate].review_forward is enabled"
+                        .to_owned(),
+                    receipt: "review/threads/reporter/turn-000.json".to_owned(),
+                    next_action: Some(
+                        "investigate the reporter's uncertainty, then re-run".to_owned(),
+                    ),
+                });
+            }
+            crate::ReporterVerdict::Clear | crate::ReporterVerdict::None => {}
         }
     }
 
@@ -640,6 +680,7 @@ mod tests {
                 proof_receipts: &[],
                 missing_or_failed_sensor_evidence: &[],
                 missing_or_failed_model_evidence: &[],
+                reporter_verdict: None,
             });
 
             assert_eq!(gate.schema, "ub-review.gate_outcome.v1");
@@ -678,6 +719,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &model_issues,
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -707,6 +749,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -744,6 +787,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -789,6 +833,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -845,6 +890,7 @@ mod tests {
             proof_receipts: &receipts,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -877,6 +923,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -908,6 +955,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -933,6 +981,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(review_byok_gate.conclusion, "pass");
@@ -967,6 +1016,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
         assert_eq!(
             gate.conclusion, "inconclusive",
@@ -998,6 +1048,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1036,6 +1087,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "inconclusive");
@@ -1082,6 +1134,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1125,6 +1178,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1179,6 +1233,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.reasons.len(), 1);
@@ -1230,6 +1285,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         // Two reasons: one evidence-gap (missing), one finding (failed).
@@ -1280,6 +1336,7 @@ mod tests {
             proof_receipts: &[],
             missing_or_failed_sensor_evidence: &sensor_issues,
             missing_or_failed_model_evidence: &model_issues,
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1315,6 +1372,7 @@ mod tests {
             proof_receipts: std::slice::from_ref(&receipt),
             missing_or_failed_sensor_evidence: &issues,
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1390,6 +1448,7 @@ mod tests {
             tool_gate_outcomes: &entries,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "fail");
@@ -1443,6 +1502,7 @@ mod tests {
             tool_gate_outcomes: &entries,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "pass");
@@ -1474,6 +1534,7 @@ mod tests {
             tool_gate_outcomes: &entries,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         // Only the required tool blocks; the non-required gap stays advisory
@@ -1591,6 +1652,7 @@ mod tests {
                 tool_gate_outcomes: std::slice::from_ref(&non_required_entry),
                 missing_or_failed_sensor_evidence: &[],
                 missing_or_failed_model_evidence: &[],
+                reporter_verdict: None,
             });
             assert_eq!(gate.conclusion, "pass");
             assert_eq!(gate.tool_gates.failed, 0);
@@ -1616,6 +1678,7 @@ mod tests {
             tool_gate_outcomes: std::slice::from_ref(&required_entry),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
         assert_eq!(default_gate.conclusion, "pass");
         assert!(default_gate.reasons.is_empty());
@@ -1629,6 +1692,7 @@ mod tests {
             tool_gate_outcomes: std::slice::from_ref(&required_entry),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
         assert_eq!(opted_in_gate.conclusion, "fail");
         assert_eq!(opted_in_gate.reasons.len(), 1);
@@ -1678,6 +1742,7 @@ mod tests {
             tool_gate_outcomes: std::slice::from_ref(&entry),
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
         assert_eq!(gate.conclusion, "fail");
         assert_eq!(gate.tool_gates.failed, 1);
@@ -1722,6 +1787,7 @@ mod tests {
             tool_gate_outcomes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         // Recorded in review-byok too: the verdict is mode-independent and
@@ -1763,6 +1829,7 @@ mod tests {
             tool_gate_outcomes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
+            reporter_verdict: None,
         });
 
         assert_eq!(gate.conclusion, "fail");

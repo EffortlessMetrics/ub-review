@@ -4616,6 +4616,9 @@ fn write_review_artifacts(
         final_compiler_loop,
         "completed",
     )?;
+    // Order 11 (#678): read the reporter's verdict for review-forward gate
+    // policy. Only affects the gate when config.gate.review_forward == true.
+    let reporter_verdict = read_reporter_verdict(&review_dir);
     let gate_outcome = build_gate_outcome(GateOutcomeInput {
         args,
         config,
@@ -4626,6 +4629,7 @@ fn write_review_artifacts(
         tool_gate_outcomes,
         missing_or_failed_sensor_evidence: &review.missing_or_failed_sensor_evidence,
         missing_or_failed_model_evidence: &review.missing_or_failed_model_evidence,
+        reporter_verdict,
     });
     if (gate_outcome.conclusion == "fail" || gate_outcome.conclusion == "inconclusive")
         && review_payload_status == "skipped_empty_smoke"

@@ -190,6 +190,13 @@ pub(crate) struct GateConfig {
     pub(crate) hard_timeout_minutes: u64,
     pub(crate) post_review_on: Vec<String>,
     pub(crate) blocking: GateBlockingPolicy,
+    /// Review-forward gate policy (Order 11 of #678). When true, the reporter's
+    /// verdict (changes_requested / uncertain) may produce a gate `fail` reason.
+    /// Default false: model output never feeds the gate unless the repo
+    /// explicitly opts in. Individual lanes never block; only the final
+    /// reporter verdict may, and only under this flag.
+    #[serde(default)]
+    pub(crate) review_forward: bool,
 }
 
 /// Repo-policy blocking markers for deterministic evidence classes
@@ -619,6 +626,7 @@ impl Default for GateConfig {
             hard_timeout_minutes: 60,
             post_review_on: vec!["opened".to_owned(), "ready_for_review".to_owned()],
             blocking: GateBlockingPolicy::default(),
+            review_forward: false,
         }
     }
 }
