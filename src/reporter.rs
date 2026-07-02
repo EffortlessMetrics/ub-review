@@ -378,4 +378,21 @@ mod tests {
         assert!(distillation.contains("safe to merge"));
         Ok(())
     }
+
+    #[test]
+    fn lane_continuation_prompt_includes_question_and_prior_conclusion() {
+        let prompt = crate::lane_continuation_prompt(
+            "tests-oracle",
+            "specialist reviewer",
+            "The test does not discriminate the patch.",
+            "Does the test fail against base source plus the new fixture?",
+            "PR looks safe; one test-gap concern from tests-oracle.",
+        );
+        assert!(prompt.contains("tests-oracle"));
+        assert!(prompt.contains("does not discriminate"));
+        assert!(prompt.contains("Does the test fail"));
+        assert!(prompt.contains("reporter"));
+        assert!(prompt.contains("Revise, confirm, or withdraw"));
+        assert!(prompt.contains("\"changed\""));
+    }
 }

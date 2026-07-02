@@ -175,6 +175,119 @@ pub(crate) fn run_refuter_pass(
 }
 
 /// Order 9 (#678): the live reporter — same-model coordinator. Runs after the
+/// Build the continuation prompt for a lane that the reporter asked a
+/// follow-up question. The prompt is: the reporter's question + the lane's
+/// prior conclusion, asking the lane to revise or confirm its finding.
+/// (Order 9b of #678.)
+pub(crate) fn lane_continuation_prompt(
+    lane_id: &str,
+    lane_role: &str,
+    prior_conclusion: &str,
+    reporter_question: &str,
+    reporter_distillation: &str,
+) -> String {
+    format!(
+        "# Lane continuation: `{lane_id}`\n\n\
+         Your role: {lane_role}\n\n\
+         ## Your prior conclusion\n\n{prior_conclusion}\n\n\
+         ## The reporter's summary\n\n{reporter_distillation}\n\n\
+         ## Reporter follow-up question\n\n{reporter_question}\n\n\
+         ## Task\n\n\
+         Re-examine your conclusion in light of the reporter's question. \
+         Revise, confirm, or withdraw your finding. Return a JSON object: \
+         {{\"conclusion\": \"your revised or confirmed conclusion\", \
+         \"changed\": true|false}}.\n"
+    )
+}
+
+/// Continue a named lane's thread with turn-001: the reporter's question +
+/// the lane's compact prior history. Returns the lane's revised conclusion
+/// text. Writes turn-001 for the lane thread + emits a LaneAnswer message.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "continuation turn mirrors the reporter/proof context inputs; tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
+)]
+fn run_lane_continuation_turn(
+    root: &Path,
+    review_dir: &Path,
+    shared_context: &str,
+    spec: &ProviderSpec,
+    lane_receipt: &ModelLaneReceipt,
+    question: &str,
+    reporter_distillation: &str,
+    args: &RunArgs,
+    event_log: &EventLog,
+    message_log: &MessageLog,
+) -> Result<String> {
+    let prompt = lane_continuation_prompt(
+        &lane_receipt.lane,
+        "specialist reviewer",
+        &lane_receipt.reason,
+        question,
+        reporter_distillation,
+    );
+    let lane_thread_dir = review_dir.join("threads").join(&lane_receipt.lane);
+    fs::create_dir_all(&lane_thread_dir)?;
+    fs::write(lane_thread_dir.join("continuation-prompt-001.md"), &prompt)?;
+    let content = call_model_prompt_content(
+        root,
+        &lane_thread_dir,
+        spec,
+        Some(shared_context),
+        true,
+        &prompt,
+        args,
+    )?;
+    let revised =
+        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content.json_payload) {
+            parsed
+                .get("conclusion")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&content.json_payload)
+                .to_owned()
+        } else {
+            content.json_payload
+        };
+    // Write turn-001 for the lane (the lane continued its thread).
+    let turn = LaneThreadTurn {
+        schema: LANE_THREAD_SCHEMA.to_owned(),
+        thread_id: lane_receipt.thread_id.clone(),
+        turn: 1,
+        stage: "follow-up".to_owned(),
+        prompt_packet_path: format!(
+            "review/threads/{}/continuation-prompt-001.md",
+            lane_receipt.lane
+        ),
+        response_summary: revised.clone(),
+        routed_evidence_refs: vec![format!("reporter-question:{question}")],
+        receipt_ref: format!("review/threads/{}/turn-001.json", lane_receipt.lane),
+    };
+    write_lane_thread_turn(
+        review_dir,
+        &lane_receipt.lane,
+        &turn,
+        &lane_receipt.cohort_id,
+        "follow-up-answered",
+    )?;
+    let _ = message_log.append(
+        CrossLaneMessageKind::LaneAnswer,
+        &lane_receipt.lane,
+        "reporter",
+        1,
+        vec![format!(
+            "review/threads/{}/turn-001.json",
+            lane_receipt.lane
+        )],
+        serde_json::json!({"answer": revised, "question": question}),
+    );
+    let _ = event_log.append(
+        "lane_continuation_completed",
+        serde_json::json!({"lane": lane_receipt.lane, "turn": 1}),
+    );
+    Ok(revised)
+}
+
+/// Order 9 (#678): the live reporter — same-model coordinator. Runs after the
 /// primary wave, reads lane digests, makes one same-model distillation call
 /// (same cohort, same cached prefix), records the conclusion as a reporter
 /// thread artifact, and emits reporter messages. Advisory (feeds the compiler;
@@ -275,6 +388,125 @@ pub(crate) fn run_reporter_coordination(
             "proposed_follow_ups": conclusion.proposed_follow_ups.len(),
         }),
     );
+
+    // Multi-turn continuation (Order 9b of #678): the reporter proposed
+    // follow-up questions for named lanes. For each question that targets a
+    // known lane (by lane_id prefix) and where budget allows, continue that
+    // lane's thread with turn-001: shared prefix + compact lane history +
+    // reporter question. The lane revises its conclusion, which feeds back to
+    // the reporter for a re-distillation (turn-001).
+    let mut calls_used = model_calls_used + 1; // +1 for the reporter call above
+    let mut lane_answers: Vec<(String, String)> = Vec::new();
+    for question in &conclusion.proposed_follow_ups {
+        let (target, q_text) = match question
+            .split_once(':')
+            .map(|(t, q)| (t.trim().to_owned(), q.trim().to_owned()))
+        {
+            Some((t, q)) if !t.is_empty() && !q.is_empty() => (t, q),
+            _ => continue,
+        };
+        // Only continue if the target is a known lane and budget allows.
+        let lane_receipt = match model_lanes.iter().find(|r| r.lane == target) {
+            Some(r) if !r.thread_id.is_empty() => r,
+            _ => continue,
+        };
+        if calls_used >= args.max_model_calls {
+            break;
+        }
+        let answer = run_lane_continuation_turn(
+            root,
+            review_dir,
+            shared_context,
+            &spec,
+            lane_receipt,
+            &q_text,
+            &conclusion.distillation,
+            args,
+            event_log,
+            message_log,
+        );
+        calls_used += 1;
+        if let Ok(revised) = answer {
+            lane_answers.push((target.clone(), revised));
+        }
+    }
+
+    // If any lane answered, the reporter re-distills (turn-001) with the
+    // updated conclusions.
+    if !lane_answers.is_empty() && calls_used < args.max_model_calls {
+        let updated_digests: Vec<LaneDigest> = model_lanes
+            .iter()
+            .filter(|r| !r.thread_id.is_empty())
+            .map(|r| {
+                // If this lane answered, use the revised conclusion.
+                let revised = lane_answers
+                    .iter()
+                    .find(|(lane, _)| lane == &r.lane)
+                    .map(|(_, c)| c.as_str());
+                LaneDigest {
+                    lane: r.lane.clone(),
+                    status: r.status.clone(),
+                    conclusion: revised.unwrap_or(&r.reason).to_owned(),
+                    thread_id: r.thread_id.clone(),
+                }
+            })
+            .collect();
+        let re_prompt = reporter_prompt(&updated_digests);
+        let re_dir = review_dir.join("threads").join("reporter");
+        if let Ok(re_content) = call_model_prompt_content(
+            root,
+            &re_dir,
+            &spec,
+            Some(shared_context),
+            true,
+            &re_prompt,
+            args,
+        ) {
+            let re_conclusion =
+                parse_reporter_conclusion(&re_content.json_payload, &cohort_id, &thread_id);
+            // Write the reporter's revised conclusion as turn-001.
+            let re_turn = LaneThreadTurn {
+                schema: REPORTER_THREAD_SCHEMA.to_owned(),
+                thread_id: thread_id.clone(),
+                turn: 1,
+                stage: "reporter".to_owned(),
+                prompt_packet_path: "review/threads/reporter/prompt.md".to_owned(),
+                response_summary: re_conclusion.distillation.clone(),
+                routed_evidence_refs: lane_answers
+                    .iter()
+                    .map(|(lane, _)| format!("lane-answer:{lane}"))
+                    .collect(),
+                receipt_ref: "review/threads/reporter/turn-001.json".to_owned(),
+            };
+            let _ = write_lane_thread_turn(
+                review_dir,
+                "reporter",
+                &re_turn,
+                &cohort_id,
+                "reporter_re_distilled",
+            );
+            let _ = message_log.append(
+                CrossLaneMessageKind::LaneReport,
+                "reporter",
+                "all-lanes",
+                1,
+                vec!["review/threads/reporter/turn-001.json".to_owned()],
+                serde_json::json!({
+                    "distillation": re_conclusion.distillation,
+                    "cohort_id": re_conclusion.cohort_id,
+                    "round": "re-distillation",
+                }),
+            );
+            let _ = event_log.append(
+                "reporter_re_distilled",
+                serde_json::json!({
+                    "lane_answers": lane_answers.len(),
+                    "distillation_length": re_conclusion.distillation.len(),
+                }),
+            );
+        }
+    }
+
     Ok(())
 }
 
