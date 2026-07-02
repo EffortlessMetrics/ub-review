@@ -1,3 +1,4 @@
+// ub-review: reporter module — the same-model coordinator (Order 9 of #678).
 //! Live reporter coordination (Order 9 of #678) — the product center.
 //!
 //! The same-model coordinator that runs after the primary investigation wave,
