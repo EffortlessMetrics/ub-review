@@ -1177,6 +1177,7 @@ If there is no blocker/high/medium actionable issue, use empty arrays and put th
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not post, mutate files, or run shell commands. Request executable proof only through `proof_requests`.
+IMPORTANT: proof commands must use exact syntax the broker accepts. Use `--package <name>` (not `-p`), always include `--locked`. Examples: `cargo test --locked --package <name> --test <target>`, `cargo check --locked --package <name>`, `cargo doc --locked --package <name> --no-deps`. Commands with `-p`, missing `--locked`, or shell pipes will be rejected.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
 Calibration: do not introduce `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation-failure analysis unless the current PR diff, seeded thread, or a candidate explicitly raises that objection. When raised, allocation failure does not return `None`, an empty box, or a recoverable fallback; return it as a refuted false-premise failed_objection, not as a candidate finding."#,
         lane = lane.id,
