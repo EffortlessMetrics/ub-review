@@ -655,10 +655,17 @@ pub(crate) fn call_model_proof_planner(
     box_state: &BoxState,
     pr_thread_context: &PrThreadContext,
     proof_requests: &[ProofRequest],
+    impact_candidates: Vec<crate::ImpactCandidateSummary>,
     args: &RunArgs,
 ) -> Result<ModelCallOutcome<LaneModelOutput>> {
-    let input =
-        build_proof_planner_input(diff, profile, box_state, pr_thread_context, proof_requests)?;
+    let input = build_proof_planner_input(
+        diff,
+        profile,
+        box_state,
+        pr_thread_context,
+        proof_requests,
+        impact_candidates,
+    )?;
     let output = build_proof_planner_output(diff, profile, proof_requests)?;
     let prompt = render_proof_planner_model_task_prompt(lane, spec, &input, &output)?;
     call_model_prompt_cached(root, lane_dir, spec, shared_context, &prompt, args)
@@ -682,6 +689,7 @@ Focus: {focus}
 
 Use the cached shared context. You are an advisory proof-planner lane for the intelligent-ci gate.
 The deterministic planner remains the source of proof_tasks.ndjson. Add only proof requests or observations that would improve the central proof broker's plan.
+If impact_candidates are present in the planner input, prioritize proof that targets the highest-ranked candidates the deterministic planner skipped.
 
 Planner input:
 ```json

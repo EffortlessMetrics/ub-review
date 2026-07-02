@@ -2862,6 +2862,9 @@ struct ProofPlannerRunContext<'a> {
     model_calls_used: usize,
     key_present: fn(&str) -> bool,
     line_map: &'a BTreeSet<(String, u32)>,
+    /// Impact-plan candidate tasks (implementation step 6 of #678) so the
+    /// proof-planner model lane can make model-selected proof choices.
+    impact_candidates: &'a [ImpactCandidateTask],
 }
 
 struct FollowUpRunContext<'a> {
@@ -3948,6 +3951,13 @@ fn write_review_artifacts(
         args,
     )?;
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
+    // Build the impact plan BEFORE the model wave so its ranked candidate
+    // tasks are available to the proof-planner model lane (implementation
+    // step 6 of #678: model-selected proof from impact candidates).
+    let impact_mode = config.impact.resolved_mode();
+    let impact_plan = build_impact_plan(root, &diff.changed_files, impact_mode);
+    let impact_plan_candidate_tasks = impact_plan.candidate_tasks.clone();
+    write_impact_plan(out, &impact_plan)?;
     let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
     let mut missing_or_failed_model_evidence = model_lanes
         .iter()
@@ -4115,6 +4125,7 @@ fn write_review_artifacts(
                     model_calls_used,
                     key_present: env_value_present,
                     line_map: &line_map,
+                    impact_candidates: &impact_plan_candidate_tasks,
                 },
                 &mut model_lanes,
                 &mut missing_or_failed_model_evidence,
@@ -4231,14 +4242,8 @@ fn write_review_artifacts(
         &proof_requests,
     )?;
     // Impact plan (Order 3 of epic #655). Computes the Cargo workspace graph,
-    // changed/affected package ownership, reverse-dep closure, and ranked
-    // candidate tasks. selection_mode reflects [impact].mode (shadow by
-    // default, active when the repo opts in); both modes are advisory-only for
-    // execution today, which keeps this behavior-preserving. A follow-up PR
-    // wires active candidate_tasks into the proof planner.
-    let impact_mode = config.impact.resolved_mode();
-    let impact_plan = build_impact_plan(root, &diff.changed_files, impact_mode);
-    write_impact_plan(out, &impact_plan)?;
+    // Impact plan built earlier (before the model wave) so its candidate
+    // tasks are available to the proof-planner model lane. See line ~3955.
     // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
     // existing v1 requests to typed intents. Emitted but not consumed for
     // execution — the broker still uses v1 command-string requests.

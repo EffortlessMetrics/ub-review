@@ -53,6 +53,7 @@ pub(crate) fn build_proof_planner_input<'a>(
     box_state: &'a BoxState,
     pr_thread_context: &'a PrThreadContext,
     proof_requests: &'a [ProofRequest],
+    impact_candidates: Vec<ImpactCandidateSummary>,
 ) -> Result<ProofPlannerInput<'a>> {
     let budget = proof_budget(profile)?;
     Ok(ProofPlannerInput {
@@ -69,6 +70,7 @@ pub(crate) fn build_proof_planner_input<'a>(
             total_proof_timeout_sec: budget.max_total_seconds,
         },
         box_shape: box_state,
+        impact_candidates,
     })
 }
 
@@ -110,8 +112,14 @@ pub(crate) fn write_proof_planner_artifacts(
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
-    let input =
-        build_proof_planner_input(diff, profile, box_state, pr_thread_context, proof_requests)?;
+    let input = build_proof_planner_input(
+        diff,
+        profile,
+        box_state,
+        pr_thread_context,
+        proof_requests,
+        Vec::new(),
+    )?;
     let output = build_proof_planner_output(diff, profile, proof_requests)?;
     fs::write(
         review_dir.join("proof_planner_input.json"),
