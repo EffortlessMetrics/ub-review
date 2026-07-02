@@ -4206,6 +4206,7 @@ fn write_review_artifacts(
         &review_dir,
         &shared_context,
         &model_lanes,
+        &proof_result.proof_receipts,
         args,
         model_calls_used,
         event_log,
