@@ -175,6 +175,42 @@ pub(crate) fn run_refuter_pass(
 }
 
 /// Order 9 (#678): the live reporter — same-model coordinator. Runs after the
+/// Resolve a reporter question target to an actual lane ID. The model often
+/// writes "Question for workflow-proof: ..." or "workflow-proof lane: ..." —
+/// strip common prefixes and match against known lane IDs. Also tries
+/// substring matching: if any known lane ID appears within the target text,
+/// use it. (Fixes the production issue where "Question for workflow-proof"
+/// didn't match lane ID "workflow-proof".)
+pub(crate) fn resolve_lane_target(target: &str, known_lane_ids: &[&str]) -> Option<String> {
+    let cleaned = target
+        .trim()
+        .strip_prefix("Question for ")
+        .or_else(|| target.trim().strip_prefix("question for "))
+        .or_else(|| target.trim().strip_prefix("Question to "))
+        .unwrap_or(target)
+        .trim();
+    // Exact match first.
+    if known_lane_ids.contains(&cleaned) {
+        return Some(cleaned.to_owned());
+    }
+    // Strip trailing " lane" suffix.
+    let no_lane_suffix = cleaned
+        .strip_suffix(" lane")
+        .or_else(|| cleaned.strip_suffix(" Lane"))
+        .unwrap_or(cleaned);
+    if known_lane_ids.contains(&no_lane_suffix) {
+        return Some(no_lane_suffix.to_owned());
+    }
+    // Fuzzy: if any known lane ID is a substring of the target, use it.
+    // (e.g., "workflow-proof" matches inside "Question for workflow-proof")
+    for id in known_lane_ids {
+        if cleaned.contains(id) {
+            return Some((*id).to_owned());
+        }
+    }
+    None
+}
+
 /// Build the continuation prompt for a lane that the reporter asked a
 /// follow-up question. The prompt is: the reporter's question + the lane's
 /// prior conclusion, asking the lane to revise or confirm its finding.
@@ -404,14 +440,21 @@ pub(crate) fn run_reporter_coordination(
         serde_json::json!({"distillation": conclusion.distillation, "cohort_id": conclusion.cohort_id}),
     );
     for question in &conclusion.proposed_follow_ups {
-        let (target, q_text) = question
+        let (raw_target, q_text) = question
             .split_once(':')
             .map(|(t, q)| (t.trim().to_owned(), q.trim().to_owned()))
             .unwrap_or((String::new(), question.clone()));
+        // Resolve the target to an actual lane ID for the message routing.
+        let known_ids: Vec<&str> = model_lanes
+            .iter()
+            .filter(|r| !r.thread_id.is_empty())
+            .map(|r| r.lane.as_str())
+            .collect();
+        let resolved = resolve_lane_target(&raw_target, &known_ids).unwrap_or(raw_target.clone());
         let _ = message_log.append(
             CrossLaneMessageKind::ReporterQuestion,
             "reporter",
-            &target,
+            &resolved,
             0,
             vec![],
             serde_json::json!({"question": q_text}),
@@ -433,6 +476,11 @@ pub(crate) fn run_reporter_coordination(
     // the reporter for a re-distillation (turn-001).
     let mut calls_used = model_calls_used + 1; // +1 for the reporter call above
     let mut lane_answers: Vec<(String, String)> = Vec::new();
+    let known_lane_ids: Vec<&str> = model_lanes
+        .iter()
+        .filter(|r| !r.thread_id.is_empty())
+        .map(|r| r.lane.as_str())
+        .collect();
     for question in &conclusion.proposed_follow_ups {
         let (target, q_text) = match question
             .split_once(':')
@@ -441,10 +489,19 @@ pub(crate) fn run_reporter_coordination(
             Some((t, q)) if !t.is_empty() && !q.is_empty() => (t, q),
             _ => continue,
         };
-        // Only continue if the target is a known lane and budget allows.
-        let lane_receipt = match model_lanes.iter().find(|r| r.lane == target) {
-            Some(r) if !r.thread_id.is_empty() => r,
-            _ => continue,
+        // Strip common prefixes the model adds ("Question for X", "X lane", etc.)
+        // and match against known lane IDs. Also try fuzzy matching: if any
+        // known lane ID is a substring of the target, use that lane.
+        let resolved_target = resolve_lane_target(&target, &known_lane_ids);
+        let lane_receipt = match resolved_target {
+            Some(lane_id) => model_lanes
+                .iter()
+                .find(|r| r.lane == lane_id && !r.thread_id.is_empty()),
+            None => continue,
+        };
+        let lane_receipt = match lane_receipt {
+            Some(r) => r,
+            None => continue,
         };
         if calls_used >= args.max_model_calls {
             break;
