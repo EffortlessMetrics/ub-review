@@ -800,6 +800,14 @@ Use the cached shared context. You are an advisory proof-planner lane for the in
 The deterministic planner remains the source of proof_tasks.ndjson. Add only proof requests or observations that would improve the central proof broker's plan.
 If impact_candidates are present in the planner input, prioritize proof that targets the highest-ranked candidates the deterministic planner skipped.
 
+IMPORTANT: proof commands must use the EXACT syntax the proof broker's allowlist accepts.
+- Use `--package <name>` not `-p <name>`.
+- Always include `--locked`.
+- For focused tests: `cargo test --locked --package <name> --test <target> [filter]`
+- For focused builds: `cargo check --locked --package <name>` or `cargo build --locked --package <name>`
+- Passthrough test args after `--`: only `--exact`, `--nocapture`, `--show-output`, `--ignored`, `--include-ignored`, `--test-threads N`.
+- Commands not matching this syntax will be rejected by the broker and produce no receipt.
+
 Planner input:
 ```json
 {input_json}
