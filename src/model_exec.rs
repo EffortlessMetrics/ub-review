@@ -185,19 +185,39 @@ pub(crate) fn lane_continuation_prompt(
     prior_conclusion: &str,
     reporter_question: &str,
     reporter_distillation: &str,
+    proof_receipt_excerpts: &[String],
 ) -> String {
-    format!(
+    let mut prompt = format!(
         "# Lane continuation: `{lane_id}`\n\n\
          Your role: {lane_role}\n\n\
          ## Your prior conclusion\n\n{prior_conclusion}\n\n\
          ## The reporter's summary\n\n{reporter_distillation}\n\n\
-         ## Reporter follow-up question\n\n{reporter_question}\n\n\
-         ## Task\n\n\
-         Re-examine your conclusion in light of the reporter's question. \
-         Revise, confirm, or withdraw your finding. Return a JSON object: \
-         {{\"conclusion\": \"your revised or confirmed conclusion\", \
-         \"changed\": true|false}}.\n"
-    )
+         ## Reporter follow-up question\n\n{reporter_question}\n\n"
+    );
+    // Route proof receipts back to the lane (Order 9c of #678): when proof
+    // evidence relevant to this lane's concern exists, include a bounded
+    // excerpt so the lane can revise its conclusion based on the evidence.
+    // This proves 'proof changing lane conclusions' end-to-end.
+    if !proof_receipt_excerpts.is_empty() {
+        prompt.push_str("## Routed proof evidence\n\n");
+        prompt.push_str(
+            "The following proof receipts are relevant to your concern. \
+             Revise your conclusion in light of this evidence.\n\n",
+        );
+        for excerpt in proof_receipt_excerpts {
+            prompt.push_str(&format!("- {excerpt}\n"));
+        }
+        prompt.push('\n');
+    }
+    prompt.push_str(
+        "## Task\n\n\
+         Re-examine your conclusion in light of the reporter's question and any \
+         routed proof evidence. Revise, confirm, or withdraw your finding. \
+         Return a JSON object: \
+         {\"conclusion\": \"your revised or confirmed conclusion\", \
+         \"changed\": true|false}.\n",
+    );
+    prompt
 }
 
 /// Continue a named lane's thread with turn-001: the reporter's question +
@@ -218,13 +238,28 @@ fn run_lane_continuation_turn(
     args: &RunArgs,
     event_log: &EventLog,
     message_log: &MessageLog,
+    proof_receipts: &[ProofReceipt],
 ) -> Result<String> {
+    // Route proof receipts relevant to this lane back into its continuation
+    // prompt (Order 9c of #678). The lane sees the evidence and can revise its
+    // conclusion — proving 'proof changing lane conclusions' end-to-end.
+    let proof_excerpts: Vec<String> = proof_receipts
+        .iter()
+        .filter(|receipt| receipt.requested_by.iter().any(|r| r == &lane_receipt.lane))
+        .map(|receipt| {
+            format!(
+                "proof `{}` result=`{}` reason=`{}`",
+                receipt.id, receipt.result, receipt.reason
+            )
+        })
+        .collect();
     let prompt = lane_continuation_prompt(
         &lane_receipt.lane,
         "specialist reviewer",
         &lane_receipt.reason,
         question,
         reporter_distillation,
+        &proof_excerpts,
     );
     let lane_thread_dir = review_dir.join("threads").join(&lane_receipt.lane);
     fs::create_dir_all(&lane_thread_dir)?;
@@ -301,6 +336,7 @@ pub(crate) fn run_reporter_coordination(
     review_dir: &Path,
     shared_context: &str,
     model_lanes: &[ModelLaneReceipt],
+    proof_receipts: &[ProofReceipt],
     args: &RunArgs,
     model_calls_used: usize,
     event_log: &EventLog,
@@ -424,6 +460,7 @@ pub(crate) fn run_reporter_coordination(
             args,
             event_log,
             message_log,
+            proof_receipts,
         );
         calls_used += 1;
         if let Ok(revised) = answer {

@@ -387,6 +387,7 @@ mod tests {
             "The test does not discriminate the patch.",
             "Does the test fail against base source plus the new fixture?",
             "PR looks safe; one test-gap concern from tests-oracle.",
+            &[],
         );
         assert!(prompt.contains("tests-oracle"));
         assert!(prompt.contains("does not discriminate"));
@@ -394,5 +395,25 @@ mod tests {
         assert!(prompt.contains("reporter"));
         assert!(prompt.contains("Revise, confirm, or withdraw"));
         assert!(prompt.contains("\"changed\""));
+        // No proof evidence section when excerpts are empty.
+        assert!(!prompt.contains("Routed proof evidence"));
+    }
+
+    #[test]
+    fn lane_continuation_prompt_includes_proof_evidence_when_present() {
+        let prompt = crate::lane_continuation_prompt(
+            "tests-oracle",
+            "specialist reviewer",
+            "The test may not discriminate the patch.",
+            "Does the test fail against base source?",
+            "PR has a test-gap concern.",
+            &[
+                "proof `proof-001` result=`non_discriminating` reason=`base+tests passed the same`"
+                    .to_owned(),
+            ],
+        );
+        assert!(prompt.contains("Routed proof evidence"));
+        assert!(prompt.contains("non_discriminating"));
+        assert!(prompt.contains("Revise"));
     }
 }
