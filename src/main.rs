@@ -4325,6 +4325,7 @@ fn write_review_artifacts(
         proof_receipts: &proof_receipts,
         final_follow_up_tasks: 0,
         suggested_issues: &[],
+        reporter_distillation: None,
     })?;
     let mut review = ReviewArtifacts {
         shared_context_id,
@@ -4553,6 +4554,10 @@ fn write_review_artifacts(
             proof_receipts: &review.proof_receipts,
         },
     )?;
+    // Order 10 (#678): read the reporter's distillation (Order 9 #696) to pass
+    // into the compiler as the review body's editorial summary. The compiler
+    // renders it verbatim (firewall, not truth reducer).
+    let reporter_distillation = read_reporter_distillation(&review_dir);
     let final_surface = compile_review_surface(ReviewCompilerInput {
         shared_context_id: &review.shared_context_id,
         review_body_policy: &config.review_body,
@@ -4570,6 +4575,7 @@ fn write_review_artifacts(
         proof_receipts: &review.proof_receipts,
         suggested_issues: &suggested_issues,
         final_follow_up_tasks: final_orchestrator_plan.follow_up_tasks.len(),
+        reporter_distillation: reporter_distillation.as_deref(),
     })?;
     let mut review_payload_status = final_surface.review_payload_status;
     let should_prepare_github_review = final_surface.should_prepare_github_review;
@@ -14047,6 +14053,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 2,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -14091,6 +14098,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -14134,6 +14142,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -14194,6 +14203,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(surface.should_prepare_github_review);
@@ -14272,6 +14282,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })
     }
 
@@ -14416,6 +14427,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -14644,6 +14656,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(!surface.should_prepare_github_review);
@@ -14696,6 +14709,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(surface.should_prepare_github_review);
@@ -14738,6 +14752,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(
@@ -14942,6 +14957,7 @@ required_proof_unprooven = true
             proof_receipts: &[],
             final_follow_up_tasks: 0,
             suggested_issues: &[],
+            reporter_distillation: None,
         })?;
 
         assert!(
@@ -19706,6 +19722,7 @@ index 1111111..2222222 100644
             proof_receipts: &[],
             suggested_issues: &suggested,
             final_follow_up_tasks: 0,
+            reporter_distillation: None,
         })?;
         assert!(
             surface

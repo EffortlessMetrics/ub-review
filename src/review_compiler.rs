@@ -64,6 +64,12 @@ pub(crate) struct ReviewCompilerInput<'a> {
     /// step 5): rendered as a follow-up section, never blocking.
     pub(crate) suggested_issues: &'a [IssueCandidate],
     pub(crate) final_follow_up_tasks: usize,
+    /// The live reporter's editorial distillation (Order 9 #696 / Order 10
+    /// #678). When present and non-empty, rendered as a "## Reporter summary"
+    /// section at the top of the PR review body. The compiler passes it
+    /// through verbatim (firewall: validates anchors/schema/limits/redaction/
+    /// posting only — does not rank or suppress the reporter's editorial).
+    pub(crate) reporter_distillation: Option<&'a str>,
 }
 
 #[derive(Debug, Serialize)]
@@ -157,6 +163,22 @@ pub(crate) fn compile_review_surface(
         input.args.review_body_max_bytes,
         ReviewBodyAudience::PullRequest,
     );
+    // Order 10 (#678): the live reporter's editorial distillation renders at
+    // the TOP of the PR review body, before any finding sections. The compiler
+    // passes it through verbatim — it is the reporter's editorial judgment,
+    // not a deterministic finding the compiler ranks or suppresses (firewall,
+    // not truth reducer). Subject only to the existing body-size limit.
+    if let Some(distillation) = input.reporter_distillation {
+        let trimmed = distillation.trim();
+        if !trimmed.is_empty() {
+            let reporter_section = format!("## Reporter summary\n\n{trimmed}\n\n");
+            pr_body = if pr_body.is_empty() {
+                reporter_section.trim_end().to_owned()
+            } else {
+                format!("{reporter_section}{pr_body}")
+            };
+        }
+    }
     // Release lane step 5: suggested follow-ups render last - they explain
     // why the PR's scope was not broadened, never block, and only appear
     // when the action ledger promoted a candidate to `suggested`. The full
