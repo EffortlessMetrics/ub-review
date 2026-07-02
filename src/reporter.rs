@@ -416,4 +416,36 @@ mod tests {
         assert!(prompt.contains("non_discriminating"));
         assert!(prompt.contains("Revise"));
     }
+
+    #[test]
+    fn resolve_lane_target_strips_question_for_prefix() {
+        let lanes = ["tests-oracle", "workflow-proof", "opposition"];
+        assert_eq!(
+            crate::resolve_lane_target("Question for tests-oracle", &lanes),
+            Some("tests-oracle".to_owned())
+        );
+        assert_eq!(
+            crate::resolve_lane_target("Question for workflow-proof", &lanes),
+            Some("workflow-proof".to_owned())
+        );
+    }
+
+    #[test]
+    fn resolve_lane_target_exact_and_suffix() {
+        let lanes = ["tests-oracle", "opposition"];
+        assert_eq!(
+            crate::resolve_lane_target("opposition", &lanes),
+            Some("opposition".to_owned())
+        );
+        assert_eq!(
+            crate::resolve_lane_target("tests-oracle lane", &lanes),
+            Some("tests-oracle".to_owned())
+        );
+    }
+
+    #[test]
+    fn resolve_lane_target_returns_none_for_unknown() {
+        let lanes = ["tests-oracle"];
+        assert_eq!(crate::resolve_lane_target("nonexistent-lane", &lanes), None);
+    }
 }
