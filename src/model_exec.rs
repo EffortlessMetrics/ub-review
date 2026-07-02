@@ -276,12 +276,27 @@ fn run_lane_continuation_turn(
     message_log: &MessageLog,
     proof_receipts: &[ProofReceipt],
 ) -> Result<String> {
-    // Route proof receipts relevant to this lane back into its continuation
-    // prompt (Order 9c of #678). The lane sees the evidence and can revise its
+    // Route proof receipts back into the lane's continuation prompt (Order 9c
+    // of #678). The lane sees the deterministic evidence and can revise its
     // conclusion — proving 'proof changing lane conclusions' end-to-end.
+    //
+    // Receipts are routed if EITHER:
+    // - The lane explicitly requested them (requested_by match), OR
+    // - They are run-level policy receipts (intelligent-ci-policy /
+    //   proof-policy:*), since any lane investigating a Rust diff benefits
+    //   from knowing whether the baseline checks passed. This is the common
+    //   case: proof receipts are requested by the policy planner, not
+    //   individual lanes, so a strict requested_by match would route nothing
+    //   in most production runs.
     let proof_excerpts: Vec<String> = proof_receipts
         .iter()
-        .filter(|receipt| receipt.requested_by.iter().any(|r| r == &lane_receipt.lane))
+        .filter(|receipt| {
+            receipt.requested_by.iter().any(|r| r == &lane_receipt.lane)
+                || receipt
+                    .requested_by
+                    .iter()
+                    .any(|r| r.starts_with("proof-policy:") || r == "intelligent-ci-policy")
+        })
         .map(|receipt| {
             format!(
                 "proof `{}` result=`{}` reason=`{}`",
