@@ -120,6 +120,19 @@ pub(crate) fn run_proof_planner_model_lane(
         context.box_state,
         context.pr_thread_context,
         proof_requests,
+        context
+            .impact_candidates
+            .iter()
+            .map(|c| ImpactCandidateSummary {
+                target: c.target.clone(),
+                reason: c.reason.clone(),
+                owning_package: c.owning_package.clone(),
+                estimated_cost: c.estimated_cost.to_owned(),
+                expected_value: c.expected_value.to_owned(),
+                rank: c.rank,
+                selection: c.selection.to_owned(),
+            })
+            .collect(),
         context.args,
     ) {
         Ok(outcome) => {

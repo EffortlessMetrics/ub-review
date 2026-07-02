@@ -405,6 +405,27 @@ pub(crate) struct ProofPlannerInput<'a> {
     pub(crate) proof_requests: &'a [ProofRequest],
     pub(crate) runtime_budget: ProofPlannerRuntimeBudget,
     pub(crate) box_shape: &'a BoxState,
+    /// Impact-plan candidate tasks the model can select from (implementation
+    /// step 6 of #678). The ranked candidates + their reasons + costs let the
+    /// model make informed PR-specific proof choices. The deterministic
+    /// planner remains the floor; the model adds requests above it. Empty when
+    /// the impact plan has no candidates (docs-only diff, no Cargo workspace).
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub(crate) impact_candidates: Vec<ImpactCandidateSummary>,
+}
+
+/// A compact summary of an impact-plan candidate task, for the proof-planner
+/// model input. Contains what the model needs to decide whether to select
+/// this candidate for proof execution.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ImpactCandidateSummary {
+    pub(crate) target: String,
+    pub(crate) reason: String,
+    pub(crate) owning_package: String,
+    pub(crate) estimated_cost: String,
+    pub(crate) expected_value: String,
+    pub(crate) rank: u32,
+    pub(crate) selection: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
