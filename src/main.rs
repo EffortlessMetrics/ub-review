@@ -4194,40 +4194,10 @@ fn write_review_artifacts(
             "completed",
         )?;
     }
-    // Order 9 (#678): the live reporter — the same-model coordinator. Runs
-    // after the primary wave, reads lane digests, makes one same-model
-    // distillation call (same cohort, same cached prefix), and records its
-    // conclusion as a reporter thread artifact + messages. Advisory: feeds the
-    // compiler, does not post or gate.
-    let reporter_loop =
-        start_run_loop(event_log, run_started, "model", "investigation", "reporter")?;
-    let reporter_status = match run_reporter_coordination(
-        root,
-        &review_dir,
-        &shared_context,
-        &model_lanes,
-        &proof_result.proof_receipts,
-        args,
-        model_calls_used,
-        event_log,
-        &message_log,
-    ) {
-        Ok(()) => "completed",
-        Err(e) => {
-            let _ = event_log.append(
-                "reporter_error",
-                serde_json::json!({"error": format!("{e:#}")}),
-            );
-            "failed"
-        }
-    };
-    finish_run_loop(
-        event_log,
-        run_started,
-        run_loop_tracker,
-        reporter_loop,
-        reporter_status,
-    )?;
+    // Run the model-request proof broker BEFORE the reporter so proof receipts
+    // are available for routing to lanes in the multi-turn continuation.
+    // Previously this ran after the reporter, meaning continuation prompts
+    // never saw proof evidence. (Order 9c fix of #678.)
     attach_request_metadata_to_focused_receipts(
         diff,
         &proof_requests,
@@ -4242,22 +4212,6 @@ fn write_review_artifacts(
         &pr_thread_context,
         &proof_requests,
     )?;
-    // Impact plan (Order 3 of epic #655). Computes the Cargo workspace graph,
-    // Impact plan built earlier (before the model wave) so its candidate
-    // tasks are available to the proof-planner model lane. See line ~3955.
-    // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
-    // existing v1 requests to typed intents. Emitted but not consumed for
-    // execution — the broker still uses v1 command-string requests.
-    let v2_shadow_requests = build_v2_shadow_requests(&proof_requests);
-    if !v2_shadow_requests.is_empty() {
-        let v2_path = out.join("review").join("proof_requests_v2.json");
-        std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
-    }
-    // Shadow-mode claim graph (Order 3 of epic #655). Emitted but not consumed
-    // for review compilation — the compiler still uses raw observations and
-    // candidates. Future PRs populate claims, evidence, conflicts, and states.
-    let shadow_claim_graph = build_shadow_claim_graph();
-    write_claim_graph(out, &shadow_claim_graph)?;
     if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
         let request_proof_loop = start_run_loop(
             event_log,
@@ -4290,6 +4244,57 @@ fn write_review_artifacts(
             "completed",
         )?;
     }
+    // Order 9 (#678): the live reporter — the same-model coordinator. Runs
+    // after the primary wave + proof broker, reads lane digests, makes one
+    // same-model distillation call (same cohort, same cached prefix), and
+    // records its conclusion as a reporter thread artifact + messages. Advisory:
+    // feeds the compiler, does not post or gate. Runs AFTER the proof broker
+    // so proof receipts are available for routing to lanes in the multi-turn
+    // continuation (Order 9c proof-routing).
+    let reporter_loop =
+        start_run_loop(event_log, run_started, "model", "investigation", "reporter")?;
+    let reporter_status = match run_reporter_coordination(
+        root,
+        &review_dir,
+        &shared_context,
+        &model_lanes,
+        &proof_result.proof_receipts,
+        args,
+        model_calls_used,
+        event_log,
+        &message_log,
+    ) {
+        Ok(()) => "completed",
+        Err(e) => {
+            let _ = event_log.append(
+                "reporter_error",
+                serde_json::json!({"error": format!("{e:#}")}),
+            );
+            "failed"
+        }
+    };
+    finish_run_loop(
+        event_log,
+        run_started,
+        run_loop_tracker,
+        reporter_loop,
+        reporter_status,
+    )?;
+    // Impact plan built earlier (before the model wave) so its candidate
+    // tasks are available to the proof-planner model lane. See line ~3955.
+    // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
+    // existing v1 requests to typed intents. Emitted but not consumed for
+    // execution — the broker still uses v1 command-string requests.
+    let v2_shadow_requests = build_v2_shadow_requests(&proof_requests);
+    if !v2_shadow_requests.is_empty() {
+        let v2_path = out.join("review").join("proof_requests_v2.json");
+        std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
+    }
+    // Shadow-mode claim graph (Order 3 of epic #655). Emitted but not consumed
+    // for review compilation — the compiler still uses raw observations and
+    // candidates. Future PRs populate claims, evidence, conflicts, and states.
+    let shadow_claim_graph = build_shadow_claim_graph();
+    write_claim_graph(out, &shadow_claim_graph)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
     let compiler_loop = start_run_loop(
