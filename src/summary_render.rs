@@ -323,6 +323,112 @@ pub(crate) fn render_review_efficiency_section(text: &mut String, out: &Path) {
     text.push_str(&format!(
         "- Review payload: `{payload_status}`; post: `{post_status}`\n"
     ));
+
+    // Calibration summary (compact, scannable). Computed from
+    // review/calibration.json — NOT from model prose.
+    if let Some(cal) = read_calibration_summary(out) {
+        text.push_str("\n## Calibration\n\n");
+        text.push_str(&format!(
+            "- Cohort: `{}`, cache-coherent: `{}`\n",
+            cal.cohort_model, !cal.cohort_broken
+        ));
+        text.push_str(&format!(
+            "- Lanes: `{}` executed, `{}` continued (turn-001)\n",
+            cal.lanes_executed, cal.lane_continuations
+        ));
+        text.push_str(&format!(
+            "- Reporter: `{}` questions\n",
+            cal.reporter_questions
+        ));
+        text.push_str(&format!(
+            "- Model-selected proof: `{}` requested, `{}` executed, `{}` routed\n",
+            cal.proof_model_selected, cal.proof_executed, cal.proof_routed
+        ));
+        text.push_str(&format!(
+            "- Proof changed conclusions: `{}`\n",
+            cal.proof_changed_conclusions
+        ));
+        text.push_str(&format!(
+            "- Final review: `{}` inline, `{}` summary | Gate: `{}`\n",
+            cal.inline_comments, cal.summary_comments, cal.gate
+        ));
+    }
+}
+
+/// Compact calibration summary extracted from review/calibration.json.
+struct CalibrationSummary {
+    cohort_model: String,
+    cohort_broken: bool,
+    lanes_executed: usize,
+    lane_continuations: usize,
+    reporter_questions: usize,
+    proof_model_selected: usize,
+    proof_executed: usize,
+    proof_routed: usize,
+    proof_changed_conclusions: usize,
+    inline_comments: usize,
+    summary_comments: usize,
+    gate: String,
+}
+
+fn read_calibration_summary(out: &Path) -> Option<CalibrationSummary> {
+    let path = out.join("review").join("calibration.json");
+    let text = fs::read_to_string(&path).ok()?;
+    let cal: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let counts = cal.get("counts")?;
+    let cohort = cal.get("cohort")?;
+    Some(CalibrationSummary {
+        cohort_model: cohort
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_owned(),
+        cohort_broken: cohort
+            .get("cohort_broken")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        lanes_executed: counts
+            .get("lanes_executed")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        lane_continuations: counts
+            .get("lane_continuations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        reporter_questions: counts
+            .get("reporter_questions")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        proof_model_selected: counts
+            .get("proof_requests_model_selected")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        proof_executed: counts
+            .get("proof_requests_executed")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        proof_routed: counts
+            .get("proof_receipts_routed")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        proof_changed_conclusions: counts
+            .get("lane_conclusions_changed_by_proof")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        inline_comments: counts
+            .get("inline_comments_posted")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        summary_comments: counts
+            .get("summary_comments_posted")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as usize,
+        gate: cal
+            .get("gate_policy")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_owned(),
+    })
 }
 
 pub(crate) fn format_millis(ms: u64) -> String {

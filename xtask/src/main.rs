@@ -52,9 +52,15 @@ fn run() -> Result<()> {
             reject_extra_args(args)?;
             print_help();
         }
+        "calibration-report" => {
+            let dir = args.next().context(
+                "usage: cargo xtask calibration-report <dir> — scans for review/calibration.json files",
+            )?;
+            calibration_report(&PathBuf::from(dir))?;
+        }
         other => {
             bail!(
-                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, or help"
+                "unknown xtask command `{other}`; expected policy-check, policy-inventory, audit, precommit, calibration-report, or help"
             )
         }
     }
@@ -78,6 +84,7 @@ cargo xtask commands
   cargo xtask policy-inventory  print receipt and CI policy counts
   cargo xtask audit             run cargo-audit for RUSTSEC advisories (advisory)
   cargo xtask precommit         run diff-scoped Rust precommit checks
+  cargo xtask calibration-report <dir>  aggregate review/calibration.json files
 
 precommit options
 
@@ -2325,4 +2332,119 @@ fn require_string_array(table: &Map<String, Value>, path: &Path, key: &str) -> R
         non_empty_str(value, path, key)?;
     }
     Ok(())
+}
+
+/// Scan a directory tree for `review/calibration.json` files and print an
+/// aggregate summary. Usage: `cargo xtask calibration-report <dir>`.
+fn calibration_report(dir: &Path) -> Result<()> {
+    let mut files = Vec::new();
+    collect_calibration_files(dir, &mut files);
+    if files.is_empty() {
+        println!("No calibration.json files found under {}", dir.display());
+        return Ok(());
+    }
+    let mut runs = 0u64;
+    let mut lanes_executed_total = 0u64;
+    let mut lane_continuations_total = 0u64;
+    let mut reporter_questions_total = 0u64;
+    let mut proof_model_selected_total = 0u64;
+    let mut proof_executed_total = 0u64;
+    let mut proof_changed_total = 0u64;
+    let mut expected_quiet = 0u64;
+    let mut infra_excluded = 0u64;
+    let mut proof_changed_runs = 0u64;
+    for (_, cal) in &files {
+        runs += 1;
+        let counts = cal.get("counts");
+        let class = cal
+            .get("classification")
+            .and_then(|c| c.get("suggested_class"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let infra = cal
+            .get("classification")
+            .and_then(|c| c.get("infra_excluded"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        if class == "proof-changed-conclusion" {
+            proof_changed_runs += 1;
+        }
+        if class == "expected-quiet" {
+            expected_quiet += 1;
+        }
+        if infra {
+            infra_excluded += 1;
+        }
+        if let Some(c) = counts {
+            lanes_executed_total += c
+                .get("lanes_executed")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            lane_continuations_total += c
+                .get("lane_continuations")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            reporter_questions_total += c
+                .get("reporter_questions")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            proof_model_selected_total += c
+                .get("proof_requests_model_selected")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            proof_executed_total += c
+                .get("proof_requests_executed")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+            proof_changed_total += c
+                .get("lane_conclusions_changed_by_proof")
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0);
+        }
+    }
+    println!("Calibration Report (scanned {} files)", files.len());
+    println!("---");
+    println!("Runs: {runs}");
+    println!("Lanes executed (total): {lanes_executed_total}");
+    if runs > 0 {
+        println!(
+            "Lanes executed (avg): {:.1}",
+            lanes_executed_total as f64 / runs as f64
+        );
+    }
+    println!("Lane continuations (total): {lane_continuations_total}");
+    println!("Reporter questions (total): {reporter_questions_total}");
+    println!("Proof requests model-selected (total): {proof_model_selected_total}");
+    println!("Proof executed (total): {proof_executed_total}");
+    println!("Proof changed conclusions (total): {proof_changed_total}");
+    println!("---");
+    println!("Proof-changed-conclusion runs: {proof_changed_runs}");
+    println!("Expected-quiet runs: {expected_quiet}");
+    println!("Infra-excluded runs: {infra_excluded}");
+    for (cal_path, _) in &files {
+        println!("  {}", cal_path.display());
+    }
+    Ok(())
+}
+
+fn collect_calibration_files(dir: &Path, out: &mut Vec<(PathBuf, JsonValue)>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        // Check if this dir has review/calibration.json
+        let cal_path = path.join("review").join("calibration.json");
+        if cal_path.exists()
+            && let Ok(text) = fs::read_to_string(&cal_path)
+            && let Ok(cal) = serde_json::from_str::<JsonValue>(&text)
+        {
+            out.push((cal_path, cal));
+        }
+        // Recurse into subdirectories
+        collect_calibration_files(&path, out);
+    }
 }
