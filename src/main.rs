@@ -87,6 +87,8 @@ mod cross_lane_messages;
 pub(crate) use cross_lane_messages::*;
 mod reporter;
 pub(crate) use reporter::*;
+mod calibration;
+pub(crate) use calibration::{read_messages_ndjson, write_calibration_artifact};
 mod review_compiler;
 pub(crate) use review_compiler::*;
 mod cost_artifact;
@@ -4722,6 +4724,23 @@ fn write_review_artifacts(
         serde_json::to_vec_pretty(&review.provider_preflights)?,
     )?;
     fs::write(review_dir.join("review.md"), artifact_body)?;
+    // Calibration artifact (calibration of #678): a run-level measurable
+    // signal computed from existing receipts/messages. Makes the product
+    // tunable: proof_changed_conclusion_count and useful comment counts.
+    let cal_messages = read_messages_ndjson(&review_dir);
+    let _ = write_calibration_artifact(
+        &review_dir,
+        &review.model_lanes,
+        &review.proof_requests,
+        &review.proof_receipts,
+        &cal_messages,
+        github_review.comments.len(),
+        if github_review.body.is_empty() { 0 } else { 1 },
+        &gate_outcome.conclusion,
+        args.mode.key(),
+        &diff.base,
+        &diff.head,
+    );
     if should_prepare_github_review {
         write_github_review_payload(
             &review_dir,
