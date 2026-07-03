@@ -522,4 +522,267 @@ mod tests {
         assert_eq!(artifact.counts.proof_requests_executed, 0);
         Ok(())
     }
+
+    /// Fixture: proof-changed-conclusion — a lane has turn-000 and turn-001
+    /// with different conclusions, and the turn-001 has routed proof evidence
+    /// refs. The calibration artifact should detect this as a notable event.
+    #[test]
+    fn calibration_detects_proof_changed_conclusion() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        let threads = review_dir.join("threads");
+        let lane_dir = threads.join("tests-red-green");
+        std::fs::create_dir_all(&lane_dir)?;
+        // turn-000: original conclusion
+        let turn0 = crate::LaneThreadTurn {
+            schema: "ub-review.lane_thread.v1".to_owned(),
+            thread_id: "tid".to_owned(),
+            turn: 0,
+            stage: "primary".to_owned(),
+            prompt_packet_path: "lanes/tests-red-green.md".to_owned(),
+            response_summary: "The test does not cover the error path; changes requested."
+                .to_owned(),
+            routed_evidence_refs: vec![],
+            receipt_ref: "review/threads/tests-red-green/turn-000.json".to_owned(),
+        };
+        std::fs::write(
+            lane_dir.join("turn-000.json"),
+            serde_json::to_vec_pretty(&turn0)?,
+        )?;
+        // turn-001: revised conclusion with proof evidence routed
+        let turn1 = crate::LaneThreadTurn {
+            schema: "ub-review.lane_thread.v1".to_owned(),
+            thread_id: "tid".to_owned(),
+            turn: 1,
+            stage: "follow-up".to_owned(),
+            prompt_packet_path: "review/threads/tests-red-green/continuation-prompt-001.md"
+                .to_owned(),
+            response_summary:
+                "Withdraw changes_requested — proof shows test is non-discriminating.".to_owned(),
+            routed_evidence_refs: vec!["proof evidence: receipt result".to_owned()],
+            receipt_ref: "review/threads/tests-red-green/turn-001.json".to_owned(),
+        };
+        std::fs::write(
+            lane_dir.join("turn-001.json"),
+            serde_json::to_vec_pretty(&turn1)?,
+        )?;
+        // A proof receipt matching the lane
+        let proof_receipt = crate::ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof-red-green-abc".to_owned(),
+            kind: "focused-red-green".to_owned(),
+            base: "abc".to_owned(),
+            head: "def".to_owned(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: vec!["tests-red-green".to_owned()],
+            request_ids: vec!["proof-0000".to_owned()],
+            commands: vec![],
+            result: "non_discriminating".to_owned(),
+            reason: "test does not discriminate".to_owned(),
+        };
+        let lane_receipt = crate::ModelLaneReceipt {
+            lane: "tests-red-green".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "completed".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: "cohort:minimax:M3:abc".to_owned(),
+            shared_prefix_hash: "abc".to_owned(),
+            thread_id: "cohort:minimax:M3:abc:tests-red-green".to_owned(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        write_calibration_artifact(
+            &review_dir,
+            std::slice::from_ref(&lane_receipt),
+            &[],
+            std::slice::from_ref(&proof_receipt),
+            &[],
+            0,
+            0,
+            "pass",
+            "advisory",
+            "abc",
+            "def",
+        )?;
+        let bytes = std::fs::read(review_dir.join("calibration.json"))?;
+        let artifact: CalibrationArtifact = serde_json::from_slice(&bytes)?;
+        assert_eq!(
+            artifact.counts.lane_conclusions_changed_by_proof, 1,
+            "should detect 1 proof-changed conclusion"
+        );
+        assert_eq!(artifact.counts.lane_continuations, 1);
+        assert_eq!(
+            artifact.classification.suggested_class,
+            "proof-changed-conclusion"
+        );
+        assert!(!artifact.notable_events.is_empty());
+        assert_eq!(artifact.notable_events[0].lane, "tests-red-green");
+        assert_eq!(
+            artifact.notable_events[0].proof_receipt,
+            "proof-red-green-abc"
+        );
+        Ok(())
+    }
+
+    /// Fixture: quiet-green/no-proof — pass gate, no proof, no comments.
+    #[test]
+    fn calibration_quiet_green_no_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        std::fs::create_dir_all(&review_dir)?;
+        let lane = crate::ModelLaneReceipt {
+            lane: "correctness".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "no findings".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: "cohort:minimax:M3:abc".to_owned(),
+            shared_prefix_hash: "abc".to_owned(),
+            thread_id: "cohort:minimax:M3:abc:correctness".to_owned(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        write_calibration_artifact(
+            &review_dir,
+            std::slice::from_ref(&lane),
+            &[],
+            &[],
+            &[],
+            0,
+            0,
+            "pass",
+            "advisory",
+            "abc",
+            "def",
+        )?;
+        let artifact: CalibrationArtifact =
+            serde_json::from_slice(&std::fs::read(review_dir.join("calibration.json"))?)?;
+        assert_eq!(artifact.gate_policy, "pass");
+        assert_eq!(artifact.counts.proof_requests_model_selected, 0);
+        assert_eq!(artifact.counts.lane_conclusions_changed_by_proof, 0);
+        assert_eq!(artifact.counts.inline_comments_posted, 0);
+        assert_eq!(artifact.classification.suggested_class, "expected-quiet");
+        Ok(())
+    }
+
+    /// Fixture: reporter-skipped — model_mode=off, no lanes executed.
+    #[test]
+    fn calibration_reporter_skipped() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        std::fs::create_dir_all(&review_dir)?;
+        // A lane with no thread_id (preflight only, model_mode=off)
+        let lane = crate::ModelLaneReceipt {
+            lane: "correctness".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "skipped_model_mode_off".to_owned(),
+            reason: "model mode off".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        write_calibration_artifact(
+            &review_dir,
+            std::slice::from_ref(&lane),
+            &[],
+            &[],
+            &[],
+            0,
+            0,
+            "pass",
+            "review-byok",
+            "abc",
+            "def",
+        )?;
+        let artifact: CalibrationArtifact =
+            serde_json::from_slice(&std::fs::read(review_dir.join("calibration.json"))?)?;
+        assert_eq!(artifact.counts.lanes_executed, 0);
+        assert_eq!(artifact.counts.reporter_questions, 0);
+        assert_eq!(artifact.counts.lane_continuations, 0);
+        assert_eq!(artifact.cohort.provider, ""); // no cohort identity
+        assert_eq!(artifact.classification.suggested_class, "no-model-review");
+        Ok(())
+    }
+
+    /// Fixture: missing-proof — proof requested but no receipt produced.
+    #[test]
+    fn calibration_missing_proof() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        std::fs::create_dir_all(&review_dir)?;
+        let lane = crate::ModelLaneReceipt {
+            lane: "tests-red-green".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: "completed".to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: crate::ModelCacheUsage::default(),
+            cohort_id: "cohort:minimax:M3:abc".to_owned(),
+            shared_prefix_hash: "abc".to_owned(),
+            thread_id: "cohort:minimax:M3:abc:tests-red-green".to_owned(),
+            turn: 0,
+            cohort_broken: false,
+        };
+        // Proof requested but status=unsupported (broker rejected command)
+        let proof_req = crate::ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-0000-abc".to_owned(),
+            lane: "tests-red-green".to_owned(),
+            requested_by: vec!["tests-red-green".to_owned()],
+            command: "cargo test -p foo".to_owned(),
+            reason: "test".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "unsupported".to_owned(),
+        };
+        write_calibration_artifact(
+            &review_dir,
+            std::slice::from_ref(&lane),
+            std::slice::from_ref(&proof_req),
+            &[], // no receipts
+            &[],
+            0,
+            0,
+            "pass",
+            "advisory",
+            "abc",
+            "def",
+        )?;
+        let artifact: CalibrationArtifact =
+            serde_json::from_slice(&std::fs::read(review_dir.join("calibration.json"))?)?;
+        // Model-selected proof requested but unsupported → 0 model_selected
+        // (status != "requested")
+        assert_eq!(artifact.counts.proof_requests_model_selected, 0);
+        assert_eq!(artifact.counts.proof_requests_executed, 0);
+        assert_eq!(artifact.counts.lane_conclusions_changed_by_proof, 0);
+        Ok(())
+    }
 }
