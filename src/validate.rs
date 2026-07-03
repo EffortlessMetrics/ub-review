@@ -411,6 +411,44 @@ pub(crate) fn validate_proof_request(
     )
 }
 
+/// Normalize a model-suggested proof command to match the broker's allowlist:
+/// - Replace `-p <name>` with `--package <name>` (short to long form).
+/// - Strip shell pipes (`| ...`) and redirects (`2>&1`, `> file`, etc.).
+/// - Add `--locked` after `cargo test/build/check/doc` if missing.
+/// - Strip `--nocapture` from after `--` if present (not in passthrough allowlist).
+///
+/// If the command doesn't start with `cargo`, return it unchanged (the broker
+/// will reject non-cargo commands via its own allowlist).
+pub(crate) fn normalize_proof_command(command: &str) -> String {
+    let mut cmd = command.trim().to_owned();
+    // Strip shell pipes and redirects: take only the part before the first pipe/redirect.
+    for sep in [" | ", " 2>&1", " >/dev/null", " > /dev/null", " && "] {
+        if let Some(idx) = cmd.find(sep) {
+            cmd.truncate(idx);
+        }
+    }
+    // Replace `-p <name>` with `--package <name>`.
+    cmd = cmd.replace(" -p ", " --package ");
+    // Add --locked after cargo subcommand if missing.
+    if cmd.starts_with("cargo ") && !cmd.contains("--locked") {
+        // Insert --locked right after the subcommand word.
+        let parts: Vec<&str> = cmd.splitn(3, ' ').collect();
+        if parts.len() >= 2 {
+            cmd = format!(
+                "{} {} --locked {}",
+                parts[0],
+                parts[1],
+                parts.get(2).unwrap_or(&"")
+            );
+            cmd = cmd.trim_end().to_owned();
+        }
+    }
+    // Strip --nocapture from after -- (not in passthrough allowlist).
+    cmd = cmd.replace(" --nocapture", "");
+    cmd = cmd.replace(" -- --", " --");
+    cmd.trim().to_owned()
+}
+
 pub(crate) fn has_shell_control_token(command: &str) -> bool {
     command
         .chars()

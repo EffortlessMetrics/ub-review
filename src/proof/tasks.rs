@@ -271,7 +271,10 @@ fn proof_request_v2_to_v1_for_build(req: &ProofRequestV2) -> Option<ProofRequest
 
 /// Shared v2→v1 normalization. The v2 `target` is the command string; `cost`
 /// is the v1 proof-class label for the kind. Other v1 fields are mapped from
-/// their v2 equivalents.
+/// their v2 equivalents. The command is normalized to match the broker's
+/// allowlist syntax (Order 6 of #678): `-p` → `--package`, add `--locked`,
+/// strip shell pipes. This lets the model express intent freely while the
+/// deterministic layer enforces the exact allowlist.
 fn proof_request_v2_to_v1(req: &ProofRequestV2, cost: &str) -> ProofRequest {
     ProofRequest {
         schema: "ub-review.proof_request.v1".to_owned(),
@@ -283,7 +286,7 @@ fn proof_request_v2_to_v1(req: &ProofRequestV2, cost: &str) -> ProofRequest {
             .cloned()
             .unwrap_or_else(|| "proof-planner".to_owned()),
         requested_by: req.requested_by.clone(),
-        command: req.target.clone(),
+        command: crate::normalize_proof_command(&req.target),
         reason: req.expected_interpretation.clone(),
         cost: cost.to_owned(),
         timeout_sec: req.timeout_sec,
