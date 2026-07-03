@@ -76,10 +76,29 @@ deterministic evidence floor without making AI judgment the merge blocker.
     failed, required sensor finding, tool-gate threshold exceeded).
   - `inconclusive`: required evidence was unavailable (tool missing, timed
     out, key absent). This is NOT clean — it means "we couldn't check."
-- Model review still posts as advisory COMMENT (reporter distillation,
-  inline candidates). Model output never feeds the gate verdict.
+- Model review feeds the gate only through deterministic evidence, never
+  through the verdict itself (unless `[gate].review_forward = true`, see
+  Mode 4). Whether the model review *posts* to the PR is governed by
+  `[review_body].summary_only_body` (see "Posting posture" below), not by
+  the gate mode. Under `suppress`, nothing is posted even in
+  deterministic-floor mode.
 - `[[proof.required]]` entries in the config declare the must-run floor
   (e.g., `cargo check --locked`, `cargo clippy -D warnings`).
+
+### Posting posture (`summary_only_body`)
+
+The `[review_body].summary_only_body` setting controls whether the model
+review reaches the PR at all. It is orthogonal to `fail-on-gate`:
+
+| Value | What posts to the PR |
+|---|---|
+| `suppress` (default) | **Nothing.** No review body, no inline comments. Findings live only in local artifacts. The acted-on metric is structurally zero under this setting. |
+| `post_substantive` | A grouped review + inline comments **only when at least one finding is substantive** (severity medium+ or confidence medium-high+; pure lane-status findings are excluded). Boilerplate stays suppressed. |
+| `post_all` | Any classified review body posts. Use only after calibration shows the boilerplate classification is reliable. |
+
+> **Promotion note:** a repo must move from `suppress` to at least
+> `post_substantive` before the acted-on-comment metric can be nonzero.
+> See the staged promotion checklist below.
 
 **Promotion criterion:** run deterministic-floor for a calibration window.
 Verify:
@@ -159,15 +178,26 @@ For each repo adopting ub-review as a primary gate:
 ```
 Stage 0: Advisory
   - Pin to a merged-main SHA with all features (post-#713).
+  - Keep summary_only_body = "suppress" for the first few PRs while you
+    confirm infra is healthy (no secrets missing, no runner failures).
+  - Promote summary_only_body to "post_substantive" so actionable findings
+    reach the PR. This MUST happen before the acted-on-comment metric can
+    ever be nonzero. Without it, the staged promotion below is unverifiable.
   - Run for 10–20 PRs with calibration.json collected.
-  - Classify: expected-quiet, true-positive, false-positive, infra-excluded.
-  - Goal: false-positive rate < 10%, infra-excluded rate < 5%.
+  - Classify: expected-quiet, true-positive, false-positive, infra-excluded,
+    acted-on-comment.
+  - Goal: false-positive rate < 10%, infra-excluded rate < 5%, and at least
+    one acted-on comment (a human cited/fixed a posted finding).
 
 Stage 1: Deterministic-floor
   - Set fail-on-gate: true, mode: intelligent-ci.
   - Configure [[proof.required]] for the repo's must-run checks.
+  - Keep summary_only_body at "post_substantive" (or "post_all" if Stage 0
+    showed boilerplate classification is reliable). Do NOT regress to
+    "suppress" — it would zero the acted-on metric and make Stage 2
+    unverifiable.
   - Make ub-review/gate a required branch-protection check.
-  - Model review stays advisory (reporter posts, never blocks).
+  - Model review stays advisory (substantive findings post, never block).
   - Goal: zero false fail, low inconclusive rate.
 
 Stage 2: Review-forward (optional, only if calibration supports it)
@@ -177,6 +207,12 @@ Stage 2: Review-forward (optional, only if calibration supports it)
   - Expand blockable classes only with evidence.
   - Goal: reporter verdict adds signal without blocking good PRs.
 ```
+
+> **Failure mode the checklist prevents:** promoting a repo to a primary
+> required gate while `summary_only_body = "suppress"` is still set. In
+> that state the gate can block on deterministic evidence, but no
+> actionable finding ever reaches the PR — so the acted-on metric stays
+> structurally zero and the staged promotion cannot be verified. See #717.
 
 ## Metrics to track (from calibration.json)
 
