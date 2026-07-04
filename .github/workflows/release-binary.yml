@@ -103,5 +103,5 @@ jobs:
             gh release create "$TAG" "dist/$ASSET_NAME" "dist/$ASSET_NAME.sha256" \
               --verify-tag \
               --title "$TAG" \
-              --notes "ub-review $TAG"
+              --notes-file .github/release-notes.md
           fi
