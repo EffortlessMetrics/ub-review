@@ -17,6 +17,10 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Write a starter .ub-review.toml.
     Init(InitArgs),
+    /// One-command adoption: write a safe GitHub Actions workflow + minimal
+    /// `.ub-review.toml` for the chosen review posture. Prints the exact
+    /// secret to add. The Droid/Factory-style first-run path.
+    Enable(EnableArgs),
     /// Print box detection and tool availability.
     Doctor(DoctorArgs),
     /// Inspect or prepare ub-review caches.
@@ -424,6 +428,28 @@ pub(crate) struct InitArgs {
     #[arg(long, value_enum, default_value = "gh-runner")]
     pub(crate) profile: ProfileArg,
     /// Overwrite existing config.
+    #[arg(long)]
+    pub(crate) force: bool,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct EnableArgs {
+    /// Review posture: advisory (comment only), gate (recommended required
+    /// check), or strict (+ reporter verdict can block). See #720.
+    #[arg(long, value_enum, env = "UB_REVIEW_REVIEW_MODE")]
+    pub(crate) mode: ReviewModePreset,
+    /// Model backend. Only `minimax` is supported in v0.
+    #[arg(long, default_value = "minimax")]
+    pub(crate) model: String,
+    /// Full 40-hex ub-review commit SHA to pin in the generated workflow.
+    /// Required: the generator refuses to invent a pin (matches the
+    /// `setup-ci` SHA-pin safety contract).
+    #[arg(long, env = "UB_REVIEW_ACTION_SHA")]
+    pub(crate) action_sha: String,
+    /// Repository root to write into.
+    #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
+    pub(crate) root: PathBuf,
+    /// Overwrite an existing `.ub-review.toml` or ub-review workflow.
     #[arg(long)]
     pub(crate) force: bool,
 }

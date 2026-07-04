@@ -47,6 +47,8 @@ mod providers;
 pub(crate) use providers::*;
 mod init;
 pub(crate) use init::*;
+mod enable;
+pub(crate) use enable::*;
 mod claim_graph;
 pub(crate) use claim_graph::*;
 mod impact_plan;
@@ -151,6 +153,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Init(args) => cmd_init(args),
+        Command::Enable(args) => cmd_enable(args),
         Command::Doctor(args) => cmd_doctor(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
