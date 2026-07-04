@@ -81,6 +81,10 @@ inputs:
     description: 'Execution mode: review-byok or intelligent-ci. Legacy review-direct is accepted as an alias.'
     default: review-byok
     required: false
+  review-mode:
+    description: 'User-facing review posture. When set, overrides mode/fail-on-gate/[gate].review_forward (with a per-knob warning). advisory = comment only, never blocks; gate = deterministic-floor required check (recommended); strict = + reporter verdict can block. Unset (default) uses the legacy knobs below unchanged.'
+    default: ''
+    required: false
   run-pass:
     description: 'Run pass identity: auto, opened, reopened, ready_for_review, synchronize, pull_request_other, or manual. Auto maps pull_request opened, reopened, ready_for_review, and synchronize to the matching pass; when posting=review, a pass posts the grouped review only if the profile lists its event action in [gate].post_review_on.'
     default: auto
@@ -601,6 +605,13 @@ runs:
         if [[ -n "${{ inputs['runtime-profile'] }}" ]]; then
           extra+=(--runtime-profile "${{ inputs['runtime-profile'] }}")
         fi
+        # #719: forward the user-facing review-mode preset when set. The binary
+        # applies the {mode, fail-on-gate, review_forward} override during run
+        # so the gate_outcome.json reflects the preset; the gate-check step
+        # repeats the {mode, fail-on-gate} override for enforcement.
+        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
+          extra+=(--review-mode "${{ inputs['review-mode'] }}")
+        fi
 
         config_path="${{ inputs.config }}"
         if [[ -z "$config_path" ]]; then
@@ -711,7 +722,15 @@ runs:
         UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
       run: |
         set -euo pipefail
+        review_mode_args=()
+        # #719: forward the review-mode preset (advisory/gate/strict). Inlined
+        # from the input expression (matching the runtime-profile pattern) so
+        # an empty input renders the guard false and the flag is never passed.
+        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
+          review_mode_args+=(--review-mode "${{ inputs['review-mode'] }}")
+        fi
         "${{ steps.runner.outputs.bin }}" gate-check \
           --gate-outcome "$UB_REVIEW_GATE_OUTCOME_PATH" \
           --fail-on-gate "$UB_REVIEW_FAIL_ON_GATE" \
-          --mode "$UB_REVIEW_MODE"
+          --mode "$UB_REVIEW_MODE" \
+          "${review_mode_args[@]}"
