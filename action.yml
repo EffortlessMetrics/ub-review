@@ -587,7 +587,6 @@ runs:
       env:
         UB_REVIEW_PROFILE: ${{ inputs.profile }}
         UB_REVIEW_PRESET: ${{ inputs.preset }}
-        UB_REVIEW_REVIEW_MODE: ${{ inputs['review-mode'] }}
         UB_REVIEW_MINIMAX_API_KEY: ${{ inputs['minimax-api-key'] }}
         UB_REVIEW_MINIMAX_API_URL: ${{ inputs['minimax-api-url'] }}
         UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
@@ -610,8 +609,8 @@ runs:
         # applies the {mode, fail-on-gate, review_forward} override during run
         # so the gate_outcome.json reflects the preset; the gate-check step
         # repeats the {mode, fail-on-gate} override for enforcement.
-        if [[ -n "${UB_REVIEW_REVIEW_MODE:-}" ]]; then
-          extra+=(--review-mode "$UB_REVIEW_REVIEW_MODE")
+        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
+          extra+=(--review-mode "${{ inputs['review-mode'] }}")
         fi
 
         config_path="${{ inputs.config }}"
@@ -720,16 +719,15 @@ runs:
         # parser use, instead of handing clap an empty string (a hard error).
         UB_REVIEW_FAIL_ON_GATE: ${{ inputs['fail-on-gate'] || 'auto' }}
         UB_REVIEW_MODE: ${{ inputs.mode || 'review-byok' }}
-        # #719: the review-mode preset (advisory/gate/strict). When set, the
-        # binary overrides mode/fail-on-gate above (with per-knob warnings) so
-        # normal users need only set review-mode. Empty = unset = legacy knobs.
-        UB_REVIEW_REVIEW_MODE: ${{ inputs['review-mode'] }}
         UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
       run: |
         set -euo pipefail
         review_mode_args=()
-        if [[ -n "${UB_REVIEW_REVIEW_MODE:-}" ]]; then
-          review_mode_args+=(--review-mode "$UB_REVIEW_REVIEW_MODE")
+        # #719: forward the review-mode preset (advisory/gate/strict). Inlined
+        # from the input expression (matching the runtime-profile pattern) so
+        # an empty input renders the guard false and the flag is never passed.
+        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
+          review_mode_args+=(--review-mode "${{ inputs['review-mode'] }}")
         fi
         "${{ steps.runner.outputs.bin }}" gate-check \
           --gate-outcome "$UB_REVIEW_GATE_OUTCOME_PATH" \
