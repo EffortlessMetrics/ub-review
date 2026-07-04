@@ -81,6 +81,25 @@ pull request. ub-review runs on every PR (`opened`, `reopened`,
 is deliberately tiny; the sophistication lives inside the tool. Add proof,
 sensors, or lanes later only if the calibration data shows you need them.
 
+## What gets posted to the PR
+
+ub-review does not post on every run. The default config (`post_substantive`)
+posts a grouped review **only when at least one finding is substantive**:
+
+- **severity medium or higher** (medium, high, blocker), OR
+- **confidence medium-high or higher** (medium-high, high).
+
+Pure lane-status findings (e.g. "this lane produced no output") are excluded —
+they are not reviewer-actionable. When no finding is substantive, ub-review
+stays quiet (the run is "expected-quiet") and records the result in
+`review/calibration.json` without posting boilerplate. This keeps the PR
+signal-to-noise ratio high: a posted review means something worth looking at.
+
+To post on every classified run instead, set `summary_only_body = "post_all"`
+in `.ub-review.toml` under `[review_body]`. See
+[ADOPTION_MODES.md](ADOPTION_MODES.md#posting-posture-summary_only_body) for
+the full posting-posture table.
+
 ## Make it required (gate mode)
 
 In `gate` mode the `ub-review/gate` check can be made a required branch
