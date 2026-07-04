@@ -33,6 +33,9 @@ src/review_compiler.rs FinalCompilerInputArtifact (v2 filter contract)
   <-> verifier require_final_compiler_input
 src/issue_broker.rs follow_up_resolved_away_candidate_ids + surface matchers
   <-> verifier mirrors (pinned by self-tests)
+src/work_queue.rs work_queue_task_from_sensor (#325 late-phase pending rule)
+  <-> verifier require_sensor_work_queue_task_schema (pinned by
+      self_test_late_phase_sensor_work_queue_task_stays_pending)
 schema strings ub-review.<name>.vN in Rust
   <-> exact strings the verifier pins
 ```

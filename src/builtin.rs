@@ -329,6 +329,7 @@ pub(crate) fn tool(
         artifact_budget_mb,
         requires_lease,
         enabled,
+        phase: None,
         gate: None,
         provided: ToolPolicyProvided::default(),
     }

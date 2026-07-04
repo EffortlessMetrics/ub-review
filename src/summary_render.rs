@@ -477,6 +477,7 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
     let mut available = Vec::new();
     let mut missing = Vec::new();
     let mut failed = Vec::new();
+    let mut scheduled_late = Vec::new();
 
     for sensor in &plan.sensors {
         let status_path = out
@@ -485,11 +486,22 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
             .join("ub-review-sensor-status.json");
         let Some(receipt) = read_sensor_receipt(&status_path) else {
             if sensor.run {
-                missing.push(format!(
-                    "{} receipt absent; {} unavailable.",
-                    sensor.id,
-                    evidence_label(&sensor.id)
-                ));
+                // #325: a late-phase sensor without a receipt is scheduled
+                // work, not missing evidence — its receipt lands before the
+                // reporter/compile/gate. Fast sensors without receipts stay
+                // missing evidence.
+                if matches!(sensor.phase, SensorPhase::Late) {
+                    scheduled_late.push(format!(
+                        "{} scheduled in the late evidence phase; its receipt lands before the gate (late is not missing).",
+                        sensor.id
+                    ));
+                } else {
+                    missing.push(format!(
+                        "{} receipt absent; {} unavailable.",
+                        sensor.id,
+                        evidence_label(&sensor.id)
+                    ));
+                }
             }
             continue;
         };
@@ -583,6 +595,13 @@ pub(crate) fn render_evidence_sections(text: &mut String, out: &Path, plan: &Pla
     if !failed.is_empty() {
         text.push_str("\n## Failed evidence\n\n");
         for item in failed {
+            text.push_str(&format!("- {}\n", escape_md(&item)));
+        }
+    }
+
+    if !scheduled_late.is_empty() {
+        text.push_str("\n## Scheduled late evidence\n\n");
+        for item in scheduled_late {
             text.push_str(&format!("- {}\n", escape_md(&item)));
         }
     }

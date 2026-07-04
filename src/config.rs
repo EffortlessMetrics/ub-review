@@ -444,6 +444,12 @@ pub(crate) struct ToolPolicy {
     pub(crate) artifact_budget_mb: u64,
     pub(crate) requires_lease: bool,
     pub(crate) enabled: bool,
+    /// Evidence-phase override for the pipelined scheduler (#325). Unset means
+    /// the phase is derived from `class`/`requires_lease` at plan time via
+    /// `default_sensor_phase`; `fast` forces the sensor into the pre-lane
+    /// evidence window, `late` defers it behind lane launch.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) phase: Option<SensorPhase>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) gate: Option<ToolGatePolicy>,
     #[serde(skip)]
@@ -462,6 +468,7 @@ pub(crate) struct ToolPolicyProvided {
     pub(crate) artifact_budget_mb: bool,
     pub(crate) requires_lease: bool,
     pub(crate) enabled: bool,
+    pub(crate) phase: bool,
     pub(crate) gate: bool,
 }
 
@@ -477,6 +484,7 @@ pub(crate) struct ToolPolicyInput {
     pub(crate) artifact_budget_mb: Option<u64>,
     pub(crate) requires_lease: Option<bool>,
     pub(crate) enabled: Option<bool>,
+    pub(crate) phase: Option<SensorPhase>,
     pub(crate) gate: Option<ToolGatePolicy>,
 }
 
@@ -511,6 +519,7 @@ impl<'de> Deserialize<'de> for ToolPolicy {
             artifact_budget_mb: input.artifact_budget_mb.is_some(),
             requires_lease: input.requires_lease.is_some(),
             enabled: input.enabled.is_some(),
+            phase: input.phase.is_some(),
             gate: input.gate.is_some(),
         };
         Ok(Self {
@@ -526,9 +535,65 @@ impl<'de> Deserialize<'de> for ToolPolicy {
                 .unwrap_or(defaults.artifact_budget_mb),
             requires_lease: input.requires_lease.unwrap_or(defaults.requires_lease),
             enabled: input.enabled.unwrap_or(defaults.enabled),
+            phase: input.phase.or(defaults.phase),
             gate: input.gate.or(defaults.gate),
             provided,
         })
+    }
+}
+
+/// Evidence phase for the pipelined intelligent-ci scheduler (#325).
+///
+/// `fast` sensors run to completion before the shared context is rendered and
+/// model lanes launch (the "first evidence window"). `late` sensors are
+/// spawned concurrently with the model wave and joined before the reporter,
+/// the review compile, and the gate — so the gate always evaluates complete
+/// sensor evidence, while lane launch never waits on the slow suite. A late
+/// sensor that produced no receipt at join time stays missing evidence, never
+/// clean evidence.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum SensorPhase {
+    Fast,
+    Late,
+}
+
+impl SensorPhase {
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            SensorPhase::Fast => "fast",
+            SensorPhase::Late => "late",
+        }
+    }
+}
+
+/// Default evidence phase for a tool when `[tools.<id>].phase` is unset:
+/// lease-gated witnesses and compile/test-requiring classes are late; the
+/// non-compiling static signal (static, search, packet, workflow, security)
+/// is fast. A repo can override per tool (for example `cargo-fmt` is class
+/// `build` but needs no compile, so this repo pins it `phase = "fast"`).
+pub(crate) fn default_sensor_phase(class: ToolClass, requires_lease: bool) -> SensorPhase {
+    if requires_lease {
+        return SensorPhase::Late;
+    }
+    match class {
+        ToolClass::Test | ToolClass::Build | ToolClass::Coverage | ToolClass::HeavyWitness => {
+            SensorPhase::Late
+        }
+        ToolClass::Packet
+        | ToolClass::Static
+        | ToolClass::Search
+        | ToolClass::Workflow
+        | ToolClass::Security => SensorPhase::Fast,
+    }
+}
+
+impl ToolPolicy {
+    /// The phase this tool's sensor executes in: the explicit `phase` key when
+    /// provided, else the class/lease-derived default.
+    pub(crate) fn effective_phase(&self) -> SensorPhase {
+        self.phase
+            .unwrap_or_else(|| default_sensor_phase(self.class, self.requires_lease))
     }
 }
 
@@ -752,6 +817,7 @@ impl Default for ToolPolicy {
             artifact_budget_mb: 64,
             requires_lease: false,
             enabled: true,
+            phase: None,
             gate: None,
             provided: ToolPolicyProvided::default(),
         }
@@ -895,6 +961,9 @@ impl Config {
                     if !tool.provided.enabled {
                         tool.enabled = default_tool.enabled;
                     }
+                    if !tool.provided.phase {
+                        tool.phase = default_tool.phase;
+                    }
                     if !tool.provided.gate {
                         tool.gate = default_tool.gate;
                     }
@@ -952,6 +1021,7 @@ pub(crate) const KNOWN_TOOL_POLICY_KEYS: &[&str] = &[
     "artifact_budget_mb",
     "requires_lease",
     "enabled",
+    "phase",
     "gate",
 ];
 
@@ -1443,6 +1513,103 @@ pub(crate) fn runtime_profile_from_toml(text: &str) -> Result<Profile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn default_sensor_phase_classifies_by_class_and_lease() {
+        // Compile/test-requiring classes and leased witnesses are late.
+        assert_eq!(
+            default_sensor_phase(ToolClass::Test, false),
+            SensorPhase::Late
+        );
+        assert_eq!(
+            default_sensor_phase(ToolClass::Build, false),
+            SensorPhase::Late
+        );
+        assert_eq!(
+            default_sensor_phase(ToolClass::Coverage, false),
+            SensorPhase::Late
+        );
+        assert_eq!(
+            default_sensor_phase(ToolClass::HeavyWitness, false),
+            SensorPhase::Late
+        );
+        // A lease requirement forces late regardless of class.
+        assert_eq!(
+            default_sensor_phase(ToolClass::Static, true),
+            SensorPhase::Late
+        );
+        // Non-compiling static signal is fast.
+        for class in [
+            ToolClass::Packet,
+            ToolClass::Static,
+            ToolClass::Search,
+            ToolClass::Workflow,
+            ToolClass::Security,
+        ] {
+            assert_eq!(default_sensor_phase(class, false), SensorPhase::Fast);
+        }
+    }
+
+    #[test]
+    fn tool_policy_phase_key_overrides_class_default() -> anyhow::Result<()> {
+        let mut config = Config::from_toml_with_policy_receipts(
+            r#"
+[tools.cargo-fmt]
+enabled = true
+class = "build"
+phase = "fast"
+
+[tools.cargo-test]
+enabled = true
+class = "test"
+"#,
+        )?;
+        assert!(
+            config.policy_errors.is_empty(),
+            "valid phase values must not receipt: {:?}",
+            config.policy_errors
+        );
+        config.merge_defaults();
+        let fmt = config
+            .tools
+            .get("cargo-fmt")
+            .ok_or_else(|| anyhow::anyhow!("cargo-fmt tool missing"))?;
+        assert_eq!(fmt.phase, Some(SensorPhase::Fast));
+        assert_eq!(fmt.effective_phase(), SensorPhase::Fast);
+        let test = config
+            .tools
+            .get("cargo-test")
+            .ok_or_else(|| anyhow::anyhow!("cargo-test tool missing"))?;
+        assert_eq!(test.phase, None);
+        assert_eq!(test.effective_phase(), SensorPhase::Late);
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_tool_phase_value_is_stripped_with_policy_error() -> anyhow::Result<()> {
+        let config = Config::from_toml_with_policy_receipts(
+            r#"
+[tools.cargo-fmt]
+enabled = true
+class = "build"
+phase = "sometime"
+"#,
+        )?;
+        assert!(
+            config
+                .policy_errors
+                .iter()
+                .any(|error| error.section == "tools.cargo-fmt.phase"),
+            "expected a policy error for the invalid phase value: {:?}",
+            config.policy_errors
+        );
+        let fmt = config
+            .tools
+            .get("cargo-fmt")
+            .ok_or_else(|| anyhow::anyhow!("cargo-fmt tool missing"))?;
+        assert_eq!(fmt.phase, None, "invalid phase value must be stripped");
+        Ok(())
+    }
 
     fn provider_max_concurrency_value<'a>(
         value: &'a toml::Value,

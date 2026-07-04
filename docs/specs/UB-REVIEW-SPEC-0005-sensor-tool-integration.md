@@ -46,14 +46,17 @@ never reaches the verdict or the PR body.
 
 Every `plan`/`run` pass. `prepare_plan` classifies the diff and resolves each
 registered tool's trigger into a per-sensor plan (`build_plan`,
-src/main.rs); fast sensors run in the first evidence window
-(docs/ci/work-queue.md packet timing: sensors and must-run static checks in
-roughly T+0-60s); the initial model packet closes with completed receipts
-plus the pending queue; tool gate outcomes are evaluated when tool artifacts
-are written; the gate outcome folds required-sensor gaps and tool-gate
-failures at review compile time. `doctor` is the pre-run moment: it reports
-tool presence and version per registered tool and can hard-require the core
-set.
+src/plan_build.rs), including its evidence phase (`SensorPhase`; per-tool
+`phase` key, default derived from class/lease — see docs/ci/work-queue.md
+"Evidence phases"). Fast sensors run to completion in the first evidence
+window and close the initial model packet with completed receipts plus the
+pending queue; late-phase sensors run on a background pool concurrently with
+the model wave and are joined before the reporter and review compile. Tool
+gate outcomes are evaluated when tool artifacts are written (after the late
+join, so thresholds always evaluate complete receipts); the gate outcome
+folds required-sensor gaps and tool-gate failures at review compile time.
+`doctor` is the pre-run moment: it reports tool presence and version per
+registered tool and can hard-require the core set.
 
 ## Consumer
 

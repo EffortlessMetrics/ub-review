@@ -4215,11 +4215,18 @@ def require_sensor_work_queue_task_schema(root: pathlib.Path, task: dict, tool: 
         "task_path": "resolved-tools.json",
     }
     receipt_ready = (root / expected["receipt_path"]).is_file()
-    expected["initial_packet_status"] = expected_work_queue_initial_packet_status(
-        expected["packet_policy"],
-        expected["status"],
-        receipt_ready,
-    )
+    # #325 mirror of work_queue_task_from_sensor (src/work_queue.rs): a
+    # late-phase planned sensor is never part of the initial packet, so its
+    # initial-packet status is pending regardless of receipt presence. Older
+    # artifacts without a phase field keep the receipt-derived computation.
+    if tool.get("phase") == "late" and expected["status"] == "planned":
+        expected["initial_packet_status"] = "pending_initial_packet"
+    else:
+        expected["initial_packet_status"] = expected_work_queue_initial_packet_status(
+            expected["packet_policy"],
+            expected["status"],
+            receipt_ready,
+        )
     for field, value in expected.items():
         if task.get(field) != value:
             fail(f"sensor work queue task {field} mismatch: task={task!r} tool={tool!r}")
@@ -7484,6 +7491,11 @@ def require_tool_entries(artifact: dict, path: str) -> dict[str, dict]:
             for field in ["status", "reason"]:
                 if not isinstance(entry.get(field), str) or not entry[field]:
                     fail(f"{path} {tool_id} missing string field {field}: {entry!r}")
+            # #325 evidence phase; mirrored into the work-queue initial-packet
+            # computation. Optional so pre-phase artifacts still verify.
+            phase = entry.get("phase")
+            if phase is not None and phase not in {"fast", "late"}:
+                fail(f"{path} {tool_id} phase is invalid: {entry!r}")
             if not isinstance(entry.get("timed_out"), bool):
                 fail(f"{path} {tool_id} timed_out is not boolean: {entry!r}")
             exit_code = entry.get("exit_code")
@@ -7895,6 +7907,56 @@ def self_test_coverage_sidecar_receipts() -> None:
             },
         )
         require_coverage_status_artifact(root, tool_status)
+
+
+def self_test_late_phase_sensor_work_queue_task_stays_pending() -> None:
+    # #325 mirror: a late-phase planned sensor's work-queue task reports
+    # pending_initial_packet even when its receipt has already landed; a
+    # ready_for_initial_packet claim for it must fail verification.
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        receipt_path = root / "sensors/cargo-test/ub-review-sensor-status.json"
+        receipt_path.parent.mkdir(parents=True)
+        receipt_path.write_text("{}", encoding="utf-8")
+        tool = {
+            "id": "cargo-test",
+            "required": True,
+            "planned_run": True,
+            "timeout_sec": 900,
+            "phase": "late",
+            "gate": None,
+        }
+        task = {
+            "schema": "ub-review.work_queue_task.v1",
+            "id": "sensor-cargo-test",
+            "kind": "sensor",
+            "source": "tool-registry",
+            "priority": "high",
+            "packet_policy": "must-run",
+            "deadline_sec": 900,
+            "consumers": ["compiler"],
+            "gate_policy": "gate-required",
+            "dedupe_key": "tool-registry:sensor:cargo-test",
+            "lease": {
+                "cpu": 1,
+                "memory_mb": 0,
+                "disk_mb": 256,
+                "network": False,
+                "timeout_sec": 900,
+            },
+            "receipt_path": "sensors/cargo-test/ub-review-sensor-status.json",
+            "status": "planned",
+            "initial_packet_status": "pending_initial_packet",
+            "task_path": "resolved-tools.json",
+        }
+        require_sensor_work_queue_task_schema(root, task, tool)
+        ready_task = dict(task)
+        ready_task["initial_packet_status"] = "ready_for_initial_packet"
+        expect_self_test_failure(
+            "late-phase sensor marked ready for the initial packet",
+            "initial_packet_status mismatch",
+            lambda: require_sensor_work_queue_task_schema(root, ready_task, tool),
+        )
 
 
 def self_test_tool_status_metadata_mismatch_fails() -> None:
@@ -11338,6 +11400,7 @@ def run_self_tests() -> None:
     self_test_quality_backfill_contract()
     self_test_noise_rule_phrase_parity_with_rust()
     self_test_sanitize_artifact_name_matches_rust_contract()
+    self_test_late_phase_sensor_work_queue_task_stays_pending()
     expect_self_test_failure(
         "tool status metadata mismatch",
         "tool-status.json timeout_sec for ripr does not match resolved-tools.json",

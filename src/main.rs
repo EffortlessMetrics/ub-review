@@ -766,8 +766,18 @@ struct SensorPlan {
     class: ToolClass,
     weight: u32,
     requires_lease: bool,
+    /// Evidence phase under the pipelined scheduler (#325): `fast` sensors
+    /// complete before the shared context renders and lanes launch; `late`
+    /// sensors overlap the model wave and join before the reporter/compile/
+    /// gate. Defaults to `fast` so plan artifacts from older runs still load.
+    #[serde(default = "default_plan_sensor_phase")]
+    phase: SensorPhase,
     #[serde(skip_serializing_if = "Option::is_none")]
     gate: Option<ToolGatePolicy>,
+}
+
+fn default_plan_sensor_phase() -> SensorPhase {
+    SensorPhase::Fast
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -817,6 +827,11 @@ struct ToolStatusEntry {
     timeout_sec: u64,
     artifact_budget_mb: u64,
     requires_lease: bool,
+    /// Evidence phase under the pipelined scheduler (#325). The artifact
+    /// verifier mirrors this to recompute the work-queue initial-packet
+    /// status: a late-phase planned sensor is never part of the initial
+    /// packet.
+    phase: SensorPhase,
     status: String,
     reason: String,
     exit_code: Option<i32>,
@@ -3437,11 +3452,11 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         },
     )?;
 
-    let event_log = EventLog::open(&args.review.out.join("events.ndjson"))?;
+    let event_log = Arc::new(EventLog::open(&args.review.out.join("events.ndjson"))?);
     let mut run_loop_tracker = RunLoopTracker::new();
     event_log.append(
         "run_started",
-        serde_json::json!({"base": args.review.base, "head": args.review.head, "profile": plan.profile_name, "dry_run": args.dry_run, "run_pass": run_pass.key()}),
+        serde_json::json!({"base": args.review.base, "head": args.review.head, "profile": plan.profile_name, "dry_run": args.dry_run, "run_pass": run_pass.key(), "sensor_phases": args.sensor_phases.key()}),
     )?;
 
     let evidence_loop = start_run_loop(
@@ -3451,26 +3466,63 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         "coordination",
         "sensors-and-packet",
     )?;
+    // #325 pipelined scheduler: fast sensors block here because they feed the
+    // shared precontext the lanes launch from; late-phase sensors (test,
+    // build, coverage, lease-gated witnesses) overlap the model wave on a
+    // background pool and are joined inside write_review_artifacts before the
+    // reporter, tool-status/gate-outcome computation, the review compiles,
+    // and the gate — so the gate always evaluates complete sensor evidence.
+    let mut late_phase: Option<LateSensorPhase> = None;
     if args.dry_run {
         write_dry_run_sensor_receipts(&args.review.root, &args.review.out, &plan, &event_log)?;
         event_log.append("run_dry", serde_json::json!({"reason": "--dry-run"}))?;
     } else {
         write_skipped_sensor_receipts(&args.review.root, &args.review.out, &plan, &event_log)?;
-        run_sensors(
-            &args.review.root,
-            &args.review.out,
-            &plan,
-            profile,
-            &event_log,
-        )?;
+        let runnable = plan
+            .sensors
+            .iter()
+            .filter(|sensor| sensor.run)
+            .cloned()
+            .collect::<Vec<SensorPlan>>();
+        let (fast, late): (Vec<SensorPlan>, Vec<SensorPlan>) = match args.sensor_phases {
+            SensorPhasesMode::Serial => (runnable, Vec::new()),
+            SensorPhasesMode::Pipelined => runnable
+                .into_iter()
+                .partition(|sensor| matches!(sensor.phase, SensorPhase::Fast)),
+        };
+        if fast.is_empty() && late.is_empty() {
+            event_log.append("sensors_empty", serde_json::json!({}))?;
+        } else {
+            if !fast.is_empty() {
+                let jobs = sensor_job_count(profile, fast.len())?;
+                run_sensor_pool(
+                    &args.review.root,
+                    &args.review.out,
+                    &plan,
+                    jobs,
+                    fast.into(),
+                    &event_log,
+                )?;
+            }
+            if !late.is_empty() {
+                late_phase = Some(spawn_late_sensor_phase(
+                    &args.review.root,
+                    &args.review.out,
+                    &plan,
+                    profile,
+                    &event_log,
+                    &run_started,
+                    late,
+                )?);
+            }
+        }
     }
-    let tool_gate_outcomes =
-        write_tool_status_artifacts(&args.review.out, &config, profile, &plan)?;
     let pr_thread_context = collect_pr_thread_context(&args.review.root, &args)?;
 
     write_lane_packets(
         &args.review.out,
         &diff,
+        &plan,
         &selected_model_lanes,
         &pr_thread_context,
         &event_log,
@@ -3494,7 +3546,6 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &diff,
         &box_state,
         &plan,
-        &tool_gate_outcomes.outcomes,
         &preliminary_summary,
         pr_thread_context,
         &args,
@@ -3502,6 +3553,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
         &run_started,
         &mut run_loop_tracker,
         run_started.elapsed(),
+        late_phase,
     )?;
     let summary = render_summary(&args.review.out, &plan, &diff)?;
     fs::write(args.review.out.join("running-summary.md"), &summary)?;
@@ -3899,7 +3951,6 @@ fn write_review_artifacts(
     diff: &DiffContext,
     box_state: &BoxState,
     plan: &Plan,
-    tool_gate_outcomes: &[ToolGateOutcomeEntry],
     running_summary: &str,
     pr_thread_context: PrThreadContext,
     args: &RunArgs,
@@ -3907,6 +3958,7 @@ fn write_review_artifacts(
     run_started: &Instant,
     run_loop_tracker: &mut RunLoopTracker,
     elapsed: Duration,
+    late_phase: Option<LateSensorPhase>,
 ) -> Result<GateOutcome> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir)?;
@@ -3975,7 +4027,9 @@ fn write_review_artifacts(
     let impact_plan = build_impact_plan(root, &diff.changed_files, impact_mode);
     let impact_plan_candidate_tasks = impact_plan.candidate_tasks.clone();
     write_impact_plan(out, &impact_plan)?;
-    let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
+    // Sensor evidence issues are collected after the late-phase join below
+    // (#325): collecting here would misread still-running late sensors as
+    // missing evidence.
     let mut missing_or_failed_model_evidence = model_lanes
         .iter()
         .filter(|receipt| is_model_receipt_evidence_issue(receipt))
@@ -4211,6 +4265,44 @@ fn write_review_artifacts(
             "completed",
         )?;
     }
+    // #325 stream-as-it-lands join point: the late evidence phase lands here,
+    // before anything downstream reads sensor state — the model-request proof
+    // broker, the reporter (which routes late receipts into lane continuation
+    // turns), tool-status/tool-gate artifacts, sensor evidence-issue
+    // collection, both review compiles, and the gate. A late sensor that
+    // failed or never wrote a receipt surfaces as missing evidence through
+    // the same collectors as before — never as clean evidence.
+    let late_sensor_ids: Vec<String> = late_phase
+        .as_ref()
+        .map(|phase| phase.sensor_ids.clone())
+        .unwrap_or_default();
+    if let Some(phase) = late_phase {
+        phase.join(event_log, run_started, run_loop_tracker)?;
+    }
+    let tool_gate_outcome_artifact = write_tool_status_artifacts(out, config, profile, plan)?;
+    let tool_gate_outcomes: &[ToolGateOutcomeEntry] = &tool_gate_outcome_artifact.outcomes;
+    let missing_or_failed_sensor_evidence = collect_sensor_evidence_issues(out, plan);
+    let late_sensor_evidence = late_sensor_receipt_digests(out, &late_sensor_ids);
+    for digest in &late_sensor_evidence {
+        if let Err(e) = message_log.append(
+            CrossLaneMessageKind::EvidenceRouted,
+            "runner",
+            "reporter",
+            0,
+            vec![digest.receipt_path.clone()],
+            serde_json::json!({
+                "sensor": digest.sensor,
+                "status": digest.status,
+                "reason": digest.reason,
+                "phase": "late",
+            }),
+        ) {
+            let _ = event_log.append(
+                "message_log_error",
+                serde_json::json!({"sensor": digest.sensor, "kind": "evidence_routed", "error": format!("{e:#}")}),
+            );
+        }
+    }
     // Run the model-request proof broker BEFORE the reporter so proof receipts
     // are available for routing to lanes in the multi-turn continuation.
     // Previously this ran after the reporter, meaning continuation prompts
@@ -4276,6 +4368,7 @@ fn write_review_artifacts(
         &shared_context,
         &model_lanes,
         &proof_result.proof_receipts,
+        &late_sensor_evidence,
         args,
         model_calls_used,
         event_log,
@@ -6367,6 +6460,80 @@ mod tests {
         assert_eq!(
             cargo_fmt_event["initial_packet_status"],
             cargo_fmt["initial_packet_status"]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn work_queue_late_phase_sensor_stays_pending_initial_packet() -> Result<()> {
+        // #325: a late-phase sensor was never part of the initial packet, so
+        // its initial-packet status is deterministically pending even when
+        // its receipt has landed by the time the queue artifact is written.
+        let temp = tempfile::tempdir()?;
+        fs::create_dir_all(temp.path().join("sensors/cargo-test"))?;
+        fs::write(
+            temp.path()
+                .join("sensors/cargo-test/ub-review-sensor-status.json"),
+            "{}",
+        )?;
+        let mut late = sensor_plan("cargo-test", "cargo", true);
+        late.required = true;
+        late.phase = super::SensorPhase::Late;
+        let task = super::work_queue_task_from_sensor(temp.path(), &late);
+        assert_eq!(task.packet_policy, "must-run");
+        assert_eq!(task.initial_packet_status, "pending_initial_packet");
+
+        let mut fast = sensor_plan("cargo-test", "cargo", true);
+        fast.required = true;
+        let ready = super::work_queue_task_from_sensor(temp.path(), &fast);
+        assert_eq!(ready.initial_packet_status, "ready_for_initial_packet");
+        Ok(())
+    }
+
+    #[test]
+    fn lane_packets_render_late_phase_sensors_as_scheduled() -> Result<()> {
+        // #325: packets must not read a racing late receipt — a routed late
+        // sensor renders as scheduled work with the late-is-not-missing rule.
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(out.join("sensors/ast-grep"))?;
+        fs::write(
+            out.join("sensors/ast-grep/ub-review-sensor-status.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "sensor": "ast-grep",
+                "status": "ok",
+                "reason": "completed",
+            }))?,
+        )?;
+        let mut coverage = sensor_plan("coverage", "cargo", true);
+        coverage.phase = super::SensorPhase::Late;
+        let plan = test_plan(vec![coverage, sensor_plan("ast-grep", "ast-grep", true)]);
+        let lane = LanePlan {
+            id: "tests-oracle".to_owned(),
+            role: "test oracle".to_owned(),
+            model: "custom:test".to_owned(),
+            model_display: "test model".to_owned(),
+            receives: vec!["coverage".to_owned(), "ast-grep".to_owned()],
+            focus: "test focus".to_owned(),
+        };
+        let event_log = EventLog::open(&out.join("events.ndjson"))?;
+        super::write_lane_packets(
+            &out,
+            &test_diff(),
+            &plan,
+            std::slice::from_ref(&lane),
+            &test_pr_thread_context(),
+            &event_log,
+        )?;
+        let packet = fs::read_to_string(out.join("lanes/tests-oracle.md"))?;
+        assert!(
+            packet.contains("- `coverage`: `scheduled-late`"),
+            "late routed sensor must render as scheduled: {packet}"
+        );
+        assert!(packet.contains("late is not missing"));
+        assert!(
+            packet.contains("- `ast-grep`: `ok`"),
+            "fast routed sensor still renders its receipt status: {packet}"
         );
         Ok(())
     }
@@ -13751,6 +13918,7 @@ max_new_unsuppressed = 0
                 scope: Some("on-diff".to_owned()),
                 max_new_unsuppressed: Some(0),
             }),
+            phase: Some(super::SensorPhase::Fast),
             ..super::ToolPolicy::default()
         };
         let serialized = serde_json::to_value(&tool)?;
@@ -14127,7 +14295,6 @@ required_proof_unprooven = true
             &diff,
             &test_box_state(),
             &plan,
-            &[],
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -14135,6 +14302,7 @@ required_proof_unprooven = true
             &run_started,
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
+            None,
         )?;
 
         let written: serde_json::Value =
@@ -14152,6 +14320,91 @@ required_proof_unprooven = true
             summary
                 .contains("- Gate: `pass` with `0` blocking reasons (`review/gate_outcome.json`)")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn pipelined_late_sensor_phase_joins_before_gate_and_stays_missing_evidence() -> Result<()> {
+        // #325 end-to-end: a late-phase required sensor runs behind the model
+        // wave; its receipt must land before the gate evaluates, and a late
+        // sensor that could not run stays missing evidence — never clean.
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        fs::create_dir_all(&out)?;
+        let config = Config::default();
+        let mut late_sensor = sensor_plan(
+            "slowtool",
+            "ub-review-test-late-tool-that-does-not-exist",
+            true,
+        );
+        late_sensor.required = true;
+        late_sensor.phase = super::SensorPhase::Late;
+        let plan = test_plan(vec![late_sensor.clone()]);
+        let diff = test_diff();
+        let mut args = test_run_args(out.clone());
+        args.model_mode = ModelMode::Off;
+        args.mode = super::RunMode::IntelligentCi;
+        let event_log = std::sync::Arc::new(EventLog::open(&out.join("events.ndjson"))?);
+        let run_started = Instant::now();
+        let mut run_loop_tracker = super::RunLoopTracker::new();
+        let profile = config.selected_profile()?;
+
+        let late_phase = super::spawn_late_sensor_phase(
+            temp.path(),
+            &out,
+            &plan,
+            profile,
+            &event_log,
+            &run_started,
+            vec![late_sensor],
+        )?;
+        let gate_outcome = write_review_artifacts(
+            temp.path(),
+            &out,
+            &config,
+            &diff,
+            &test_box_state(),
+            &plan,
+            "running summary",
+            test_pr_thread_context(),
+            &args,
+            &event_log,
+            &run_started,
+            &mut run_loop_tracker,
+            std::time::Duration::from_secs(5),
+            Some(late_phase),
+        )?;
+
+        // The late receipt landed before the gate evaluated, and the missing
+        // late required sensor reddens the intelligent-ci gate.
+        let receipt: serde_json::Value = serde_json::from_slice(&fs::read(
+            out.join("sensors/slowtool/ub-review-sensor-status.json"),
+        )?)?;
+        assert_eq!(receipt["status"], "missing");
+        assert_eq!(receipt["phase"], "late");
+        // Three-state gate: an evidence gap is inconclusive (blocking in
+        // intelligent-ci), not a demonstrated failure — and never a pass.
+        assert_eq!(gate_outcome.conclusion, "inconclusive");
+        let written: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+        assert_eq!(written["conclusion"], "inconclusive");
+
+        // The shared prefix renders the late sensor as scheduled work
+        // deterministically — it never reads a racing receipt.
+        let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
+        assert!(
+            shared_context.contains("`slowtool`: `scheduled-late`"),
+            "shared context must render late sensors as scheduled: {shared_context}"
+        );
+        assert!(shared_context.contains("late is not missing"));
+
+        // Join accounting: lifecycle events and the late-sensors scheduler
+        // phase are recorded; tool status is computed after the join.
+        let events = fs::read_to_string(out.join("events.ndjson"))?;
+        assert!(events.contains("late_sensor_phase_started"));
+        assert!(events.contains("late_sensor_phase_joined"));
+        assert!(events.contains("late-sensors"));
+        assert!(out.join("tool-status.json").is_file());
         Ok(())
     }
 
@@ -16332,7 +16585,6 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
-            &[],
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -16340,6 +16592,7 @@ index 1111111..2222222 100644
             &run_started,
             &mut run_loop_tracker,
             std::time::Duration::from_secs(73),
+            None,
         )?;
 
         let artifact_body = fs::read_to_string(out.join("review/review.md"))?;
@@ -16401,7 +16654,6 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
-            &[],
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -16409,6 +16661,7 @@ index 1111111..2222222 100644
             &run_started,
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
+            None,
         )?;
 
         assert_eq!(gate_outcome.conclusion, "inconclusive");
@@ -16475,7 +16728,6 @@ index 1111111..2222222 100644
             &diff,
             &test_box_state(),
             &plan,
-            &[],
             "running summary",
             test_pr_thread_context(),
             &args,
@@ -16483,6 +16735,7 @@ index 1111111..2222222 100644
             &run_started,
             &mut run_loop_tracker,
             std::time::Duration::from_secs(5),
+            None,
         )?;
 
         assert!(!out.join("review/github-review.json").exists());
@@ -21170,6 +21423,7 @@ index 1111111..2222222 100644
             class: ToolClass::Static,
             weight: 1,
             requires_lease: false,
+            phase: super::SensorPhase::Fast,
             gate: None,
         }
     }
@@ -21668,6 +21922,7 @@ index 1111111..2222222 100644
             mode: RunMode::ReviewByok,
             run_pass: super::RunPass::Auto,
             model_mode: ModelMode::Auto,
+            sensor_phases: super::SensorPhasesMode::Pipelined,
             fail_on_gate: super::FailOnGate::Auto,
             selectors: SelectorArgs::default(),
             depth: ReviewDepth::Standard,

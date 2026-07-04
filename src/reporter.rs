@@ -32,6 +32,59 @@ pub(crate) struct LaneDigest {
     pub(crate) thread_id: String,
 }
 
+/// Digest of a late-phase sensor receipt (#325 stream-as-it-lands). Late
+/// sensors finish while the lanes are already investigating; their receipts
+/// are joined before the reporter runs and routed here so the reporter can
+/// weigh the late deterministic evidence and carry it into lane continuation
+/// turns.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct LateSensorDigest {
+    pub(crate) sensor: String,
+    pub(crate) status: String,
+    pub(crate) reason: String,
+    pub(crate) receipt_path: String,
+}
+
+impl LateSensorDigest {
+    /// One-line excerpt for routing into a lane continuation prompt.
+    pub(crate) fn excerpt(&self) -> String {
+        format!(
+            "late sensor `{}` status=`{}` reason=`{}` (receipt: {})",
+            self.sensor, self.status, self.reason, self.receipt_path
+        )
+    }
+}
+
+/// Read the late-phase sensors' receipts into reporter-routable digests. A
+/// receipt that is absent or unreadable is reported as `receipt-absent` —
+/// missing evidence, never clean evidence.
+pub(crate) fn late_sensor_receipt_digests(
+    out: &Path,
+    sensor_ids: &[String],
+) -> Vec<LateSensorDigest> {
+    sensor_ids
+        .iter()
+        .map(|id| {
+            let receipt_path = format!("sensors/{id}/ub-review-sensor-status.json");
+            let receipt = crate::read_sensor_receipt(&out.join(&receipt_path));
+            let (status, reason) = receipt
+                .map(|receipt| (receipt.status, receipt.reason))
+                .unwrap_or_else(|| {
+                    (
+                        "receipt-absent".to_owned(),
+                        "late sensor produced no receipt; treat as missing evidence".to_owned(),
+                    )
+                });
+            LateSensorDigest {
+                sensor: id.clone(),
+                status,
+                reason,
+                receipt_path,
+            }
+        })
+        .collect()
+}
+
 /// The reporter's verdict on the PR (Order 11 of #678). Only meaningful when
 /// `[gate].review_forward = true`; otherwise it is advisory and never feeds
 /// the gate.
@@ -73,7 +126,10 @@ pub(crate) struct ReporterConclusion {
 /// separately (as the cacheable prefix to the model call); this returns the
 /// reporter *suffix* — the compact digest of what each lane concluded plus the
 /// reporter's task instruction.
-pub(crate) fn reporter_prompt(digests: &[LaneDigest]) -> String {
+pub(crate) fn reporter_prompt(
+    digests: &[LaneDigest],
+    late_evidence: &[LateSensorDigest],
+) -> String {
     let mut prompt = String::new();
     prompt.push_str("# Reporter Coordination Task\n\n");
     prompt.push_str(
@@ -98,6 +154,26 @@ pub(crate) fn reporter_prompt(digests: &[LaneDigest]) -> String {
             "### `{}` (status: `{}`)\n{}\n\n",
             d.lane, d.status, conclusion
         ));
+    }
+    // #325 stream-as-it-lands: late-phase deterministic evidence landed after
+    // the lanes launched, so the lanes have not seen it. The reporter weighs
+    // it here and can route it to lanes via follow-up questions.
+    if !late_evidence.is_empty() {
+        prompt.push_str("## Late deterministic evidence\n\n");
+        prompt.push_str(
+            "These sensor receipts landed after the lanes launched (the lanes \
+             reviewed on the fast-sensor precontext and have not seen them). \
+             Weigh them in your distillation; if one contradicts or confirms a \
+             lane's conclusion, ask that lane a follow-up question naming the \
+             receipt.\n\n",
+        );
+        for digest in late_evidence {
+            prompt.push_str(&format!(
+                "- `{}`: `{}` - {} (receipt: `{}`)\n",
+                digest.sensor, digest.status, digest.reason, digest.receipt_path
+            ));
+        }
+        prompt.push('\n');
     }
     prompt.push_str(
         "## Output\n\nReturn a JSON object: {\"distillation\": \"...\", \
@@ -264,19 +340,68 @@ mod tests {
                 thread_id: "tid2".to_owned(),
             },
         ];
-        let prompt = reporter_prompt(&digests);
+        let prompt = reporter_prompt(&digests, &[]);
         assert!(prompt.contains("Reporter Coordination Task"));
         assert!(prompt.contains("tests-oracle"));
         assert!(prompt.contains("discriminates"));
         assert!(prompt.contains("opposition"));
         assert!(prompt.contains("missing error path"));
         assert!(prompt.contains("proposed_follow_ups"));
+        assert!(
+            !prompt.contains("Late deterministic evidence"),
+            "no late-evidence section without late receipts"
+        );
     }
 
     #[test]
     fn reporter_prompt_handles_no_lanes() {
-        let prompt = reporter_prompt(&[]);
+        let prompt = reporter_prompt(&[], &[]);
         assert!(prompt.contains("No lanes reported"));
+    }
+
+    #[test]
+    fn reporter_prompt_routes_late_sensor_evidence() {
+        let digests = vec![LaneDigest {
+            lane: "tests-oracle".to_owned(),
+            status: "ok".to_owned(),
+            conclusion: "coverage gap suspected".to_owned(),
+            thread_id: "tid1".to_owned(),
+        }];
+        let late = vec![LateSensorDigest {
+            sensor: "cargo-test".to_owned(),
+            status: "failed".to_owned(),
+            reason: "exit code Some(101)".to_owned(),
+            receipt_path: "sensors/cargo-test/ub-review-sensor-status.json".to_owned(),
+        }];
+        let prompt = reporter_prompt(&digests, &late);
+        assert!(prompt.contains("Late deterministic evidence"));
+        assert!(prompt.contains("`cargo-test`: `failed`"));
+        assert!(prompt.contains("sensors/cargo-test/ub-review-sensor-status.json"));
+        assert!(prompt.contains("landed after the lanes launched"));
+    }
+
+    #[test]
+    fn late_sensor_digest_reads_receipt_and_reports_absence_as_missing() -> anyhow::Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path();
+        std::fs::create_dir_all(out.join("sensors/cargo-test"))?;
+        std::fs::write(
+            out.join("sensors/cargo-test/ub-review-sensor-status.json"),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "sensor": "cargo-test",
+                "status": "ok",
+                "reason": "completed",
+            }))?,
+        )?;
+        let digests =
+            late_sensor_receipt_digests(out, &["cargo-test".to_owned(), "coverage".to_owned()]);
+        assert_eq!(digests.len(), 2);
+        assert_eq!(digests[0].sensor, "cargo-test");
+        assert_eq!(digests[0].status, "ok");
+        assert_eq!(digests[1].sensor, "coverage");
+        assert_eq!(digests[1].status, "receipt-absent");
+        assert!(digests[1].reason.contains("missing evidence"));
+        Ok(())
     }
 
     #[test]
@@ -389,6 +514,7 @@ mod tests {
             "Does the test fail against base source plus the new fixture?",
             "PR looks safe; one test-gap concern from tests-oracle.",
             &[],
+            &[],
         );
         assert!(prompt.contains("tests-oracle"));
         assert!(prompt.contains("does not discriminate"));
@@ -398,6 +524,7 @@ mod tests {
         assert!(prompt.contains("\"changed\""));
         // No proof evidence section when excerpts are empty.
         assert!(!prompt.contains("Routed proof evidence"));
+        assert!(!prompt.contains("Routed late deterministic evidence"));
     }
 
     #[test]
@@ -412,10 +539,33 @@ mod tests {
                 "proof `proof-001` result=`non_discriminating` reason=`base+tests passed the same`"
                     .to_owned(),
             ],
+            &[],
         );
         assert!(prompt.contains("Routed proof evidence"));
         assert!(prompt.contains("non_discriminating"));
         assert!(prompt.contains("Revise"));
+    }
+
+    #[test]
+    fn lane_continuation_prompt_routes_late_sensor_evidence_when_present() {
+        let prompt = crate::lane_continuation_prompt(
+            "tests-oracle",
+            "specialist reviewer",
+            "The test may not discriminate the patch.",
+            "Does the full suite confirm your concern?",
+            "PR has a test-gap concern.",
+            &[],
+            &[LateSensorDigest {
+                sensor: "cargo-test".to_owned(),
+                status: "failed".to_owned(),
+                reason: "exit code Some(101)".to_owned(),
+                receipt_path: "sensors/cargo-test/ub-review-sensor-status.json".to_owned(),
+            }
+            .excerpt()],
+        );
+        assert!(prompt.contains("Routed late deterministic evidence"));
+        assert!(prompt.contains("late sensor `cargo-test` status=`failed`"));
+        assert!(prompt.contains("landed after your primary turn"));
     }
 
     #[test]

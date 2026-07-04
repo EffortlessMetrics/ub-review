@@ -87,6 +87,9 @@ weight = 1
 timeout_sec = 120
 artifact_budget_mb = 32
 requires_lease = false
+# fmt needs no compile, so it belongs in the fast evidence window even though
+# its class is build (#325 pipelined scheduler: class build defaults to late).
+phase = "fast"
 
 [tools.cargo-check]
 enabled = true
