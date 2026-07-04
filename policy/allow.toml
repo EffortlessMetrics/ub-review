@@ -29,7 +29,7 @@ review_after = "2026-07-03"
 [[exception]]
 id = "non-rust-docs-and-templates"
 kind = "non-rust-file"
-glob = "{README.md,docs/**/*.md,templates/**/*.md,REPO_READY.md,RELEASE_NOTES*.md,AGENTS.md,CLAUDE.md,.github/pull_request_template.md}"
+glob = "{README.md,docs/**/*.md,templates/**/*.md,REPO_READY.md,RELEASE_NOTES*.md,AGENTS.md,CLAUDE.md,.github/pull_request_template.md,.github/release-notes.md}"
 category = "documentation"
 language = "markdown"
 owner = "ub-review/docs"
