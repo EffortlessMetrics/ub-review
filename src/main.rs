@@ -14031,10 +14031,8 @@ required_proof_unprooven = true
         // review_forward true in TOML must be overridden to false by gate preset.
         config.gate.review_forward = true;
 
-        let resolved =
-            crate::apply_review_mode_preset(&mut args, &mut config).ok_or_else(|| {
-                anyhow::anyhow!("gate preset should resolve to Some")
-            })?;
+        let resolved = crate::apply_review_mode_preset(&mut args, &mut config)
+            .ok_or_else(|| anyhow::anyhow!("gate preset should resolve to Some"))?;
         assert_eq!(resolved.mode, super::RunMode::IntelligentCi);
         assert_eq!(resolved.fail_on_gate, super::FailOnGate::True);
         assert!(!resolved.review_forward);
@@ -14046,9 +14044,8 @@ required_proof_unprooven = true
         // strict forces review_forward true even when TOML says false.
         args.review_mode = Some(super::ReviewModePreset::Strict);
         config.gate.review_forward = false;
-        let strict = crate::apply_review_mode_preset(&mut args, &mut config).ok_or_else(|| {
-            anyhow::anyhow!("strict preset should resolve to Some")
-        })?;
+        let strict = crate::apply_review_mode_preset(&mut args, &mut config)
+            .ok_or_else(|| anyhow::anyhow!("strict preset should resolve to Some"))?;
         assert!(strict.review_forward);
         assert!(config.gate.review_forward);
         Ok(())
