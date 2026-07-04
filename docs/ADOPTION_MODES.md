@@ -270,7 +270,40 @@ proof_changed_conclusion_count   — does the system buy useful evidence?
 useful_comments_acted_on_count   — does the review save reviewer time?
 ```
 
-Use `cargo xtask calibration-report <dir>` to aggregate across runs.
+## Calibration → promotion commands
+
+Three commands turn `review/calibration.json` artifacts into actionable
+guidance, encoding the promotion thresholds above (no more manual
+spreadsheet):
+
+```
+ub-review status   --run-dir <run>      # single-run summary
+ub-review recommend --runs-dir <dir>    # aggregate, recommend a mode
+ub-review promote   --runs-dir <dir>    # go/no-go + manual next step
+```
+
+`recommend` and `promote` recursively scan `<dir>/*/review/calibration.json`
+and apply these criteria:
+
+| Criterion | Threshold | Blocks |
+|---|---|---|
+| Sample size | ≥ 5 runs | recommendation (else: "collect more data") |
+| Infra-excluded rate | < 5% | gate |
+| False-positive rate | < 10% | gate (unmeasured until runs are human-labeled) |
+| Acted-on comments | ≥ 1 | strict |
+| Proof-changed conclusions | ≥ 1 | strict |
+
+The recommendation is honest about unmeasured signal: until a maintainer labels
+runs with `human_classification` (true-positive / false-positive / acted-on) in
+the calibration JSON, the false-positive rate is reported as "unmeasured" and
+does not silently pass.
+
+To label a run, edit its `review/calibration.json` and set
+`classification.human_classification` to `"true-positive"`, `"false-positive"`,
+or `"acted-on"`. Then re-run `recommend` / `promote`.
+
+`cargo xtask calibration-report <dir>` remains available for raw-count
+aggregation across runs.
 
 ## Related
 

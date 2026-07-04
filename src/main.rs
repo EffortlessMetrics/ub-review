@@ -49,6 +49,8 @@ mod init;
 pub(crate) use init::*;
 mod enable;
 pub(crate) use enable::*;
+mod promotion;
+pub(crate) use promotion::*;
 mod claim_graph;
 pub(crate) use claim_graph::*;
 mod impact_plan;
@@ -90,7 +92,9 @@ pub(crate) use cross_lane_messages::*;
 mod reporter;
 pub(crate) use reporter::*;
 mod calibration;
-pub(crate) use calibration::{read_messages_ndjson, write_calibration_artifact};
+pub(crate) use calibration::{
+    CalibrationArtifact, read_messages_ndjson, write_calibration_artifact,
+};
 mod review_compiler;
 pub(crate) use review_compiler::*;
 mod cost_artifact;
@@ -154,6 +158,9 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Init(args) => cmd_init(args),
         Command::Enable(args) => cmd_enable(args),
+        Command::Status(args) => cmd_status(args),
+        Command::Recommend(args) => cmd_recommend(args),
+        Command::Promote(args) => cmd_promote(args),
         Command::Doctor(args) => cmd_doctor(args),
         Command::Cache(args) => cmd_cache(args),
         Command::Plan(args) => cmd_plan(args),
