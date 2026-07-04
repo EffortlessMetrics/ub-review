@@ -266,6 +266,64 @@ impl FailOnGate {
     }
 }
 
+/// User-facing review posture (the simple-mode UX). Each preset resolves to
+/// the existing `{mode, fail-on-gate, review_forward}` triple so normal users
+/// never have to compose those internal knobs. The legacy knobs remain as
+/// backwards-compatible escape hatches; when a preset is set it wins (with a
+/// per-knob warning). See ADOPTION_MODES.md and #719.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum ReviewModePreset {
+    Advisory,
+    Gate,
+    Strict,
+}
+
+impl ReviewModePreset {
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::Advisory => "advisory",
+            Self::Gate => "gate",
+            Self::Strict => "strict",
+        }
+    }
+
+    /// The full resolution table — explicit and boring.
+    ///
+    /// | preset    | mode            | fail-on-gate | review_forward |
+    /// |-----------|-----------------|--------------|----------------|
+    /// | advisory  | review-byok     | false        | false          |
+    /// | gate      | intelligent-ci  | true         | false          |
+    /// | strict    | intelligent-ci  | true         | true           |
+    pub(crate) fn resolve(self) -> ResolvedReviewMode {
+        match self {
+            Self::Advisory => ResolvedReviewMode {
+                mode: RunMode::ReviewByok,
+                fail_on_gate: FailOnGate::False,
+                review_forward: false,
+            },
+            Self::Gate => ResolvedReviewMode {
+                mode: RunMode::IntelligentCi,
+                fail_on_gate: FailOnGate::True,
+                review_forward: false,
+            },
+            Self::Strict => ResolvedReviewMode {
+                mode: RunMode::IntelligentCi,
+                fail_on_gate: FailOnGate::True,
+                review_forward: true,
+            },
+        }
+    }
+}
+
+/// The concrete `{mode, fail-on-gate, review_forward}` triple a preset (or the
+/// legacy knobs) resolves to. One object, not scattered conditionals (#719).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ResolvedReviewMode {
+    pub(crate) mode: RunMode,
+    pub(crate) fail_on_gate: FailOnGate,
+    pub(crate) review_forward: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RunPass {
     Auto,
@@ -484,6 +542,13 @@ pub(crate) struct RunArgs {
         env = "UB_REVIEW_FAIL_ON_GATE"
     )]
     pub(crate) fail_on_gate: FailOnGate,
+    /// User-facing review posture. When set, overrides `--mode`,
+    /// `--fail-on-gate`, and `[gate].review_forward` (with a per-knob
+    /// warning). `advisory` = comment only; `gate` = deterministic-floor
+    /// required check (recommended); `strict` = + reporter verdict can block.
+    /// Unset (the default) uses the legacy knobs unchanged.
+    #[arg(long = "review-mode", value_enum, env = "UB_REVIEW_REVIEW_MODE")]
+    pub(crate) review_mode: Option<ReviewModePreset>,
     #[command(flatten)]
     pub(crate) selectors: SelectorArgs,
     /// Review depth selector. Nonstandard depths expand to lane/model budgets.
@@ -653,6 +718,11 @@ pub(crate) struct GateCheckArgs {
         env = "UB_REVIEW_MODE"
     )]
     pub(crate) mode: RunMode,
+    /// User-facing review posture. When set, overrides `--fail-on-gate` and
+    /// `--mode` here, and `[gate].review_forward` at run time (with a
+    /// per-knob warning). See `RunArgs::review_mode`.
+    #[arg(long = "review-mode", value_enum, env = "UB_REVIEW_REVIEW_MODE")]
+    pub(crate) review_mode: Option<ReviewModePreset>,
 }
 
 #[derive(Debug, Args)]

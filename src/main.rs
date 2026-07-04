@@ -3398,8 +3398,13 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     let run_started = Instant::now();
     let mut args = normalize_run_args(args)?;
     let run_pass = resolved_run_pass(args.run_pass);
-    let (config, diff, box_state, plan) =
+    let (mut config, diff, box_state, plan) =
         prepare_plan(&args.review, args.allow_heavy, &args.selectors)?;
+    // #719: apply the user-facing review-mode preset (advisory/gate/strict)
+    // when set. This overrides --mode, --fail-on-gate, and
+    // [gate].review_forward before any downstream resolution reads them, so
+    // the resolved triple flows into the gate outcome unchanged.
+    apply_review_mode_preset(&mut args, &mut config);
     // D2 precedence (spec 0006): an explicit --provider-policy / env value
     // wins; `auto` defers to the repo's [providers].policy; with neither,
     // `auto` keeps its built-in minimax-primary semantics.
@@ -13866,6 +13871,7 @@ required_proof_unprooven = true
                 gate_outcome: path.to_path_buf(),
                 fail_on_gate,
                 mode,
+                review_mode: None,
             })
         };
 
@@ -13975,6 +13981,94 @@ required_proof_unprooven = true
             <super::FailOnGate as clap::ValueEnum>::from_str("false", true),
             Ok(super::FailOnGate::False)
         );
+    }
+
+    #[test]
+    fn review_mode_preset_resolves_to_expected_triple() {
+        use crate::ReviewModePreset;
+        assert_eq!(super::ReviewModePreset::Advisory.key(), "advisory");
+        assert_eq!(super::ReviewModePreset::Gate.key(), "gate");
+        assert_eq!(super::ReviewModePreset::Strict.key(), "strict");
+
+        let advisory = ReviewModePreset::Advisory.resolve();
+        assert_eq!(advisory.mode, super::RunMode::ReviewByok);
+        assert_eq!(advisory.fail_on_gate, super::FailOnGate::False);
+        assert!(!advisory.review_forward);
+
+        let gate = ReviewModePreset::Gate.resolve();
+        assert_eq!(gate.mode, super::RunMode::IntelligentCi);
+        assert_eq!(gate.fail_on_gate, super::FailOnGate::True);
+        assert!(!gate.review_forward);
+
+        let strict = ReviewModePreset::Strict.resolve();
+        assert_eq!(strict.mode, super::RunMode::IntelligentCi);
+        assert_eq!(strict.fail_on_gate, super::FailOnGate::True);
+        assert!(strict.review_forward);
+
+        // The preset names parse from clap exactly as the action input declares them.
+        assert_eq!(
+            <super::ReviewModePreset as clap::ValueEnum>::from_str("advisory", true),
+            Ok(super::ReviewModePreset::Advisory)
+        );
+        assert_eq!(
+            <super::ReviewModePreset as clap::ValueEnum>::from_str("gate", true),
+            Ok(super::ReviewModePreset::Gate)
+        );
+        assert_eq!(
+            <super::ReviewModePreset as clap::ValueEnum>::from_str("strict", true),
+            Ok(super::ReviewModePreset::Strict)
+        );
+    }
+
+    #[test]
+    fn review_mode_preset_overrides_legacy_knobs() -> Result<()> {
+        // Start with legacy knobs that disagree with the gate preset.
+        let mut args = test_run_args(PathBuf::from("target/ub-review-test"));
+        args.mode = super::RunMode::ReviewByok;
+        args.fail_on_gate = super::FailOnGate::False;
+        args.review_mode = Some(super::ReviewModePreset::Gate);
+        let mut config = Config::default();
+        // review_forward true in TOML must be overridden to false by gate preset.
+        config.gate.review_forward = true;
+
+        let resolved =
+            crate::apply_review_mode_preset(&mut args, &mut config).ok_or_else(|| {
+                anyhow::anyhow!("gate preset should resolve to Some")
+            })?;
+        assert_eq!(resolved.mode, super::RunMode::IntelligentCi);
+        assert_eq!(resolved.fail_on_gate, super::FailOnGate::True);
+        assert!(!resolved.review_forward);
+        // The args and config are mutated to match the resolution.
+        assert_eq!(args.mode, super::RunMode::IntelligentCi);
+        assert_eq!(args.fail_on_gate, super::FailOnGate::True);
+        assert!(!config.gate.review_forward);
+
+        // strict forces review_forward true even when TOML says false.
+        args.review_mode = Some(super::ReviewModePreset::Strict);
+        config.gate.review_forward = false;
+        let strict = crate::apply_review_mode_preset(&mut args, &mut config).ok_or_else(|| {
+            anyhow::anyhow!("strict preset should resolve to Some")
+        })?;
+        assert!(strict.review_forward);
+        assert!(config.gate.review_forward);
+        Ok(())
+    }
+
+    #[test]
+    fn review_mode_preset_unset_uses_legacy_knobs() {
+        // No preset set: legacy knobs flow through unchanged, and the helper
+        // returns None so callers know no override was applied.
+        let mut args = test_run_args(PathBuf::from("target/ub-review-test"));
+        args.mode = super::RunMode::ReviewByok;
+        args.fail_on_gate = super::FailOnGate::Auto;
+        args.review_mode = None;
+        let mut config = Config::default();
+        config.gate.review_forward = true;
+        let resolved = crate::apply_review_mode_preset(&mut args, &mut config);
+        assert!(resolved.is_none(), "unset preset must not override");
+        assert_eq!(args.mode, super::RunMode::ReviewByok);
+        assert_eq!(args.fail_on_gate, super::FailOnGate::Auto);
+        assert!(config.gate.review_forward, "TOML review_forward preserved");
     }
 
     #[test]
@@ -21591,6 +21685,7 @@ index 1111111..2222222 100644
             opencode_model: "minimax-m3".to_owned(),
             opencode_endpoint_kind: OpenCodeEndpointKindArg::Auto,
             review_body_max_bytes: 60_000,
+            review_mode: None,
         }
     }
 

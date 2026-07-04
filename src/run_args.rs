@@ -9,6 +9,45 @@ pub(crate) fn normalize_run_args(mut args: RunArgs) -> Result<RunArgs> {
     Ok(args)
 }
 
+/// Apply the user-facing `review-mode` preset (advisory / gate / strict) when
+/// set. The preset overrides the legacy `--mode`, `--fail-on-gate`, and
+/// `[gate].review_forward` knobs, emitting one warning per overridden knob so
+/// contradictory intent is never silently merged. When the preset is unset
+/// (the default), nothing changes — the legacy knobs flow through unchanged.
+/// See ADOPTION_MODES.md and #719.
+pub(crate) fn apply_review_mode_preset(
+    args: &mut RunArgs,
+    config: &mut Config,
+) -> Option<ResolvedReviewMode> {
+    let preset = args.review_mode?;
+    let resolved = preset.resolve();
+    let preset_name = preset.key();
+    if args.mode != resolved.mode {
+        eprintln!(
+            "warning: --review-mode {preset_name} overrides --mode {} -> {}",
+            args.mode.key(),
+            resolved.mode.key()
+        );
+        args.mode = resolved.mode;
+    }
+    if args.fail_on_gate != resolved.fail_on_gate {
+        eprintln!(
+            "warning: --review-mode {preset_name} overrides --fail-on-gate {} -> {}",
+            args.fail_on_gate.key(),
+            resolved.fail_on_gate.key()
+        );
+        args.fail_on_gate = resolved.fail_on_gate;
+    }
+    if config.gate.review_forward != resolved.review_forward {
+        eprintln!(
+            "warning: --review-mode {preset_name} overrides [gate].review_forward {} -> {}",
+            config.gate.review_forward, resolved.review_forward
+        );
+        config.gate.review_forward = resolved.review_forward;
+    }
+    Some(resolved)
+}
+
 pub(crate) fn apply_depth_defaults(args: &mut RunArgs) -> Result<()> {
     if args.depth == ReviewDepth::Standard {
         return Ok(());

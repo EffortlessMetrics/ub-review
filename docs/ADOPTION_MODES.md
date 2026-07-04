@@ -4,6 +4,42 @@ This document explains the four ub-review gate modes and the staged path
 from advisory reviewer to primary required gate. It complements
 [ADOPTION_ADVISORY.md](ADOPTION_ADVISORY.md) (the minimal setup guide).
 
+## Quick start: pick a `review-mode`
+
+For most repos, set **one** input and you are done. The `review-mode` preset
+resolves to the underlying `{mode, fail-on-gate, review_forward}` triple
+internally — you do not need to know those knobs unless you want to.
+
+```yaml
+- uses: EffortlessMetrics/ub-review@<SHA>
+  with:
+    review-mode: gate            # recommended
+    minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}
+    github-token: ${{ github.token }}
+```
+
+| `review-mode` | What it does | Use when |
+|---|---|---|
+| `advisory` | Reviews and comments; never blocks. The ub-review check is non-required. | First install, calibration |
+| `gate` | Reviews + deterministic-floor gate enforcement (proof, sensors, policy). Model verdict does not block. **Recommended.** | Normal CI gate |
+| `strict` | `gate` + the reporter verdict (changes_requested / uncertain) can block the merge. | Opt-in review-forward after calibration |
+
+Under the hood:
+
+| `review-mode` | `mode` | `fail-on-gate` | `review_forward` |
+|---|---|---|---|
+| `advisory` | `review-byok` | `false` | `false` |
+| `gate` | `intelligent-ci` | `true` | `false` |
+| `strict` | `intelligent-ci` | `true` | `true` |
+
+If you set `review-mode` **and** the legacy knobs, the preset wins and ub-review
+prints one warning per overridden knob. The legacy knobs (`mode`,
+`fail-on-gate`, `[gate].review_forward`) remain as escape hatches for power
+users; leave `review-mode` unset to use them unchanged.
+
+The rest of this document covers the four detailed modes and staged-promotion
+checklist for repos that want fine-grained control.
+
 ## The four modes
 
 | Mode | `fail-on-gate` | `[gate].review_forward` | What blocks merge | Model role |

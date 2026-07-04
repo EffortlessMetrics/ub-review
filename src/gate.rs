@@ -49,6 +49,30 @@ pub(crate) struct GateCheckReason {
 /// as a failure naming the unexpected value, so a corrupted or
 /// future-incompatible artifact can never silently pass the gate.
 pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
+    let mut args = args;
+    // #719: honor the user-facing review-mode preset. Only the {mode,
+    // fail-on-gate} legs matter here — review_forward was already applied
+    // during `run` and baked into the recorded gate_outcome.json.
+    if let Some(preset) = args.review_mode {
+        let resolved = preset.resolve();
+        let preset_name = preset.key();
+        if args.mode != resolved.mode {
+            eprintln!(
+                "warning: --review-mode {preset_name} overrides --mode {} -> {}",
+                args.mode.key(),
+                resolved.mode.key()
+            );
+            args.mode = resolved.mode;
+        }
+        if args.fail_on_gate != resolved.fail_on_gate {
+            eprintln!(
+                "warning: --review-mode {preset_name} overrides --fail-on-gate {} -> {}",
+                args.fail_on_gate.key(),
+                resolved.fail_on_gate.key()
+            );
+            args.fail_on_gate = resolved.fail_on_gate;
+        }
+    }
     let path = &args.gate_outcome;
     if !args.fail_on_gate.resolved(args.mode) {
         // Informational only: with enforcement off nothing fails, but a
