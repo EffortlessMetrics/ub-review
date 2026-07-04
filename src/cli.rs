@@ -56,6 +56,37 @@ pub(crate) enum Command {
     /// collects receipts and produces the gate verdict.
     /// (Order 8 of epic #655.)
     Worker(WorkerArgs),
+    /// Print a single run's calibration summary (cohort, counts,
+    /// classification, notable proof-changed-conclusion events).
+    Status(StatusArgs),
+    /// Aggregate calibration artifacts across many runs and recommend a
+    /// review mode (advisory / gate / strict) with per-criterion pass/fail.
+    Recommend(RecommendArgs),
+    /// Go/no-go for promoting to the next gate stage, with the manual
+    /// branch-protection step. Reads calibration data only; never changes
+    /// branch protection.
+    Promote(PromoteArgs),
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct StatusArgs {
+    /// Run directory containing `review/calibration.json`.
+    #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_RUN_DIR")]
+    pub(crate) run_dir: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct RecommendArgs {
+    /// Directory tree to scan for `*/review/calibration.json` artifacts.
+    #[arg(long, env = "UB_REVIEW_RUNS_DIR")]
+    pub(crate) runs_dir: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct PromoteArgs {
+    /// Directory tree to scan for `*/review/calibration.json` artifacts.
+    #[arg(long, env = "UB_REVIEW_RUNS_DIR")]
+    pub(crate) runs_dir: PathBuf,
 }
 
 /// Arguments for the `worker` subcommand (Order 8 of epic #655).
