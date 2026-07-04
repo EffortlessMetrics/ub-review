@@ -169,6 +169,13 @@ head = "HEAD"
 
 [gate]
 required_check = "{REQUIRED_CHECK}"
+
+# Post actionable findings (severity medium+ or confidence medium-high+) to
+# the PR; suppress pure lane-status boilerplate. Without this, the default
+# `suppress` policy posts nothing, so the acted-on-comment metric is
+# structurally zero and a human can never cite a finding. See ub-review #717.
+[review_body]
+summary_only_body = "post_substantive"
 "#
     )
 }
@@ -259,6 +266,12 @@ mod tests {
         assert_eq!(config.profile, "gh-runner");
         assert_eq!(config.repo.base, "origin/main");
         assert_eq!(config.repo.head, "HEAD");
+        // post_substantive so actionable findings reach the PR (#717).
+        assert_eq!(
+            config.review_body.summary_only_body.key(),
+            "post_substantive",
+            "enable config must default to post_substantive so findings are actionable"
+        );
         Ok(())
     }
 
