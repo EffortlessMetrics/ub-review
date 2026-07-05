@@ -1516,7 +1516,6 @@ impl RunLoopPhase {
         LoopInterval {
             started_at_offset_ms: self.started_at_offset_ms,
             finished_at_offset_ms: self.finished_at_offset_ms,
-            duration_ms: self.duration_ms,
         }
     }
 }
@@ -2745,7 +2744,7 @@ impl RunLoopTracker {
 fn combined_timing(accumulators: &[&LoopAccumulator]) -> LoopTiming {
     let mut started_at_offset_ms = None::<u128>;
     let mut finished_at_offset_ms = None::<u128>;
-    let mut wall_ms = 0_u128;
+    let mut intervals = Vec::new();
     for accumulator in accumulators {
         if let Some(started) = accumulator.started_at_offset_ms {
             started_at_offset_ms =
@@ -2755,12 +2754,15 @@ fn combined_timing(accumulators: &[&LoopAccumulator]) -> LoopTiming {
             finished_at_offset_ms =
                 Some(finished_at_offset_ms.map_or(finished, |existing| existing.max(finished)));
         }
-        wall_ms = wall_ms.saturating_add(accumulator.wall_ms);
+        intervals.extend(accumulator.intervals.iter().copied());
     }
     LoopTiming {
         started_at_offset_ms: started_at_offset_ms.unwrap_or(0),
         finished_at_offset_ms: finished_at_offset_ms.unwrap_or(0),
-        wall_ms,
+        // Union across the combined loops for the same reason as
+        // LoopAccumulator::record: overlapping phases must not double-count
+        // wall time (the verifier enforces wall <= observed span).
+        wall_ms: union_wall_ms(&intervals),
     }
 }
 
@@ -2786,8 +2788,14 @@ impl LoopAccumulator {
                     existing.max(interval.finished_at_offset_ms)
                 }),
         );
-        self.wall_ms = self.wall_ms.saturating_add(interval.duration_ms);
         self.intervals.push(interval);
+        // Wall time is the union of the recorded intervals, not their sum:
+        // under the pipelined scheduler (#325) phases within one loop can
+        // overlap (the late evidence phase runs behind lane launch while the
+        // sensors-and-packet phase is still open), and summing durations
+        // would double-count that time — the artifact verifier enforces
+        // wall <= observed span per stream.
+        self.wall_ms = union_wall_ms(&self.intervals);
     }
 
     fn timing(&self) -> LoopTiming {
@@ -2799,11 +2807,45 @@ impl LoopAccumulator {
     }
 }
 
+/// Busy wall time of a set of possibly-overlapping intervals: the summed
+/// length of the union of their `[start, finish)` offset spans.
+fn union_wall_ms(intervals: &[LoopInterval]) -> u128 {
+    let mut spans: Vec<(u128, u128)> = intervals
+        .iter()
+        .map(|interval| {
+            (
+                interval.started_at_offset_ms,
+                interval
+                    .finished_at_offset_ms
+                    .max(interval.started_at_offset_ms),
+            )
+        })
+        .collect();
+    spans.sort_unstable();
+    let mut total = 0_u128;
+    let mut current: Option<(u128, u128)> = None;
+    for (start, finish) in spans {
+        current = match current {
+            Some((open_start, open_finish)) if start <= open_finish => {
+                Some((open_start, open_finish.max(finish)))
+            }
+            Some((open_start, open_finish)) => {
+                total = total.saturating_add(open_finish.saturating_sub(open_start));
+                Some((start, finish))
+            }
+            None => Some((start, finish)),
+        };
+    }
+    if let Some((open_start, open_finish)) = current {
+        total = total.saturating_add(open_finish.saturating_sub(open_start));
+    }
+    total
+}
+
 #[derive(Clone, Copy)]
 struct LoopInterval {
     started_at_offset_ms: u128,
     finished_at_offset_ms: u128,
-    duration_ms: u128,
 }
 
 struct ActiveRunLoop {
@@ -9285,7 +9327,6 @@ index 1111111..2222222 100644
             super::LoopInterval {
                 started_at_offset_ms: 10,
                 finished_at_offset_ms: 110,
-                duration_ms: 100,
             },
         );
         tracker.record_interval(
@@ -9293,7 +9334,6 @@ index 1111111..2222222 100644
             super::LoopInterval {
                 started_at_offset_ms: 50,
                 finished_at_offset_ms: 80,
-                duration_ms: 30,
             },
         );
 
@@ -9305,6 +9345,57 @@ index 1111111..2222222 100644
         assert_eq!(metrics.investigation_proof_overlap_ms, 30);
         assert_eq!(metrics.model_proof_overlap_ms, 30);
         assert_eq!(metrics.proof_overlap_ms, 30);
+    }
+
+    #[test]
+    fn overlapping_evidence_phases_never_exceed_observed_span() {
+        // #325 regression (caught by the artifact verifier on the first
+        // pipelined dogfood run): the late evidence phase overlaps the
+        // sensors-and-packet phase inside the same evidence loop. Wall time
+        // must be the union of the intervals, never their sum — the verifier
+        // enforces wall <= observed span per stream.
+        let mut tracker = super::RunLoopTracker::new();
+        tracker.record_interval(
+            "evidence",
+            super::LoopInterval {
+                started_at_offset_ms: 0,
+                finished_at_offset_ms: 100,
+            },
+        );
+        // Late-sensors phase: opened while sensors-and-packet was still
+        // running, finished long after it (under the model wave).
+        tracker.record_interval(
+            "evidence",
+            super::LoopInterval {
+                started_at_offset_ms: 40,
+                finished_at_offset_ms: 400,
+            },
+        );
+
+        let metrics = tracker.metrics();
+        let span = metrics.streams.coordination.finished_at_offset_ms
+            - metrics.streams.coordination.started_at_offset_ms;
+        assert_eq!(
+            metrics.evidence_wall_ms, 400,
+            "union of [0,100) and [40,400)"
+        );
+        assert_eq!(metrics.streams.coordination.wall_ms, 400);
+        assert!(
+            metrics.streams.coordination.wall_ms <= span,
+            "coordination wall {} must not exceed observed span {span}",
+            metrics.streams.coordination.wall_ms
+        );
+        assert_eq!(metrics.scheduler_roles.evidence.wall_ms, 400);
+
+        // Disjoint follow-up phase still adds its full length.
+        tracker.record_interval(
+            "evidence",
+            super::LoopInterval {
+                started_at_offset_ms: 500,
+                finished_at_offset_ms: 550,
+            },
+        );
+        assert_eq!(tracker.metrics().evidence_wall_ms, 450);
     }
 
     #[test]
