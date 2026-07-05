@@ -20,25 +20,18 @@ use anyhow::{Context, Result, bail};
 
 use crate::*;
 
-pub(crate) fn run_sensors(
+/// Run a set of sensors on a bounded worker pool. Individual sensor failures
+/// are captured as `sensor_degraded` (missing evidence, never clean
+/// evidence); only infrastructure failures (poisoned queue) error out.
+pub(crate) fn run_sensor_pool(
     root: &Path,
     out: &Path,
     plan: &Plan,
-    profile: &Profile,
+    jobs: usize,
+    sensors: VecDeque<SensorPlan>,
     event_log: &EventLog,
 ) -> Result<()> {
-    let runnable = plan
-        .sensors
-        .iter()
-        .filter(|sensor| sensor.run)
-        .cloned()
-        .collect::<VecDeque<_>>();
-    if runnable.is_empty() {
-        event_log.append("sensors_empty", serde_json::json!({}))?;
-        return Ok(());
-    }
-    let jobs = sensor_job_count(profile, runnable.len())?;
-    let queue = Arc::new(Mutex::new(runnable));
+    let queue = Arc::new(Mutex::new(sensors));
     let failures = Arc::new(Mutex::new(Vec::<String>::new()));
 
     thread::scope(|scope| {
@@ -74,6 +67,93 @@ pub(crate) fn run_sensors(
         )?;
     }
     Ok(())
+}
+
+/// Handle for the late evidence phase (#325): heavy sensors (test, build,
+/// coverage, lease-gated witnesses) running on a background pool while the
+/// model wave investigates off the fast-sensor precontext. The phase is
+/// joined before the reporter, review compile, and gate so every downstream
+/// consumer evaluates complete sensor evidence; a late sensor without a
+/// receipt at join time stays missing evidence, never clean evidence.
+pub(crate) struct LateSensorPhase {
+    handle: std::thread::JoinHandle<Result<()>>,
+    pub(crate) sensor_ids: Vec<String>,
+    run_loop: ActiveRunLoop,
+}
+
+pub(crate) fn spawn_late_sensor_phase(
+    root: &Path,
+    out: &Path,
+    plan: &Plan,
+    profile: &Profile,
+    event_log: &Arc<EventLog>,
+    run_started: &Instant,
+    sensors: Vec<SensorPlan>,
+) -> Result<LateSensorPhase> {
+    let jobs = sensor_job_count(profile, sensors.len())?;
+    let sensor_ids: Vec<String> = sensors.iter().map(|sensor| sensor.id.clone()).collect();
+    let run_loop = start_run_loop(
+        event_log,
+        run_started,
+        "evidence",
+        "coordination",
+        "late-sensors",
+    )?;
+    event_log.append(
+        "late_sensor_phase_started",
+        serde_json::json!({"sensors": sensor_ids, "jobs": jobs}),
+    )?;
+    let thread_root = root.to_path_buf();
+    let thread_out = out.to_path_buf();
+    let thread_plan = plan.clone();
+    let thread_log = Arc::clone(event_log);
+    let queue: VecDeque<SensorPlan> = sensors.into();
+    let handle = std::thread::Builder::new()
+        .name("ub-review-late-sensors".to_owned())
+        .spawn(move || {
+            run_sensor_pool(
+                &thread_root,
+                &thread_out,
+                &thread_plan,
+                jobs,
+                queue,
+                &thread_log,
+            )
+        })?;
+    Ok(LateSensorPhase {
+        handle,
+        sensor_ids,
+        run_loop,
+    })
+}
+
+impl LateSensorPhase {
+    /// Block until every late sensor has written its receipt (or failed),
+    /// recording the scheduler phase and a join event. Must run before the
+    /// reporter, tool-status/gate-outcome computation, and the review
+    /// compile.
+    pub(crate) fn join(
+        self,
+        event_log: &EventLog,
+        run_started: &Instant,
+        tracker: &mut RunLoopTracker,
+    ) -> Result<()> {
+        let joined = self.handle.join();
+        let status = match &joined {
+            Ok(Ok(())) => "completed",
+            Ok(Err(_)) => "failed",
+            Err(_) => "panicked",
+        };
+        event_log.append(
+            "late_sensor_phase_joined",
+            serde_json::json!({"sensors": self.sensor_ids, "status": status}),
+        )?;
+        finish_run_loop(event_log, run_started, tracker, self.run_loop, status)?;
+        match joined {
+            Ok(result) => result,
+            Err(_) => Err(anyhow::anyhow!("late sensor phase thread panicked")),
+        }
+    }
 }
 
 pub(crate) fn sensor_job_count(profile: &Profile, runnable_len: usize) -> Result<usize> {
@@ -527,14 +607,19 @@ pub(crate) fn write_sensor_status(
         "class": sensor.class,
         "requires_lease": sensor.requires_lease,
         "required": sensor.required,
+        "phase": sensor.phase.key(),
     });
     if let Some(gate) = &sensor.gate {
         value["gate"] = serde_json::to_value(gate)?;
     }
-    fs::write(
-        dir.join("ub-review-sensor-status.json"),
-        serde_json::to_vec_pretty(&value)?,
-    )?;
+    // Write via temp + rename so a status receipt is never observable
+    // half-written: under the pipelined scheduler (#325) late sensors write
+    // receipts while the main thread may concurrently read them for renders.
+    let status_path = dir.join("ub-review-sensor-status.json");
+    let tmp_path = dir.join("ub-review-sensor-status.json.tmp");
+    fs::write(&tmp_path, serde_json::to_vec_pretty(&value)?)?;
+    fs::rename(&tmp_path, &status_path)
+        .with_context(|| format!("publish sensor status {}", status_path.display()))?;
     if sensor.id == "coverage" {
         write_coverage_status_receipt(&dir, fields)?;
     }
@@ -731,6 +816,109 @@ mod tests {
                 "--format".to_owned(),
                 "badge-json".to_owned(),
             ]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn baseline_gate_plan_phases_split_fast_signal_from_slow_suite() -> Result<()> {
+        // #325: the self-gate plan must launch lanes off the non-compiling
+        // fast signal while the slow suite (full check/test/clippy/doc,
+        // leased coverage) defers to the late phase. cargo-fmt is class
+        // `build` but pinned `phase = "fast"` in .ub-review.toml.
+        let mut config: Config = toml::from_str(include_str!("../../.ub-review.toml"))?;
+        config.merge_defaults();
+        let plan = super::build_plan(
+            &config,
+            config.selected_profile()?,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_000),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.5),
+                github_actions: true,
+            },
+            &test_diff(),
+            Path::new("."),
+            true,
+        );
+        let phase_of = |id: &str| -> Result<SensorPhase> {
+            plan.sensors
+                .iter()
+                .find(|sensor| sensor.id == id)
+                .map(|sensor| sensor.phase)
+                .ok_or_else(|| anyhow::anyhow!("missing planned sensor {id}"))
+        };
+        for fast in [
+            "cargo-fmt",
+            "tokmd",
+            "cargo-allow",
+            "ripr",
+            "unsafe-review",
+            "ast-grep",
+            "artifact-verifier",
+        ] {
+            assert_eq!(
+                phase_of(fast)?,
+                SensorPhase::Fast,
+                "{fast} must be fast-phase signal"
+            );
+        }
+        for late in [
+            "cargo-check",
+            "cargo-test",
+            "cargo-clippy",
+            "cargo-doc",
+            "coverage",
+        ] {
+            assert_eq!(
+                phase_of(late)?,
+                SensorPhase::Late,
+                "{late} must defer to the late phase"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn late_sensor_phase_spawn_and_join_write_receipts_and_events() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let root = temp.path().join("repo");
+        let out = temp.path().join("out");
+        fs::create_dir_all(&root)?;
+        let event_log = std::sync::Arc::new(EventLog::open(&out.join("events.ndjson"))?);
+        let run_started = Instant::now();
+        let mut tracker = RunLoopTracker::new();
+        let mut sensor = sensor_plan("late-probe", "ub-review-test-late-tool-missing", true);
+        sensor.phase = SensorPhase::Late;
+        sensor.timeout_sec = 5;
+        let plan = test_plan(vec![sensor.clone()]);
+
+        let phase = super::spawn_late_sensor_phase(
+            &root,
+            &out,
+            &plan,
+            &Profile::default(),
+            &event_log,
+            &run_started,
+            vec![sensor],
+        )?;
+        assert_eq!(phase.sensor_ids, vec!["late-probe".to_owned()]);
+        phase.join(&event_log, &run_started, &mut tracker)?;
+
+        // The receipt landed (missing command -> missing evidence, never
+        // clean), stamped with its phase.
+        let receipt: serde_json::Value = serde_json::from_slice(&fs::read(
+            out.join("sensors/late-probe/ub-review-sensor-status.json"),
+        )?)?;
+        assert_eq!(receipt["status"], "missing");
+        assert_eq!(receipt["phase"], "late");
+        let events = fs::read_to_string(out.join("events.ndjson"))?;
+        assert!(events.contains("late_sensor_phase_started"));
+        assert!(events.contains("late_sensor_phase_joined"));
+        assert!(
+            events.contains("\"stage\":\"late-sensors\""),
+            "late phase must open an evidence scheduler phase: {events}"
         );
         Ok(())
     }

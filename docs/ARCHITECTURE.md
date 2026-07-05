@@ -8,11 +8,29 @@ immutable source checkout
   -> fast sensors under profile limits
   -> lane-specific packets
   -> bounded MiniMax/OpenCode Go direct provider lanes
+       (late-phase sensors run concurrently, join before reporter/gate)
   -> validated inline candidates
   -> one grouped Pull Request Review
   -> append-only events
   -> single-writer running summary
 ```
+
+## Pipelined evidence phases (#325)
+
+Sensor execution is two-phase. Fast sensors (static, search, packet,
+workflow, security classes) complete before the shared context prefix is
+rendered — they are the deterministic signal model lanes launch from. Late
+sensors (test, build, coverage, lease-gated witnesses; per-tool override via
+`[tools.<id>].phase`) run on a background pool concurrently with the model
+wave, hiding the slow suite under lane network latency. The late pool is
+joined before the reporter, tool-status/gate-outcome computation, the review
+compiles, and the gate — so the gate always evaluates complete sensor
+evidence, and a late sensor without a receipt at join time is missing
+evidence, never clean evidence. Late receipts are routed to the reporter and
+into lane continuation turns as "late deterministic evidence"
+(stream-as-it-lands: direct provider lanes are single network calls, so
+post-wave continuation turns are the streaming surface). `--sensor-phases
+serial` restores single-phase execution.
 
 ## Mutation model
 

@@ -497,6 +497,7 @@ pub(crate) fn plan_tool(
                 class: tool.class,
                 weight: tool.weight,
                 requires_lease: tool.requires_lease,
+                phase: tool.effective_phase(),
                 gate: tool.gate.clone(),
             }
         }
@@ -584,6 +585,7 @@ pub(crate) fn skipped(tool: &ToolPolicy, reason: &str, required: bool) -> Sensor
         class: tool.class,
         weight: tool.weight,
         requires_lease: tool.requires_lease,
+        phase: tool.effective_phase(),
         gate: tool.gate.clone(),
     }
 }

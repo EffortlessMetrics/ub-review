@@ -20,6 +20,27 @@ Every task has one packet policy:
 Late is not missing. If a task misses the packet deadline, it becomes pending
 queue state and may still produce a receipt for follow-up routing.
 
+## Evidence phases (#325)
+
+Sensor execution is split into two phases (`SensorPhase`, config key
+`[tools.<id>].phase`, values `fast`/`late`; default derived from
+class/lease: `test`, `build`, `coverage`, `heavy-witness`, and lease-gated
+tools are late, everything else fast):
+
+- `fast` sensors complete before the shared context renders and model lanes
+  launch — they are the initial packet's deterministic signal.
+- `late` sensors run on a background pool concurrently with the model wave
+  and are joined before the reporter, tool-status/gate-outcome computation,
+  the review compiles, and the gate. Their receipts are routed to the
+  reporter (and into lane continuation turns) as late deterministic
+  evidence.
+
+A late-phase sensor task always reports `pending_initial_packet` in
+`work_queue.json` — it was never part of the initial packet, even when its
+receipt has landed by the time the queue artifact is written. A late sensor
+that produced no receipt at join time is missing evidence, never clean
+evidence. `--sensor-phases serial` restores single-phase execution.
+
 ## Required Fields
 
 No local task runs without:

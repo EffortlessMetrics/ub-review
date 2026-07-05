@@ -1586,6 +1586,7 @@ mod tests {
             timeout_sec: 120,
             artifact_budget_mb: 64,
             requires_lease: false,
+            phase: crate::SensorPhase::Fast,
             status: status.to_owned(),
             reason: format!("sensor fixture status `{status}`"),
             exit_code: Some(if status == "ok" { 0 } else { 101 }),

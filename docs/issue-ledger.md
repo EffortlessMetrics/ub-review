@@ -93,8 +93,14 @@ default. No invented quality score.
                 ship; reviewer acceptance/override fields stay null or
                 missing until GitHub backfill receipts exist
 #325  narrowed  ask (c) shipped (proof broker on-demand focused proof);
-                remaining: (a) lanes off fast precontext, (b) streaming
-                late deterministic outputs into running lanes
+                (a) shipped: pipelined scheduler — fast sensors feed the
+                shared precontext, lanes launch without waiting on late-phase
+                sensors (SensorPhase, --sensor-phases; late pool joins before
+                reporter/compile/gate); (b) shipped as post-wave routing:
+                late receipts stream into the reporter distillation, lane
+                continuation turns, and the final compile/gate (direct
+                provider lanes are single network calls, so mid-call push
+                does not exist; continuation turns are the streaming surface)
 ```
 
 ## 4. Adoption

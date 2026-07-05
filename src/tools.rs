@@ -129,6 +129,9 @@ pub(crate) fn tool_status_artifact(
                 requires_lease: planned
                     .map(|sensor| sensor.requires_lease)
                     .unwrap_or(tool.requires_lease),
+                phase: planned
+                    .map(|sensor| sensor.phase)
+                    .unwrap_or_else(|| tool.effective_phase()),
                 status: receipt
                     .as_ref()
                     .map(|receipt| receipt.status.clone())
@@ -411,6 +414,7 @@ pub(crate) fn tool_artifact_paths(id: &str) -> Vec<String> {
         class: ToolClass::Static,
         weight: 0,
         requires_lease: false,
+        phase: SensorPhase::Fast,
         gate: None,
     };
     let mut paths = vec![format!("sensors/{id}/ub-review-sensor-status.json")];

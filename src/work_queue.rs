@@ -149,6 +149,15 @@ pub(crate) fn work_queue_task_from_sensor(
     let receipt_path = format!("sensors/{}/ub-review-sensor-status.json", sensor.id);
     let status = if sensor.run { "planned" } else { "skipped" }.to_owned();
     let receipt_ready = out.join(&receipt_path).is_file();
+    // #325: a late-phase sensor is by construction never part of the initial
+    // packet — it is scheduled behind lane launch — so its initial-packet
+    // status is deterministically pending regardless of whether its receipt
+    // has landed by the time this artifact is written. Late is not missing.
+    let initial_packet_status = if sensor.run && matches!(sensor.phase, crate::SensorPhase::Late) {
+        "pending_initial_packet".to_owned()
+    } else {
+        work_queue_initial_packet_status(&packet_policy, &status, receipt_ready)
+    };
     WorkQueueTaskArtifact {
         schema: WORK_QUEUE_TASK_SCHEMA,
         id: format!("sensor-{}", sensor.id),
@@ -162,12 +171,8 @@ pub(crate) fn work_queue_task_from_sensor(
         dedupe_key: format!("tool-registry:sensor:{}", sensor.id),
         lease: work_queue_sensor_lease(sensor),
         receipt_path,
-        status: status.clone(),
-        initial_packet_status: work_queue_initial_packet_status(
-            &packet_policy,
-            &status,
-            receipt_ready,
-        ),
+        status,
+        initial_packet_status,
         task_path: "resolved-tools.json".to_owned(),
     }
 }

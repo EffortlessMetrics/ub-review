@@ -222,6 +222,7 @@ pub(crate) fn lane_continuation_prompt(
     reporter_question: &str,
     reporter_distillation: &str,
     proof_receipt_excerpts: &[String],
+    late_sensor_excerpts: &[String],
 ) -> String {
     let mut prompt = format!(
         "# Lane continuation: `{lane_id}`\n\n\
@@ -241,6 +242,20 @@ pub(crate) fn lane_continuation_prompt(
              Revise your conclusion in light of this evidence.\n\n",
         );
         for excerpt in proof_receipt_excerpts {
+            prompt.push_str(&format!("- {excerpt}\n"));
+        }
+        prompt.push('\n');
+    }
+    // #325 stream-as-it-lands: late-phase deterministic outputs (full test,
+    // build, coverage, leased witnesses) landed after this lane's primary
+    // turn, so the lane reviewed on the fast-sensor precontext without them.
+    if !late_sensor_excerpts.is_empty() {
+        prompt.push_str("## Routed late deterministic evidence\n\n");
+        prompt.push_str(
+            "These sensor receipts landed after your primary turn (you \
+             reviewed without them). Weigh them when revising.\n\n",
+        );
+        for excerpt in late_sensor_excerpts {
             prompt.push_str(&format!("- {excerpt}\n"));
         }
         prompt.push('\n');
@@ -275,6 +290,7 @@ fn run_lane_continuation_turn(
     event_log: &EventLog,
     message_log: &MessageLog,
     proof_receipts: &[ProofReceipt],
+    late_sensor_evidence: &[LateSensorDigest],
 ) -> Result<String> {
     // Route proof receipts back into the lane's continuation prompt (Order 9c
     // of #678). The lane sees the deterministic evidence and can revise its
@@ -304,6 +320,10 @@ fn run_lane_continuation_turn(
             )
         })
         .collect();
+    let late_excerpts: Vec<String> = late_sensor_evidence
+        .iter()
+        .map(LateSensorDigest::excerpt)
+        .collect();
     let prompt = lane_continuation_prompt(
         &lane_receipt.lane,
         "specialist reviewer",
@@ -311,6 +331,7 @@ fn run_lane_continuation_turn(
         question,
         reporter_distillation,
         &proof_excerpts,
+        &late_excerpts,
     );
     let lane_thread_dir = review_dir.join("threads").join(&lane_receipt.lane);
     fs::create_dir_all(&lane_thread_dir)?;
@@ -388,6 +409,7 @@ pub(crate) fn run_reporter_coordination(
     shared_context: &str,
     model_lanes: &[ModelLaneReceipt],
     proof_receipts: &[ProofReceipt],
+    late_sensor_evidence: &[LateSensorDigest],
     args: &RunArgs,
     model_calls_used: usize,
     event_log: &EventLog,
@@ -414,7 +436,7 @@ pub(crate) fn run_reporter_coordination(
     let prefix_hash = sha256_hex(shared_context.as_bytes());
     let cohort_id = cohort_id_for(spec.provider.key(), &spec.model, &prefix_hash);
     let thread_id = format!("{cohort_id}:reporter");
-    let prompt = reporter_prompt(&digests);
+    let prompt = reporter_prompt(&digests, late_sensor_evidence);
     let reporter_dir = review_dir.join("threads").join("reporter");
     fs::create_dir_all(&reporter_dir)?;
     fs::write(reporter_dir.join("prompt.md"), &prompt)?;
@@ -533,6 +555,7 @@ pub(crate) fn run_reporter_coordination(
             event_log,
             message_log,
             proof_receipts,
+            late_sensor_evidence,
         );
         calls_used += 1;
         if let Ok(revised) = answer {
@@ -560,7 +583,7 @@ pub(crate) fn run_reporter_coordination(
                 }
             })
             .collect();
-        let re_prompt = reporter_prompt(&updated_digests);
+        let re_prompt = reporter_prompt(&updated_digests, late_sensor_evidence);
         let re_dir = review_dir.join("threads").join("reporter");
         if let Ok(re_content) = call_model_prompt_content(
             root,

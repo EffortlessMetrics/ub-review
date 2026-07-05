@@ -163,6 +163,27 @@ impl ModelMode {
     }
 }
 
+/// Sensor scheduling mode for the run pipeline (#325).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub(crate) enum SensorPhasesMode {
+    /// Fast sensors complete before lane launch; late-phase sensors (test,
+    /// build, coverage, lease-gated witnesses) overlap the model wave and
+    /// join before the reporter, review compile, and gate.
+    Pipelined,
+    /// All planned sensors complete before the shared context is rendered
+    /// and any model lane launches (the pre-#325 behavior).
+    Serial,
+}
+
+impl SensorPhasesMode {
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Self::Pipelined => "pipelined",
+            Self::Serial => "serial",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub(crate) enum ReviewDepth {
     Quick,
@@ -588,6 +609,17 @@ pub(crate) struct RunArgs {
     /// Model execution mode.
     #[arg(long, value_enum, default_value = "auto", env = "UB_REVIEW_MODEL_MODE")]
     pub(crate) model_mode: ModelMode,
+    /// Sensor scheduling (#325). `pipelined` launches model lanes off the
+    /// fast-sensor precontext and overlaps late-phase sensors with the model
+    /// wave (joined before the reporter/compile/gate, so the gate always sees
+    /// complete evidence); `serial` runs every sensor to completion first.
+    #[arg(
+        long = "sensor-phases",
+        value_enum,
+        default_value = "pipelined",
+        env = "UB_REVIEW_SENSOR_PHASES"
+    )]
+    pub(crate) sensor_phases: SensorPhasesMode,
     /// Gate enforcement. When this resolves to true and review/gate_outcome.json
     /// records a `fail` conclusion, `run` exits non-zero (exit code 1) after all
     /// artifacts are written. `auto` resolves to true for --mode intelligent-ci

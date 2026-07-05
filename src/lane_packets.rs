@@ -275,10 +275,20 @@ pub(crate) fn parse_lcov_count(value: &str) -> u64 {
 pub(crate) fn write_lane_packets(
     out: &Path,
     diff: &DiffContext,
+    plan: &Plan,
     lanes: &[LanePlan],
     pr_thread_context: &PrThreadContext,
     event_log: &EventLog,
 ) -> Result<()> {
+    // #325: late-phase sensors run behind lane launch; their receipts are not
+    // stable when packets are written, so packets render them as scheduled
+    // work deterministically instead of reading a racing receipt.
+    let late_sensor_ids = plan
+        .sensors
+        .iter()
+        .filter(|sensor| sensor.run && matches!(sensor.phase, SensorPhase::Late))
+        .map(|sensor| sensor.id.as_str())
+        .collect::<std::collections::BTreeSet<_>>();
     let lane_dir = out.join("lanes");
     fs::create_dir_all(&lane_dir)?;
     for lane in lanes {
@@ -299,6 +309,12 @@ pub(crate) fn write_lane_packets(
         }
         text.push_str("\n## Routed sensor evidence\n\n");
         for sensor_id in &lane.receives {
+            if late_sensor_ids.contains(sensor_id.as_str()) {
+                text.push_str(&format!(
+                    "- `{sensor_id}`: `scheduled-late` (runs during the model wave; late is not missing — request it via the reporter follow-up if load-bearing)\n"
+                ));
+                continue;
+            }
             let sensor_dir = out.join("sensors").join(sensor_id);
             let status_path = sensor_dir.join("ub-review-sensor-status.json");
             let status = read_sensor_receipt(&status_path)

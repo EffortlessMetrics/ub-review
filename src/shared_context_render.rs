@@ -129,6 +129,19 @@ pub(crate) fn render_shared_context(
     }
     text.push_str("\n## Sensor Statuses\n\n");
     for sensor in &plan.sensors {
+        // #325: late-phase sensors overlap the model wave, so their receipts
+        // are deliberately not read here — the prefix renders them as
+        // scheduled work deterministically (independent of how far the late
+        // pool got), keeping the shared prefix a function of the plan rather
+        // than of scheduler timing. Late is not missing: the receipts land
+        // before the reporter/compile/gate and are routed to lanes then.
+        if sensor.run && matches!(sensor.phase, SensorPhase::Late) {
+            text.push_str(&format!(
+                "- `{}`: `scheduled-late` - runs during the model wave; receipt lands before the gate (late is not missing)\n",
+                sensor.id
+            ));
+            continue;
+        }
         let status_path = out
             .join("sensors")
             .join(&sensor.id)
@@ -154,13 +167,21 @@ pub(crate) fn render_shared_context(
     // recognised schema. Falls back to a note when absent or schema is unknown.
     // Trust boundary is always advisory; this section supplements the
     // deterministic floor, never overrides it.
-    if plan.sensors.iter().any(|s| s.id == "unsafe-review") {
+    if let Some(unsafe_review) = plan.sensors.iter().find(|s| s.id == "unsafe-review") {
         text.push_str("\n## unsafe-review Coverage Evidence\n\n");
         let sensor_dir = out.join("sensors").join("unsafe-review");
         let status_path = sensor_dir.join("ub-review-sensor-status.json");
-        let sensor_status = read_sensor_receipt(&status_path)
-            .map(|r| r.status)
-            .unwrap_or_else(|| "receipt-absent".to_owned());
+        // #325: an unsafe-review sensor deferred to the late phase has no
+        // stable evidence at prefix time; render it as scheduled work
+        // deterministically instead of reading a racing receipt.
+        let sensor_status = if unsafe_review.run && matches!(unsafe_review.phase, SensorPhase::Late)
+        {
+            "scheduled-late".to_owned()
+        } else {
+            read_sensor_receipt(&status_path)
+                .map(|r| r.status)
+                .unwrap_or_else(|| "receipt-absent".to_owned())
+        };
         text.push_str(&format!("- Sensor status: `{sensor_status}`\n"));
         if sensor_status == "ok" {
             match read_unsafe_review_artifacts(&sensor_dir) {
