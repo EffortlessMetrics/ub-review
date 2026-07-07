@@ -9,29 +9,36 @@ result. This guide gets you from zero to reviewed PRs in five minutes.
 
 - A Rust project on GitHub with GitHub Actions enabled.
 - A MiniMax API key (`MiniMax-M3`).
-- The `ub-review` binary (install from source for now; a release artifact is
-  tracked in #716).
+- The `ub-review` binary. Once a release ships, `enable` resolves it
+  automatically; until then, install from source (see [Installing
+  ub-review](#installing-ub-review) below).
 
-## Step 1 — Find the ub-review SHA to pin
-
-`enable` pins your workflow to an exact ub-review commit (it never invents a
-pin — that's a safety contract). Pick a recent merged SHA from
-[EffortlessMetrics/ub-review](https://github.com/EffortlessMetrics/ub-review)
-commits, e.g. `cc62168…` (copy the full 40-hex value).
-
-## Step 2 — Run enable
+## Step 1 — Run enable
 
 ```bash
 ub-review enable --mode gate --model minimax --action-sha <40-hex-sha>
 ```
 
+`enable` resolves the latest ub-review release and generates a workflow that
+**downloads + sha256-verifies the binary** (~seconds per run). The `--action-sha`
+is the fallback pin used only when no release is resolvable (pre-release,
+offline, or for reproducible pinning) — in that case the workflow source-builds
+ub-review instead. `enable` never invents a pin: the SHA is a safety contract.
+
+Pick a recent merged SHA from
+[EffortlessMetrics/ub-review](https://github.com/EffortlessMetrics/ub-review)
+commits, e.g. `cc62168…` (copy the full 40-hex value) for the fallback pin.
+
 This writes two files and prints the exact secret to add:
 
 ```
-ub-review enabled (gate, pinned to cc62168…).
+ub-review enabled (gate, release v0.1.0).
 
   wrote .github/workflows/ub-review.yml
   wrote .ub-review.toml
+
+  The workflow downloads the ub-review v0.1.0 binary and verifies its sha256,
+  so each run starts in seconds instead of source-building (~12 min).
 
 Next:
   1. Add MINIMAX_API_KEY as a repository secret:
@@ -39,6 +46,10 @@ Next:
   2. Commit the two files and open a pull request.
   3. ub-review will post a MiniMax review and a CI gate result on the PR.
 ```
+
+(When no release is resolvable, the summary instead reports `source-build
+pinned to <sha>` and notes the ~12 min cached build — re-run `enable` after a
+release ships to switch to the fast binary-download path.)
 
 Pick your posture:
 
@@ -51,14 +62,14 @@ Pick your posture:
 See [ADOPTION_MODES.md](ADOPTION_MODES.md) for the full mode table and the
 staged path from advisory → gate → strict.
 
-## Step 3 — Add the secret
+## Step 2 — Add the secret
 
 Add `MINIMAX_API_KEY` as a **repository secret** (Settings → Secrets and
 variables → Actions → New repository secret). ub-review reads it from
 `${{ secrets.MINIMAX_API_KEY }}` in the workflow — it is never exported to
 the step's `env:`, so fork PRs cannot read it.
 
-## Step 4 — Open a PR
+## Step 3 — Open a PR
 
 Commit `.github/workflows/ub-review.yml` and `.ub-review.toml`, then open a
 pull request. ub-review runs on every PR (`opened`, `reopened`,
@@ -73,8 +84,9 @@ pull request. ub-review runs on every PR (`opened`, `reopened`,
 
 ## What ub-review wrote
 
-**`.github/workflows/ub-review.yml`** — the workflow. Pinned to your SHA, with
-`review-mode`, MiniMax-on, `posting: review`, and artifact upload. Fork-safe:
+**`.github/workflows/ub-review.yml`** — the workflow. Pinned to the release
+tag (or your SHA, if no release was resolvable), with `review-mode`, MiniMax-on,
+`posting: review`, and artifact upload. Fork-safe:
 `persist-credentials: false`, no `pull_request_target` trigger.
 
 **`.ub-review.toml`** — a minimal config (profile + `[repo]` + `[gate]`). It
@@ -127,14 +139,35 @@ full promotion checklist.
 - These are deterministic checks. Fix the finding and re-push; the gate
   re-evaluates on every synchronize event.
 
-**Source-build is slow**
-- Until the release artifact ships (#716), the action builds ub-review from
-  source on each run (~2-3 min on `ubuntu-latest`). A release artifact will
-  remove this once authorized.
+**Source-build instead of binary download**
+- When no release was resolvable at `enable` time (no release published yet,
+  offline, or rate-limited), the workflow source-builds ub-review (~12 min on
+  the first run, then cached via `Swatinem/rust-cache`). Re-run
+  `ub-review enable` after a release ships to regenerate the workflow with the
+  fast binary-download path (`install-mode: release`).
 
 **Bumping the pin**
-- To move to a newer ub-review: `ub-review enable --mode gate --action-sha
-  <newer-sha> --force` (or edit the `uses:` line directly).
+- To move to a newer ub-review: re-run `ub-review enable --mode gate
+  --action-sha <40-hex-sha> --force`. If a newer release exists, the regenerated
+  workflow pins to it and downloads its binary; otherwise it pins to the SHA and
+  source-builds. (You can also edit the `uses:` / `release-version` lines
+  directly.)
+
+## Installing ub-review
+
+You need the `ub-review` binary locally only to run `enable` (the generated
+workflow installs ub-review itself on the runner). Until a release ships, build
+it from source:
+
+```bash
+git clone https://github.com/EffortlessMetrics/ub-review
+cd ub-review
+cargo build --release
+# binary: target/release/ub-review
+```
+
+Once a release is published, `enable` resolves and the workflow downloads it
+automatically; a local install helper may follow.
 
 ## Related
 
@@ -142,4 +175,5 @@ full promotion checklist.
 - [ADOPTION_ADVISORY.md](ADOPTION_ADVISORY.md) — the minimal manual setup
   (if you prefer not to use `enable`).
 - #721 — the `enable` command issue.
+- #732 — release-aware `enable` (binary download vs source-build).
 - #720 — the `review-mode` preset vocabulary.
