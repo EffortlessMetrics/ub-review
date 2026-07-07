@@ -26,8 +26,22 @@ pub(crate) fn should_prepare_github_review_payload(
     pr_body_has_reviewer_value(pr_body)
 }
 
+/// Recognize the reviewer-value headings that justify posting a PR review.
+///
+/// `## Reporter summary` is included because it is the live reporter's editorial
+/// distillation (Order 9 #696 / Order 10 #678) — the reporter "decides what is
+/// worth saying" (core doctrine), and the compiler only prepends it when the
+/// distillation is non-empty. Without this entry, a run whose deterministic
+/// compiler produced no ranked findings/inline comments but whose reporter
+/// distilled a substantive editorial (e.g. flagging real copy/accuracy issues on
+/// a docs-only diff) would be misclassified as `skipped_empty_smoke` and the
+/// reporter's editorial would be silently withheld from the PR. Observed on
+/// ripr-swarm #1487: the reporter flagged two actionable findings, both
+/// independently raised by gemini-code-assist, yet `post-result.json` recorded
+/// `status=skipped` because no other reviewer-value heading was present.
 pub(crate) fn pr_body_has_reviewer_value(body: &str) -> bool {
     [
+        "## Reporter summary",
         "## Confirmed findings",
         "## Findings",
         "## Verification questions",
@@ -604,4 +618,49 @@ pub(crate) struct TerminalStateInput<'a> {
     pub(crate) missing_or_failed_model_evidence: &'a [ModelEvidenceIssue],
     pub(crate) proof_receipts: &'a [ProofReceipt],
     pub(crate) final_follow_up_tasks: usize,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Regression for ripr-swarm #1487 / ub-review gap: a run whose deterministic
+    // compiler produced no ranked findings or inline comments, but whose reporter
+    // lane distilled a substantive editorial, must still count as reviewer value
+    // so the reporter's editorial is not silently withheld as skipped_empty_smoke.
+    // `pr_body_has_reviewer_value` is the terminal predicate that
+    // `should_prepare_github_review_payload` delegates to when there are no
+    // inline comments and no proof receipts, so covering it here covers the gate.
+    #[test]
+    fn reporter_summary_heading_is_reviewer_value() {
+        // Minimal body the compiler builds when the distillation is the only
+        // reviewer-value content: the reporter section, nothing else.
+        let body = "## Reporter summary\n\nDocs-only README reorder that demotes vocabulary; two copy issues flagged.\n\n";
+        assert!(
+            pr_body_has_reviewer_value(body),
+            "a non-empty Reporter summary section is reviewer value (reporter decides what is worth saying)"
+        );
+    }
+
+    #[test]
+    fn empty_body_without_headings_is_not_reviewer_value() {
+        assert!(!pr_body_has_reviewer_value(""));
+        assert!(!pr_body_has_reviewer_value(
+            "lane status: ok\nno findings\n"
+        ));
+        // A body whose text does not contain any reviewer-value heading must
+        // not match. (Like the other headings, the check is intentionally a
+        // substring match, so this asserts the negative case, not a prefix rule.)
+        assert!(!pr_body_has_reviewer_value(
+            "## Status\nall lanes degraded\n"
+        ));
+    }
+
+    #[test]
+    fn other_reviewer_value_headings_still_recognized() {
+        // Existing behavior preserved: deterministic findings still count.
+        assert!(pr_body_has_reviewer_value("## Confirmed findings\n- x"));
+        assert!(pr_body_has_reviewer_value("## Verification questions\n- y"));
+        assert!(pr_body_has_reviewer_value("## Evidence gaps\n- z"));
+    }
 }
