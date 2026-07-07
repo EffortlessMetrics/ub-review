@@ -79,7 +79,7 @@ fn resolve_latest_release_tag() -> Option<String> {
 
 /// Resolve the install strategy: prefer the latest release binary (fast path),
 /// fall back to the pinned SHA + source build when no release is available or
-/// the network is unreachable. `--install-mode source` forces the fallback.
+/// the network is unreachable.
 fn resolve_install_strategy(action_sha: &str) -> InstallStrategy {
     match resolve_latest_release_tag() {
         Some(tag) => InstallStrategy::Release { tag },
@@ -93,6 +93,15 @@ fn resolve_install_strategy(action_sha: &str) -> InstallStrategy {
 /// existing files without `--force`, writes the workflow + minimal config,
 /// and prints secret instructions.
 pub(crate) fn cmd_enable(args: EnableArgs) -> Result<()> {
+    cmd_enable_with_resolver(args, resolve_install_strategy)
+}
+
+/// Resolver-injectable core so tests can run `enable` fully offline. The real
+/// entrypoint (`cmd_enable`) wires in `resolve_install_strategy`, which does a
+/// best-effort live GitHub Releases lookup; tests pass a stub returning a fixed
+/// `InstallStrategy` so they never touch the network (determinism, per #732
+/// self-review).
+fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn(&str) -> InstallStrategy) -> Result<()> {
     validate_action_sha(&args.action_sha)?;
     if !matches!(args.model.as_str(), "minimax") {
         bail!(
@@ -112,7 +121,7 @@ pub(crate) fn cmd_enable(args: EnableArgs) -> Result<()> {
         refuse_existing_workflow(root)?;
     }
 
-    let strategy = resolve_install_strategy(&args.action_sha);
+    let strategy = resolve(&args.action_sha);
     let workflow = render_enable_workflow(&strategy, args.mode);
     let config = render_enable_config();
 
@@ -361,6 +370,25 @@ fn print_enable_summary(
 mod tests {
     use super::*;
 
+    /// Deterministic offline resolver stub for `cmd_enable`-level tests so they
+    /// never hit the live GitHub Releases API (determinism, per #732
+    /// self-review). Always resolves to the source-build path.
+    fn offline_resolve_source(action_sha: &str) -> InstallStrategy {
+        InstallStrategy::Source {
+            sha: action_sha.to_owned(),
+        }
+    }
+
+    /// Offline resolver stub that always resolves a release tag, so the
+    /// resolver-seam test can exercise the release-install path without a
+    /// network call. A named `fn` (not a closure) so it coerces to the
+    /// `for<'a> fn(&'a str) -> InstallStrategy` parameter type.
+    fn offline_resolve_release(_action_sha: &str) -> InstallStrategy {
+        InstallStrategy::Release {
+            tag: "v9.9.9".to_owned(),
+        }
+    }
+
     #[test]
     fn enable_workflow_renders_review_mode_input() {
         for mode in [
@@ -583,7 +611,7 @@ mod tests {
             root: root.to_path_buf(),
             force: false,
         };
-        assert!(cmd_enable(args).is_err());
+        assert!(cmd_enable_with_resolver(args, offline_resolve_source).is_err());
 
         // With --force it proceeds even with the pre-existing config.
         fs::remove_file(&config_path)?; // reset
@@ -595,7 +623,7 @@ mod tests {
             root: root.to_path_buf(),
             force: true,
         };
-        cmd_enable(args)?;
+        cmd_enable_with_resolver(args, offline_resolve_source)?;
         assert!(config_path.exists());
         assert!(workflow_path.exists());
         Ok(())
@@ -619,7 +647,7 @@ mod tests {
             root: root.to_path_buf(),
             force: false,
         };
-        let err = match cmd_enable(args) {
+        let err = match cmd_enable_with_resolver(args, offline_resolve_source) {
             Ok(()) => anyhow::bail!("should have refused a competing ub-review workflow"),
             Err(err) => err.to_string(),
         };
@@ -640,11 +668,41 @@ mod tests {
             root: temp.path().to_path_buf(),
             force: false,
         };
-        let err = match cmd_enable(args) {
+        let err = match cmd_enable_with_resolver(args, offline_resolve_source) {
             Ok(()) => anyhow::bail!("should have rejected the unsupported openai model"),
             Err(err) => err.to_string(),
         };
         assert!(err.contains("not supported"), "should reject openai: {err}");
+        Ok(())
+    }
+
+    #[test]
+    fn cmd_enable_with_resolver_writes_release_workflow_offline() -> Result<()> {
+        // The resolver seam is what lets cmd_enable run fully offline. Inject a
+        // resolver that always resolves a release tag and confirm the written
+        // workflow is the release-install path — no network involved.
+        let temp = tempfile::tempdir()?;
+        let root = temp.path();
+        let args = EnableArgs {
+            mode: ReviewModePreset::Gate,
+            model: "minimax".to_owned(),
+            action_sha: "1".repeat(40),
+            root: root.to_path_buf(),
+            force: false,
+        };
+        let resolve = offline_resolve_release;
+        cmd_enable_with_resolver(args, resolve)?;
+        let workflow = fs::read_to_string(root.join(WORKFLOW_RELATIVE_PATH))?;
+        assert!(
+            workflow.contains("install-mode: release")
+                && workflow.contains("release-version: v9.9.9")
+                && workflow.contains("@v9.9.9"),
+            "injected release resolver must produce a release-install workflow"
+        );
+        assert!(
+            !workflow.contains("Swatinem/rust-cache"),
+            "release workflow must not carry the source-build cache"
+        );
         Ok(())
     }
 }
