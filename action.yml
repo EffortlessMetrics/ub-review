@@ -318,17 +318,17 @@ runs:
 
         build_from_source() {
           # Source mode remains the deterministic fallback. Callers can cache
-          # ~/.cargo and CARGO_TARGET_DIR for faster follow-up runs.
+          # the target dir (via CARGO_TARGET_DIR + a cache step) for faster
+          # follow-up runs — without it every run recompiles ~12 min of deps.
           workdir="${RUNNER_TEMP:-/tmp}/ub-review-action-src"
           rm -rf "$workdir"
           mkdir -p "$workdir"
           cp -R "$GITHUB_ACTION_PATH/." "$workdir/"
 
-          echo "::group::Build ub-review from action source"
-          cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
-          cargo build --manifest-path "$workdir/Cargo.toml" --locked --release
-          echo "::endgroup::"
-
+          # Resolve the target dir BEFORE the build so --target-dir is passed
+          # to cargo (otherwise cargo builds in $workdir/target, ignoring the
+          # cache). When CARGO_TARGET_DIR is set, it must be an absolute path
+          # so the cache step (which keys on absolute paths) can restore it.
           if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
             case "$CARGO_TARGET_DIR" in
               /*)
@@ -341,6 +341,13 @@ runs:
           else
             cargo_target_dir="$workdir/target"
           fi
+          mkdir -p "$cargo_target_dir"
+
+          echo "::group::Build ub-review from action source"
+          cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
+          cargo build --manifest-path "$workdir/Cargo.toml" --locked --release --target-dir "$cargo_target_dir"
+          echo "::endgroup::"
+
           bin="$cargo_target_dir/release/ub-review"
           if [[ ! -x "$bin" ]]; then
             echo "::error::ub-review binary was not produced at $bin"
