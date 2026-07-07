@@ -9,6 +9,85 @@ use std::fs;
 const REQUIRED_CHECK: &str = "ub-review/gate";
 const WORKFLOW_RELATIVE_PATH: &str = ".github/workflows/ub-review.yml";
 const CONFIG_RELATIVE_PATH: &str = ".ub-review.toml";
+/// The GitHub repo that publishes ub-review releases. Used to resolve the
+/// latest release tag during `enable` so generated workflows download a binary
+/// instead of source-building every run (Ordered Program item 1).
+const UBM_REPOSITORY: &str = "EffortlessMetrics/ub-review";
+
+/// How the generated workflow installs ub-review. Release is the fast path
+/// (download + sha256-verify a binary); Source is the fallback when no release
+/// exists yet or the network is unavailable. Mirrors `action.yml`
+/// `install-mode` (#732).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum InstallStrategy {
+    /// Download and sha256-verify the release binary; pin `uses:` to the tag.
+    Release { tag: String },
+    /// Source-build from the pinned commit SHA (with `Swatinem/rust-cache`).
+    Source { sha: String },
+}
+
+impl InstallStrategy {
+    /// Test/spec constructor for the source-build fallback path.
+    #[cfg(test)]
+    pub(crate) fn source(sha: &str) -> Self {
+        InstallStrategy::Source {
+            sha: sha.to_owned(),
+        }
+    }
+}
+
+/// A release tag is installable when it is `v<digit>...` — matching the
+/// `^v[0-9]` guard `action.yml` uses to decide auto-mode release download.
+/// Extracted from the resolver so the validation is unit-testable without a
+/// network call.
+fn is_installable_release_tag(tag: &str) -> bool {
+    let tag = tag.trim();
+    tag.starts_with('v') && tag.len() > 1 && tag.as_bytes()[1].is_ascii_digit()
+}
+
+/// Best-effort lookup of the latest ub-review release tag. Returns `Some(tag)`
+/// only when the GitHub Releases API returns a `v<digit>` tag name; returns
+/// `None` on any failure (offline, 404, rate limit, non-`v` tag, malformed
+/// body) so `enable` degrades to the source-build path instead of failing.
+/// Unauthenticated: the public API is reachable without a token, just rate
+/// limited, and a missing release must not block first-run enablement.
+fn resolve_latest_release_tag() -> Option<String> {
+    let url = format!("https://api.github.com/repos/{UBM_REPOSITORY}/releases/latest");
+    let output = std::process::Command::new("curl")
+        .arg("-sS")
+        .arg("--fail-with-body")
+        .arg("--max-time")
+        .arg("15")
+        .arg("-H")
+        .arg("Accept: application/vnd.github+json")
+        .arg("-H")
+        .arg("User-Agent: ub-review-enable")
+        .arg(&url)
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let body: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let tag = body.get("tag_name").and_then(|v| v.as_str())?.trim();
+    if is_installable_release_tag(tag) {
+        Some(tag.to_owned())
+    } else {
+        None
+    }
+}
+
+/// Resolve the install strategy: prefer the latest release binary (fast path),
+/// fall back to the pinned SHA + source build when no release is available or
+/// the network is unreachable. `--install-mode source` forces the fallback.
+fn resolve_install_strategy(action_sha: &str) -> InstallStrategy {
+    match resolve_latest_release_tag() {
+        Some(tag) => InstallStrategy::Release { tag },
+        None => InstallStrategy::Source {
+            sha: action_sha.to_owned(),
+        },
+    }
+}
 
 /// Run `ub-review enable`. Validates the SHA pin, refuses to overwrite
 /// existing files without `--force`, writes the workflow + minimal config,
@@ -33,7 +112,8 @@ pub(crate) fn cmd_enable(args: EnableArgs) -> Result<()> {
         refuse_existing_workflow(root)?;
     }
 
-    let workflow = render_enable_workflow(&args.action_sha, args.mode);
+    let strategy = resolve_install_strategy(&args.action_sha);
+    let workflow = render_enable_workflow(&strategy, args.mode);
     let config = render_enable_config();
 
     let workflow_dir = workflow_path.parent().ok_or_else(|| {
@@ -45,7 +125,7 @@ pub(crate) fn cmd_enable(args: EnableArgs) -> Result<()> {
         .with_context(|| format!("write {}", workflow_path.display()))?;
     fs::write(&config_path, &config).with_context(|| format!("write {}", config_path.display()))?;
 
-    print_enable_summary(&workflow_path, &config_path, args.mode, &args.action_sha);
+    print_enable_summary(&workflow_path, &config_path, args.mode, &strategy);
     Ok(())
 }
 
@@ -92,8 +172,63 @@ fn refuse_existing_workflow(root: &Path) -> Result<()> {
 /// artifact-only`). The enable template turns MiniMax review ON and uses the
 /// `review-mode` preset (#720) so normal users never compose the internal
 /// mode/fail-on-gate/review_forward knobs.
-pub(crate) fn render_enable_workflow(action_sha: &str, mode: ReviewModePreset) -> String {
+///
+/// When a release is available (`InstallStrategy::Release`) the generated
+/// workflow downloads + sha256-verifies the binary instead of source-building
+/// (Ordered Program item 1: distribution first, source build is fallback
+/// only). Without this, a SHA pin + `install-mode: auto` (the default) forces
+/// a source build on every run even after a release exists (#732).
+pub(crate) fn render_enable_workflow(strategy: &InstallStrategy, mode: ReviewModePreset) -> String {
     let mode_key = mode.key();
+    let install_block = match strategy {
+        InstallStrategy::Release { tag } => format!(
+            r#"      # Release install: download + sha256-verify the ub-review binary
+      # instead of source-building (~seconds vs ~12 min). install-mode=release
+      # fails closed if the asset is missing; auto would silently fall back to
+      # a source build. See action.yml and #732.
+      - name: ub-review
+        uses: {UBM_REPOSITORY}@{tag}
+        with:
+          install-mode: release
+          release-version: {tag}
+          review-mode: {mode_key}
+          provider-policy: minimax-only
+          minimax-api-key: ${{{{ secrets.MINIMAX_API_KEY }}}}
+          github-token: ${{{{ github.token }}}}
+          root: .
+          base: origin/${{{{ github.base_ref }}}}
+          head: HEAD
+          out: target/ub-review
+          posting: review
+"#
+        ),
+        InstallStrategy::Source { sha } => format!(
+            r#"      # No ub-review release was resolvable at enable time, so this workflow
+      # source-builds ub-review and caches the build (Swatinem/rust-cache,
+      # keyed on the SHA). Re-run `ub-review enable` after a release ships to
+      # switch to the fast binary-download path. See #732.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target/ub-review-build"
+          key: ub-review-{sha}
+
+      - name: ub-review
+        env:
+          CARGO_TARGET_DIR: target/ub-review-build
+        uses: {UBM_REPOSITORY}@{sha}
+        with:
+          review-mode: {mode_key}
+          provider-policy: minimax-only
+          minimax-api-key: ${{{{ secrets.MINIMAX_API_KEY }}}}
+          github-token: ${{{{ github.token }}}}
+          root: .
+          base: origin/${{{{ github.base_ref }}}}
+          head: HEAD
+          out: target/ub-review
+          posting: review
+"#
+        ),
+    };
     format!(
         r#"name: ub-review
 
@@ -123,34 +258,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # Cache the ub-review source build so subsequent runs skip the ~12 min
-      # cargo recompile. Keyed on the action SHA so a new pin invalidates.
-      # This is critical for the source-build path (before a release artifact
-      # exists): it cuts repeat runs from ~14 min to ~2-3 min, fast enough for
-      # ub-review to post findings before human reviewers.
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ". -> target/ub-review-build"
-          key: ub-review-{action_sha}
-
-      - name: ub-review
-        env:
-          CARGO_TARGET_DIR: target/ub-review-build
-        uses: EffortlessMetrics/ub-review@{action_sha}
-        with:
-          # review-mode hides the internal mode/fail-on-gate/review_forward
-          # knobs. advisory = comment only; gate = recommended CI gate;
-          # strict = + reporter verdict can block.
-          review-mode: {mode_key}
-          provider-policy: minimax-only
-          minimax-api-key: ${{{{ secrets.MINIMAX_API_KEY }}}}
-          github-token: ${{{{ github.token }}}}
-          root: .
-          base: origin/${{{{ github.base_ref }}}}
-          head: HEAD
-          out: target/ub-review
-          posting: review
-
+{install_block}
       - name: Upload ub-review artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -196,12 +304,36 @@ fn print_enable_summary(
     workflow_path: &Path,
     config_path: &Path,
     mode: ReviewModePreset,
-    sha: &str,
+    strategy: &InstallStrategy,
 ) {
-    println!("ub-review enabled ({}, pinned to {sha}).", mode.key());
-    println!();
-    println!("  wrote {}", workflow_path.display());
-    println!("  wrote {}", config_path.display());
+    match strategy {
+        InstallStrategy::Release { tag } => {
+            println!("ub-review enabled ({}, release {tag}).", mode.key());
+            println!();
+            println!("  wrote {}", workflow_path.display());
+            println!("  wrote {}", config_path.display());
+            println!();
+            println!(
+                "  The workflow downloads the ub-review {tag} binary and verifies its sha256,"
+            );
+            println!("  so each run starts in seconds instead of source-building (~12 min).");
+        }
+        InstallStrategy::Source { sha } => {
+            println!(
+                "ub-review enabled ({}, source-build pinned to {sha}).",
+                mode.key()
+            );
+            println!();
+            println!("  wrote {}", workflow_path.display());
+            println!("  wrote {}", config_path.display());
+            println!();
+            println!("  No ub-review release was resolvable, so each run source-builds ub-review");
+            println!(
+                "  (~12 min, cached). Re-run `ub-review enable` after a release ships to switch"
+            );
+            println!("  to the fast binary-download path.");
+        }
+    }
     println!();
     println!("Next:");
     println!("  1. Add MINIMAX_API_KEY as a repository secret:");
@@ -236,26 +368,30 @@ mod tests {
             ReviewModePreset::Gate,
             ReviewModePreset::Strict,
         ] {
-            let yaml = render_enable_workflow("aa".repeat(20).as_str(), mode);
+            let sha = "aa".repeat(20);
+            let yaml = render_enable_workflow(&InstallStrategy::source(&sha), mode);
             assert!(
                 yaml.contains(&format!("review-mode: {}", mode.key())),
                 "workflow for {mode:?} must set review-mode"
             );
-            assert!(yaml.contains("@aa"), "workflow must pin the action SHA");
+            assert!(
+                yaml.contains(&format!("@{sha}")),
+                "workflow must pin the action ref"
+            );
         }
     }
 
     #[test]
     fn enable_workflow_caches_source_build() {
         let sha = "c".repeat(40);
-        let yaml = render_enable_workflow(&sha, ReviewModePreset::Gate);
+        let yaml = render_enable_workflow(&InstallStrategy::source(&sha), ReviewModePreset::Gate);
         // The rust-cache step is critical for the source-build path: without it,
         // every run recompiles ~12 min of deps, making ub-review too slow to post
         // before human reviewers. The cache key must include the action SHA so a
         // new pin invalidates it.
         assert!(
             yaml.contains("Swatinem/rust-cache"),
-            "workflow must cache the source build"
+            "source workflow must cache the source build"
         );
         assert!(
             yaml.contains(&format!("key: ub-review-{sha}")),
@@ -263,37 +399,120 @@ mod tests {
         );
         assert!(
             yaml.contains("CARGO_TARGET_DIR"),
-            "workflow must set CARGO_TARGET_DIR so the action reuses the cache"
+            "source workflow must set CARGO_TARGET_DIR so the action reuses the cache"
         );
     }
 
     #[test]
-    fn enable_workflow_uses_minimax_key_not_env() {
-        let yaml = render_enable_workflow(&"b".repeat(40), ReviewModePreset::Gate);
-        assert!(
-            yaml.contains("${{ secrets.MINIMAX_API_KEY }}"),
-            "workflow must reference the MINIMAX_API_KEY secret"
+    fn enable_workflow_release_path_downloads_binary_not_source_builds() {
+        // Regression for #732: when a release is available the generated
+        // workflow must install the binary, not source-build. Otherwise a SHA
+        // pin + install-mode=auto (default) silently forces a source build on
+        // every run even after a release ships.
+        let tag = "v0.1.0";
+        let yaml = render_enable_workflow(
+            &InstallStrategy::Release {
+                tag: tag.to_owned(),
+            },
+            ReviewModePreset::Gate,
         );
-        // Fork-safety guard: the secret reference must appear on the same line
-        // as `minimax-api-key:` (inside the `with:` block), NOT in an `env:`
-        // block. The CARGO_TARGET_DIR env var is fine (not a secret).
-        for line in yaml.lines() {
-            if line.contains("secrets.MINIMAX_API_KEY") {
-                assert!(
-                    line.contains("minimax-api-key:"),
-                    "MINIMAX_API_KEY must only appear in the with: inputs, not env:; got: {line}"
-                );
-            }
+        assert!(
+            yaml.contains("install-mode: release"),
+            "release workflow must set install-mode: release"
+        );
+        assert!(
+            yaml.contains(&format!("release-version: {tag}")),
+            "release workflow must pin release-version to the tag"
+        );
+        assert!(
+            yaml.contains(&format!("@{tag}")),
+            "release workflow must pin uses@<tag>"
+        );
+        // The source-build cache is the fallback; it must NOT appear in the
+        // release path (it would be dead weight and signal the wrong install).
+        assert!(
+            !yaml.contains("Swatinem/rust-cache"),
+            "release workflow must not carry the source-build cache step"
+        );
+        assert!(
+            !yaml.contains("CARGO_TARGET_DIR"),
+            "release workflow must not set the source-build CARGO_TARGET_DIR"
+        );
+    }
+
+    #[test]
+    fn enable_workflow_release_version_and_uses_ref_agree() {
+        // The release-version input and the uses@<ref> must name the same tag,
+        // otherwise action.yml downloads a different binary than the pinned
+        // action source (confusing and a supply-chain smell).
+        for mode in [
+            ReviewModePreset::Advisory,
+            ReviewModePreset::Gate,
+            ReviewModePreset::Strict,
+        ] {
+            let yaml = render_enable_workflow(
+                &InstallStrategy::Release {
+                    tag: "v0.2.3".to_owned(),
+                },
+                mode,
+            );
+            assert!(
+                yaml.contains("release-version: v0.2.3") && yaml.contains("@v0.2.3"),
+                "release-version and uses@ ref must both be the tag for {mode:?}"
+            );
         }
-        // No pull_request_target trigger: that event runs on the base branch
-        // and would expose secrets to fork-authored workflow runs.
+    }
+
+    #[test]
+    fn enable_workflow_uses_minimax_key_not_env() {
+        // Fork-safety must hold on BOTH install paths: the secret must only
+        // appear inside `with:` inputs, never in an `env:` block, and never on
+        // a pull_request_target trigger.
+        for strategy in [
+            InstallStrategy::Release {
+                tag: "v0.1.0".to_owned(),
+            },
+            InstallStrategy::source(&"b".repeat(40)),
+        ] {
+            let yaml = render_enable_workflow(&strategy, ReviewModePreset::Gate);
+            assert!(
+                yaml.contains("${{ secrets.MINIMAX_API_KEY }}"),
+                "workflow must reference the MINIMAX_API_KEY secret"
+            );
+            for line in yaml.lines() {
+                if line.contains("secrets.MINIMAX_API_KEY") {
+                    assert!(
+                        line.contains("minimax-api-key:"),
+                        "MINIMAX_API_KEY must only appear in the with: inputs, not env:; got: {line}"
+                    );
+                }
+            }
+            assert!(
+                !yaml.contains("pull_request_target"),
+                "workflow must not use pull_request_target (fork-safety)"
+            );
+            assert!(
+                yaml.contains("persist-credentials: false"),
+                "checkout must disable credential persistence (fork-safety)"
+            );
+        }
+    }
+
+    #[test]
+    fn is_installable_release_tag_accepts_version_tags_only() {
+        // Only v<digit> tags are installable: this mirrors action.yml's
+        // ^v[0-9] auto-mode guard. A non-version tag (or a SHA) must NOT be
+        // treated as a release, or the resolver would emit a broken workflow.
+        assert!(is_installable_release_tag("v0.1.0"));
+        assert!(is_installable_release_tag("v1.0.0-rc.1"));
+        assert!(is_installable_release_tag(" v2.3 ")); // trimmed
+        assert!(!is_installable_release_tag("latest"));
+        assert!(!is_installable_release_tag("v")); // no digit after v
+        assert!(!is_installable_release_tag("vx"));
+        assert!(!is_installable_release_tag("vX1"));
         assert!(
-            !yaml.contains("pull_request_target"),
-            "workflow must not use pull_request_target (fork-safety)"
-        );
-        assert!(
-            yaml.contains("persist-credentials: false"),
-            "checkout must disable credential persistence (fork-safety)"
+            !is_installable_release_tag(&"a".repeat(40)),
+            "a commit SHA must never be mistaken for a release tag"
         );
     }
 
