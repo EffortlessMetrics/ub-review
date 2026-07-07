@@ -123,7 +123,19 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # Cache the ub-review source build so subsequent runs skip the ~12 min
+      # cargo recompile. Keyed on the action SHA so a new pin invalidates.
+      # This is critical for the source-build path (before a release artifact
+      # exists): it cuts repeat runs from ~14 min to ~2-3 min, fast enough for
+      # ub-review to post findings before human reviewers.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target/ub-review-build"
+          key: ub-review-{action_sha}
+
       - name: ub-review
+        env:
+          CARGO_TARGET_DIR: target/ub-review-build
         uses: EffortlessMetrics/ub-review@{action_sha}
         with:
           # review-mode hides the internal mode/fail-on-gate/review_forward
@@ -234,18 +246,45 @@ mod tests {
     }
 
     #[test]
+    fn enable_workflow_caches_source_build() {
+        let sha = "c".repeat(40);
+        let yaml = render_enable_workflow(&sha, ReviewModePreset::Gate);
+        // The rust-cache step is critical for the source-build path: without it,
+        // every run recompiles ~12 min of deps, making ub-review too slow to post
+        // before human reviewers. The cache key must include the action SHA so a
+        // new pin invalidates it.
+        assert!(
+            yaml.contains("Swatinem/rust-cache"),
+            "workflow must cache the source build"
+        );
+        assert!(
+            yaml.contains(&format!("key: ub-review-{sha}")),
+            "cache key must be keyed on the action SHA"
+        );
+        assert!(
+            yaml.contains("CARGO_TARGET_DIR"),
+            "workflow must set CARGO_TARGET_DIR so the action reuses the cache"
+        );
+    }
+
+    #[test]
     fn enable_workflow_uses_minimax_key_not_env() {
         let yaml = render_enable_workflow(&"b".repeat(40), ReviewModePreset::Gate);
         assert!(
             yaml.contains("${{ secrets.MINIMAX_API_KEY }}"),
             "workflow must reference the MINIMAX_API_KEY secret"
         );
-        // Fork-safety guard: the secret must NOT be exported into the step's
-        // `env:` block, where it would be visible to untrusted checkout code.
-        assert!(
-            !yaml.contains("env:\n") && !yaml.contains("\n          env:"),
-            "workflow must not export the minimax key to env (fork-safety)"
-        );
+        // Fork-safety guard: the secret reference must appear on the same line
+        // as `minimax-api-key:` (inside the `with:` block), NOT in an `env:`
+        // block. The CARGO_TARGET_DIR env var is fine (not a secret).
+        for line in yaml.lines() {
+            if line.contains("secrets.MINIMAX_API_KEY") {
+                assert!(
+                    line.contains("minimax-api-key:"),
+                    "MINIMAX_API_KEY must only appear in the with: inputs, not env:; got: {line}"
+                );
+            }
+        }
         // No pull_request_target trigger: that event runs on the base branch
         // and would expose secrets to fork-authored workflow runs.
         assert!(
