@@ -11703,3 +11703,92 @@ kind = "exposure_gap"
 finding_id = "probe:src_claim_graph.rs:362:side_effect"
 owner = "ub-review/core"
 reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:68:error_path"
+owner = "ub-review/core"
+reason = "Release-resolution fallback (#732): a curl spawn or response parse failure intentionally resolves to Source rather than generating a broken release-install workflow. The resolver's complete/incomplete-release fixtures pin the safe branch; re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:202:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): user-facing separator emitted by print_enable_summary after the workflow/config writes; release and source summary paths are exercised by cmd_enable_with_resolver_writes_release_workflow_offline. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:203:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): reports the written workflow path after successful writes; resolver-seam test executes this summary path. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:204:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): reports the written config path after successful writes; resolver-seam test executes this summary path. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:340:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): blank-line separator in the release branch of print_enable_summary; release resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:341:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): workflow-path report in the release branch; release resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:342:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): config-path report in the release branch; release resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:343:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): blank-line separator in the release branch; release resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:344:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): release-install explanation is user-visible only after a successful resolver decision; release resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:350:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): mode-specific release guidance is user-visible only after a successful resolver decision; release resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:354:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): blank-line separator in the source fallback branch; source resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:355:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): workflow-path report in the source fallback branch; source resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:356:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): config-path report in the source fallback branch; source resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:357:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): blank-line separator in the source fallback branch; source resolver fixture exercises the branch. Re-verify after edits to enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:359:side_effect"
+owner = "ub-review/core"
+reason = "Release-enable summary output (#732): source-build fallback explanation is user-visible only after a successful fallback decision; source resolver fixture exercises the branch. Re-verify after edits to enable.rs."
