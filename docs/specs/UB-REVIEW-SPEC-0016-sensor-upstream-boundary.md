@@ -83,9 +83,9 @@ Some sensor limitations are known and tracked upstream without blocking
 
 | Limitation | Upstream issues | Local impact |
 |---|---|---|
-| ripr line-keyed `finding_id`s rot on code motion | `ripr-swarm#1053` | suppression entries may go dead after extraction; re-verify after edits |
+| ripr content-addressed `finding_id`s follow code across line motion | `ripr-swarm#1093` | re-verify suppressions after semantic edits and RIPR upgrades |
 | ripr cannot trace cross-module test paths (false-negatives) | `ripr-swarm#1054` | some predicate probes need suppression with the test name as oracle witness |
-| ripr suppressions schema rejects `created`/`review_after` fields | (ripr 0.8.0) | per-entry dating carried by the `non-rust-ripr-suppressions` receipt instead (#586) |
+| ripr suppressions schema rejects `created`/`review_after` fields | #586 | per-entry dating carried by the `non-rust-ripr-suppressions` receipt instead |
 | ripr `cfg(test)` skipping not implemented | `ripr-swarm#1055` | test-side probes need suppression twins |
 
 These are not "filed and forgotten" — they are tracked here so local

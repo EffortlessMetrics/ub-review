@@ -91,7 +91,7 @@ this repository's own file is the production example):
   Production status (#316 closed by #335): this repo configures
   `[tools.ripr.gate] max_new_unsuppressed = 0` and the threshold evaluates
   on every run that triggers the ripr sensor — the sensor runs
-  `ripr check --diff --mode ready --format badge-json` (ripr pinned 0.8.0
+  `ripr check --diff --mode ready --format badge-json` (ripr pinned 0.10.0
   in the install script and doctor) and persists the verbatim stdout as
   `sensors/ripr/gate-decision.json`; the threshold reads
   `counts.unsuppressed_exposure_gaps`. First production evaluation: run

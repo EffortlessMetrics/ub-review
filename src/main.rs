@@ -5532,7 +5532,7 @@ mod tests {
         );
         assert_eq!(
             super::doctor_tool_install_hint("ripr"),
-            "cargo install ripr --locked --version 0.8.0 --force"
+            "cargo install ripr --locked --version 0.10.0 --force"
         );
         assert_eq!(
             super::doctor_tool_install_hint("unsafe-review"),
@@ -5562,12 +5562,12 @@ mod tests {
             super::doctor_tool_version_fix("actionlint", "1.7.12"),
             "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12; add $(go env GOPATH)/bin to PATH"
         );
-        assert!(super::command_version_matches("ripr 0.8.0", "0.8.0"));
+        assert!(super::command_version_matches("ripr 0.10.0", "0.10.0"));
         assert!(super::command_version_matches(
             "actionlint version v1.7.12",
             "1.7.12"
         ));
-        assert!(!super::command_version_matches("ripr 0.7.9", "0.8.0"));
+        assert!(!super::command_version_matches("ripr 0.9.9", "0.10.0"));
     }
 
     #[test]
