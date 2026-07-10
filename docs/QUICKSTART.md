@@ -18,17 +18,23 @@ result. This guide gets you from zero to reviewed PRs in five minutes.
 ## Step 1 — Run enable
 
 ```bash
-ub-review enable --mode gate --model minimax --action-sha <40-hex-sha>
+ub-review enable --mode gate --model minimax
 ```
 
 `enable` resolves the latest ub-review release and generates a workflow that
-**downloads + sha256-verifies the binary** (~seconds per run). The `--action-sha`
-is the fallback pin used only when no installable release is resolvable
-(pre-release, offline, rate-limited, or incomplete assets) — in that case the
-workflow source-builds ub-review instead. `enable` never invents a pin: the SHA
-is a safety contract.
+**downloads + sha256-verifies the binary** (~seconds per run). No SHA is needed
+when an installable release is available. If release lookup is unavailable,
+invalid, or incomplete, `enable` exits without writing files and asks you to
+rerun with an explicit source-fallback pin:
 
-Pick a recent merged SHA from
+```bash
+ub-review enable --mode gate --model minimax --action-sha <40-hex-sha>
+```
+
+That workflow source-builds ub-review from the pinned commit instead. `enable`
+never invents a source ref: the optional SHA is a fallback safety contract.
+
+For that fallback only, pick a recent merged SHA from
 [EffortlessMetrics/ub-review](https://github.com/EffortlessMetrics/ub-review)
 commits, e.g. `cc62168…` (copy the full 40-hex value) for the fallback pin.
 
@@ -52,9 +58,10 @@ Next:
   4. ub-review will post a MiniMax review and a CI gate result on the PR.
 ```
 
-(When no release is resolvable, the summary instead reports `source-build
-pinned to <sha>` and notes the ~12 min cached build — re-run `enable` after a
-release ships to switch to the fast binary-download path.)
+(When no release is resolvable and you supply the fallback SHA, the summary
+instead reports `source-build pinned to <sha>` and notes the ~12 min cached
+build — re-run `enable` after a release ships to switch to the fast
+binary-download path.)
 
 Pick your posture:
 

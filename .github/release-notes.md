@@ -7,13 +7,16 @@ runs them safely, and the reporter distills one review plus a CI gate result.
 ## Install (one command)
 
 ```bash
-ub-review enable --mode gate --model minimax --action-sha <this-tag-sha>
+ub-review enable --mode gate --model minimax
 ```
 
 Then add `MINIMAX_API_KEY` as a required repository secret and, optionally,
 `OPENCODE` for provider fallback before opening a PR. MiniMax remains operational
 without the optional fallback secret. See
 [docs/QUICKSTART.md](docs/QUICKSTART.md) for the 5-minute guide.
+
+`--action-sha <40-hex-sha>` remains available only when a release cannot be
+resolved and you explicitly want the cached source-build fallback.
 
 ## Modes
 
