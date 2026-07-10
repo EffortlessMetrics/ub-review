@@ -21,9 +21,10 @@ ub-review enable --mode gate --model minimax --action-sha <40-hex-sha>
 
 `enable` resolves the latest ub-review release and generates a workflow that
 **downloads + sha256-verifies the binary** (~seconds per run). The `--action-sha`
-is the fallback pin used only when no release is resolvable (pre-release,
-offline, or for reproducible pinning) — in that case the workflow source-builds
-ub-review instead. `enable` never invents a pin: the SHA is a safety contract.
+is the fallback pin used only when no installable release is resolvable
+(pre-release, offline, rate-limited, or incomplete assets) — in that case the
+workflow source-builds ub-review instead. `enable` never invents a pin: the SHA
+is a safety contract.
 
 Pick a recent merged SHA from
 [EffortlessMetrics/ub-review](https://github.com/EffortlessMetrics/ub-review)
@@ -140,9 +141,9 @@ full promotion checklist.
   re-evaluates on every synchronize event.
 
 **Source-build instead of binary download**
-- When no release was resolvable at `enable` time (no release published yet,
-  offline, or rate-limited), the workflow source-builds ub-review (~12 min on
-  the first run, then cached via `Swatinem/rust-cache`). Re-run
+- When no installable release was resolvable at `enable` time (unavailable,
+  invalid, incomplete, or unreachable), the workflow source-builds ub-review
+  (~12 min on the first run, then cached via `Swatinem/rust-cache`). Re-run
   `ub-review enable` after a release ships to regenerate the workflow with the
   fast binary-download path (`install-mode: release`).
 
