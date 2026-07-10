@@ -921,8 +921,33 @@ mod tests {
             anyhow::ensure!(workflow.contains("opencode-model: mimo-v2.5"));
             anyhow::ensure!(!workflow.contains("provider-policy: minimax-only"));
             anyhow::ensure!(!workflow.contains("pull_request_target"));
-            anyhow::ensure!(!workflow.contains("env:\n          MINIMAX_API_KEY"));
-            anyhow::ensure!(!workflow.contains("env:\n          OPENCODE"));
+
+            let mut minimax_secret_lines = 0_u8;
+            let mut opencode_secret_lines = 0_u8;
+            for line in workflow.lines() {
+                if line.contains("secrets.MINIMAX_API_KEY") {
+                    minimax_secret_lines = minimax_secret_lines.saturating_add(1);
+                    anyhow::ensure!(
+                        line.trim() == "minimax-api-key: ${{ secrets.MINIMAX_API_KEY }}",
+                        "MINIMAX_API_KEY must only appear as its action input; got: {line}"
+                    );
+                }
+                if line.contains("secrets.OPENCODE") {
+                    opencode_secret_lines = opencode_secret_lines.saturating_add(1);
+                    anyhow::ensure!(
+                        line.trim() == "opencode-api-key: ${{ secrets.OPENCODE }}",
+                        "OPENCODE must only appear as its action input; got: {line}"
+                    );
+                }
+            }
+            anyhow::ensure!(
+                minimax_secret_lines == 1,
+                "expected exactly one MINIMAX_API_KEY action input, got {minimax_secret_lines}"
+            );
+            anyhow::ensure!(
+                opencode_secret_lines == 1,
+                "expected exactly one OPENCODE action input, got {opencode_secret_lines}"
+            );
 
             let summary = render_enable_summary(
                 Path::new(".github/workflows/ub-review.yml"),
