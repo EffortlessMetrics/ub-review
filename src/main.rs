@@ -6167,10 +6167,7 @@ mod tests {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("missing self-profile ripr gate policy"))?;
         assert_eq!(ripr_gate.scope.as_deref(), Some("on-diff"));
-        // Temporary epic ceiling for #678 Orders 5-9 (cohort topology); revert
-        // to 0 once Order 9 drives end-to-end model execution.
-        // See policy/allow.toml#ripr-epic-ceiling-678.
-        assert_eq!(ripr_gate.max_new_unsuppressed, Some(200));
+        assert_eq!(ripr_gate.max_new_unsuppressed, Some(0));
         let plan = super::build_plan(
             &config,
             config.selected_profile()?,
