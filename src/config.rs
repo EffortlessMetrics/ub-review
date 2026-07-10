@@ -68,14 +68,11 @@ impl ProviderRuntimeConfig {
     }
 }
 
-/// The `[impact]` section (Order 3 of epic #655). `mode` selects whether the
-/// Cargo impact plan is computed and emitted as a shadow/advisory artifact
-/// (`shadow`, the default) or whether its ranked candidate tasks also feed
-/// proof selection (`active`). `active` is reserved for a follow-up PR that
-/// wires candidate_tasks into the proof planner; today both modes compute the
-/// full plan and write `review/impact_plan.json`. Invalid values fall back to
-/// `shadow` and are recorded as a policy error so the gate reports the
-/// misconfiguration rather than silently defaulting.
+/// The `[impact]` section (Order 3 of epic #655). Both modes compute and write
+/// the full plan artifact. `shadow` (the default) keeps candidates artifact-only;
+/// only explicit `active` feeds them to model proof selection. Invalid values
+/// fall back to `shadow` and are recorded as a policy error so the gate reports
+/// the misconfiguration rather than silently defaulting.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ImpactConfig {

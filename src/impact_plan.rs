@@ -2,11 +2,10 @@
 //! reverse-dependency closure, and deterministic test/build candidate
 //! selection with reasons.
 //!
-//! **Shadow mode**: this module computes and emits the impact plan artifact
-//! but does NOT change proof execution. The existing planner continues to
-//! select candidates from diff filenames and model requests. The shadow
-//! artifact lets us compare what the impact planner WOULD select against
-//! what currently runs.
+//! Every mode computes and emits the full impact plan artifact. Shadow mode
+//! keeps candidates artifact-only. Active mode exposes the ranked catalog to
+//! the model proof planner, while Rust policy and the proof broker retain
+//! execution authority.
 //!
 //! Order 1 of the evidence-control-plane epic (#655).
 
@@ -16,7 +15,7 @@ use std::path::Path;
 use crate::artifacts::IMPACT_PLAN_SCHEMA;
 
 /// The complete impact plan for a single run. Written to
-/// `review/impact_plan.json` as a shadow artifact.
+/// `review/impact_plan.json` in every mode.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ImpactPlan {
     pub(crate) schema: &'static str,
@@ -28,14 +27,27 @@ pub(crate) struct ImpactPlan {
     /// Packages identified as reverse-dependency-affected.
     /// Empty until reverse-dependency closure is implemented (Order 1 PR 6).
     pub(crate) affected_packages: Vec<ImpactPackage>,
-    /// Candidate tests/builds the impact planner WOULD select.
-    /// Empty until candidate ranking is implemented (Order 1 PR 7).
+    /// Ranked candidate tests/builds produced by deterministic analysis.
     pub(crate) candidate_tasks: Vec<ImpactCandidateTask>,
     /// Evidence gaps: what the impact planner could not determine.
     pub(crate) evidence_gaps: Vec<ImpactEvidenceGap>,
-    /// Whether the impact plan is computed from real Cargo metadata or
-    /// is a placeholder. "shadow" until promoted to active selection.
+    /// Whether candidates remain artifact-only (`shadow`) or may enter model
+    /// proof planning (`active`).
     pub(crate) selection_mode: &'static str,
+}
+
+impl ImpactPlan {
+    /// Return candidates that may cross into model proof planning.
+    ///
+    /// Default, invalid, and explicit shadow modes remain artifact-only at this
+    /// authority boundary. Only an explicit active mode exposes the catalog.
+    pub(crate) fn proof_planner_candidates(&self) -> &[ImpactCandidateTask] {
+        if self.selection_mode == "active" {
+            &self.candidate_tasks
+        } else {
+            &[]
+        }
+    }
 }
 
 /// A package in the workspace graph.
@@ -48,7 +60,7 @@ pub(crate) struct ImpactPackage {
     pub(crate) relation: &'static str,
 }
 
-/// A candidate proof task the impact planner would select.
+/// A candidate proof task produced by the impact planner.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ImpactCandidateTask {
     /// The test target or build command.
@@ -84,12 +96,10 @@ pub(crate) struct ImpactEvidenceGap {
 /// ranked candidate tasks) and what we don't (evidence gaps).
 ///
 /// `selection_mode` is the resolved `[impact].mode` ("shadow" by default,
-/// "active" when the repo opts in). In both modes the full plan is computed
-/// and written to `review/impact_plan.json`. The difference is recorded in
-/// `selection_mode` so consumers (and the dogfood comparison) can tell
-/// advisory shadow selection from active selection. A follow-up PR wires
-/// `active` candidate tasks into the proof planner; today both modes are
-/// advisory-only for execution, which keeps this change behavior-preserving.
+/// "active" when the repo opts in). Both modes write the full artifact. Active
+/// mode may expose the ranked catalog through
+/// [`ImpactPlan::proof_planner_candidates`]; shadow, default, and invalid modes
+/// keep it artifact-only.
 pub(crate) fn build_impact_plan(
     root: &Path,
     changed_files: &[String],
@@ -218,13 +228,13 @@ pub(crate) fn build_impact_plan(
             }
         }
 
-        // Ranking pass: sort by rank descending, mark low-rank candidates as
-        // skipped. Budget is a shadow concept here (we don't actually filter
-        // execution — the shadow plan is advisory). The max_focused_tests budget
-        // from the runtime profile would be applied here in active mode.
+        // Ranking pass: sort by rank descending and mark low-rank candidates as
+        // skipped. Active mode currently exposes the full ranked catalog; model
+        // selection remains subject to Rust validation and proof-broker policy.
         candidate_tasks.sort_by_key(|c| std::cmp::Reverse(c.rank));
-        // In shadow mode, all candidates are "selected" (we want to see what
-        // WOULD run). Active-mode budget filtering is a future PR.
+        // Every ranked candidate remains visible in the artifact. In active
+        // mode the model may rank or reject the catalog downstream; bounded
+        // catalog filtering remains follow-up work.
         // Remove the no-candidate-ranking gap — ranking IS implemented now.
 
         if candidate_tasks.is_empty() {
@@ -522,6 +532,29 @@ mod tests {
                 "candidate must name the test package"
             );
         }
+    }
+
+    #[test]
+    fn impact_mode_controls_proof_planner_candidate_visibility() -> anyhow::Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let changed_files = ["src/main.rs".to_owned()];
+
+        let shadow = build_impact_plan(root, &changed_files, "shadow");
+        anyhow::ensure!(!shadow.candidate_tasks.is_empty());
+        anyhow::ensure!(shadow.proof_planner_candidates().is_empty());
+
+        let active = build_impact_plan(root, &changed_files, "active");
+        anyhow::ensure!(!active.candidate_tasks.is_empty());
+        anyhow::ensure!(active.proof_planner_candidates().len() == active.candidate_tasks.len());
+
+        for invalid_mode in ["", "production"] {
+            let invalid = build_impact_plan(root, &changed_files, invalid_mode);
+            anyhow::ensure!(invalid.selection_mode == "shadow");
+            anyhow::ensure!(!invalid.candidate_tasks.is_empty());
+            anyhow::ensure!(invalid.proof_planner_candidates().is_empty());
+        }
+
+        Ok(())
     }
 
     #[test]

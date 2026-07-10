@@ -4062,12 +4062,12 @@ fn write_review_artifacts(
         args,
     )?;
     let mut model_lanes = build_model_lane_receipts(&assignments, args);
-    // Build the impact plan BEFORE the model wave so its ranked candidate
-    // tasks are available to the proof-planner model lane (implementation
-    // step 6 of #678: model-selected proof from impact candidates).
+    // Build the impact plan before the model wave and write the complete
+    // artifact in every mode. Only explicit active mode may expose its ranked
+    // candidates to model proof planning (implementation step 6 of #678).
     let impact_mode = config.impact.resolved_mode();
     let impact_plan = build_impact_plan(root, &diff.changed_files, impact_mode);
-    let impact_plan_candidate_tasks = impact_plan.candidate_tasks.clone();
+    let impact_plan_candidate_tasks = impact_plan.proof_planner_candidates().to_vec();
     write_impact_plan(out, &impact_plan)?;
     // Sensor evidence issues are collected after the late-phase join below
     // (#325): collecting here would misread still-running late sensors as

@@ -55,11 +55,13 @@ Candidate planners exist (`focused_test_candidates_from_diff`,
 identifies changed-package ownership, direct reverse-dependency candidates,
 declared targets, and ranked test candidates.
 
-**Gap:** The Cargo graph remains a shadow/advisory plan: it uses
-`cargo metadata --no-deps`, package names, and direct manifest dependency
-names, and does not yet change command execution. Before activation it needs
-package-ID/resolve-graph edges, bounded approved command templates, and
-receipt-backed broker execution.
+**Gap:** The Cargo graph always emits its artifact. Shadow, default, and invalid
+modes keep candidates artifact-only; explicit active mode may feed the ranked
+catalog to model proof planning, while Rust policy and the broker retain
+execution authority. The graph still uses `cargo metadata --no-deps`, package
+names, and direct manifest dependency names. Before it can determine required
+execution it needs package-ID/resolve-graph edges, bounded approved command
+templates, and receipt-backed broker execution.
 
 ### PR 3 — Base+tests red/green — DONE
 
