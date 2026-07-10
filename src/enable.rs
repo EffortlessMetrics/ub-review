@@ -194,9 +194,11 @@ pub(crate) fn cmd_enable(args: EnableArgs) -> Result<()> {
 /// `ReleaseLookup` so they never touch the network (determinism, per #732
 /// self-review).
 fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn() -> ReleaseLookup) -> Result<()> {
-    if let Some(action_sha) = args.action_sha.as_deref() {
-        validate_action_sha(action_sha)?;
-    }
+    let action_sha = args
+        .action_sha
+        .as_deref()
+        .map(validate_action_sha)
+        .transpose()?;
     if !matches!(args.model.as_str(), "minimax") {
         bail!(
             "--model {} is not supported in v0; only `minimax` is available",
@@ -215,7 +217,7 @@ fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn() -> ReleaseLookup) ->
         refuse_existing_workflow(root)?;
     }
 
-    let strategy = select_install_strategy(resolve(), args.action_sha.as_deref())?;
+    let strategy = select_install_strategy(resolve(), action_sha)?;
     let workflow = render_enable_workflow(&strategy, args.mode);
     let config = render_enable_config();
 
@@ -235,10 +237,10 @@ fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn() -> ReleaseLookup) ->
 /// Reject anything that is not a full 40-character lowercase-or-uppercase hex
 /// SHA. Mirrors `valid_setup_ci_action_sha` (`src/ci_audit.rs`): the generator
 /// never invents a pin.
-fn validate_action_sha(sha: &str) -> Result<()> {
+fn validate_action_sha(sha: &str) -> Result<&str> {
     let trimmed = sha.trim();
     if trimmed.len() == 40 && trimmed.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Ok(());
+        return Ok(trimmed);
     }
     bail!(
         "--action-sha must be the full 40-hex ub-review commit to pin in the generated workflow; got `{sha}`"
@@ -982,6 +984,22 @@ mod tests {
                     }
             );
         }
+
+        let padded_sha = format!("  {fallback_sha}\r\n");
+        let normalized_sha = validate_action_sha(&padded_sha)?;
+        anyhow::ensure!(normalized_sha == fallback_sha);
+        let normalized_source = select_install_strategy(
+            ReleaseLookup::Unavailable {
+                reason: ReleaseFallbackReason::RequestUnavailable,
+            },
+            Some(normalized_sha),
+        )?;
+        anyhow::ensure!(
+            normalized_source
+                == InstallStrategy::Source {
+                    sha: fallback_sha.clone()
+                }
+        );
 
         let temp = tempfile::tempdir()?;
         let args = EnableArgs {

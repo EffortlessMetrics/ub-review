@@ -11858,3 +11858,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:error_path:1cc495d4"
 owner = "ub-review/core"
 reason = "enable_requires_a_valid_sha_only_for_source_fallback pins the exact missing-SHA error for every release fallback reason and proves no files are written; RIPR 0.10.0 does not recognize the fallible error discriminator (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:error_path:f04f7f1f"
+owner = "ub-review/core"
+reason = "enable_requires_a_valid_sha_only_for_source_fallback passes a malformed explicit SHA through this transpose boundary, pins the exact validation error, and proves no files are written; RIPR 0.10.0 does not recognize the fallible error discriminator (#737). Re-verify after semantic edits or RIPR upgrades."
