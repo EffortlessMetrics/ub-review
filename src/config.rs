@@ -68,14 +68,11 @@ impl ProviderRuntimeConfig {
     }
 }
 
-/// The `[impact]` section (Order 3 of epic #655). `mode` selects whether the
-/// Cargo impact plan is computed and emitted as a shadow/advisory artifact
-/// (`shadow`, the default) or whether its ranked candidate tasks also feed
-/// proof selection (`active`). `active` is reserved for a follow-up PR that
-/// wires candidate_tasks into the proof planner; today both modes compute the
-/// full plan and write `review/impact_plan.json`. Invalid values fall back to
-/// `shadow` and are recorded as a policy error so the gate reports the
-/// misconfiguration rather than silently defaulting.
+/// The `[impact]` section (Order 3 of epic #655). Both modes compute and write
+/// the full plan artifact. `shadow` (the default) keeps candidates artifact-only;
+/// only explicit `active` feeds them to model proof selection. Invalid values
+/// fall back to `shadow` and are recorded as a policy error so the gate reports
+/// the misconfiguration rather than silently defaulting.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default)]
 pub(crate) struct ImpactConfig {
@@ -1030,7 +1027,7 @@ pub(crate) const KNOWN_TOOL_POLICY_KEYS: &[&str] = &[
 pub(crate) const KNOWN_TOOL_GATE_SCOPES: &[&str] = &["on-diff"];
 
 /// Validate the receipted policy surfaces (`[gate]`, `[review_body]`,
-/// `[tools.<id>]`, `[proof]`, and their containers) inside a parsed TOML
+/// `[impact]`, `[tools.<id>]`, `[proof]`, and their containers) inside a parsed TOML
 /// document. The strategy is strip-and-receipt per key: each
 /// unknown or malformed key is removed so the remaining document still
 /// deserializes, valid siblings survive, and one `PolicyError` is recorded
@@ -1060,10 +1057,59 @@ fn sanitize_policy_sections(value: &mut toml::Value) -> Vec<PolicyError> {
     }
     sanitize_gate_section(table, &mut errors);
     sanitize_review_body_section(table, &mut errors);
+    sanitize_impact_section(table, &mut errors);
     sanitize_tools_section(table, &mut errors);
     sanitize_proof_section(table, &mut errors);
     sanitize_providers_section(table, &mut errors);
     errors
+}
+
+/// Validate `[impact]` before deserialization can clamp an invalid mode to the
+/// safe shadow default. Invalid values remain fail-safe, but also produce a
+/// policy receipt so an intended active configuration cannot silently degrade.
+fn sanitize_impact_section(table: &mut toml::value::Table, errors: &mut Vec<PolicyError>) {
+    let Some(impact_value) = table.get("impact") else {
+        return;
+    };
+    if impact_value.as_table().is_none() {
+        errors.push(PolicyError {
+            section: "impact".to_owned(),
+            detail: format!(
+                "invalid [impact] value {impact_value}; expected a table with key `mode`"
+            ),
+        });
+        table.remove("impact");
+        return;
+    }
+
+    let Some(impact) = table.get_mut("impact").and_then(toml::Value::as_table_mut) else {
+        return;
+    };
+    let unknown_keys = impact
+        .keys()
+        .filter(|key| key.as_str() != "mode")
+        .cloned()
+        .collect::<Vec<_>>();
+    for key in unknown_keys {
+        errors.push(PolicyError {
+            section: format!("impact.{key}"),
+            detail: format!("unknown [impact] key `{key}`; expected only `mode`"),
+        });
+        impact.remove(&key);
+    }
+
+    if let Some(mode) = impact.get("mode") {
+        let valid = matches!(mode.as_str(), Some("shadow" | "active"));
+        if !valid {
+            errors.push(PolicyError {
+                section: "impact.mode".to_owned(),
+                detail: format!(
+                    "invalid [impact].mode value {mode}; expected `shadow` or `active`"
+                ),
+            });
+            impact.remove("mode");
+        }
+    }
 }
 
 /// Validate consumed `[providers]` keys. `policy` must name a provider policy
@@ -1693,9 +1739,49 @@ phase = "sometime"
     fn impact_section_parses_and_is_known_top_level() -> anyhow::Result<()> {
         // An [impact] section must be accepted (not an unknown-key policy
         // error) since `impact` is registered in KNOWN_TOP_LEVEL_KEYS.
-        let cfg: Config = toml::from_str("[impact]\nmode = \"active\"\n")?;
-        assert_eq!(cfg.impact.mode, "active");
-        assert_eq!(cfg.impact.resolved_mode(), "active");
+        let cfg = Config::from_toml_with_policy_receipts("[impact]\nmode = \"active\"\n")?;
+        anyhow::ensure!(cfg.policy_errors.is_empty());
+        anyhow::ensure!(cfg.impact.mode == "active");
+        anyhow::ensure!(cfg.impact.resolved_mode() == "active");
+        Ok(())
+    }
+
+    #[test]
+    fn impact_section_receipts_malformed_values_and_unknown_keys() -> anyhow::Result<()> {
+        let malformed =
+            Config::from_toml_with_policy_receipts("[impact]\nmode = 1\nunexpected = true\n")?;
+        anyhow::ensure!(malformed.impact.resolved_mode() == "shadow");
+        anyhow::ensure!(malformed.policy_errors.len() == 2);
+        let mode_error = malformed
+            .policy_errors
+            .iter()
+            .find(|error| error.section == "impact.mode")
+            .ok_or_else(|| anyhow::anyhow!("missing invalid impact mode receipt"))?;
+        anyhow::ensure!(
+            mode_error.detail == "invalid [impact].mode value 1; expected `shadow` or `active`"
+        );
+        let unknown_key_error = malformed
+            .policy_errors
+            .iter()
+            .find(|error| error.section == "impact.unexpected")
+            .ok_or_else(|| anyhow::anyhow!("missing unknown impact key receipt"))?;
+        anyhow::ensure!(
+            unknown_key_error.detail == "unknown [impact] key `unexpected`; expected only `mode`"
+        );
+
+        let invalid_shape = Config::from_toml_with_policy_receipts("impact = \"active\"\n")?;
+        anyhow::ensure!(invalid_shape.impact.resolved_mode() == "shadow");
+        anyhow::ensure!(invalid_shape.policy_errors.len() == 1);
+        let shape_error = invalid_shape
+            .policy_errors
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing invalid impact shape receipt"))?;
+        anyhow::ensure!(shape_error.section == "impact");
+        anyhow::ensure!(
+            shape_error.detail
+                == "invalid [impact] value \"active\"; expected a table with key `mode`"
+        );
+
         Ok(())
     }
 

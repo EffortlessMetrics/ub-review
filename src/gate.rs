@@ -1790,16 +1790,17 @@ mod tests {
     }
 
     #[test]
-    fn gate_outcome_fails_on_policy_parse_error_with_effective_config_receipt() {
+    fn invalid_impact_mode_fails_gate_with_effective_config_receipt() -> anyhow::Result<()> {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
-        let config = Config {
-            policy_errors: vec![crate::PolicyError {
-                section: "tools.ripr.gate".to_owned(),
-                detail: "invalid [tools.ripr.gate] table: unknown field `max_new`".to_owned(),
-            }],
-            ..Config::default()
-        };
+        let config = Config::from_toml_with_policy_receipts("[impact]\nmode = \"acitve\"\n")?;
+        anyhow::ensure!(config.impact.resolved_mode() == "shadow");
+        anyhow::ensure!(config.policy_errors.len() == 1);
+        let policy_error = config
+            .policy_errors
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing invalid impact mode receipt"))?;
+        anyhow::ensure!(policy_error.section == "impact.mode");
         let terminal_state = test_terminal_state("sufficient");
 
         let gate = build_gate_outcome(GateOutcomeInput {
@@ -1815,14 +1816,17 @@ mod tests {
             reporter_verdict: None,
         });
 
-        // Recorded in review-byok too: the verdict is mode-independent and
-        // the exit decision follows fail-on-gate.
-        assert_eq!(gate.conclusion, "fail");
-        assert_eq!(gate.reasons.len(), 1);
-        assert_eq!(gate.reasons[0].kind, "policy");
-        assert_eq!(gate.reasons[0].id, "tools.ripr.gate");
-        assert!(gate.reasons[0].detail.contains("unknown field"));
-        assert_eq!(gate.reasons[0].receipt, "effective-config.json");
+        anyhow::ensure!(gate.conclusion == "fail");
+        anyhow::ensure!(gate.reasons.len() == 1);
+        let reason = gate
+            .reasons
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing invalid impact mode gate reason"))?;
+        anyhow::ensure!(reason.kind == "policy");
+        anyhow::ensure!(reason.id == "impact.mode");
+        anyhow::ensure!(reason.detail.contains("acitve"));
+        anyhow::ensure!(reason.receipt == "effective-config.json");
+        Ok(())
     }
 
     #[test]
