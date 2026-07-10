@@ -16,6 +16,15 @@ fn main() {
     }
 }
 
+#[cfg(test)]
+#[test]
+fn ripr_install_hint_uses_the_content_addressed_identity_contract() {
+    assert_eq!(
+        install_hint("ripr"),
+        "cargo install ripr --locked --version 0.10.0 --force"
+    );
+}
+
 fn run() -> Result<()> {
     let mut args = env::args().skip(1);
     let command = args.next().unwrap_or_else(|| "help".to_owned());
