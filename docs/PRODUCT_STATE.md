@@ -1,4 +1,4 @@
-# Product state assessment (June 2026)
+# Product state assessment (July 2026)
 
 ## Category
 
@@ -50,14 +50,16 @@ partial execution. Issue-ledger #312 closed.
 ### PR 2 — Deterministic test-impact candidate planning — PARTIAL
 
 Candidate planners exist (`focused_test_candidates_from_diff`,
-`focused_test_candidates_from_requests`,
-`focused_build_candidates_from_requests`). They are diff-file and
-request driven only.
+`focused_test_candidates_from_requests`, and
+`focused_build_candidates_from_requests`). The Cargo workspace graph now
+identifies changed-package ownership, direct reverse-dependency candidates,
+declared targets, and ranked test candidates.
 
-**Gap:** No Cargo package-graph or changed-module expansion. The planner
-does not expand a changed module to its reverse-dependency test crates.
-A grep for `cargo_metadata`, `package_graph`, `workspace_members`,
-`changed_module` returns zero hits.
+**Gap:** The Cargo graph remains a shadow/advisory plan: it uses
+`cargo metadata --no-deps`, package names, and direct manifest dependency
+names, and does not yet change command execution. Before activation it needs
+package-ID/resolve-graph edges, bounded approved command templates, and
+receipt-backed broker execution.
 
 ### PR 3 — Base+tests red/green — DONE
 
@@ -138,7 +140,9 @@ Release workflow: tag-triggered, builds Linux x64 archive, emits
 path with checksum validation. Doctor reports install status.
 Source-build fallback for non-release refs.
 
-**Remaining action:** cut the actual v0.1.0 tag (issue-ledger #343).
+**Remaining action:** merge the release-aware `enable` path, refresh the
+release packet with the exact candidate SHA and receipts, then cut the actual
+v0.1.0 tag with maintainer authorization (issue #716).
 
 ### PR 12 — Fleet rollout — NOT STARTED
 
@@ -171,14 +175,11 @@ extracting when next touched:
 
 - **ripr-swarm#1324:** runner OOM when a PR introduces a large new file
   (~2,600+ lines); ripr's analysis of the full codebase exceeds the 7 GB
-  runner budget. This drove the temporary `[tools.ripr.gate]
-  max_new_unsuppressed` raises during the cleanup train (now reverted to 0,
-  see #585) and still constrains any future large-file extraction or new
-  module addition.
-- **Issue-ledger #343:** no published `v0.1.0` GitHub Release yet (`v0` and `v0.1`
-  tags exist for early commit-SHA pinning; no release archive with checksums).
-  The release runbook (#629) documents the cut procedure; the tag is pending
-  maintainer authorization.
+  runner budget. The self-gate is back at a strict zero ceiling; any future
+  exception must be narrowly receipted and evidenced.
+- **Issue #716:** no published `v0.1.0` GitHub Release yet. The release packet
+  must name the exact candidate SHA, pre-tag receipts, archive/checksum names,
+  downstream smoke plan, and rollback before maintainer authorization.
 - **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
   and suppression shipped; deeper evidence-precedence adjudication is the open
   next step (epic #655 milestone 4).

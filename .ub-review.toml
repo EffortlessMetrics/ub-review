@@ -330,4 +330,7 @@ scope = "on-diff"
 # init.rs must either wait for the upstream fix or temporarily raise this
 # ceiling with a fresh dated receipt in policy/allow.toml (the #538 pattern).
 # Owner: ub-review/core.
-max_new_unsuppressed = 200
+# Strict zero posture. The temporary cohort-orchestrator ceiling ended after
+# the live reporter reached end-to-end execution. Any future nonzero ceiling
+# requires a narrow, dated policy receipt with current evidence.
+max_new_unsuppressed = 0

@@ -485,7 +485,7 @@ mod tests {
             .find(|outcome| outcome.tool == "ripr")
             .ok_or_else(|| anyhow::anyhow!("ripr gate outcome missing"))?;
         assert_eq!(ripr.schema, "ub-review.tool_gate_outcome.v1");
-        assert_eq!(ripr.policy.max_new_unsuppressed, Some(200));
+        assert_eq!(ripr.policy.max_new_unsuppressed, Some(0));
         assert_eq!(ripr.outcome, "missing_evidence");
         assert!(!ripr.evaluated);
         assert_eq!(
@@ -582,16 +582,7 @@ mod tests {
             Path::new("."),
             true,
         );
-        // Temporary epic ceiling (#678 Orders 5-9): max_new_unsuppressed is
-        // 200, not 0 (policy/allow.toml#ripr-epic-ceiling-678). So 3 gaps now
-        // passes (3 < 200); the failure path needs gaps > ceiling. Revert the
-        // ceiling to 0 and these cases back to [(0,passed),(3,failed)] once
-        // Order 9 drives end-to-end model execution.
-        let cases = [
-            (0u64, "passed", true),
-            (3u64, "passed", true),
-            (201u64, "failed", true),
-        ];
+        let cases = [(0u64, "passed", true), (3u64, "failed", true)];
         for (gaps, expected_outcome, expected_evaluated) in cases {
             let temp = tempfile::tempdir()?;
             let ripr = plan
