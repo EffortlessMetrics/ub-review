@@ -11544,7 +11544,7 @@ reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push 
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:xtask_src_main.rs:match_arm:9915e7fd"
+finding_id = "probe:xtask_src_main.rs:match_arm:4714c49d"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 cannot associate the direct ripr_install_hint_uses_the_content_addressed_identity_contract assertion with this install_hint match arm (#737). The test pins the exact remediation command; re-verify after semantic edits or RIPR upgrades."
 
