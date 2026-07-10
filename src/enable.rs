@@ -9,6 +9,7 @@ use std::fs;
 const REQUIRED_CHECK: &str = "ub-review/gate";
 const WORKFLOW_RELATIVE_PATH: &str = ".github/workflows/ub-review.yml";
 const CONFIG_RELATIVE_PATH: &str = ".ub-review.toml";
+const RELEASE_BINARY_ASSET: &str = "ub-review-x86_64-unknown-linux-gnu.tar.gz";
 /// The GitHub repo that publishes ub-review releases. Used to resolve the
 /// latest release tag during `enable` so generated workflows download a binary
 /// instead of source-building every run (Ordered Program item 1).
@@ -69,8 +70,26 @@ fn resolve_latest_release_tag() -> Option<String> {
         return None;
     }
     let body: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    installable_release_tag_from_api_response(&body)
+}
+
+/// Return a release tag only when the GitHub response includes the exact
+/// archive and checksum consumed by `action.yml`'s release-install path.
+/// A tagged but incompletely published release must use the source fallback,
+/// not generate a workflow that fails closed on its first PR run.
+fn installable_release_tag_from_api_response(body: &serde_json::Value) -> Option<String> {
     let tag = body.get("tag_name").and_then(|v| v.as_str())?.trim();
-    if is_installable_release_tag(tag) {
+    let checksum = format!("{RELEASE_BINARY_ASSET}.sha256");
+    let assets = body.get("assets")?.as_array()?;
+    let has_archive = assets
+        .iter()
+        .filter_map(|asset| asset.get("name").and_then(|name| name.as_str()))
+        .any(|name| name == RELEASE_BINARY_ASSET);
+    let has_checksum = assets
+        .iter()
+        .filter_map(|asset| asset.get("name").and_then(|name| name.as_str()))
+        .any(|name| name == checksum);
+    if is_installable_release_tag(tag) && has_archive && has_checksum {
         Some(tag.to_owned())
     } else {
         None
@@ -542,6 +561,42 @@ mod tests {
             !is_installable_release_tag(&"a".repeat(40)),
             "a commit SHA must never be mistaken for a release tag"
         );
+    }
+
+    #[test]
+    fn release_resolver_requires_the_action_archive_and_checksum() {
+        assert!(
+            include_str!("../action.yml").contains(&format!("default: {RELEASE_BINARY_ASSET}")),
+            "enable's expected asset must match action.yml's release asset"
+        );
+        let complete = serde_json::json!({
+            "tag_name": "v0.1.0",
+            "assets": [
+                { "name": RELEASE_BINARY_ASSET },
+                { "name": format!("{RELEASE_BINARY_ASSET}.sha256") }
+            ]
+        });
+        assert_eq!(
+            installable_release_tag_from_api_response(&complete).as_deref(),
+            Some("v0.1.0")
+        );
+
+        for incomplete in [
+            serde_json::json!({ "tag_name": "v0.1.0", "assets": [] }),
+            serde_json::json!({
+                "tag_name": "v0.1.0",
+                "assets": [{ "name": RELEASE_BINARY_ASSET }]
+            }),
+            serde_json::json!({
+                "tag_name": "v0.1.0",
+                "assets": [{ "name": format!("{RELEASE_BINARY_ASSET}.sha256") }]
+            }),
+        ] {
+            assert!(
+                installable_release_tag_from_api_response(&incomplete).is_none(),
+                "incomplete releases must use the source-build fallback"
+            );
+        }
     }
 
     #[test]
