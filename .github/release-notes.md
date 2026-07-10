@@ -10,7 +10,9 @@ runs them safely, and the reporter distills one review plus a CI gate result.
 ub-review enable --mode gate --model minimax --action-sha <this-tag-sha>
 ```
 
-Then add `MINIMAX_API_KEY` as a repository secret and open a PR. See
+Then add `MINIMAX_API_KEY` as a required repository secret and, optionally,
+`OPENCODE` for provider fallback before opening a PR. MiniMax remains operational
+without the optional fallback secret. See
 [docs/QUICKSTART.md](docs/QUICKSTART.md) for the 5-minute guide.
 
 ## Modes

@@ -140,9 +140,12 @@ Release workflow: tag-triggered, builds Linux x64 archive, emits
 path with checksum validation. Doctor reports install status.
 Source-build fallback for non-release refs.
 
-**Remaining action:** merge the release-aware `enable` path, refresh the
-release packet with the exact candidate SHA and receipts, then cut the actual
-v0.1.0 tag with maintainer authorization (issue #716).
+The release-aware `enable` path is merged and generates release downloads with
+cached source builds only when no installable release is resolvable. Generated
+workflows use MiniMax primary with optional OpenCode fallback.
+
+**Remaining action:** cut the actual v0.1.0 tag with maintainer authorization
+and execute the release smoke plan recorded in issue #716.
 
 ### PR 12 — Fleet rollout — NOT STARTED
 
