@@ -9,6 +9,8 @@ result. This guide gets you from zero to reviewed PRs in five minutes.
 
 - A Rust project on GitHub with GitHub Actions enabled.
 - A MiniMax API key (`MiniMax-M3`).
+- Optional: an OpenCode API key for provider fallback. Without it, MiniMax
+  remains operational with reduced provider redundancy.
 - The `ub-review` binary. Once a release ships, `enable` resolves it
   automatically; until then, install from source (see [Installing
   ub-review](#installing-ub-review) below).
@@ -30,7 +32,7 @@ Pick a recent merged SHA from
 [EffortlessMetrics/ub-review](https://github.com/EffortlessMetrics/ub-review)
 commits, e.g. `cc62168…` (copy the full 40-hex value) for the fallback pin.
 
-This writes two files and prints the exact secret to add:
+This writes two files and prints the required and optional secrets:
 
 ```
 ub-review enabled (gate, release v0.1.0).
@@ -42,10 +44,12 @@ ub-review enabled (gate, release v0.1.0).
   so each run starts in seconds instead of source-building (~12 min).
 
 Next:
-  1. Add MINIMAX_API_KEY as a repository secret:
+  1. Add MINIMAX_API_KEY as a required repository secret:
        repo Settings → Secrets and variables → Actions → New repository secret
-  2. Commit the two files and open a pull request.
-  3. ub-review will post a MiniMax review and a CI gate result on the PR.
+  2. Optionally add OPENCODE for provider fallback. Without it, MiniMax remains
+     operational but OpenCode fallback is unavailable.
+  3. Commit the two files and open a pull request.
+  4. ub-review will post a MiniMax review and a CI gate result on the PR.
 ```
 
 (When no release is resolvable, the summary instead reports `source-build
@@ -63,12 +67,17 @@ Pick your posture:
 See [ADOPTION_MODES.md](ADOPTION_MODES.md) for the full mode table and the
 staged path from advisory → gate → strict.
 
-## Step 2 — Add the secret
+## Step 2 — Add provider secrets
 
 Add `MINIMAX_API_KEY` as a **repository secret** (Settings → Secrets and
 variables → Actions → New repository secret). ub-review reads it from
 `${{ secrets.MINIMAX_API_KEY }}` in the workflow — it is never exported to
 the step's `env:`, so fork PRs cannot read it.
+
+Optionally add `OPENCODE` as a repository secret. The generated workflow uses
+OpenCode with `mimo-v2.5` for deeper fallback work, while fast fallback lanes
+use `deepseek-v4-flash`. If `OPENCODE` is absent, MiniMax continues operating
+normally and ub-review records that provider fallback is unavailable.
 
 ## Step 3 — Open a PR
 
@@ -86,8 +95,8 @@ pull request. ub-review runs on every PR (`opened`, `reopened`,
 ## What ub-review wrote
 
 **`.github/workflows/ub-review.yml`** — the workflow. Pinned to the release
-tag (or your SHA, if no release was resolvable), with `review-mode`, MiniMax-on,
-`posting: review`, and artifact upload. Fork-safe:
+tag (or your SHA, if no release was resolvable), with `review-mode`, MiniMax
+primary, optional OpenCode fallback, `posting: review`, and artifact upload. Fork-safe:
 `persist-credentials: false`, no `pull_request_target` trigger.
 
 **`.ub-review.toml`** — a minimal config (profile + `[repo]` + `[gate]`). It
@@ -133,6 +142,8 @@ full promotion checklist.
 - Check that `MINIMAX_API_KEY` is set and valid. ub-review records provider
   preflight status in the uploaded artifacts under
   `review/provider-preflight-status.json`.
+- If only OpenCode fallback is unavailable, check the optional `OPENCODE`
+  secret. Its absence does not stop MiniMax review.
 - Fork PRs: the secret is unavailable by default, so ub-review runs in a
   degraded mode. This is expected and safe.
 
