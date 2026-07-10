@@ -11834,3 +11834,27 @@ kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:field_construction:84bf226d"
 owner = "ub-review/core"
 reason = "print_enable_summary is a one-print side-effect boundary over the pure render_enable_summary seam; enable_summary_renders_install_and_mode_contracts pins the rendered strategy output (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:81318919"
+owner = "ub-review/core"
+reason = "enable_requires_a_valid_sha_only_for_source_fallback exhaustively pins every ReleaseFallbackReason description in the exact fail-closed error; RIPR 0.10.0 does not associate the fallible oracle with this match (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:9e9713a6"
+owner = "ub-review/core"
+reason = "This deletion-side probe is the removed resolve_install_strategy dispatch. cmd_enable_with_resolver_writes_release_workflow_offline and enable_requires_a_valid_sha_only_for_source_fallback pin the replacement release and source behavior, but RIPR 0.10.0 does not associate them (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:86381934"
+owner = "ub-review/core"
+reason = "enable_requires_a_valid_sha_only_for_source_fallback pins the exact release result plus every unavailable-reason source and refusal result from select_install_strategy; RIPR 0.10.0 does not associate the fallible oracle (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:error_path:1cc495d4"
+owner = "ub-review/core"
+reason = "enable_requires_a_valid_sha_only_for_source_fallback pins the exact missing-SHA error for every release fallback reason and proves no files are written; RIPR 0.10.0 does not recognize the fallible error discriminator (#737). Re-verify after semantic edits or RIPR upgrades."

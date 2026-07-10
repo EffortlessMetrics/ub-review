@@ -36,6 +36,18 @@ enum ReleaseFallbackReason {
     AssetsIncomplete,
 }
 
+impl ReleaseFallbackReason {
+    fn description(self) -> &'static str {
+        match self {
+            ReleaseFallbackReason::RequestUnavailable => "release lookup unavailable",
+            ReleaseFallbackReason::RequestFailed => "release request failed",
+            ReleaseFallbackReason::MalformedResponse => "release response malformed",
+            ReleaseFallbackReason::InvalidTag => "release tag invalid",
+            ReleaseFallbackReason::AssetsIncomplete => "release assets incomplete",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ReleaseLookup {
     Installable { tag: String },
@@ -146,32 +158,45 @@ fn classify_release_lookup_response(body: &serde_json::Value) -> ReleaseLookup {
     }
 }
 
-/// Resolve the install strategy: prefer the latest release binary (fast path),
-/// fall back to the pinned SHA + source build when no release is available or
-/// the network is unreachable.
-fn resolve_install_strategy(action_sha: &str) -> InstallStrategy {
-    match resolve_latest_release_lookup() {
-        ReleaseLookup::Installable { tag } => InstallStrategy::Release { tag },
-        ReleaseLookup::Unavailable { .. } => InstallStrategy::Source {
-            sha: action_sha.to_owned(),
-        },
+/// Select the install strategy from a classified release lookup and an
+/// optional, already-validated fallback pin. Source installation is impossible
+/// without an explicit SHA; release lookup failure never invents a ref.
+fn select_install_strategy(
+    lookup: ReleaseLookup,
+    action_sha: Option<&str>,
+) -> Result<InstallStrategy> {
+    match lookup {
+        ReleaseLookup::Installable { tag } => Ok(InstallStrategy::Release { tag }),
+        ReleaseLookup::Unavailable { reason } => {
+            let sha = action_sha.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "no installable ub-review release was resolvable ({}); pass --action-sha <40-hex-sha> to permit the cached source-build fallback",
+                    reason.description()
+                )
+            })?;
+            Ok(InstallStrategy::Source {
+                sha: sha.to_owned(),
+            })
+        }
     }
 }
 
-/// Run `ub-review enable`. Validates the SHA pin, refuses to overwrite
-/// existing files without `--force`, writes the workflow + minimal config,
-/// and prints secret instructions.
+/// Run `ub-review enable`. Validates any supplied fallback SHA, refuses to
+/// overwrite existing files without `--force`, writes the workflow + minimal
+/// config, and prints secret instructions.
 pub(crate) fn cmd_enable(args: EnableArgs) -> Result<()> {
-    cmd_enable_with_resolver(args, resolve_install_strategy)
+    cmd_enable_with_resolver(args, resolve_latest_release_lookup)
 }
 
 /// Resolver-injectable core so tests can run `enable` fully offline. The real
-/// entrypoint (`cmd_enable`) wires in `resolve_install_strategy`, which does a
-/// best-effort live GitHub Releases lookup; tests pass a stub returning a fixed
-/// `InstallStrategy` so they never touch the network (determinism, per #732
+/// entrypoint (`cmd_enable`) wires in `resolve_latest_release_lookup`, which does
+/// a best-effort live GitHub Releases lookup; tests pass a stub returning a fixed
+/// `ReleaseLookup` so they never touch the network (determinism, per #732
 /// self-review).
-fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn(&str) -> InstallStrategy) -> Result<()> {
-    validate_action_sha(&args.action_sha)?;
+fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn() -> ReleaseLookup) -> Result<()> {
+    if let Some(action_sha) = args.action_sha.as_deref() {
+        validate_action_sha(action_sha)?;
+    }
     if !matches!(args.model.as_str(), "minimax") {
         bail!(
             "--model {} is not supported in v0; only `minimax` is available",
@@ -190,7 +215,7 @@ fn cmd_enable_with_resolver(args: EnableArgs, resolve: fn(&str) -> InstallStrate
         refuse_existing_workflow(root)?;
     }
 
-    let strategy = resolve(&args.action_sha);
+    let strategy = select_install_strategy(resolve(), args.action_sha.as_deref())?;
     let workflow = render_enable_workflow(&strategy, args.mode);
     let config = render_enable_config();
 
@@ -446,18 +471,17 @@ mod tests {
     /// Deterministic offline resolver stub for `cmd_enable`-level tests so they
     /// never hit the live GitHub Releases API (determinism, per #732
     /// self-review). Always resolves to the source-build path.
-    fn offline_resolve_source(action_sha: &str) -> InstallStrategy {
-        InstallStrategy::Source {
-            sha: action_sha.to_owned(),
+    fn offline_resolve_source() -> ReleaseLookup {
+        ReleaseLookup::Unavailable {
+            reason: ReleaseFallbackReason::RequestUnavailable,
         }
     }
 
     /// Offline resolver stub that always resolves a release tag, so the
     /// resolver-seam test can exercise the release-install path without a
-    /// network call. A named `fn` (not a closure) so it coerces to the
-    /// `for<'a> fn(&'a str) -> InstallStrategy` parameter type.
-    fn offline_resolve_release(_action_sha: &str) -> InstallStrategy {
-        InstallStrategy::Release {
+    /// network call. A named `fn` keeps the injected resolver deterministic.
+    fn offline_resolve_release() -> ReleaseLookup {
+        ReleaseLookup::Installable {
             tag: "v9.9.9".to_owned(),
         }
     }
@@ -803,7 +827,7 @@ mod tests {
         let args = EnableArgs {
             mode: ReviewModePreset::Gate,
             model: "minimax".to_owned(),
-            action_sha: "d".repeat(40),
+            action_sha: Some("d".repeat(40)),
             root: root.to_path_buf(),
             force: false,
         };
@@ -815,7 +839,7 @@ mod tests {
         let args = EnableArgs {
             mode: ReviewModePreset::Gate,
             model: "minimax".to_owned(),
-            action_sha: "d".repeat(40),
+            action_sha: Some("d".repeat(40)),
             root: root.to_path_buf(),
             force: true,
         };
@@ -839,7 +863,7 @@ mod tests {
         let args = EnableArgs {
             mode: ReviewModePreset::Gate,
             model: "minimax".to_owned(),
-            action_sha: "e".repeat(40),
+            action_sha: Some("e".repeat(40)),
             root: root.to_path_buf(),
             force: false,
         };
@@ -860,7 +884,7 @@ mod tests {
         let args = EnableArgs {
             mode: ReviewModePreset::Gate,
             model: "openai".to_owned(),
-            action_sha: "f".repeat(40),
+            action_sha: Some("f".repeat(40)),
             root: temp.path().to_path_buf(),
             force: false,
         };
@@ -882,7 +906,7 @@ mod tests {
         let args = EnableArgs {
             mode: ReviewModePreset::Gate,
             model: "minimax".to_owned(),
-            action_sha: "1".repeat(40),
+            action_sha: None,
             root: root.to_path_buf(),
             force: false,
         };
@@ -899,6 +923,101 @@ mod tests {
             !workflow.contains("Swatinem/rust-cache"),
             "release workflow must not carry the source-build cache"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn enable_requires_a_valid_sha_only_for_source_fallback() -> Result<()> {
+        let fallback_sha = "a".repeat(40);
+        let release = select_install_strategy(
+            ReleaseLookup::Installable {
+                tag: "v9.9.9".to_owned(),
+            },
+            Some(&fallback_sha),
+        )?;
+        anyhow::ensure!(
+            release
+                == InstallStrategy::Release {
+                    tag: "v9.9.9".to_owned()
+                }
+        );
+
+        for (reason, description) in [
+            (
+                ReleaseFallbackReason::RequestUnavailable,
+                "release lookup unavailable",
+            ),
+            (
+                ReleaseFallbackReason::RequestFailed,
+                "release request failed",
+            ),
+            (
+                ReleaseFallbackReason::MalformedResponse,
+                "release response malformed",
+            ),
+            (ReleaseFallbackReason::InvalidTag, "release tag invalid"),
+            (
+                ReleaseFallbackReason::AssetsIncomplete,
+                "release assets incomplete",
+            ),
+        ] {
+            let error = select_install_strategy(ReleaseLookup::Unavailable { reason }, None)
+                .err()
+                .ok_or_else(|| anyhow::anyhow!("{description} without a SHA should fail"))?;
+            anyhow::ensure!(
+                error.to_string()
+                    == format!(
+                        "no installable ub-review release was resolvable ({description}); pass --action-sha <40-hex-sha> to permit the cached source-build fallback"
+                    )
+            );
+
+            let source = select_install_strategy(
+                ReleaseLookup::Unavailable { reason },
+                Some(&fallback_sha),
+            )?;
+            anyhow::ensure!(
+                source
+                    == InstallStrategy::Source {
+                        sha: fallback_sha.clone()
+                    }
+            );
+        }
+
+        let temp = tempfile::tempdir()?;
+        let args = EnableArgs {
+            mode: ReviewModePreset::Gate,
+            model: "minimax".to_owned(),
+            action_sha: None,
+            root: temp.path().to_path_buf(),
+            force: false,
+        };
+        let error = cmd_enable_with_resolver(args, offline_resolve_source)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("source fallback without a SHA should fail"))?;
+        let message = error.to_string();
+        anyhow::ensure!(message.contains("release lookup unavailable"));
+        anyhow::ensure!(message.contains("--action-sha <40-hex-sha>"));
+        anyhow::ensure!(!temp.path().join(WORKFLOW_RELATIVE_PATH).exists());
+        anyhow::ensure!(!temp.path().join(CONFIG_RELATIVE_PATH).exists());
+
+        let malformed_root = tempfile::tempdir()?;
+        let malformed = EnableArgs {
+            mode: ReviewModePreset::Gate,
+            model: "minimax".to_owned(),
+            action_sha: Some("not-a-sha".to_owned()),
+            root: malformed_root.path().to_path_buf(),
+            force: false,
+        };
+        let error = cmd_enable_with_resolver(malformed, offline_resolve_release)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("malformed explicit SHA should fail"))?;
+        anyhow::ensure!(
+            error
+                .to_string()
+                .contains("--action-sha must be the full 40-hex")
+        );
+        anyhow::ensure!(!malformed_root.path().join(WORKFLOW_RELATIVE_PATH).exists());
+        anyhow::ensure!(!malformed_root.path().join(CONFIG_RELATIVE_PATH).exists());
         Ok(())
     }
 

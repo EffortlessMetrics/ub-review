@@ -493,11 +493,11 @@ pub(crate) struct EnableArgs {
     /// Model backend. Only `minimax` is supported in v0.
     #[arg(long, default_value = "minimax")]
     pub(crate) model: String,
-    /// Full 40-hex ub-review commit SHA to pin in the generated workflow.
-    /// Required: the generator refuses to invent a pin (matches the
-    /// `setup-ci` SHA-pin safety contract).
+    /// Optional full 40-hex ub-review commit SHA for cached source fallback.
+    /// Required only when no installable release can be resolved; the generator
+    /// never invents a source pin.
     #[arg(long, env = "UB_REVIEW_ACTION_SHA")]
-    pub(crate) action_sha: String,
+    pub(crate) action_sha: Option<String>,
     /// Repository root to write into.
     #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
     pub(crate) root: PathBuf,

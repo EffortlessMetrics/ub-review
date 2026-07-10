@@ -142,7 +142,9 @@ Source-build fallback for non-release refs.
 
 The release-aware `enable` path is merged and generates release downloads with
 cached source builds only when no installable release is resolvable. Generated
-workflows use MiniMax primary with optional OpenCode fallback.
+workflows use MiniMax primary with optional OpenCode fallback. The release happy
+path needs no action SHA; an explicit validated SHA is required only to permit
+the cached source-build fallback.
 
 **Remaining action:** cut the actual v0.1.0 tag with maintainer authorization
 and execute the release smoke plan recorded in issue #716.
