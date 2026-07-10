@@ -11864,3 +11864,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:error_path:f04f7f1f"
 owner = "ub-review/core"
 reason = "enable_requires_a_valid_sha_only_for_source_fallback passes a malformed explicit SHA through this transpose boundary, pins the exact validation error, and proves no files are written; RIPR 0.10.0 does not recognize the fallible error discriminator (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:a402603e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 analyzer limitation (#743): field_construction resolves to the closing delimiter of the formatted invalid-[impact]-shape PolicyError. The same-file test impact_section_receipts_malformed_values_and_unknown_keys asserts the exact section and complete detail string for this branch. Content-addressed ID from the exact PR diff."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_config.rs:field_construction:a402603e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 analyzer limitation (#743): field_construction resolves to the closing delimiter of the formatted invalid-[impact].mode PolicyError. The same-file test impact_section_receipts_malformed_values_and_unknown_keys asserts the exact section and complete detail string for this branch. Content-addressed ID from the exact PR diff."

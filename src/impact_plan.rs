@@ -429,7 +429,11 @@ fn impact_candidate_rank(kind: &str, expected_value: &str, is_changed: bool) -> 
     kind_score + value_score + ownership_score
 }
 
-/// Write the impact plan as a shadow artifact.
+/// Write the complete impact plan artifact in every selection mode.
+///
+/// This persistence boundary serializes `candidate_tasks` unchanged.
+/// [`ImpactPlan::proof_planner_candidates`] controls model-planner visibility;
+/// it must not filter the artifact.
 pub(crate) fn write_impact_plan(out: &Path, plan: &ImpactPlan) -> anyhow::Result<()> {
     let path = out.join("review").join("impact_plan.json");
     let parent = path.parent();
@@ -552,6 +556,61 @@ mod tests {
             anyhow::ensure!(invalid.selection_mode == "shadow");
             anyhow::ensure!(!invalid.candidate_tasks.is_empty());
             anyhow::ensure!(invalid.proof_planner_candidates().is_empty());
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn write_impact_plan_preserves_full_candidates_in_both_modes() -> anyhow::Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let changed_files = ["src/main.rs".to_owned()];
+        let temp = tempfile::tempdir()?;
+
+        for mode in ["shadow", "active"] {
+            let plan = build_impact_plan(root, &changed_files, mode);
+            anyhow::ensure!(
+                !plan.candidate_tasks.is_empty(),
+                "{mode} fixture must produce candidate tasks"
+            );
+
+            let out = temp.path().join(mode);
+            write_impact_plan(&out, &plan)?;
+
+            let artifact_path = out.join("review").join("impact_plan.json");
+            let artifact_bytes = std::fs::read(&artifact_path)?;
+            let artifact: serde_json::Value = serde_json::from_slice(&artifact_bytes)?;
+            let serialized_mode = artifact
+                .get("selection_mode")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "{} is missing string selection_mode",
+                        artifact_path.display()
+                    )
+                })?;
+            anyhow::ensure!(
+                serialized_mode == mode,
+                "{} serialized mode {serialized_mode:?}, expected {mode:?}",
+                artifact_path.display()
+            );
+
+            let serialized_candidates = artifact
+                .get("candidate_tasks")
+                .and_then(serde_json::Value::as_array)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "{} is missing candidate_tasks array",
+                        artifact_path.display()
+                    )
+                })?;
+            anyhow::ensure!(
+                serialized_candidates.len() == plan.candidate_tasks.len(),
+                "{} serialized {} of {} candidate tasks",
+                artifact_path.display(),
+                serialized_candidates.len(),
+                plan.candidate_tasks.len()
+            );
         }
 
         Ok(())
