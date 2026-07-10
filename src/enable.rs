@@ -27,6 +27,21 @@ pub(crate) enum InstallStrategy {
     Source { sha: String },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReleaseFallbackReason {
+    RequestUnavailable,
+    RequestFailed,
+    MalformedResponse,
+    InvalidTag,
+    AssetsIncomplete,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ReleaseLookup {
+    Installable { tag: String },
+    Unavailable { reason: ReleaseFallbackReason },
+}
+
 impl InstallStrategy {
     /// Test/spec constructor for the source-build fallback path.
     #[cfg(test)]
@@ -46,13 +61,11 @@ fn is_installable_release_tag(tag: &str) -> bool {
     tag.starts_with('v') && tag.len() > 1 && tag.as_bytes()[1].is_ascii_digit()
 }
 
-/// Best-effort lookup of the latest ub-review release tag. Returns `Some(tag)`
-/// only when the GitHub Releases API returns a `v<digit>` tag name; returns
-/// `None` on any failure (offline, 404, rate limit, non-`v` tag, malformed
-/// body) so `enable` degrades to the source-build path instead of failing.
+/// Best-effort lookup of the latest ub-review release tag. Every unavailable
+/// outcome is classified so the source fallback is explicit and testable.
 /// Unauthenticated: the public API is reachable without a token, just rate
 /// limited, and a missing release must not block first-run enablement.
-fn resolve_latest_release_tag() -> Option<String> {
+fn resolve_latest_release_lookup() -> ReleaseLookup {
     let url = format!("https://api.github.com/repos/{UBM_REPOSITORY}/releases/latest");
     let output = std::process::Command::new("curl")
         .arg("-sS")
@@ -65,22 +78,55 @@ fn resolve_latest_release_tag() -> Option<String> {
         .arg("User-Agent: ub-review-enable")
         .arg(&url)
         .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let body: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
-    installable_release_tag_from_api_response(&body)
+        .map(|output| (output.status.success(), output.stdout))
+        .map_err(|_| ReleaseFallbackReason::RequestUnavailable);
+    classify_release_lookup_output(output)
 }
 
-/// Return a release tag only when the GitHub response includes the exact
-/// archive and checksum consumed by `action.yml`'s release-install path.
-/// A tagged but incompletely published release must use the source fallback,
-/// not generate a workflow that fails closed on its first PR run.
-fn installable_release_tag_from_api_response(body: &serde_json::Value) -> Option<String> {
-    let tag = body.get("tag_name").and_then(|v| v.as_str())?.trim();
+fn classify_release_lookup_output(
+    output: std::result::Result<(bool, Vec<u8>), ReleaseFallbackReason>,
+) -> ReleaseLookup {
+    let (success, stdout) = match output {
+        Ok(output) => output,
+        Err(reason) => return ReleaseLookup::Unavailable { reason },
+    };
+    if !success {
+        return ReleaseLookup::Unavailable {
+            reason: ReleaseFallbackReason::RequestFailed,
+        };
+    }
+    let body: serde_json::Value = match serde_json::from_slice(&stdout) {
+        Ok(body) => body,
+        Err(_) => {
+            return ReleaseLookup::Unavailable {
+                reason: ReleaseFallbackReason::MalformedResponse,
+            };
+        }
+    };
+    classify_release_lookup_response(&body)
+}
+
+/// Classify a release response against the archive and checksum consumed by
+/// `action.yml`'s release-install path. A tagged but incomplete release must
+/// use the source fallback, not generate a workflow that fails on its first PR.
+fn classify_release_lookup_response(body: &serde_json::Value) -> ReleaseLookup {
+    let Some(tag) = body.get("tag_name").and_then(|value| value.as_str()) else {
+        return ReleaseLookup::Unavailable {
+            reason: ReleaseFallbackReason::InvalidTag,
+        };
+    };
+    let tag = tag.trim();
+    if !is_installable_release_tag(tag) {
+        return ReleaseLookup::Unavailable {
+            reason: ReleaseFallbackReason::InvalidTag,
+        };
+    }
     let checksum = format!("{RELEASE_BINARY_ASSET}.sha256");
-    let assets = body.get("assets")?.as_array()?;
+    let Some(assets) = body.get("assets").and_then(|value| value.as_array()) else {
+        return ReleaseLookup::Unavailable {
+            reason: ReleaseFallbackReason::AssetsIncomplete,
+        };
+    };
     let has_archive = assets
         .iter()
         .filter_map(|asset| asset.get("name").and_then(|name| name.as_str()))
@@ -89,10 +135,14 @@ fn installable_release_tag_from_api_response(body: &serde_json::Value) -> Option
         .iter()
         .filter_map(|asset| asset.get("name").and_then(|name| name.as_str()))
         .any(|name| name == checksum);
-    if is_installable_release_tag(tag) && has_archive && has_checksum {
-        Some(tag.to_owned())
+    if has_archive && has_checksum {
+        ReleaseLookup::Installable {
+            tag: tag.to_owned(),
+        }
     } else {
-        None
+        ReleaseLookup::Unavailable {
+            reason: ReleaseFallbackReason::AssetsIncomplete,
+        }
     }
 }
 
@@ -100,9 +150,9 @@ fn installable_release_tag_from_api_response(body: &serde_json::Value) -> Option
 /// fall back to the pinned SHA + source build when no release is available or
 /// the network is unreachable.
 fn resolve_install_strategy(action_sha: &str) -> InstallStrategy {
-    match resolve_latest_release_tag() {
-        Some(tag) => InstallStrategy::Release { tag },
-        None => InstallStrategy::Source {
+    match resolve_latest_release_lookup() {
+        ReleaseLookup::Installable { tag } => InstallStrategy::Release { tag },
+        ReleaseLookup::Unavailable { .. } => InstallStrategy::Source {
             sha: action_sha.to_owned(),
         },
     }
@@ -328,61 +378,60 @@ summary_only_body = "post_substantive"
     )
 }
 
+fn render_enable_summary(
+    workflow_path: &Path,
+    config_path: &Path,
+    mode: ReviewModePreset,
+    strategy: &InstallStrategy,
+) -> String {
+    let (header, install_detail) = match strategy {
+        InstallStrategy::Release { tag } => {
+            (
+                format!("ub-review enabled ({}, release {tag}).", mode.key()),
+                format!(
+                    "  The workflow downloads the ub-review {tag} binary and verifies its sha256,\n  so each run starts in seconds instead of source-building (~12 min)."
+                ),
+            )
+        }
+        InstallStrategy::Source { sha } => {
+            (
+                format!(
+                    "ub-review enabled ({}, source-build pinned to {sha}).",
+                    mode.key()
+                ),
+                "  No ub-review release was resolvable, so each run source-builds ub-review\n  (~12 min, cached). Re-run `ub-review enable` after a release ships to switch\n  to the fast binary-download path.".to_owned(),
+            )
+        }
+    };
+    let mode_detail = match mode {
+        ReviewModePreset::Advisory => {
+            "  MiniMax reviews and comments; the gate is non-required and never blocks."
+        }
+        ReviewModePreset::Gate => {
+            "  MiniMax reviews + the deterministic-floor gate is the required check.\n  Make `ub-review/gate` required in branch protection when ready."
+        }
+        ReviewModePreset::Strict => {
+            "  Gate + the reporter verdict (changes_requested/uncertain) can block.\n  Use only after calibration shows low false positives."
+        }
+    };
+    format!(
+        "{header}\n\n  wrote {}\n  wrote {}\n\n{install_detail}\n\nNext:\n  1. Add MINIMAX_API_KEY as a repository secret:\n       repo Settings → Secrets and variables → Actions → New repository secret\n  2. Commit the two files and open a pull request.\n  3. ub-review will post a MiniMax review and a CI gate result on the PR.\n\nMode `{}`:\n{mode_detail}\n",
+        workflow_path.display(),
+        config_path.display(),
+        mode.key(),
+    )
+}
+
 fn print_enable_summary(
     workflow_path: &Path,
     config_path: &Path,
     mode: ReviewModePreset,
     strategy: &InstallStrategy,
 ) {
-    match strategy {
-        InstallStrategy::Release { tag } => {
-            println!("ub-review enabled ({}, release {tag}).", mode.key());
-            println!();
-            println!("  wrote {}", workflow_path.display());
-            println!("  wrote {}", config_path.display());
-            println!();
-            println!(
-                "  The workflow downloads the ub-review {tag} binary and verifies its sha256,"
-            );
-            println!("  so each run starts in seconds instead of source-building (~12 min).");
-        }
-        InstallStrategy::Source { sha } => {
-            println!(
-                "ub-review enabled ({}, source-build pinned to {sha}).",
-                mode.key()
-            );
-            println!();
-            println!("  wrote {}", workflow_path.display());
-            println!("  wrote {}", config_path.display());
-            println!();
-            println!("  No ub-review release was resolvable, so each run source-builds ub-review");
-            println!(
-                "  (~12 min, cached). Re-run `ub-review enable` after a release ships to switch"
-            );
-            println!("  to the fast binary-download path.");
-        }
-    }
-    println!();
-    println!("Next:");
-    println!("  1. Add MINIMAX_API_KEY as a repository secret:");
-    println!("       repo Settings → Secrets and variables → Actions → New repository secret");
-    println!("  2. Commit the two files and open a pull request.");
-    println!("  3. ub-review will post a MiniMax review and a CI gate result on the PR.");
-    println!();
-    println!("Mode `{}`:", mode.key());
-    match mode {
-        ReviewModePreset::Advisory => {
-            println!("  MiniMax reviews and comments; the gate is non-required and never blocks.");
-        }
-        ReviewModePreset::Gate => {
-            println!("  MiniMax reviews + the deterministic-floor gate is the required check.");
-            println!("  Make `ub-review/gate` required in branch protection when ready.");
-        }
-        ReviewModePreset::Strict => {
-            println!("  Gate + the reporter verdict (changes_requested/uncertain) can block.");
-            println!("  Use only after calibration shows low false positives.");
-        }
-    }
+    print!(
+        "{}",
+        render_enable_summary(workflow_path, config_path, mode, strategy)
+    );
 }
 
 #[cfg(test)]
@@ -577,8 +626,10 @@ mod tests {
             ]
         });
         assert_eq!(
-            installable_release_tag_from_api_response(&complete).as_deref(),
-            Some("v0.1.0")
+            classify_release_lookup_response(&complete),
+            ReleaseLookup::Installable {
+                tag: "v0.1.0".to_owned()
+            }
         );
 
         for incomplete in [
@@ -592,10 +643,80 @@ mod tests {
                 "assets": [{ "name": format!("{RELEASE_BINARY_ASSET}.sha256") }]
             }),
         ] {
-            assert!(
-                installable_release_tag_from_api_response(&incomplete).is_none(),
+            assert_eq!(
+                classify_release_lookup_response(&incomplete),
+                ReleaseLookup::Unavailable {
+                    reason: ReleaseFallbackReason::AssetsIncomplete
+                },
                 "incomplete releases must use the source-build fallback"
             );
+        }
+    }
+
+    #[test]
+    fn release_lookup_classifies_unavailable_paths() {
+        let unavailable =
+            classify_release_lookup_output(Err(ReleaseFallbackReason::RequestUnavailable));
+        assert_eq!(
+            unavailable,
+            ReleaseLookup::Unavailable {
+                reason: ReleaseFallbackReason::RequestUnavailable
+            }
+        );
+        assert_eq!(
+            classify_release_lookup_output(Ok((false, Vec::new()))),
+            ReleaseLookup::Unavailable {
+                reason: ReleaseFallbackReason::RequestFailed
+            }
+        );
+        assert_eq!(
+            classify_release_lookup_output(Ok((true, b"{".to_vec()))),
+            ReleaseLookup::Unavailable {
+                reason: ReleaseFallbackReason::MalformedResponse
+            }
+        );
+        let invalid_tag = serde_json::json!({
+            "tag_name": "latest",
+            "assets": [
+                { "name": RELEASE_BINARY_ASSET },
+                { "name": format!("{RELEASE_BINARY_ASSET}.sha256") }
+            ]
+        });
+        assert_eq!(
+            classify_release_lookup_response(&invalid_tag),
+            ReleaseLookup::Unavailable {
+                reason: ReleaseFallbackReason::InvalidTag
+            }
+        );
+    }
+
+    #[test]
+    fn enable_summary_renders_install_and_mode_contracts() {
+        let workflow = Path::new(".github/workflows/ub-review.yml");
+        let config = Path::new(".ub-review.toml");
+        for (strategy, install_phrase) in [
+            (
+                InstallStrategy::Release {
+                    tag: "v0.1.0".to_owned(),
+                },
+                "downloads the ub-review v0.1.0 binary",
+            ),
+            (
+                InstallStrategy::source(&"a".repeat(40)),
+                "No ub-review release was resolvable",
+            ),
+        ] {
+            for (mode, mode_phrase) in [
+                (ReviewModePreset::Advisory, "never blocks"),
+                (ReviewModePreset::Gate, "deterministic-floor gate"),
+                (ReviewModePreset::Strict, "reporter verdict"),
+            ] {
+                let summary = render_enable_summary(workflow, config, mode, &strategy);
+                assert!(summary.contains(install_phrase), "{mode:?}: {summary}");
+                assert!(summary.contains(mode_phrase), "{mode:?}: {summary}");
+                assert!(summary.contains(".github/workflows/ub-review.yml"));
+                assert!(summary.contains(".ub-review.toml"));
+            }
         }
     }
 
