@@ -11705,54 +11705,6 @@ owner = "ub-review/core"
 reason = "RIPR false-negative (ripr-swarm#1055): side_effect probe on Vec::push in claim graph extraction logic (#669). The same-file tests claim_extraction_assigns_needs_evidence_when_evidence_present and claim_extraction_detects_cross_lane_conflicts pin the push results with exact assertions. Line-keyed id; re-verify after edits to claim_graph.rs."
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:error_path:f7a0f00a"
-owner = "ub-review/core"
-reason = "Release lookup fallback (#732): curl/process failure intentionally resolves to Source rather than generating a broken release-install workflow; release_lookup_classifies_unavailable_paths pins the result. Re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:return_value:7bb46a37"
-owner = "ub-review/core"
-reason = "Release response fallback (#732): incomplete-release fixtures assert the exact source-fallback result; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:return_value:e33ad8b1"
-owner = "ub-review/core"
-reason = "Release response fallback (#732): incomplete-release fixtures assert the exact source-fallback result; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:match_arm:9f0f6f95"
-owner = "ub-review/core"
-reason = "Release strategy dispatch (#732) is covered by offline source and release resolver fixtures; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:return_value:832ca272"
-owner = "ub-review/core"
-reason = "Release strategy source fallback (#732) is covered by the offline source resolver fixture; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:field_construction:f27bf825"
-owner = "ub-review/core"
-reason = "Release workflow rendering (#732) is covered by source and release install-contract assertions; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:field_construction:307f2172"
-owner = "ub-review/core"
-reason = "Release workflow source environment (#732) is covered by the cached-source rendering assertion; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:field_construction:4219ae41"
-owner = "ub-review/core"
-reason = "Release workflow rendering (#732) is covered by source and release install-contract assertions; re-verify after edits to enable.rs."
-
-[[suppressions]]
-kind = "exposure_gap"
 finding_id = "probe:src_enable.rs:field_construction:51bd3236"
 owner = "ub-review/core"
 reason = "Release workflow source environment (#732) is covered by the cached-source rendering assertion; re-verify after edits to enable.rs."
@@ -11765,18 +11717,120 @@ reason = "Release workflow rendering (#732) is covered by source and release ins
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:field_construction:8c50a857"
+finding_id = "probe:src_enable.rs:return_value:10e19567"
 owner = "ub-review/core"
-reason = "Pure enable summary strategy seam (#732) is covered by exact release/source and mode renderer assertions; re-verify after edits to enable.rs."
+reason = "RIPR 0.10.0 cannot associate the direct is_installable_release_tag_accepts_version_tags_only assertions with this returned predicate (#737). Re-verify after semantic edits or RIPR upgrades."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:field_construction:47db439d"
+finding_id = "probe:src_enable.rs:match_arm:51e08fc0"
 owner = "ub-review/core"
-reason = "Pure enable summary source-pin seam (#732) is covered by exact release/source and mode renderer assertions; re-verify after edits to enable.rs."
+reason = "RIPR 0.10.0 cannot associate release_lookup_classifies_unavailable_paths with the classified process-result match (#737); the test pins unavailable, nonzero, malformed, invalid-tag, and complete-response outcomes. Re-verify after semantic edits or RIPR upgrades."
 
 [[suppressions]]
 kind = "exposure_gap"
-finding_id = "probe:src_enable.rs:match_arm:f623536b"
+finding_id = "probe:src_enable.rs:match_arm:82ee5f1f"
 owner = "ub-review/core"
-reason = "Pure enable summary strategy dispatch (#732) is covered by exact release/source and mode renderer assertions; re-verify after edits to enable.rs."
+reason = "release_lookup_classifies_unavailable_paths pins the successful process-result arm through exact complete-response equality; RIPR 0.10.0 does not associate that oracle (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:return_value:950d2f62"
+owner = "ub-review/core"
+reason = "release_lookup_classifies_unavailable_paths pins the exact nonzero-response fallback returned from this match (#737); RIPR 0.10.0 does not associate the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:6cbd7e7c"
+owner = "ub-review/core"
+reason = "release_lookup_classifies_unavailable_paths pins successful JSON parsing through exact complete-response equality (#737); RIPR 0.10.0 does not associate the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:86ec1858"
+owner = "ub-review/core"
+reason = "release_lookup_classifies_unavailable_paths pins malformed JSON to ReleaseFallbackReason::MalformedResponse (#737); RIPR 0.10.0 does not associate the exact oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:return_value:c042e0b3"
+owner = "ub-review/core"
+reason = "release_resolver_requires_the_action_archive_and_checksum pins missing-tag and incomplete-asset fallbacks around this return boundary (#737); RIPR 0.10.0 does not associate those exact outcomes. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:return_value:c042e0b3.2"
+owner = "ub-review/core"
+reason = "release_resolver_requires_the_action_archive_and_checksum pins incomplete assets to ReleaseFallbackReason::AssetsIncomplete at this return boundary (#737); RIPR 0.10.0 does not associate the exact oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:6e3d8f73"
+owner = "ub-review/core"
+reason = "The live lookup dispatch is bounded by exact classifier tests plus cmd_enable_with_resolver_writes_release_workflow_offline for the release path and source-fixture enable tests for fallback (#737); RIPR 0.10.0 cannot associate those seams. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:9a102f02"
+owner = "ub-review/core"
+reason = "enable_workflow_caches_source_build and enable_workflow_release_path_downloads_binary_not_source_builds pin both install-block arms (#737); RIPR 0.10.0 does not associate their rendered-output oracles. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:d4e949be.2"
+owner = "ub-review/core"
+reason = "enable_workflow_release_path_downloads_binary_not_source_builds pins the release workflow root field in rendered output (#737); RIPR 0.10.0 does not associate the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:51bd3236.2"
+owner = "ub-review/core"
+reason = "enable_workflow_release_path_downloads_binary_not_source_builds pins the release workflow environment shape in rendered output (#737); RIPR 0.10.0 does not associate the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:d4e949be.3"
+owner = "ub-review/core"
+reason = "enable_workflow_release_version_and_uses_ref_agree pins the release-version and action-ref workflow block containing this root field (#737); RIPR 0.10.0 does not associate the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:335187b8"
+owner = "ub-review/core"
+reason = "enable_summary_renders_install_and_mode_contracts exercises release and source strategies through this renderer parameter (#737); RIPR 0.10.0 does not associate the output assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:ffa7e46d"
+owner = "ub-review/core"
+reason = "enable_workflow_caches_source_build and enable_summary_renders_install_and_mode_contracts pin the source SHA in workflow and summary output (#737); RIPR 0.10.0 does not associate those oracles. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:a27ae72b"
+owner = "ub-review/core"
+reason = "This is the removed multi-print summary boundary replaced by render_enable_summary; enable_summary_renders_install_and_mode_contracts pins the new pure output (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:b02cd023"
+owner = "ub-review/core"
+reason = "enable_summary_renders_install_and_mode_contracts exercises advisory, gate, and strict modes across the removed summary match (#737); RIPR 0.10.0 does not associate the output assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:3d731c74"
+owner = "ub-review/core"
+reason = "enable_summary_renders_install_and_mode_contracts pins both release and source install phrases from this strategy match (#737); RIPR 0.10.0 does not associate the renderer assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:3d2223d8"
+owner = "ub-review/core"
+reason = "enable_summary_renders_install_and_mode_contracts pins advisory, gate, and strict mode phrases from this match (#737); RIPR 0.10.0 does not associate the renderer assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:84bf226d"
+owner = "ub-review/core"
+reason = "print_enable_summary is a one-print side-effect boundary over the pure render_enable_summary seam; enable_summary_renders_install_and_mode_contracts pins the rendered strategy output (#737). Re-verify after semantic edits or RIPR upgrades."

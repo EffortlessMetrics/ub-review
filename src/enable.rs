@@ -12,7 +12,7 @@ const CONFIG_RELATIVE_PATH: &str = ".ub-review.toml";
 const RELEASE_BINARY_ASSET: &str = "ub-review-x86_64-unknown-linux-gnu.tar.gz";
 /// The GitHub repo that publishes ub-review releases. Used to resolve the
 /// latest release tag during `enable` so generated workflows download a binary
-/// instead of source-building every run (Ordered Program item 1).
+/// instead of source-building every run (#732).
 const UBM_REPOSITORY: &str = "EffortlessMetrics/ub-review";
 
 /// How the generated workflow installs ub-review. Release is the fast path
@@ -687,6 +687,21 @@ mod tests {
             ReleaseLookup::Unavailable {
                 reason: ReleaseFallbackReason::InvalidTag
             }
+        );
+
+        let complete = serde_json::json!({
+            "tag_name": "v0.1.0",
+            "assets": [
+                { "name": RELEASE_BINARY_ASSET },
+                { "name": format!("{RELEASE_BINARY_ASSET}.sha256") }
+            ]
+        });
+        assert_eq!(
+            classify_release_lookup_output(Ok((true, complete.to_string().into_bytes()))),
+            ReleaseLookup::Installable {
+                tag: "v0.1.0".to_owned()
+            },
+            "successful response bytes must reach complete-asset classification"
         );
     }
 
