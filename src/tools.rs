@@ -582,10 +582,7 @@ mod tests {
             Path::new("."),
             true,
         );
-        let cases = [
-            (0u64, "passed", true),
-            (3u64, "failed", true),
-        ];
+        let cases = [(0u64, "passed", true), (3u64, "failed", true)];
         for (gaps, expected_outcome, expected_evaluated) in cases {
             let temp = tempfile::tempdir()?;
             let ripr = plan
