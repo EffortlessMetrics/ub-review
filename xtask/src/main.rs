@@ -435,7 +435,7 @@ fn install_hint(name: &str) -> &'static str {
     match name {
         "tokmd" => "cargo install tokmd --locked --version 1.12.0 --force",
         "cargo-allow" => "cargo install cargo-allow --locked",
-        "ripr" => "cargo install ripr --locked --version 0.8.0 --force",
+        "ripr" => "cargo install ripr --locked --version 0.10.0 --force",
         "unsafe-review" => "cargo install unsafe-review --locked --version 0.3.4 --force",
         "ast-grep" => "npm install -g @ast-grep/cli",
         "actionlint" => {
@@ -1265,7 +1265,7 @@ mod tests {
         let reason = receipt.reason.as_deref().unwrap_or_default();
         assert!(reason.contains("not installed"), "{reason}");
         assert!(
-            reason.contains("cargo install ripr --locked --version 0.8.0 --force"),
+            reason.contains("cargo install ripr --locked --version 0.10.0 --force"),
             "{reason}"
         );
         // A relevance skip stays success: true and missing: false - the two
@@ -1297,7 +1297,7 @@ mod tests {
             ("cargo-allow", "cargo install cargo-allow --locked"),
             (
                 "ripr",
-                "cargo install ripr --locked --version 0.8.0 --force",
+                "cargo install ripr --locked --version 0.10.0 --force",
             ),
             (
                 "unsafe-review",

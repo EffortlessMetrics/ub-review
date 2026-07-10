@@ -22,13 +22,13 @@ where `UB_REVIEW_TOOL_DIR` defaults to `/opt/ub-review`. It uses
 `go install` for `actionlint`, so the standard image build must provide Go.
 `tokmd` defaults to version `1.12.0` because the Bun profile depends on the
 current on-diff `bun-ub`, `cockpit`, and `context` command surfaces.
-`cargo-allow` defaults to `0.1.8`; `ripr` defaults to `0.8.0`;
+`cargo-allow` defaults to `0.1.8`; `ripr` defaults to `0.10.0`;
 `unsafe-review` defaults to `0.3.4`; `actionlint` defaults to `v1.7.12`:
 
 ```bash
 export UB_REVIEW_TOKMD_VERSION="1.12.0"
 export UB_REVIEW_CARGO_ALLOW_VERSION="0.1.8"
-export UB_REVIEW_RIPR_VERSION="0.8.0"
+export UB_REVIEW_RIPR_VERSION="0.10.0"
 export UB_REVIEW_UNSAFE_REVIEW_VERSION="0.3.4"
 export UB_REVIEW_ACTIONLINT_VERSION="v1.7.12"
 scripts/install-review-image-tools.sh
