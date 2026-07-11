@@ -139,14 +139,15 @@ pub(crate) fn is_pr_body_meta_review_noise(text: &str) -> bool {
 }
 
 pub(crate) fn is_internal_review_machinery_text(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
     [
-        "inline candidate",
-        "duplicate candidate",
         "duplicate inline",
         "merged into path",
         "lane conflict",
         "cross-lane conflict",
         "resolve cross-lane",
+        "inline plan",
+        "comment plan",
     ]
     .iter()
     .any(|needle| text.contains(needle))
@@ -591,11 +592,37 @@ pub(crate) fn review_claims_match(left: &str, right: &str) -> bool {
     if left.contains(&right) || right.contains(&left) {
         return true;
     }
+    if opposing_claim_polarity(&left, &right) {
+        return false;
+    }
     let left_tokens = conflict_tokens(&left);
     let right_tokens = conflict_tokens(&right);
     let smaller = left_tokens.len().min(right_tokens.len());
     let shared = left_tokens.intersection(&right_tokens).count();
-    smaller >= 4 && shared >= 4 && shared * 5 >= smaller * 3
+    smaller >= 5 && shared >= 4 && shared * 2 >= smaller
+}
+
+fn opposing_claim_polarity(left: &str, right: &str) -> bool {
+    const NEGATIVE: [&str; 8] = [
+        "drop", "dropped", "lose", "loses", "missing", "omitted", "reject", "refuse",
+    ];
+    const POSITIVE: [&str; 8] = [
+        "accept",
+        "accepts",
+        "retain",
+        "retains",
+        "preserve",
+        "preserves",
+        "allow",
+        "include",
+    ];
+    let has = |text: &str, words: &[&str]| {
+        words
+            .iter()
+            .any(|word| text.split_whitespace().any(|token| token == *word))
+    };
+    (has(left, &NEGATIVE) && has(right, &POSITIVE))
+        || (has(left, &POSITIVE) && has(right, &NEGATIVE))
 }
 
 pub(crate) fn unique_review_observations_by_claim(
@@ -605,6 +632,9 @@ pub(crate) fn unique_review_observations_by_claim(
     for observation in observations {
         let index = unique.iter().position(|existing| {
             observation_paths_compatible(existing, &observation)
+                && (existing.kind == observation.kind
+                    || existing.kind.is_empty()
+                    || observation.kind.is_empty())
                 && review_claims_match(&existing.claim, &observation.claim)
         });
         if let Some(index) = index {
@@ -625,12 +655,35 @@ fn observation_paths_compatible(left: &ObservationGroup, right: &ObservationGrou
     }
 }
 
-fn observation_group_rank(observation: &ObservationGroup) -> (u8, u8, u8) {
+fn observation_group_rank(observation: &ObservationGroup) -> (u8, u8, u8, u8) {
     (
+        observation_evidence_rank(observation),
         observation_status_rank(&observation.status),
         severity_rank(&observation.severity),
         confidence_rank(&observation.confidence),
     )
+}
+
+fn observation_evidence_rank(observation: &ObservationGroup) -> u8 {
+    let text = format!(
+        "{} {}",
+        observation.sources.join(" "),
+        observation.evidence.join(" ")
+    )
+    .to_ascii_lowercase();
+    if text.contains("executed")
+        || text.contains("receipt")
+        || text.contains("focused test")
+        || text.contains("sensor")
+    {
+        5
+    } else if text.contains("source") || text.contains("diff") {
+        3
+    } else if text.contains("thread") || text.contains("existing") {
+        2
+    } else {
+        1
+    }
 }
 
 pub(crate) fn summary_finding_has_cross_lane_conflict(

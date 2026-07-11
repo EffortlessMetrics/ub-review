@@ -211,6 +211,15 @@ pub(crate) fn render_pull_request_review_body(
                 && !diff_structurally_answers_observation_test_witness_question(diff, observation)
         })
         .collect::<Vec<_>>();
+    let cross_lane_conflict_observations = observation_items
+        .iter()
+        .filter(|observation| {
+            observation
+                .sources
+                .iter()
+                .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
+        })
+        .collect::<Vec<_>>();
     let refuted_observations = pr_observation_items
         .iter()
         .copied()
@@ -297,17 +306,19 @@ pub(crate) fn render_pull_request_review_body(
             .iter()
             .any(observation_is_test_proof_decision_question);
     let decision_sentence = pr_decision_sentence(PrDecisionContext {
-        finding_count,
+        finding_count: finding_count + cross_lane_conflict_observations.len(),
         verification_count,
         has_test_proof_verification,
         current_proof_failure,
     });
     let has_decision_item = decision_sentence.is_some();
     let has_reviewer_value_item = has_decision_item
+        || !inline_comments.is_empty()
         || !proof_result_receipts.is_empty()
         || !parked.is_empty()
         || !parked_observations.is_empty()
-        || has_specific_missing_evidence;
+        || has_specific_missing_evidence
+        || !cross_lane_conflict_observations.is_empty();
     if !has_reviewer_value_item {
         return String::new();
     }
@@ -319,6 +330,29 @@ pub(crate) fn render_pull_request_review_body(
         text.push('\n');
     }
 
+    if !inline_comments.is_empty() {
+        text.push_str("\n## Confirmed findings\n\n");
+        for comment in inline_comments {
+            render_pr_model_signal(&mut text, &comment.body);
+        }
+    }
+
+    let summary_concerns = summary_concerns
+        .into_iter()
+        .filter(|finding| {
+            !inline_comments
+                .iter()
+                .any(|comment| review_claims_match(&comment.body, &finding.reason))
+        })
+        .collect::<Vec<_>>();
+    let concern_observations = concern_observations
+        .into_iter()
+        .filter(|observation| {
+            !inline_comments
+                .iter()
+                .any(|comment| review_claims_match(&comment.body, &observation.claim))
+        })
+        .collect::<Vec<_>>();
     if !summary_concerns.is_empty() || !concern_observations.is_empty() {
         text.push_str("\n## Confirmed findings\n\n");
         for observation in &concern_observations {
@@ -340,6 +374,20 @@ pub(crate) fn render_pull_request_review_body(
     } else if !verification_observations.is_empty() {
         text.push_str("\n## Verification questions\n\n");
         for observation in &verification_observations {
+            render_review_observation(&mut text, observation, PrObservationTone::Verification);
+        }
+    }
+
+    if !cross_lane_conflict_observations.is_empty()
+        && !verification_observations.iter().any(|observation| {
+            observation
+                .sources
+                .iter()
+                .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
+        })
+    {
+        text.push_str("\n## Verification questions\n\n");
+        for observation in &cross_lane_conflict_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
     }
