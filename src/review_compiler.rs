@@ -366,7 +366,9 @@ const MAX_PR_REVIEW_BODY_BULLETS: usize = 12;
 
 pub(crate) fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
     let text = error.to_string();
-    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
+    text.contains("artifact-only boilerplate")
+        || text.contains("refuted-only artifact note")
+        || text.contains("not concise enough")
 }
 
 pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
@@ -389,23 +391,23 @@ pub(crate) fn validate_pr_review_body_policy_with_waiver(
     if trimmed.is_empty() {
         return Ok(());
     }
-    if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
-        bail!(
-            "github review body is not concise enough: {} bytes over max {}",
-            trimmed.len(),
-            MAX_PR_REVIEW_BODY_BYTES
-        );
-    }
-    let bullet_count = pr_body_bullet_count(trimmed);
-    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
-        bail!(
-            "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
-        );
-    }
     if is_internal_review_machinery_text(&trimmed.to_ascii_lowercase()) {
         bail!("github review body contains internal review machinery");
     }
     if !waive_suppressible {
+        if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
+            bail!(
+                "github review body is not concise enough: {} bytes over max {}",
+                trimmed.len(),
+                MAX_PR_REVIEW_BODY_BYTES
+            );
+        }
+        let bullet_count = pr_body_bullet_count(trimmed);
+        if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
+            bail!(
+                "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+            );
+        }
         if has_forbidden_pr_review_boilerplate(trimmed) {
             bail!("github review body contains artifact-only boilerplate");
         }

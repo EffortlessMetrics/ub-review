@@ -549,21 +549,35 @@ pub(crate) fn unique_summary_review_findings<'a>(
     findings: impl IntoIterator<Item = &'a SummaryOnlyFinding>,
 ) -> Vec<&'a SummaryOnlyFinding> {
     let mut unique = Vec::<&SummaryOnlyFinding>::new();
+    let mut indexes = BTreeMap::<String, usize>::new();
 
     for finding in findings {
-        let index = unique
-            .iter()
-            .position(|existing| review_claims_match(&existing.reason, &finding.reason));
+        let key = summary_finding_review_dedupe_key(finding);
+        let index = indexes.get(&key).copied().or_else(|| {
+            unique
+                .iter()
+                .position(|existing| review_claims_match(&existing.reason, &finding.reason))
+        });
         if let Some(index) = index {
             if summary_finding_rank(finding) > summary_finding_rank(unique[index]) {
                 unique[index] = finding;
             }
         } else {
+            indexes.insert(key, unique.len());
             unique.push(finding);
         }
     }
 
     unique
+}
+
+pub(crate) fn summary_finding_review_dedupe_key(finding: &SummaryOnlyFinding) -> String {
+    let normalized = normalized_review_text(&reviewer_facing_pr_text(&finding.reason));
+    if normalized.chars().count() >= 24 {
+        normalized
+    } else {
+        format!("{}:{normalized}", finding.lane)
+    }
 }
 
 pub(crate) fn summary_finding_rank(finding: &SummaryOnlyFinding) -> (u8, u8) {
@@ -577,10 +591,12 @@ pub(crate) fn summary_finding_matches_observations(
     finding: &SummaryOnlyFinding,
     observations: &[ObservationGroup],
 ) -> bool {
-    let summary = format!("{} {}", finding.reason, finding.evidence);
-    observations
-        .iter()
-        .any(|observation| review_claims_match(&summary, &observation.claim))
+    let summary = normalized_review_text(&format!("{} {}", finding.reason, finding.evidence));
+    observations.iter().any(|observation| {
+        let claim = normalized_review_text(&observation.claim);
+        (claim.len() >= 24 && (summary.contains(&claim) || claim.contains(&summary)))
+            || review_claims_match(&summary, &observation.claim)
+    })
 }
 
 pub(crate) fn review_claims_match(left: &str, right: &str) -> bool {
