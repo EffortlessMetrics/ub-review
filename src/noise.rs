@@ -619,15 +619,16 @@ pub(crate) fn review_claims_match(left: &str, right: &str) -> bool {
 }
 
 fn opposing_claim_polarity(left: &str, right: &str) -> bool {
-    const NEGATIVE: [&str; 8] = [
-        "drop", "dropped", "lose", "loses", "missing", "omitted", "reject", "refuse",
+    const NEGATIVE: [&str; 9] = [
+        "drop", "drops", "dropped", "lose", "loses", "missing", "omitted", "reject", "refuse",
     ];
-    const POSITIVE: [&str; 8] = [
+    const POSITIVE: [&str; 9] = [
         "accept",
         "accepts",
         "retain",
         "retains",
         "preserve",
+        "preserves",
         "preserves",
         "allow",
         "include",
@@ -778,6 +779,84 @@ mod human_output_admission_tests {
                 "internal phrase was admitted: {phrase}"
             );
         }
+        ensure!(is_internal_review_machinery_text("LANE CONFLICT: review"));
+        ensure!(!is_internal_review_machinery_text(
+            "An inline candidate is worth review."
+        ));
         Ok(())
+    }
+
+    #[test]
+    fn opposite_polarity_claims_are_not_collapsed() {
+        assert!(!review_claims_match(
+            "The parser drops default values from later declaration variables.",
+            "The parser preserves default values for later declaration variables."
+        ));
+    }
+
+    #[test]
+    fn observation_identity_requires_matching_path_and_kind() {
+        let base = ObservationGroup {
+            schema: "observation-group".to_owned(),
+            id: "base".to_owned(),
+            dedupe_key: "claim".to_owned(),
+            claim: "The changed parser loses postfix subscripts in later declaration variables."
+                .to_owned(),
+            kind: "bug".to_owned(),
+            status: "open".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(10),
+            evidence: vec!["model observation".to_owned()],
+            lanes: vec!["parser".to_owned()],
+            sources: vec!["model".to_owned()],
+            observation_ids: vec!["base".to_owned()],
+            duplicate_count: 0,
+        };
+        let mut different_path = base.clone();
+        different_path.id = "different-path".to_owned();
+        different_path.path = Some("src/other.rs".to_owned());
+        let mut different_kind = base.clone();
+        different_kind.id = "different-kind".to_owned();
+        different_kind.kind = "verification-question".to_owned();
+        assert_eq!(
+            unique_review_observations_by_claim(vec![base.clone(), different_path]).len(),
+            2
+        );
+        assert_eq!(
+            unique_review_observations_by_claim(vec![base, different_kind]).len(),
+            2
+        );
+    }
+
+    #[test]
+    fn executed_evidence_beats_model_confidence() {
+        let model = ObservationGroup {
+            schema: "observation-group".to_owned(),
+            id: "model".to_owned(),
+            dedupe_key: "claim".to_owned(),
+            claim: "The parser loses postfix subscripts in later declaration variables.".to_owned(),
+            kind: "bug".to_owned(),
+            status: "open".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(10),
+            evidence: vec!["model assertion".to_owned()],
+            lanes: vec!["parser".to_owned()],
+            sources: vec!["model".to_owned()],
+            observation_ids: vec!["model".to_owned()],
+            duplicate_count: 0,
+        };
+        let mut executed = model.clone();
+        executed.id = "executed".to_owned();
+        executed.severity = "medium".to_owned();
+        executed.confidence = "medium".to_owned();
+        executed.evidence = vec!["executed focused test receipt".to_owned()];
+        executed.sources = vec!["proof-receipt".to_owned()];
+        let unique = unique_review_observations_by_claim(vec![model.clone(), executed]);
+        assert_eq!(unique.len(), 1);
+        assert_eq!(unique[0].id, "executed");
     }
 }
