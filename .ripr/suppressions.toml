@@ -11876,3 +11876,201 @@ kind = "exposure_gap"
 finding_id = "probe:src_config.rs:field_construction:a402603e.2"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 analyzer limitation (#743): field_construction resolves to the closing delimiter of the formatted invalid-[impact].mode PolicyError. The same-file test impact_section_receipts_malformed_values_and_unknown_keys asserts the exact section and complete detail string for this branch. Content-addressed ID from the exact PR diff."
+
+# PR #746 human-output admission: RIPR 0.10.0 reports these current
+# content-addressed weakly-exposed seams even though the colocated output,
+# polarity, structural-identity, ranking, and policy tests exercise them.
+# Keep these IDs tied to the exact expressions; never translate them to line
+# keyed aliases. Re-run RIPR after edits or a tool upgrade.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:08e07c81"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the internal-machinery phrase table despite internal_inline_planning_language_is_artifact_only and the case-insensitive negative control. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:e346d06f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the closing phrase-table delimiter despite internal_inline_planning_language_is_artifact_only. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:5e4888a2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 does not associate the stable summary dedupe-key prefilter with paraphrased_summary_findings_compile_to_one_claim. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:3361bcd5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the summary dedupe closure despite paraphrased_summary_findings_compile_to_one_claim. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:predicate:c8604e1e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 does not connect the legacy observation-summary compatibility predicate to summary_finding_matches_observations coverage. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:29848274"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes claim normalization despite the direct polarity and paraphrase claim tests. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:predicate:a71eed19"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 does not discriminate the short-claim guard exercised by opposite_polarity_claims_are_not_collapsed and paraphrased_summary_findings_compile_to_one_claim. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:192df1af"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes conflict-token construction despite the direct polarity regression test. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:15f1edc0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 reports the polarity vocabulary as weakly exposed despite opposite_polarity_claims_are_not_collapsed. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:99e4cacf"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes polarity-word iteration despite opposite_polarity_claims_are_not_collapsed. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:match_arm:d18ba78c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 does not associate structural path matching with observation_identity_requires_matching_path_and_kind. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:match_arm:6ff08504"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the Some-path branch despite observation_identity_requires_matching_path_and_kind. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:match_arm:93395dd9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the absent-path compatibility branch despite observation_identity_requires_matching_path_and_kind. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:5d458f84"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes structural observation ranking despite executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:00200a00"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes evidence-rank text construction despite executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:cbf0a94c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes evidence-source joining despite executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:a24c27b0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes evidence normalization despite executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:6bd307d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 does not associate cross-lane source filtering with cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:b174fada"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes cross-lane observation filtering despite cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:field_construction:53d3ebe4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes conflict-aware decision counting despite cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:e0d39eec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes inline-summary claim filtering despite compiler_surface_caps_inline_comments_after_value_ranking and pr_review_body_hides_machine_metadata_for_findings. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:b174fada.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes inline-summary observation filtering despite compiler_surface_caps_inline_comments_after_value_ranking and pr_review_body_hides_machine_metadata_for_findings. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:e0d39eec.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the fallback verification iterator despite cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:b174fada.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes fallback verification filtering despite cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:6bd307d1.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes final cross-lane source inspection despite cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:call_deletion:b174fada.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes final cross-lane duplicate suppression despite cross_lane_conflict_receipt_suppresses_standalone_summary_finding. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:call_deletion:f3d938d0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the non-waivable machinery wall despite review_body_quality_overflow_is_waivable_but_machinery_is_not and the existing payload boilerplate tests. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:5962d6b7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes bullet classification despite review_body_cap_drops_excess_bullets_without_failing_compilation. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:67927bd9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes summary-claim survivor selection despite paraphrased_summary_findings_compile_to_one_claim and executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:1b7e6c22"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes summary-claim survivor selection despite paraphrased_summary_findings_compile_to_one_claim and executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:c9983eef"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes exact-path observation identity despite observation_identity_requires_matching_path_and_kind. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:183485a2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes evidence-rank tuple construction despite executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."

@@ -622,13 +622,12 @@ fn opposing_claim_polarity(left: &str, right: &str) -> bool {
     const NEGATIVE: [&str; 9] = [
         "drop", "drops", "dropped", "lose", "loses", "missing", "omitted", "reject", "refuse",
     ];
-    const POSITIVE: [&str; 9] = [
+    const POSITIVE: [&str; 8] = [
         "accept",
         "accepts",
         "retain",
         "retains",
         "preserve",
-        "preserves",
         "preserves",
         "allow",
         "include",
