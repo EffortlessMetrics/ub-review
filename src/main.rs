@@ -3075,6 +3075,14 @@ impl EventLog {
         writeln!(&mut *file)?;
         Ok(())
     }
+
+    fn sync(&self) -> Result<()> {
+        let file = self
+            .file
+            .lock()
+            .map_err(|_| anyhow::anyhow!("event log mutex poisoned"))?;
+        file.sync_data().context("sync event log")
+    }
 }
 
 fn start_run_loop(
@@ -3602,10 +3610,6 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     if config.review.github_summary && !args.no_github_summary {
         append_github_step_summary(&summary)?;
     }
-    event_log.append(
-        "run_finished",
-        serde_json::json!({"run_dir": args.review.out}),
-    )?;
     println!("wrote {}", args.review.out.display());
     println!("open {}/running-summary.md", args.review.out.display());
     Ok(RunCompletion {
@@ -4907,6 +4911,8 @@ fn write_review_artifacts(
             build_github_review_skip_receipt(args, &review, config.review_body.summary_only_body),
         )?;
     }
+    event_log.append("run_finished", serde_json::json!({"run_dir": out}))?;
+    event_log.sync()?;
     Ok(gate_outcome)
 }
 
