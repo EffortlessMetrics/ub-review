@@ -699,4 +699,19 @@ mod tests {
         );
         assert!(pr_body_has_reviewer_value(&emitted));
     }
+
+    #[test]
+    fn review_body_quality_overflow_is_waivable_but_machinery_is_not() -> Result<()> {
+        let policy = ReviewBodyPolicy::default();
+        let oversized = format!("## Decision\n\n- {}", "x".repeat(6_100));
+        let err = validate_pr_review_body_policy(&oversized, &policy)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("oversized body unexpectedly passed"))?;
+        assert!(err.to_string().contains("not concise enough"));
+        validate_pr_review_body_policy_with_waiver(&oversized, &policy, true)?;
+
+        let machinery = "## Decision\n\n- duplicate inline candidate merged into path:12";
+        assert!(validate_pr_review_body_policy_with_waiver(machinery, &policy, true).is_err());
+        Ok(())
+    }
 }
