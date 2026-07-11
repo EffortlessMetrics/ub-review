@@ -2617,10 +2617,16 @@ def require_fill_ledger_entry(
     elif affected_merge is not None:
         fail(f"fill-ledger.json entries[{index}].affected_merge must be null when skipped")
     if not selected:
-        if entry.get("actual_signal") is not None:
+        receipt_backed_terminal = kind == "proof-request" and entry.get("actual_signal") is not None
+        if not receipt_backed_terminal and entry.get("actual_signal") is not None:
             fail(f"fill-ledger.json entries[{index}].actual_signal must be null when skipped")
-        if entry.get("time_spent_sec") != 0:
+        if not receipt_backed_terminal and entry.get("time_spent_sec") != 0:
             fail(f"fill-ledger.json entries[{index}].time_spent_sec must be 0 when skipped")
+        if receipt_backed_terminal and entry.get("artifact_path") is None:
+            fail(
+                f"fill-ledger.json entries[{index}] receipt-backed proof request "
+                "must cite an artifact"
+            )
     artifact_path = entry.get("artifact_path")
     if artifact_path is not None:
         artifact_file = artifact_path.split("#", 1)[0]
