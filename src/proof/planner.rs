@@ -1408,6 +1408,63 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn terminalize_proof_requests_maps_every_receipt_outcome() {
+        let results = [
+            ("discriminating", "satisfied"),
+            ("head_passed", "satisfied"),
+            ("sanitizer_clean", "satisfied"),
+            ("non_discriminating", "executed"),
+            ("executed", "executed"),
+            ("skipped_budget", "deferred"),
+            ("skipped_profile", "deferred"),
+            ("skipped_nightly", "deferred"),
+            ("skipped_unresolved", "deferred"),
+            ("head_failed", "failed"),
+            ("base_patch_failed", "failed"),
+            ("sanitizer_ub_detected", "failed"),
+            ("timed_out", "failed"),
+            ("failed", "failed"),
+            ("unknown", "executed"),
+        ];
+        for (index, (result, expected)) in results.into_iter().enumerate() {
+            let request = ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: format!("request-{index}"),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "cargo test -p parser".to_owned(),
+                reason: "exercise terminal outcome".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            };
+            let receipt = ProofReceipt {
+                schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+                id: format!("receipt-{index}"),
+                kind: "focused-head".to_owned(),
+                base: "base".to_owned(),
+                head: "head".to_owned(),
+                test_patch_mode: "head-only".to_owned(),
+                requested_by: vec!["proof-broker".to_owned()],
+                request_ids: vec![request.id.clone()],
+                commands: Vec::new(),
+                result: result.to_owned(),
+                reason: "terminal outcome fixture".to_owned(),
+            };
+            let terminal = terminalize_proof_requests(&[request], &[receipt]);
+            assert_eq!(terminal[0].status, expected, "result={result}");
+        }
+        assert_eq!(
+            super::proof_request_terminal_status("skipped_profile"),
+            "deferred"
+        );
+        assert_eq!(super::proof_request_terminal_status("timed_out"), "failed");
+        assert_eq!(super::proof_request_status_rank("failed"), 7);
+        assert_eq!(super::proof_request_status_rank("invalid"), 0);
+    }
+
+    #[test]
     fn proof_request_artifacts_write_focused_planner_without_execution() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let patch = "\
