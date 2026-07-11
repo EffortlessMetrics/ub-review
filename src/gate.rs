@@ -212,14 +212,25 @@ pub(crate) struct GateToolGateCounts {
 }
 
 pub(crate) fn run_gate_failure_message(completion: &RunCompletion) -> Option<String> {
-    if !completion.fail_on_gate || completion.gate_conclusion == "pass" {
+    if !completion.fail_on_gate {
         return None;
     }
-    Some(format!(
-        "gate conclusion is `{}`; receipts are in review/gate_outcome.json under {}",
-        completion.gate_conclusion,
-        completion.run_dir.display()
-    ))
+    let artifact = completion.run_dir.join("review").join("gate_outcome.json");
+    match completion.gate_conclusion.as_str() {
+        "pass" => None,
+        "fail" => Some(format!(
+            "gate conclusion is `fail`; blocking evidence and receipts are in {}",
+            artifact.display()
+        )),
+        "inconclusive" => Some(format!(
+            "gate conclusion is `inconclusive`; required evidence is unavailable; retry details and receipts are in {}",
+            artifact.display()
+        )),
+        other => Some(format!(
+            "gate conclusion is unrecognized `{other}`; failing closed; inspect {}",
+            artifact.display()
+        )),
+    }
 }
 
 pub(crate) const REQUIRED_PROOF_POLICY_LANE: &str = "intelligent-ci-policy";
