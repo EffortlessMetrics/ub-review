@@ -6286,7 +6286,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             "comments": []
         }))?,
     )?;
-    let (github_api_url, handle) = spawn_fake_github_api()?;
+    let (github_api_url, handle) = spawn_fake_github_review_api(vec![])?;
 
     run(
         temp.path(),
@@ -6309,22 +6309,36 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 1);
+    assert_eq!(requests.len(), 3);
     let request_text = &requests[0];
     assert!(
         request_text
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews HTTP/1.1")
     );
-    assert!(request_text.contains("Authorization: Bearer test-token-redacted"));
-    assert!(request_text.contains("\"event\": \"COMMENT\""));
+    assert!(
+        requests
+            .iter()
+            .any(|request| request.contains("Authorization: Bearer test-token-redacted"))
+    );
+    assert!(
+        requests[1]
+            .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
+    );
+    assert!(
+        requests[2]
+            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
+    );
+    assert!(requests[2].contains("\"event\": \"COMMENT\""));
     assert!(request_text.contains("\"comments\": []"));
 
     let post_result_path = out.join("post-result.json");
     assert!(post_result_path.exists());
     assert!(!out.join("post-error.json").exists());
     assert!(out.join("github-review-post-payload.json").exists());
-    assert!(out.join("post-stdout.json").exists());
-    assert!(out.join("post-stderr.txt").exists());
+    assert!(out.join("pending-review-stdout.json").exists());
+    assert!(out.join("pending-review-stderr.txt").exists());
+    assert!(out.join("submit-review-stdout.json").exists());
+    assert!(out.join("submit-review-stderr.txt").exists());
 
     let post_result_text = fs::read_to_string(&post_result_path)?;
     let post_result: serde_json::Value = serde_json::from_str(&post_result_text)?;
@@ -6350,8 +6364,10 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     for path in [
         post_result_path,
         out.join("github-review-post-payload.json"),
-        out.join("post-stdout.json"),
-        out.join("post-stderr.txt"),
+        out.join("pending-review-stdout.json"),
+        out.join("pending-review-stderr.txt"),
+        out.join("submit-review-stdout.json"),
+        out.join("submit-review-stderr.txt"),
     ] {
         let text = fs::read_to_string(path)?;
         assert!(!text.contains(token));
@@ -6400,7 +6416,7 @@ index 1111111..2222222 100644
         }))?,
     )
     .with_context(|| format!("write {}", review_json.display()))?;
-    let (github_api_url, handle) = spawn_fake_github_api()?;
+    let (github_api_url, handle) = spawn_fake_github_review_api(vec![654])?;
 
     run(
         temp.path(),
@@ -6425,12 +6441,20 @@ index 1111111..2222222 100644
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 1);
+    assert_eq!(requests.len(), 3);
     let request_text = &requests[0];
     assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
     assert!(
         !request_text.contains("\"suggestion\""),
         "GitHub API payload must not contain internal suggestion field: {request_text}"
+    );
+    assert!(
+        requests[1]
+            .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
+    );
+    assert!(
+        requests[2]
+            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
 
     let post_payload_text = fs::read_to_string(out.join("github-review-post-payload.json"))?;
