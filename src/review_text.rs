@@ -311,6 +311,29 @@ pub(crate) fn cap_review_body(text: String, max_bytes: usize) -> String {
     cap_text_prefix(text, max_bytes)
 }
 
+pub(crate) fn cap_review_body_bullets(text: String, max_bullets: usize) -> String {
+    let mut bullets = 0usize;
+    let mut dropped = false;
+    let mut output = String::with_capacity(text.len());
+    for line in text.lines() {
+        let trimmed = line.trim_start();
+        let is_bullet = trimmed.starts_with("- ") || trimmed.starts_with("* ");
+        if is_bullet {
+            if bullets >= max_bullets {
+                dropped = true;
+                continue;
+            }
+            bullets += 1;
+        }
+        output.push_str(line);
+        output.push('\n');
+    }
+    if dropped {
+        output.push_str(REVIEW_BODY_TRUNCATED_SUFFIX);
+    }
+    output
+}
+
 pub(crate) fn compact_review_body_sections(text: &str, max_bytes: usize) -> Option<String> {
     for section_budget in [180, 120, 80, 48, 0] {
         let mut compact = String::new();

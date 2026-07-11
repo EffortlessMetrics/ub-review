@@ -728,26 +728,35 @@ def require_pr_review_body_policy(
     `waive_suppressible` mirrors the Rust suppressor waiver: when the
     effective `[review_body].summary_only_body` is a posting posture
     (`post_substantive`/`post_all`), the run deliberately posted a body the
-    suppressor would have withheld, so the suppressible classes (conciseness,
-    boilerplate phrases and noise classifiers, refuted-only notes) are not
-    re-litigated here. The structural walls (status-section headings and
-    execution-summary labels, which rendered PR bodies never carry) stay in
-    force.
+    suppressor would have withheld, so artifact-only boilerplate and refuted-only
+    notes are not re-litigated here. Conciseness, internal-machinery,
+    status-section, and execution-summary walls stay in force.
     """
     lowered = body.lower()
+    body_bytes = len(body.strip().encode("utf-8"))
+    if body_bytes > MAX_PR_REVIEW_BODY_BYTES:
+        fail(
+            f"{path} is not concise enough: "
+            f"{body_bytes} bytes over max {MAX_PR_REVIEW_BODY_BYTES}"
+        )
+    bullet_count = pr_body_bullet_count(body)
+    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS:
+        fail(
+            f"{path} is not concise enough: "
+            f"{bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+        )
+    for phrase in [
+        "inline candidate",
+        "duplicate candidate",
+        "duplicate inline",
+        "merged into path",
+        "lane conflict",
+        "cross-lane conflict",
+        "resolve cross-lane",
+    ]:
+        if phrase in lowered:
+            fail(f"{path} contains internal review machinery: {phrase!r}")
     if not waive_suppressible:
-        body_bytes = len(body.strip().encode("utf-8"))
-        if body_bytes > MAX_PR_REVIEW_BODY_BYTES:
-            fail(
-                f"{path} is not concise enough: "
-                f"{body_bytes} bytes over max {MAX_PR_REVIEW_BODY_BYTES}"
-            )
-        bullet_count = pr_body_bullet_count(body)
-        if bullet_count > MAX_PR_REVIEW_BODY_BULLETS:
-            fail(
-                f"{path} is not concise enough: "
-                f"{bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
-            )
         if is_workflow_trust_posture_review_noise(lowered):
             fail(f"{path} contains artifact-only workflow trust posture prose")
         if is_refuted_only_pr_body(lowered):
@@ -3581,7 +3590,8 @@ def is_tool_status_only_gap(text: str) -> bool:
 
 def is_pr_body_meta_review_noise(text: str) -> bool:
     return (
-        "cached prior observation" in text
+        is_internal_review_machinery_text(text)
+        or "cached prior observation" in text
         or "refuter demoted inline candidate" in text
         or "gate proof is pending" in text
         or "cannot perform from cached context" in text
@@ -3601,6 +3611,22 @@ def is_pr_body_meta_review_noise(text: str) -> bool:
         or ("sha were 39-hex" in text and "all-zero" in text)
         or is_checkout_persistence_no_change_noise(text)
         or "actionlint ran ok" in text
+    )
+
+
+def is_internal_review_machinery_text(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "duplicate inline",
+            "merged into path",
+            "lane conflict",
+            "cross-lane conflict",
+            "resolve cross-lane",
+            "inline plan",
+            "comment plan",
+        )
     )
 
 
@@ -8134,6 +8160,7 @@ def self_test_noise_rule_phrase_parity_with_rust() -> None:
     here = pathlib.Path(__file__).read_text(encoding="utf-8")
     names = sorted(set(re.findall(r"fn (is_[a-z_]*noise[a-z_]*)\(", rust)))
     names.append("is_pr_body_artifact_only_observation")
+    names.append("is_internal_review_machinery_text")
     for name in names:
         rust_match = re.search(rf"fn {name}\(.*?\n}}", rust, re.S)
         py_match = re.search(rf"def {name}\(.*?\n(?=def |\Z)", here, re.S)
@@ -10902,7 +10929,7 @@ def run_self_tests() -> None:
     )
     expect_self_test_failure(
         "meta review prose",
-        "artifact-only boilerplate",
+        "internal review machinery",
         lambda: require_pr_review_body_policy(
             (
                 "## Verification questions\n\n"
@@ -11135,6 +11162,25 @@ def run_self_tests() -> None:
         summary_only_waived_body,
         pathlib.Path("review/github-review.json"),
         waive_suppressible=True,
+    )
+    expect_self_test_failure(
+        "summary-only waiver keeps internal-machinery wall",
+        "internal review machinery",
+        lambda: require_pr_review_body_policy(
+            "## Confirmed findings\n\n- Duplicate inline candidate merged into path:122.",
+            pathlib.Path("review/github-review.json"),
+            waive_suppressible=True,
+        ),
+    )
+    expect_self_test_failure(
+        "summary-only waiver keeps bullet budget",
+        "not concise enough",
+        lambda: require_pr_review_body_policy(
+            "## Confirmed findings\n\n"
+            + "\n".join(f"- Material finding {index}." for index in range(13)),
+            pathlib.Path("review/github-review.json"),
+            waive_suppressible=True,
+        ),
     )
     expect_self_test_failure(
         "summary-only waiver keeps status-section wall",

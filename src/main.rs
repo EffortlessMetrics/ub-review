@@ -5486,9 +5486,9 @@ mod tests {
         build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
         build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
         build_witness_records, builtin_profiles, candidate_matches_inline_comment,
-        candidate_matches_summary_finding, cap_review_body, classify_diff, classify_diff_class,
-        classify_issue_candidates, classify_proof_cost, cmd_gate_check, cmd_post,
-        collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
+        candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
+        classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
+        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
         command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
         default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
         fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
@@ -21453,6 +21453,18 @@ index 1111111..2222222 100644
 
         assert!(capped.ends_with("[review body truncated; see review artifacts]\n"));
         assert!(capped.is_char_boundary(capped.len()));
+    }
+
+    #[test]
+    fn review_body_cap_drops_excess_bullets_without_failing_compilation() {
+        let body = (0..20)
+            .map(|index| format!("- finding {index}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let capped = cap_review_body_bullets(body, 12);
+        let bullets = capped.lines().filter(|line| line.starts_with("- ")).count();
+        assert_eq!(bullets, 12);
+        assert!(capped.contains("review body truncated"));
     }
 
     #[test]

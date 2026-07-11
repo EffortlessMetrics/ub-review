@@ -189,15 +189,10 @@ pub(crate) fn compile_review_surface(
     // passes it through verbatim — it is the reporter's editorial judgment,
     // not a deterministic finding the compiler ranks or suppresses (firewall,
     // not truth reducer). Subject only to the existing body-size limit.
-    if let Some(distillation) = input.reporter_distillation {
+    if let (true, Some(distillation)) = (pr_body.is_empty(), input.reporter_distillation) {
         let trimmed = distillation.trim();
         if !trimmed.is_empty() {
-            let reporter_section = format!("{REPORTER_SUMMARY_HEADING}\n\n{trimmed}\n\n");
-            pr_body = if pr_body.is_empty() {
-                reporter_section.trim_end().to_owned()
-            } else {
-                format!("{reporter_section}{pr_body}")
-            };
+            pr_body = format!("{REPORTER_SUMMARY_HEADING}\n\n{trimmed}");
         }
     }
     // Release lane step 5: suggested follow-ups render last - they explain
@@ -229,6 +224,11 @@ pub(crate) fn compile_review_surface(
         }
         pr_body = cap_review_body(pr_body.clone(), input.args.review_body_max_bytes);
     }
+    // The renderer may honor a larger artifact/configuration budget, but the
+    // human-facing contract is always bounded by the hard PR body wall.
+    pr_body = cap_review_body(pr_body, MAX_PR_REVIEW_BODY_BYTES);
+    pr_body = cap_review_body_bullets(pr_body, MAX_PR_REVIEW_BODY_BULLETS);
+    pr_body = cap_review_body(pr_body, MAX_PR_REVIEW_BODY_BYTES);
     let substantive_summary_only_findings =
         count_substantive_summary_only_findings(input.summary_only_findings);
     let mut suppressed_artifact_only_pr_body = false;
@@ -376,11 +376,12 @@ pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPoli
 }
 
 /// Body-policy validation with an optional waiver for the suppressible
-/// classes (`is_suppressible_pr_body_policy_error`: conciseness, artifact-only
-/// boilerplate, refuted-only note). The waiver exists for exactly one caller
+/// classes (`is_suppressible_pr_body_policy_error`: artifact-only boilerplate
+/// and refuted-only notes). The waiver exists for exactly one caller
 /// posture: `[review_body].summary_only_body` decided to post a body the
 /// suppressor would have withheld. The non-suppressible checks (lane,
-/// provider, and sensor tables plus the execution summary) always run.
+/// size, internal-machinery, provider, and sensor walls plus the execution
+/// summary always run.
 pub(crate) fn validate_pr_review_body_policy_with_waiver(
     body: &str,
     policy: &ReviewBodyPolicy,
@@ -389,6 +390,9 @@ pub(crate) fn validate_pr_review_body_policy_with_waiver(
     let trimmed = body.trim();
     if trimmed.is_empty() {
         return Ok(());
+    }
+    if is_internal_review_machinery_text(&trimmed.to_ascii_lowercase()) {
+        bail!("github review body contains internal review machinery");
     }
     if !waive_suppressible {
         if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
@@ -469,6 +473,13 @@ pub(crate) fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
             "## residual risk",
             "cached prior observation",
             "refuter demoted inline candidate",
+            "inline candidate",
+            "duplicate candidate",
+            "duplicate inline",
+            "merged into path",
+            "lane conflict",
+            "cross-lane conflict",
+            "resolve cross-lane",
             "gate proof is pending",
             "cannot perform from cached context",
             "commit-existence/ancestry proof",
@@ -687,5 +698,20 @@ mod tests {
             REPORTER_SUMMARY_HEADING
         );
         assert!(pr_body_has_reviewer_value(&emitted));
+    }
+
+    #[test]
+    fn review_body_quality_overflow_is_waivable_but_machinery_is_not() -> Result<()> {
+        let policy = ReviewBodyPolicy::default();
+        let oversized = format!("## Decision\n\n- {}", "x".repeat(6_100));
+        let err = validate_pr_review_body_policy(&oversized, &policy)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("oversized body unexpectedly passed"))?;
+        assert!(err.to_string().contains("not concise enough"));
+        validate_pr_review_body_policy_with_waiver(&oversized, &policy, true)?;
+
+        let machinery = "## Decision\n\n- duplicate inline candidate merged into path:12";
+        assert!(validate_pr_review_body_policy_with_waiver(machinery, &policy, true).is_err());
+        Ok(())
     }
 }

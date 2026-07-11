@@ -21,13 +21,18 @@ Use the box intelligently while it is live:
 The runner can spend CPU, disk, memory, network, model budget, and wall time.
 The PR body spends reviewer attention.
 
+Claims compile across lanes and sections. One semantic claim receives one final
+disposition and appears once. A successfully posted inline comment is not
+repeated in the summary; failed inline delivery must render the actual concise
+finding rather than internal planning metadata.
+
 ## PR Body Rule
 
 Allowed content:
 
 - decision;
 - confirmed findings;
-- verification questions;
+- material unresolved questions whose missing evidence changes the decision;
 - proof results;
 - refutations;
 - parked follow-ups;
@@ -43,6 +48,8 @@ Everything else stays in artifacts:
 - terminal state;
 - command logs;
 - raw observations;
+- candidate queues, lane conflicts, and duplicate markers;
+- unexecuted proof requests and inline-comment plans;
 - approval filler;
 - successful-tool announcements;
 - generic residual risk.
@@ -97,7 +104,8 @@ what happens:
 - `post_all`: post whenever any summary-only finding exists.
 
 Unknown values are policy parse errors and become receipted gate reasons. The
-structural walls (status tables, execution summaries) hold under every value.
+structural walls, body-size limit, bullet budget, and internal-machinery ban
+hold under every value.
 
 ## Banned In PR Commentary
 
@@ -108,3 +116,5 @@ structural walls (status tables, execution summaries) hold under every value.
 - terminal state summaries;
 - "human should still review" disclaimers;
 - generic residual-risk language.
+- inline-candidate, duplicate-candidate, and cross-lane planning metadata;
+- duplicate summary copies of findings already posted inline.

@@ -116,7 +116,8 @@ pub(crate) fn is_tool_status_only_gap(text: &str) -> bool {
 }
 
 pub(crate) fn is_pr_body_meta_review_noise(text: &str) -> bool {
-    text.contains("cached prior observation")
+    is_internal_review_machinery_text(text)
+        || text.contains("cached prior observation")
         || text.contains("refuter demoted inline candidate")
         || text.contains("gate proof is pending")
         || text.contains("cannot perform from cached context")
@@ -135,6 +136,21 @@ pub(crate) fn is_pr_body_meta_review_noise(text: &str) -> bool {
         || is_self_test_meta_review_noise(text)
         || is_checkout_persistence_no_change_noise(text)
         || text.contains("actionlint ran ok")
+}
+
+pub(crate) fn is_internal_review_machinery_text(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    [
+        "duplicate inline",
+        "merged into path",
+        "lane conflict",
+        "cross-lane conflict",
+        "resolve cross-lane",
+        "inline plan",
+        "comment plan",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
 }
 
 pub(crate) fn is_checkout_persistence_no_change_noise(text: &str) -> bool {
@@ -537,7 +553,12 @@ pub(crate) fn unique_summary_review_findings<'a>(
 
     for finding in findings {
         let key = summary_finding_review_dedupe_key(finding);
-        if let Some(index) = indexes.get(&key).copied() {
+        let index = indexes.get(&key).copied().or_else(|| {
+            unique
+                .iter()
+                .position(|existing| review_claims_match(&existing.reason, &finding.reason))
+        });
+        if let Some(index) = index {
             if summary_finding_rank(finding) > summary_finding_rank(unique[index]) {
                 unique[index] = finding;
             }
@@ -573,8 +594,112 @@ pub(crate) fn summary_finding_matches_observations(
     let summary = normalized_review_text(&format!("{} {}", finding.reason, finding.evidence));
     observations.iter().any(|observation| {
         let claim = normalized_review_text(&observation.claim);
-        claim.len() >= 24 && (summary.contains(&claim) || claim.contains(&summary))
+        (claim.len() >= 24 && (summary.contains(&claim) || claim.contains(&summary)))
+            || review_claims_match(&summary, &observation.claim)
     })
+}
+
+pub(crate) fn review_claims_match(left: &str, right: &str) -> bool {
+    let left = normalized_review_text(&reviewer_facing_pr_text(left));
+    let right = normalized_review_text(&reviewer_facing_pr_text(right));
+    if left.chars().count() < 16 || right.chars().count() < 16 {
+        return left == right;
+    }
+    if left.contains(&right) || right.contains(&left) {
+        return true;
+    }
+    if opposing_claim_polarity(&left, &right) {
+        return false;
+    }
+    let left_tokens = conflict_tokens(&left);
+    let right_tokens = conflict_tokens(&right);
+    let smaller = left_tokens.len().min(right_tokens.len());
+    let shared = left_tokens.intersection(&right_tokens).count();
+    smaller >= 5 && shared >= 4 && shared * 2 >= smaller
+}
+
+fn opposing_claim_polarity(left: &str, right: &str) -> bool {
+    const NEGATIVE: [&str; 9] = [
+        "drop", "drops", "dropped", "lose", "loses", "missing", "omitted", "reject", "refuse",
+    ];
+    const POSITIVE: [&str; 8] = [
+        "accept",
+        "accepts",
+        "retain",
+        "retains",
+        "preserve",
+        "preserves",
+        "allow",
+        "include",
+    ];
+    let has = |text: &str, words: &[&str]| {
+        words
+            .iter()
+            .any(|word| text.split_whitespace().any(|token| token == *word))
+    };
+    (has(left, &NEGATIVE) && has(right, &POSITIVE))
+        || (has(left, &POSITIVE) && has(right, &NEGATIVE))
+}
+
+pub(crate) fn unique_review_observations_by_claim(
+    observations: Vec<ObservationGroup>,
+) -> Vec<ObservationGroup> {
+    let mut unique = Vec::<ObservationGroup>::new();
+    for observation in observations {
+        let index = unique.iter().position(|existing| {
+            observation_paths_compatible(existing, &observation)
+                && (existing.kind == observation.kind
+                    || existing.kind.is_empty()
+                    || observation.kind.is_empty())
+                && review_claims_match(&existing.claim, &observation.claim)
+        });
+        if let Some(index) = index {
+            if observation_group_rank(&observation) > observation_group_rank(&unique[index]) {
+                unique[index] = observation;
+            }
+        } else {
+            unique.push(observation);
+        }
+    }
+    unique
+}
+
+fn observation_paths_compatible(left: &ObservationGroup, right: &ObservationGroup) -> bool {
+    match (&left.path, &right.path) {
+        (Some(left), Some(right)) => left == right,
+        _ => true,
+    }
+}
+
+fn observation_group_rank(observation: &ObservationGroup) -> (u8, u8, u8, u8) {
+    (
+        observation_evidence_rank(observation),
+        observation_status_rank(&observation.status),
+        severity_rank(&observation.severity),
+        confidence_rank(&observation.confidence),
+    )
+}
+
+fn observation_evidence_rank(observation: &ObservationGroup) -> u8 {
+    let text = format!(
+        "{} {}",
+        observation.sources.join(" "),
+        observation.evidence.join(" ")
+    )
+    .to_ascii_lowercase();
+    if text.contains("executed")
+        || text.contains("receipt")
+        || text.contains("focused test")
+        || text.contains("sensor")
+    {
+        5
+    } else if text.contains("source") || text.contains("diff") {
+        3
+    } else if text.contains("thread") || text.contains("existing") {
+        2
+    } else {
+        1
+    }
 }
 
 pub(crate) fn summary_finding_has_cross_lane_conflict(
@@ -609,4 +734,128 @@ pub(crate) fn normalized_review_text(value: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod human_output_admission_tests {
+    use super::*;
+    use anyhow::ensure;
+
+    #[test]
+    fn paraphrased_summary_findings_compile_to_one_claim() -> Result<()> {
+        let findings = [
+            SummaryOnlyFinding {
+                lane: "parser".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Later declaration-list variables can lose postfix subscripts".to_owned(),
+                evidence: "source inspection".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "tests".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "Postfix subscripts are dropped from later variables in declaration lists"
+                    .to_owned(),
+                evidence: "focused regression".to_owned(),
+            },
+        ];
+
+        let unique = unique_summary_review_findings(&findings);
+        ensure!(unique.len() == 1, "paraphrased claim was not deduplicated");
+        ensure!(unique[0].lane == "tests", "strongest claim did not survive");
+        Ok(())
+    }
+
+    #[test]
+    fn internal_inline_planning_language_is_artifact_only() -> Result<()> {
+        for phrase in [
+            "duplicate inline candidate merged into path:122",
+            "resolve cross-lane conflict before posting",
+        ] {
+            ensure!(
+                is_internal_review_machinery_text(phrase),
+                "internal phrase was admitted: {phrase}"
+            );
+        }
+        ensure!(is_internal_review_machinery_text("LANE CONFLICT: review"));
+        ensure!(!is_internal_review_machinery_text(
+            "An inline candidate is worth review."
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn opposite_polarity_claims_are_not_collapsed() {
+        assert!(!review_claims_match(
+            "The parser drops default values from later declaration variables.",
+            "The parser preserves default values for later declaration variables."
+        ));
+    }
+
+    #[test]
+    fn observation_identity_requires_matching_path_and_kind() {
+        let base = ObservationGroup {
+            schema: "observation-group".to_owned(),
+            id: "base".to_owned(),
+            dedupe_key: "claim".to_owned(),
+            claim: "The changed parser loses postfix subscripts in later declaration variables."
+                .to_owned(),
+            kind: "bug".to_owned(),
+            status: "open".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(10),
+            evidence: vec!["model observation".to_owned()],
+            lanes: vec!["parser".to_owned()],
+            sources: vec!["model".to_owned()],
+            observation_ids: vec!["base".to_owned()],
+            duplicate_count: 0,
+        };
+        let mut different_path = base.clone();
+        different_path.id = "different-path".to_owned();
+        different_path.path = Some("src/other.rs".to_owned());
+        let mut different_kind = base.clone();
+        different_kind.id = "different-kind".to_owned();
+        different_kind.kind = "verification-question".to_owned();
+        assert_eq!(
+            unique_review_observations_by_claim(vec![base.clone(), different_path]).len(),
+            2
+        );
+        assert_eq!(
+            unique_review_observations_by_claim(vec![base, different_kind]).len(),
+            2
+        );
+    }
+
+    #[test]
+    fn executed_evidence_beats_model_confidence() {
+        let model = ObservationGroup {
+            schema: "observation-group".to_owned(),
+            id: "model".to_owned(),
+            dedupe_key: "claim".to_owned(),
+            claim: "The parser loses postfix subscripts in later declaration variables.".to_owned(),
+            kind: "bug".to_owned(),
+            status: "open".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(10),
+            evidence: vec!["model assertion".to_owned()],
+            lanes: vec!["parser".to_owned()],
+            sources: vec!["model".to_owned()],
+            observation_ids: vec!["model".to_owned()],
+            duplicate_count: 0,
+        };
+        let mut executed = model.clone();
+        executed.id = "executed".to_owned();
+        executed.severity = "medium".to_owned();
+        executed.confidence = "medium".to_owned();
+        executed.evidence = vec!["executed focused test receipt".to_owned()];
+        executed.sources = vec!["proof-receipt".to_owned()];
+        let unique = unique_review_observations_by_claim(vec![model.clone(), executed]);
+        assert_eq!(unique.len(), 1);
+        assert_eq!(unique[0].id, "executed");
+    }
 }
