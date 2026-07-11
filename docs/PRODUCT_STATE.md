@@ -38,6 +38,13 @@ Do not reopen these without a concrete failing receipt.
 - Adaptor handoff reflects `fill-ledger`, `ripr` exposure gaps, and
   current `audit-ci` / `setup-ci` boundaries.
 - Work queue and fill-ledger surfaces exist with verifier coverage.
+- Proof requests are terminalized before final artifacts; receipted requests
+  retain their result, duplicates are marked `deduplicated`, and unreceipted
+  requests become explicit `deferred` dispositions (PR #747).
+- Human-facing review output uses evidence-first structural claim identity and
+  preserves distinct claims with shared vocabulary (PRs #749/#750).
+- Internal planner language is withheld to artifacts rather than failing a
+  valid code gate at the final compiler boundary (PR #751).
 
 ## PR-by-PR status
 
@@ -93,7 +100,18 @@ and replaced with a verification question. Deeper evidence-precedence
 adjudication (resolving which side wins using proof receipts) is the open
 next step (tracked in epic #655, milestone 4). Diff-irrelevance is
 guidance text, not enforced routing. Cross-section body dedupe is doctrine
-but not structurally implemented.
+and structural cross-section claim identity is now implemented (PRs #749/#750).
+Transactional inline delivery remains in draft PR #748 pending the upstream
+RIPR CLI-subprocess analyzer contract.
+
+### Proof request execution and terminalization — PARTIAL
+
+The focused-test and focused-build broker executes approved requests with
+leases, bounded receipts, and follow-up routing. PR #747 closes the final
+artifact request queue so no `requested` status reaches the reporter. The
+remaining proof-depth gap is production sanitizer/mutation execution; issue
+#681 preserves the sanitizer route while its current consumer diff is held on
+the upstream RIPR semantic-probe boundary.
 
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
@@ -187,6 +205,12 @@ extracting when next touched:
 - **Issue #716:** no published `v0.1.0` GitHub Release yet. The release packet
   must name the exact candidate SHA, pre-tag receipts, archive/checksum names,
   downstream smoke plan, and rollback before maintainer authorization.
+- **RIPR semantic-probe contract:** #748 (transactional inline delivery),
+  #681 (production sanitizer witness), and #745 (terminal watchdog) have
+  green functional proof but remain unpublished or unmergeable while RIPR
+  reports unresolved CLI/subprocess or semantic-probe exposure gaps. No
+  aliases or threshold relaxation are permitted; current upstream tracking is
+  ripr-swarm#1528 and the related semantic-probe fixes.
 - **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
   and suppression shipped; deeper evidence-precedence adjudication is the open
   next step (epic #655 milestone 4).
