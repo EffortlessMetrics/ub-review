@@ -3590,7 +3590,8 @@ def is_tool_status_only_gap(text: str) -> bool:
 
 def is_pr_body_meta_review_noise(text: str) -> bool:
     return (
-        "cached prior observation" in text
+        is_internal_review_machinery_text(text)
+        or "cached prior observation" in text
         or "refuter demoted inline candidate" in text
         or "gate proof is pending" in text
         or "cannot perform from cached context" in text
@@ -3610,6 +3611,22 @@ def is_pr_body_meta_review_noise(text: str) -> bool:
         or ("sha were 39-hex" in text and "all-zero" in text)
         or is_checkout_persistence_no_change_noise(text)
         or "actionlint ran ok" in text
+    )
+
+
+def is_internal_review_machinery_text(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        phrase in lowered
+        for phrase in (
+            "duplicate inline",
+            "merged into path",
+            "lane conflict",
+            "cross-lane conflict",
+            "resolve cross-lane",
+            "inline plan",
+            "comment plan",
+        )
     )
 
 
@@ -8143,6 +8160,7 @@ def self_test_noise_rule_phrase_parity_with_rust() -> None:
     here = pathlib.Path(__file__).read_text(encoding="utf-8")
     names = sorted(set(re.findall(r"fn (is_[a-z_]*noise[a-z_]*)\(", rust)))
     names.append("is_pr_body_artifact_only_observation")
+    names.append("is_internal_review_machinery_text")
     for name in names:
         rust_match = re.search(rf"fn {name}\(.*?\n}}", rust, re.S)
         py_match = re.search(rf"def {name}\(.*?\n(?=def |\Z)", here, re.S)
