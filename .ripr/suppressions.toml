@@ -12276,3 +12276,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_planner.rs:return_value:032f9ba0"
 owner = "ub-review/core"
 reason = "Covered by final_proof_artifact_boundary_rejects_pending_requests; terminal statuses pass the final artifact boundary."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:call_deletion:aa571284"
+owner = "ub-review/core"
+reason = "Covered by review_body_quality_overflow_is_waivable_but_machinery_is_artifact_only; exact machinery text is classified as artifact-only output quality."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:return_value:57247c4e"
+owner = "ub-review/core"
+reason = "Covered by review_body_quality_overflow_is_waivable_but_machinery_is_artifact_only; the classifier preserves the strict validator while routing the quality error to artifacts."
