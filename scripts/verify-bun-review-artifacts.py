@@ -4660,10 +4660,10 @@ def expected_proof_request_groups(proof_requests: list[dict]) -> list[dict]:
             }
             groups[key] = group
         group["required"] = bool(group["required"] or request["required"])
-        if request["status"] == "requested":
-            group["status"] = "requested"
-        elif request["status"] == "unsupported" and group["status"] != "requested":
-            group["status"] = "unsupported"
+        if proof_request_status_rank(request["status"]) > proof_request_status_rank(
+            group["status"]
+        ):
+            group["status"] = request["status"]
         append_unique(group["requested_by"], request["lane"])
         for lane in request["requested_by"]:
             append_unique(group["requested_by"], lane)
@@ -4671,6 +4671,19 @@ def expected_proof_request_groups(proof_requests: list[dict]) -> list[dict]:
         append_unique(group["reasons"], request["reason"])
         group["duplicate_count"] += 1
     return [groups[key] for key in sorted(groups)]
+
+
+def proof_request_status_rank(status: str) -> int:
+    return {
+        "failed": 7,
+        "deferred": 6,
+        "satisfied": 5,
+        "executed": 4,
+        "deduplicated": 3,
+        "requested": 2,
+        "unsupported": 1,
+        "invalid": 0,
+    }.get(status, 0)
 
 
 def canonical_proof_request_group_command(command: str, cost: str) -> str:
@@ -6994,7 +7007,16 @@ def require_proof_request_schema(request: dict) -> None:
         fail(f"proof request timeout_sec is invalid: {request!r}")
     if not isinstance(request.get("required"), bool):
         fail(f"proof request required is not boolean: {request!r}")
-    if request["status"] not in {"requested", "unsupported", "invalid"}:
+    if request["status"] not in {
+        "requested",
+        "unsupported",
+        "invalid",
+        "failed",
+        "deferred",
+        "satisfied",
+        "executed",
+        "deduplicated",
+    }:
         fail(f"proof request has unsupported status: {request!r}")
 
 
@@ -7114,7 +7136,16 @@ def require_proof_request_group_schema(group: dict) -> None:
         fail(f"proof request group timeout_sec is invalid: {group!r}")
     if not isinstance(group.get("required"), bool):
         fail(f"proof request group required is not boolean: {group!r}")
-    if group["status"] not in {"requested", "unsupported", "invalid"}:
+    if group["status"] not in {
+        "requested",
+        "unsupported",
+        "invalid",
+        "failed",
+        "deferred",
+        "satisfied",
+        "executed",
+        "deduplicated",
+    }:
         fail(f"proof request group has unsupported status: {group!r}")
     if group["cost"] not in {"focused-test", "focused-build", "manual"}:
         fail(f"proof request group has unsupported cost: {group!r}")
