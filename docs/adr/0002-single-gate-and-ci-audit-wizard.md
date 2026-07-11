@@ -6,13 +6,12 @@ Accepted
 
 ## Context
 
-`ub-review` already runs required proof in `intelligent-ci` mode, routes required
-sensor gaps to the `failed-to-review` terminal state, and writes
-`review/terminal_state.json` (`ub-review.terminal_state.v1`). What it does not do
-is turn that state into a CI verdict: there is no gate outcome artifact, no
-action exit-code contract, and no `fail-on-gate` input. Today a failed required
-proof produces evidence, not a red check. The product is an advisory reviewer
-wearing a gate's name.
+Historically, `ub-review` ran required proof in `intelligent-ci` mode and wrote
+`review/terminal_state.json` (`ub-review.terminal_state.v1`) without turning that
+state into a CI verdict. That pre-verdict limitation is the context for this
+ADR; the gate outcome artifact, action exit-code contract, and `fail-on-gate`
+input are now implemented as described below. A failed required proof produces
+a receipt-backed terminal verdict rather than an advisory-only signal.
 
 The adoption problem is the mirror image. Repositories already have CI: workflow
 files that encode years of accreted caution — jobs added after incidents, matrix
@@ -75,11 +74,11 @@ posting trouble is not gate trouble.
 ```json
 {
   "schema": "ub-review.gate_outcome.v1",
-  "conclusion": "pass | fail",
+  "conclusion": "pass | fail | inconclusive",
   "terminal_status": "sufficient",
   "reasons": [
     {
-      "kind": "required-proof | tool-gate | required-sensor | required-tool-timeout | blocking-finding | policy | internal",
+      "kind": "required-proof | tool-gate | required-sensor | required-tool-timeout | sensor-finding | reporter-verdict | blocking-finding | policy | internal",
       "id": "cargo-check",
       "detail": "exit 101 after 41s",
       "receipt": "review/proof_receipts.json#cargo-check"

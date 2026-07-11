@@ -18,7 +18,7 @@ proof broker runs commands
 resource broker controls the box
 compiler decides what earns attention
 GitHub broker performs side effects
-gate_outcome decides pass/fail
+gate_outcome decides pass/fail/inconclusive
 ```
 
 Models do not prove correctness. No model finding is proof.
