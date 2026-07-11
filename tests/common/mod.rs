@@ -38,28 +38,6 @@ pub fn prepend_to_path(dir: &Path) -> Result<String> {
     Ok(std::env::join_paths(paths)?.to_string_lossy().into_owned())
 }
 
-pub fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
-    listener.set_nonblocking(true)?;
-    let url = format!("http://{}", listener.local_addr()?);
-    let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        loop {
-            match listener.accept() {
-                Ok((stream, _addr)) => return Ok(vec![handle_fake_github_request(stream)?]),
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!("fake GitHub API received no requests");
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-    });
-    Ok((url, handle))
-}
-
 pub fn spawn_fake_github_review_api(
     comment_ids: Vec<u64>,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
@@ -251,49 +229,6 @@ pub fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) 
         "{request_line}\n{}",
         String::from_utf8_lossy(&body)
     ))
-}
-
-pub fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
-    stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut headers = String::new();
-    loop {
-        let mut line = String::new();
-        let bytes = reader.read_line(&mut line)?;
-        if bytes == 0 {
-            bail!("fake GitHub request ended before headers finished");
-        }
-        headers.push_str(&line);
-        if line == "\r\n" || line == "\n" {
-            break;
-        }
-    }
-    let content_length = headers
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse::<usize>().ok())
-                .flatten()
-        })
-        .unwrap_or_default();
-    let mut body = vec![0; content_length];
-    reader.read_exact(&mut body)?;
-    let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
-    let response_body = serde_json::to_vec(&serde_json::json!({
-        "id": 987,
-        "state": "COMMENTED",
-        "body": "fake review posted"
-    }))?;
-    write!(
-        stream,
-        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
-    )?;
-    stream.write_all(&response_body)?;
-    Ok(request_text)
 }
 
 pub fn spawn_fake_openai_provider(
