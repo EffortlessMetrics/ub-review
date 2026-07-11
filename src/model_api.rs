@@ -353,12 +353,12 @@ pub(crate) fn run_curl_json_request(
 ) -> Result<HttpPostOutput> {
     let fallback_request_path = root.join("ub-review-curl-request");
     let output_anchor = request_path.unwrap_or(&fallback_request_path);
+    let data_binary_arg = request_path.map(curl_data_binary_arg).transpose()?;
     let (stdout_path, stderr_path) = curl_temp_output_paths(output_anchor);
     let stdout =
         File::create(&stdout_path).with_context(|| format!("create {}", stdout_path.display()))?;
     let stderr =
         File::create(&stderr_path).with_context(|| format!("create {}", stderr_path.display()))?;
-    let data_binary_arg = request_path.map(curl_data_binary_arg).transpose()?;
     let mut command = ProcessCommand::new("curl");
     command
         .arg("-sS")

@@ -41,13 +41,20 @@ pub fn prepend_to_path(dir: &Path) -> Result<String> {
 pub fn spawn_fake_github_review_api(
     comment_ids: Vec<u64>,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_github_review_api_with_expected_requests(comment_ids, 3)
+}
+
+pub fn spawn_fake_github_review_api_with_expected_requests(
+    comment_ids: Vec<u64>,
+    expected_requests: usize,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
         let deadline = Instant::now() + Duration::from_secs(20);
         let mut requests = Vec::new();
-        while requests.len() < 3 {
+        while requests.len() < expected_requests {
             match listener.accept() {
                 Ok((stream, _addr)) => {
                     requests.push(handle_fake_github_review_request(stream, &comment_ids)?);
@@ -55,8 +62,9 @@ pub fn spawn_fake_github_review_api(
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     if Instant::now() >= deadline {
                         bail!(
-                            "fake GitHub review API received {} of 3 requests",
-                            requests.len()
+                            "fake GitHub review API received {} of {} requests",
+                            requests.len(),
+                            expected_requests
                         );
                     }
                     thread::sleep(Duration::from_millis(10));
@@ -98,24 +106,32 @@ fn handle_fake_github_review_request(mut stream: TcpStream, comment_ids: &[u64])
     let mut body = vec![0; content_length];
     reader.read_exact(&mut body)?;
     let request_line = headers.lines().next().unwrap_or_default().to_owned();
-    let response_body = if request_line.starts_with("GET ") && request_line.contains("/comments") {
+    let (status_line, response_body) = if request_line.starts_with("DELETE ") {
+        ("204 No Content", Vec::new())
+    } else if request_line.starts_with("GET ") && request_line.contains("/comments") {
         let comments = comment_ids
             .iter()
             .map(|id| serde_json::json!({"id": id}))
             .collect::<Vec<_>>();
-        serde_json::to_vec(&comments)?
+        ("200 OK", serde_json::to_vec(&comments)?)
     } else if request_line.starts_with("POST ") && request_line.contains("/events") {
-        serde_json::to_vec(&serde_json::json!({
-            "id": 987,
-            "state": "COMMENTED",
-            "body": "fake review posted"
-        }))?
+        (
+            "201 Created",
+            serde_json::to_vec(&serde_json::json!({
+                "id": 987,
+                "state": "COMMENTED",
+                "body": "fake review posted"
+            }))?,
+        )
     } else {
-        serde_json::to_vec(&serde_json::json!({"id": 987, "state": "PENDING"}))?
+        (
+            "201 Created",
+            serde_json::to_vec(&serde_json::json!({"id": 987, "state": "PENDING"}))?,
+        )
     };
     write!(
         stream,
-        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         response_body.len()
     )?;
     stream.write_all(&response_body)?;

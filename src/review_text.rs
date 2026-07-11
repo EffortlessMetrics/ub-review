@@ -547,13 +547,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         args.out.join("pending-review-stderr.txt"),
         String::from_utf8_lossy(&pending_output.stderr).as_ref(),
     )?;
-    let pending_response: serde_json::Value = serde_json::from_str(&pending_text)
-        .with_context(|| "parse pending GitHub review response")?;
-    let review_id = pending_response
-        .get("id")
-        .and_then(serde_json::Value::as_u64)
-        .ok_or_else(|| anyhow::anyhow!("pending GitHub review response omitted numeric id"))?;
-    if !pending_output.status.success() {
+    if !http_output_succeeded(&pending_output) {
         bail!(
             "pending GitHub review failed with exit code {:?} and http status {:?}: {}",
             pending_output.status.code(),
@@ -561,8 +555,14 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             String::from_utf8_lossy(&pending_output.stderr)
         );
     }
+    let pending_response: serde_json::Value = serde_json::from_str(&pending_text)
+        .with_context(|| "parse pending GitHub review response")?;
+    let review_id = pending_response
+        .get("id")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| anyhow::anyhow!("pending GitHub review response omitted numeric id"))?;
     let pending_comments_url = format!("{url}/{review_id}/comments");
-    let comments_output = run_curl_json_request(
+    let comments_output = match run_curl_json_request(
         Path::new("."),
         "GET",
         &pending_comments_url,
@@ -573,15 +573,36 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             "X-GitHub-Api-Version: 2022-11-28",
         ],
         60,
-    )
-    .with_context(|| "list pending GitHub review comments")?;
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args, &url, review_id, token, err,
+            ));
+        }
+    };
     let comments_text = String::from_utf8_lossy(&comments_output.stdout).to_string();
-    fs::write(
+    if let Err(err) = fs::write(
         args.out.join("pending-review-comments.json"),
         &comments_text,
-    )?;
-    let posted_comment_ids = parse_github_review_comment_ids(&comments_text)?;
-    if !comments_output.status.success()
+    ) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    let posted_comment_ids = match parse_github_review_comment_ids(&comments_text) {
+        Ok(ids) => ids,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args, &url, review_id, token, err,
+            ));
+        }
+    };
+    if !http_output_succeeded(&comments_output)
         || posted_comment_ids.len() != pending_payload.comments.len()
     {
         let deleted = delete_pending_github_review(args, &url, review_id, token);
@@ -596,8 +617,28 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         event: review.event.clone(),
         body: review.body.clone(),
     };
-    fs::write(&submit_path, serde_json::to_vec_pretty(&submit_payload)?)?;
-    let submit_output = run_curl_json_post(
+    let submit_bytes = match serde_json::to_vec_pretty(&submit_payload) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args,
+                &url,
+                review_id,
+                token,
+                err.into(),
+            ));
+        }
+    };
+    if let Err(err) = fs::write(&submit_path, submit_bytes) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    let submit_output = match run_curl_json_post(
         Path::new("."),
         &format!("{url}/{review_id}/events"),
         &format!("Authorization: Bearer {token}"),
@@ -608,15 +649,37 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             "X-GitHub-Api-Version: 2022-11-28",
         ],
         60,
-    )
-    .with_context(|| "submit pending GitHub review")?;
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args, &url, review_id, token, err,
+            ));
+        }
+    };
     let submit_text = String::from_utf8_lossy(&submit_output.stdout).to_string();
-    fs::write(args.out.join("submit-review-stdout.json"), &submit_text)?;
-    fs::write(
+    if let Err(err) = fs::write(args.out.join("submit-review-stdout.json"), &submit_text) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    if let Err(err) = fs::write(
         args.out.join("submit-review-stderr.txt"),
         String::from_utf8_lossy(&submit_output.stderr).as_ref(),
-    )?;
-    if !submit_output.status.success() {
+    ) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    if !http_output_succeeded(&submit_output) {
         let deleted = delete_pending_github_review(args, &url, review_id, token);
         bail!(
             "GitHub review submit failed with exit code {:?} and http status {:?}; cleanup={deleted}",
@@ -671,6 +734,24 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         pending_review_deleted: false,
         head_sha: std::env::var("GITHUB_SHA").ok(),
     })
+}
+
+fn http_output_succeeded(output: &HttpPostOutput) -> bool {
+    output.status.success()
+        && output
+            .http_status
+            .is_none_or(|status| (200..300).contains(&status))
+}
+
+fn cleanup_pending_review_error(
+    args: &PostArgs,
+    url: &str,
+    review_id: u64,
+    token: &str,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    let deleted = delete_pending_github_review(args, url, review_id, token);
+    error.context(format!("pending GitHub review cleanup={deleted}"))
 }
 
 fn delete_pending_github_review(args: &PostArgs, url: &str, review_id: u64, token: &str) -> bool {

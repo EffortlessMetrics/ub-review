@@ -6378,6 +6378,74 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
 }
 
 #[test]
+fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let diff_patch = temp.path().join("diff.patch");
+    let out = temp.path().join("post");
+    fs::write(
+        &diff_patch,
+        "diff --git a/src/lib.rs b/src/lib.rs\nindex 1111111..2222222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let header = unsafe { ptr.cast::<Header>().read() };\n     len\n}\n",
+    )?;
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Verification questions\n\n- Confirm the focused proof.",
+            "comments": [{
+                "path": "src/lib.rs",
+                "line": 1,
+                "side": "RIGHT",
+                "body": "[tests] focused proof receipt is missing."
+            }]
+        }))?,
+    )?;
+    let (github_api_url, handle) =
+        spawn_fake_github_review_api_with_expected_requests(Vec::new(), 3)?;
+
+    run(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--diff-patch",
+            path_str(&diff_patch)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    assert_eq!(requests.len(), 3);
+    assert!(
+        requests[2].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+    );
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    assert_eq!(post_error["status"], "failed");
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("cleanup=true"))
+    );
+    let deletion: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("pending-review-delete.json"))?)?;
+    assert_eq!(deletion["review_id"], 987);
+    assert_eq!(deletion["deleted"], true);
+    Ok(())
+}
+
+#[test]
 fn post_payload_renders_suggestion_blocks_for_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
