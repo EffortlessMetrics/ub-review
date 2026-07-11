@@ -12216,3 +12216,27 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:error_path:b8e0c8eb"
 owner = "ub-review/core"
 reason = "Covered by plan_and_dry_run_write_expected_packet_tree; terminal event append and sync are exercised through the artifact packet contract."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:call_deletion:79ae42c2"
+owner = "ub-review/core"
+reason = "Covered by same_inline_claim_discriminates_exact_family_and_code_identity; disjoint code tokens are asserted as a retained distinct claim."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:611767cd"
+owner = "ub-review/core"
+reason = "Covered by same_inline_claim_discriminates_exact_family_and_code_identity; unclassified families fail closed instead of merging."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:predicate:0fc746d2"
+owner = "ub-review/core"
+reason = "Covered by structural_identity_requires_family_and_code_token; code-span token extraction is asserted for the supported identity shape."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_validate.rs:return_value:f8f749fe"
+owner = "ub-review/core"
+reason = "Covered by evidence_rank_is_receipt_first_then_source_thread_and_model and inline_findings_rank_executed_evidence_before_model_confidence; receipt-backed evidence wins ranking."

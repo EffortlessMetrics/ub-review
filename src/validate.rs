@@ -684,6 +684,24 @@ pub(crate) fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInline
     if left_text == right_text {
         return true;
     }
+    // Cross-line merging is a destructive operation.  Similar prose is only
+    // a clustering hint; require a shared, recognized failure family and a
+    // shared code token so distinct claims about the same vocabulary (for
+    // example, two declaration forms) remain independently reviewable.
+    let Some(left_family) = inline_claim_family(&left_text) else {
+        return false;
+    };
+    if Some(left_family) != inline_claim_family(&right_text) {
+        return false;
+    }
+    let left_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&left.body));
+    let right_code_tokens = inline_claim_code_tokens(&reviewer_facing_pr_text(&right.body));
+    if left_code_tokens.is_empty()
+        || right_code_tokens.is_empty()
+        || left_code_tokens.is_disjoint(&right_code_tokens)
+    {
+        return false;
+    }
     let left_tokens = inline_claim_tokens(&left_text);
     let right_tokens = inline_claim_tokens(&right_text);
     if left_tokens.len() < 5 || right_tokens.len() < 5 {
@@ -698,6 +716,42 @@ pub(crate) fn same_inline_claim(left: &ReviewInlineComment, right: &ReviewInline
     let min_overlap_percent = common * 100 / min_len;
     let union_overlap_percent = common * 100 / union;
     min_overlap_percent >= 60 && (union_overlap_percent >= 35 || common >= 6)
+}
+
+fn inline_claim_family(text: &str) -> Option<&'static str> {
+    let text = text.to_ascii_lowercase();
+    let has = |terms: &[&str]| terms.iter().any(|term| text.contains(term));
+    if has(&["assert", "oracle", "tothrow", "discriminat"]) {
+        Some("test-oracle")
+    } else if has(&["subscript", "postfix", "index", "slice"]) {
+        Some("indexing")
+    } else if has(&["error", "propagat", "fallback", "result"]) {
+        Some("error-path")
+    } else if has(&["unsafe", "safety", "alias", "memory", "undefined behavior"]) {
+        Some("safety")
+    } else if has(&["workflow", "action", "permission", "pin"]) {
+        Some("workflow")
+    } else {
+        None
+    }
+}
+
+fn inline_claim_code_tokens(text: &str) -> BTreeSet<String> {
+    let mut tokens = BTreeSet::new();
+    for (index, segment) in text.split('`').enumerate() {
+        if index % 2 != 1 {
+            continue;
+        }
+        for token in segment.split(|character: char| {
+            !(character.is_ascii_alphanumeric() || matches!(character, '_' | '$' | '%' | '@' | '#'))
+        }) {
+            let token = token.to_ascii_lowercase();
+            if token.len() >= 2 {
+                tokens.insert(token);
+            }
+        }
+    }
+    tokens
 }
 
 pub(crate) fn normalized_inline_claim_text(comment: &ReviewInlineComment) -> String {
@@ -741,11 +795,30 @@ pub(crate) fn normalize_inline_claim_token(token: &str) -> Option<String> {
     (normalized.len() >= 3).then_some(normalized)
 }
 
-pub(crate) fn inline_comment_rank(comment: &ReviewInlineComment) -> (u8, u8) {
+pub(crate) fn inline_comment_rank(comment: &ReviewInlineComment) -> (u8, u8, u8) {
     (
+        inline_evidence_rank(comment),
         severity_rank(&comment.severity),
         confidence_rank(&comment.confidence),
     )
+}
+
+pub(crate) fn inline_evidence_rank(comment: &ReviewInlineComment) -> u8 {
+    let evidence = comment.evidence.to_ascii_lowercase();
+    if evidence.contains("executed")
+        || evidence.contains("receipt")
+        || evidence.contains("focused test")
+        || evidence.contains("red/green")
+        || evidence.contains("sensor")
+    {
+        5
+    } else if evidence.contains("source") || evidence.contains("diff") {
+        3
+    } else if evidence.contains("thread") || evidence.contains("existing") {
+        2
+    } else {
+        1
+    }
 }
 
 pub(crate) fn ranked_inline_comments(
@@ -891,5 +964,81 @@ pub(crate) fn validate_inline_candidate(
             ),
             evidence,
         })
+    }
+}
+
+#[cfg(test)]
+mod claim_identity_tests {
+    use super::*;
+
+    fn comment(evidence: &str) -> ReviewInlineComment {
+        ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 10,
+            side: "RIGHT".to_owned(),
+            body: "the declaration list claim".to_owned(),
+            evidence: evidence.to_owned(),
+            suggestion: None,
+        }
+    }
+
+    #[test]
+    fn structural_identity_requires_family_and_code_token() {
+        assert_eq!(
+            inline_claim_family("assert the `.toThrow()` oracle"),
+            Some("test-oracle")
+        );
+        assert_eq!(
+            inline_claim_family("postfix subscript drops `$x[0]`"),
+            Some("indexing")
+        );
+        assert_eq!(
+            inline_claim_family("fallback error result is lost"),
+            Some("error-path")
+        );
+        assert_eq!(inline_claim_family("unsafe safety alias"), Some("safety"));
+        assert_eq!(inline_claim_family("workflow action pin"), Some("workflow"));
+        assert_eq!(inline_claim_family("unclassified prose"), None);
+
+        let tokens = inline_claim_code_tokens("use `$x[0]` and `%h`");
+        assert!(tokens.contains("$x"));
+        assert!(tokens.contains("%h"));
+    }
+
+    #[test]
+    fn evidence_rank_is_receipt_first_then_source_thread_and_model() {
+        assert_eq!(
+            inline_evidence_rank(&comment("executed focused test receipt")),
+            5
+        );
+        assert_eq!(inline_evidence_rank(&comment("source diff")), 3);
+        assert_eq!(inline_evidence_rank(&comment("existing thread")), 2);
+        assert_eq!(inline_evidence_rank(&comment("model observation")), 1);
+    }
+
+    #[test]
+    fn same_inline_claim_discriminates_exact_family_and_code_identity() {
+        let make = |body: &str| ReviewInlineComment {
+            body: body.to_owned(),
+            ..comment("source diff")
+        };
+        let exact_left = make(
+            "The `.toThrow()` assertion does not discriminate the thrown error; assert type or message.",
+        );
+        let exact_right =
+            make("The bare `.toThrow()` check is non-discriminating; assert type or message.");
+        assert!(same_inline_claim(&exact_left, &exact_right));
+
+        let disjoint_code = make(
+            "The `.toBe()` assertion does not discriminate the returned value; assert type or message.",
+        );
+        assert!(!same_inline_claim(&exact_left, &disjoint_code));
+
+        let unclassified = make("The declaration list needs a clearer explanation here.");
+        assert!(!same_inline_claim(&exact_left, &unclassified));
+        assert!(inline_claim_code_tokens("plain prose").is_empty());
     }
 }

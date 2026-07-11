@@ -10218,6 +10218,59 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn inline_findings_rank_executed_evidence_before_model_confidence() {
+        let comment = |severity: &str, confidence: &str, evidence: &str| ReviewInlineComment {
+            lane: "correctness".to_owned(),
+            path: format!("src/{severity}.rs"),
+            line: 10,
+            side: "RIGHT".to_owned(),
+            severity: severity.to_owned(),
+            confidence: confidence.to_owned(),
+            body: "the changed branch has a behavioral claim".to_owned(),
+            evidence: evidence.to_owned(),
+            suggestion: None,
+        };
+        let mut inline = vec![
+            comment("blocker", "high", "model observation"),
+            comment("low", "medium", "executed focused test receipt"),
+        ];
+        let mut summary = Vec::new();
+        dedupe_inline_comments(&mut inline, &mut summary);
+        assert_eq!(inline.len(), 2);
+        assert_eq!(inline[0].severity, "low");
+        assert_eq!(inline[0].evidence, "executed focused test receipt");
+    }
+
+    #[test]
+    fn inline_dedupe_keeps_distinct_structural_claims_with_shared_vocabulary() {
+        let comment = |line: u32, body: &str| ReviewInlineComment {
+            lane: "parser".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line,
+            side: "RIGHT".to_owned(),
+            body: body.to_owned(),
+            evidence: "source diff observation".to_owned(),
+            suggestion: None,
+        };
+        let mut inline = vec![
+            comment(
+                12,
+                "The declaration list parser drops postfix subscript handling for `$x[0]`; add a focused test for the list behavior.",
+            ),
+            comment(
+                30,
+                "The declaration list lookahead omits the percent sigil for `%h`; add a focused test for the list behavior.",
+            ),
+        ];
+        let mut summary = Vec::new();
+        dedupe_inline_comments(&mut inline, &mut summary);
+        assert_eq!(inline.len(), 2);
+        assert!(summary.is_empty());
+    }
+
+    #[test]
     fn inline_dedupe_keeps_strongest_same_location_candidate() {
         let mut inline_comments = vec![
             ReviewInlineComment {
