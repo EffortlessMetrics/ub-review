@@ -12288,3 +12288,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_compiler.rs:return_value:57247c4e"
 owner = "ub-review/core"
 reason = "Covered by review_body_quality_overflow_is_waivable_but_machinery_is_artifact_only; the classifier preserves the strict validator while routing the quality error to artifacts."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:54397ad5"
+owner = "ub-review/core"
+reason = "run_loop_overlap_ms_does_not_double_count_self_overlapping_side pins the exact overlap_ms(...) result (120, not the old pairwise-sum's 170) through three pairwise-distinct intermediate unions, so a wrong-operand or wrong-operation mutation of this saturating_add changes the asserted metric; RIPR 0.10.0 cannot associate the oracle through the RunLoopTracker::metrics() -> overlap_ms() indirection (#737). Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:d3368aab"
+owner = "ub-review/core"
+reason = "Twin of the return_value probe above on the same overlap_ms formula: run_loop_overlap_ms_does_not_double_count_self_overlapping_side pins the exact result of this saturating_sub through the same pairwise-distinct union values; RIPR 0.10.0 cannot associate the oracle through the metrics() -> overlap_ms() indirection (#737). Re-verify after semantic edits or RIPR upgrades."
