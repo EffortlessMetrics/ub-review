@@ -12056,27 +12056,3 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:5962d6b7"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weakly exposes bullet classification despite review_body_cap_drops_excess_bullets_without_failing_compilation. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_noise.rs:call_deletion:67927bd9"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 weakly exposes summary-claim survivor selection despite paraphrased_summary_findings_compile_to_one_claim and executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_noise.rs:return_value:1b7e6c22"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 weakly exposes summary-claim survivor selection despite paraphrased_summary_findings_compile_to_one_claim and executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_noise.rs:return_value:c9983eef"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 weakly exposes exact-path observation identity despite observation_identity_requires_matching_path_and_kind. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
-
-[[suppressions]]
-kind = "exposure_gap"
-finding_id = "probe:src_noise.rs:call_deletion:183485a2"
-owner = "ub-review/core"
-reason = "RIPR 0.10.0 weakly exposes evidence-rank tuple construction despite executed_evidence_beats_model_confidence. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
