@@ -87,6 +87,256 @@ fn ensure_classification_error_contains(input: &GateWatchdogInput, expected: &st
     Ok(())
 }
 
+fn error_text(result: Result<()>) -> Result<String> {
+    result
+        .err()
+        .map(|error| format!("{error:#}"))
+        .ok_or_else(|| anyhow::anyhow!("watchdog operation unexpectedly succeeded"))
+}
+
+fn only_reason(artifact: &GateWatchdogArtifact) -> Result<&GateWatchdogReason> {
+    anyhow::ensure!(
+        artifact.reasons.len() == 1,
+        "expected one watchdog reason, got {}",
+        artifact.reasons.len()
+    );
+    artifact
+        .reasons
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("watchdog artifact has no reason"))
+}
+
+#[test]
+fn watchdog_scalar_helpers_have_exact_contracts() -> Result<()> {
+    let mut input = terminal_input("pass");
+    let run = input
+        .runs
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no run"))?;
+    anyhow::ensure!(run_order(run) == (101, 1, "github/workflow-runs.json#101"));
+    anyhow::ensure!(is_required_check(&input, run));
+    anyhow::ensure!(same_sha(&sha('a'), &sha('A')));
+    anyhow::ensure!(!same_sha(&sha('a'), &sha('b')));
+    anyhow::ensure!(
+        availability_outcome(&input) == (GateWatchdogState::Inconclusive, Some("inconclusive"))
+    );
+    input.deadline_reached = false;
+    anyhow::ensure!(availability_outcome(&input) == (GateWatchdogState::Pending, None));
+
+    anyhow::ensure!(GateWatchdogState::Terminal.key() == "terminal");
+    anyhow::ensure!(GateWatchdogState::Pending.key() == "pending");
+    anyhow::ensure!(GateWatchdogState::Inconclusive.key() == "inconclusive");
+    anyhow::ensure!(GateWatchdogRunStatus::Queued.key() == "queued");
+    anyhow::ensure!(GateWatchdogRunStatus::InProgress.key() == "in_progress");
+    anyhow::ensure!(GateWatchdogRunStatus::Completed.key() == "completed");
+    Ok(())
+}
+
+#[test]
+fn watchdog_validation_helpers_report_exact_errors() -> Result<()> {
+    validate_sha("head", &sha('a'))?;
+    anyhow::ensure!(
+        error_text(validate_sha("head", "abc"))?
+            == "gate watchdog head must be a full 40-hex SHA; got \"abc\""
+    );
+    validate_receipt("packet", "review/gate_outcome.json#result")?;
+    anyhow::ensure!(
+        error_text(validate_receipt("packet", "../outside.json"))?
+            == "gate watchdog packet must be a packet-relative receipt; got \"../outside.json\""
+    );
+
+    let mut invalid = terminal_input("pass");
+    invalid.schema = "ub-review.gate_watchdog_input.v0".to_owned();
+    anyhow::ensure!(
+        error_text(validate_input(&invalid))?
+            == "gate watchdog input schema is \"ub-review.gate_watchdog_input.v0\"; expected \"ub-review.gate_watchdog_input.v1\""
+    );
+
+    let mut invalid = terminal_input("pass");
+    invalid.required_check.name.clear();
+    anyhow::ensure!(
+        error_text(validate_input(&invalid))?
+            == "gate watchdog required check name and app_id must be present"
+    );
+
+    let mut invalid = terminal_input("pass");
+    first_run_mut(&mut invalid)?.run_id = 0;
+    anyhow::ensure!(
+        error_text(validate_input(&invalid))?
+            == "gate watchdog run and check identities must be present"
+    );
+
+    let mut invalid = terminal_input("pass");
+    let duplicate = invalid
+        .runs
+        .first()
+        .cloned()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no run"))?;
+    invalid.runs.push(duplicate);
+    anyhow::ensure!(
+        error_text(validate_input(&invalid))?
+            == "gate watchdog duplicate check_run_id 1001 observations"
+    );
+
+    let mut invalid = terminal_input("pass");
+    let gate = invalid
+        .gate_artifact
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no gate artifact"))?;
+    gate.artifact_id = 0;
+    anyhow::ensure!(
+        error_text(validate_input(&invalid))?
+            == "gate watchdog artifact run and upload identities must be present"
+    );
+
+    let mut invalid = terminal_input("pass");
+    invalid.expected_required_proof_ids.push(String::new());
+    anyhow::ensure!(
+        error_text(validate_expected_proofs(&invalid))?
+            == "gate watchdog expected required proof id is empty"
+    );
+    Ok(())
+}
+
+#[test]
+fn run_availability_branches_have_exact_oracles() -> Result<()> {
+    let mut input = terminal_input("pass");
+    input.runs.clear();
+    input.deadline_reached = false;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(artifact.state == GateWatchdogState::Pending);
+    anyhow::ensure!(artifact.conclusion.is_none());
+    anyhow::ensure!(only_reason(&artifact)?.kind == "awaiting-run");
+
+    input.deadline_reached = true;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(artifact.state == GateWatchdogState::Inconclusive);
+    anyhow::ensure!(artifact.conclusion.as_deref() == Some("inconclusive"));
+    anyhow::ensure!(only_reason(&artifact)?.kind == "missing-run");
+
+    let mut input = terminal_input("pass");
+    first_run_mut(&mut input)?.head_sha = sha('b');
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "stale-success");
+
+    let mut input = terminal_input("pass");
+    input.deadline_reached = false;
+    let run = first_run_mut(&mut input)?;
+    run.status = GateWatchdogRunStatus::InProgress;
+    run.conclusion = None;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(artifact.state == GateWatchdogState::Pending);
+    anyhow::ensure!(only_reason(&artifact)?.kind == "run-in-progress");
+
+    input.deadline_reached = true;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(artifact.state == GateWatchdogState::Inconclusive);
+    anyhow::ensure!(only_reason(&artifact)?.kind == "run-deadline-exceeded");
+
+    let mut input = terminal_input("pass");
+    first_run_mut(&mut input)?.conclusion = Some("cancelled".to_owned());
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "cancelled-without-replacement");
+
+    let mut input = terminal_input("pass");
+    first_run_mut(&mut input)?.conclusion = None;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "run-conclusion-missing");
+    Ok(())
+}
+
+#[test]
+fn coordinator_proof_and_artifact_branches_have_exact_oracles() -> Result<()> {
+    let mut input = terminal_input("pass");
+    input.coordinator = None;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "coordinator-marker-missing");
+
+    let mut input = terminal_input("pass");
+    let coordinator = input
+        .coordinator
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no coordinator"))?;
+    coordinator.attempt = 2;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "coordinator-run-mismatch");
+
+    let mut input = terminal_input("pass");
+    let coordinator = input
+        .coordinator
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no coordinator"))?;
+    coordinator.status = GateWatchdogCoordinatorStatus::Crashed;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "coordinator-crash");
+
+    let mut input = terminal_input("pass");
+    first_proof_mut(&mut input)?.attempt = 2;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "required-proof-run-mismatch");
+
+    let mut input = terminal_input("pass");
+    input.required_proofs.clear();
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "missing-required-proof");
+
+    let mut input = terminal_input("pass");
+    first_proof_mut(&mut input)?.status = GateWatchdogProofStatus::Orphaned;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "required-proof-orphaned");
+
+    let mut input = terminal_input("pass");
+    input.gate_artifact = None;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "missing-artifact");
+
+    let mut input = terminal_input("pass");
+    let gate = input
+        .gate_artifact
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no gate artifact"))?;
+    gate.attempt = 2;
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "artifact-run-mismatch");
+
+    let mut input = terminal_input("pass");
+    let gate = input
+        .gate_artifact
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no gate artifact"))?;
+    gate.head_sha = sha('b');
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "artifact-sha-mismatch");
+
+    let mut input = terminal_input("pass");
+    let gate = input
+        .gate_artifact
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no gate artifact"))?;
+    gate.schema = "ub-review.gate_outcome.v0".to_owned();
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "artifact-schema-mismatch");
+
+    let mut input = terminal_input("pass");
+    let gate = input
+        .gate_artifact
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no gate artifact"))?;
+    gate.conclusion = "unknown".to_owned();
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "artifact-conclusion-invalid");
+
+    let mut input = terminal_input("pass");
+    let gate = input
+        .gate_artifact
+        .as_mut()
+        .ok_or_else(|| anyhow::anyhow!("watchdog test fixture has no gate artifact"))?;
+    gate.conclusion = "fail".to_owned();
+    let artifact = classify_gate_watchdog(&input)?;
+    anyhow::ensure!(only_reason(&artifact)?.kind == "run-artifact-disagreement");
+    Ok(())
+}
+
 #[test]
 fn exact_head_terminal_conclusions_are_preserved() -> Result<()> {
     for conclusion in ["pass", "fail", "inconclusive"] {
