@@ -234,10 +234,15 @@ pub(crate) fn compile_review_surface(
     let mut suppressed_artifact_only_pr_body = false;
     let mut summary_only_policy_posted = false;
     if let Err(err) = validate_pr_review_body_policy(&pr_body, input.review_body_policy) {
-        if !is_suppressible_pr_body_policy_error(&err) {
+        if !is_review_output_quality_error(&err) {
             return Err(err).with_context(|| "validate pull request review body policy");
         }
-        if !matches!(input.args.model_mode, ModelMode::Off)
+        if is_internal_review_machinery_error(&err) {
+            // Planner language is artifact-only quality noise. It must not
+            // fail an otherwise valid code gate or pass through a waiver.
+            pr_body.clear();
+            suppressed_artifact_only_pr_body = true;
+        } else if !matches!(input.args.model_mode, ModelMode::Off)
             && summary_only_body_policy_permits_post(
                 input.review_body_policy.summary_only_body,
                 input.summary_only_findings.len(),
@@ -369,6 +374,16 @@ pub(crate) fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> boo
     text.contains("artifact-only boilerplate")
         || text.contains("refuted-only artifact note")
         || text.contains("not concise enough")
+}
+
+fn is_internal_review_machinery_error(error: &anyhow::Error) -> bool {
+    error
+        .to_string()
+        .contains("github review body contains internal review machinery")
+}
+
+fn is_review_output_quality_error(error: &anyhow::Error) -> bool {
+    is_suppressible_pr_body_policy_error(error) || is_internal_review_machinery_error(error)
 }
 
 pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
@@ -701,7 +716,7 @@ mod tests {
     }
 
     #[test]
-    fn review_body_quality_overflow_is_waivable_but_machinery_is_not() -> Result<()> {
+    fn review_body_quality_overflow_is_waivable_but_machinery_is_artifact_only() -> Result<()> {
         let policy = ReviewBodyPolicy::default();
         let oversized = format!("## Decision\n\n- {}", "x".repeat(6_100));
         let err = validate_pr_review_body_policy(&oversized, &policy)
@@ -712,6 +727,10 @@ mod tests {
 
         let machinery = "## Decision\n\n- duplicate inline candidate merged into path:12";
         assert!(validate_pr_review_body_policy_with_waiver(machinery, &policy, true).is_err());
+        let machinery_error = validate_pr_review_body_policy(machinery, &policy)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("machinery unexpectedly passed"))?;
+        assert!(is_review_output_quality_error(&machinery_error));
         Ok(())
     }
 }

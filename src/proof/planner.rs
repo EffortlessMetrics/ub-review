@@ -183,6 +183,7 @@ pub(crate) fn write_proof_request_artifacts(
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
     let terminal_requests = terminalize_proof_requests(proof_requests, proof_receipts);
+    ensure_terminal_proof_requests(&terminal_requests)?;
     let proof_groups = proof_request_groups(&terminal_requests);
     let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
     let focused_build_plans =
@@ -436,6 +437,19 @@ pub(crate) fn write_receipt_route_artifacts(
         ndjson.push('\n');
     }
     fs::write(out.join("receipt_routes.ndjson"), ndjson)?;
+    Ok(())
+}
+
+fn ensure_terminal_proof_requests(requests: &[ProofRequest]) -> Result<()> {
+    if let Some(request) = requests
+        .iter()
+        .find(|request| request.status == "requested")
+    {
+        bail!(
+            "proof request `{}` remained requested at the final artifact boundary",
+            request.id
+        );
+    }
     Ok(())
 }
 
@@ -1405,6 +1419,40 @@ index 1111111..2222222 100644
         assert_eq!(terminal[2].status, "deferred");
         assert!(terminal.iter().all(|request| request.status != "requested"));
         assert_eq!(proof_request_groups(&terminal)[0].status, "deferred");
+    }
+
+    #[test]
+    fn final_proof_artifact_boundary_rejects_pending_requests() {
+        let pending = ProofRequest {
+            schema: PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "request-pending".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test -p parser".to_owned(),
+            reason: "pending fixture".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        assert!(super::ensure_terminal_proof_requests(&[pending]).is_err());
+
+        let terminal = ProofRequest {
+            status: "deferred".to_owned(),
+            ..ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: "request-deferred".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "cargo test -p parser".to_owned(),
+                reason: "deferred fixture".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            }
+        };
+        assert!(super::ensure_terminal_proof_requests(&[terminal]).is_ok());
     }
 
     #[test]
