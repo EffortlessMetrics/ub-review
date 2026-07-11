@@ -9,6 +9,8 @@ since #335 (closing #316) and has blocked two real PRs (#342, #346).
 Tool-gate reds are
 diagnosable from artifacts: per-finding gap detail ships in
 `sensors/ripr/exposure-gaps.json` next to the badge receipt (#347 closed).
+The workflow still executes candidate code via `uses: ./`; stable-judge and
+independent terminal-publication hardening remain open under #658.
 
 ## Purpose
 
@@ -153,7 +155,7 @@ configurable.
 
 ```text
 schema                    "ub-review.gate_outcome.v1" exactly
-conclusion                "pass" | "fail"
+conclusion                "pass" | "fail" | "inconclusive"
 terminal_status           from ub-review.terminal_state.v1
 reasons[]                 {kind, id, detail, receipt, next_action?}
 required_proof            {matched, passed, failed, skipped}
@@ -172,7 +174,7 @@ tool-gate           a configured [tools.*.gate] threshold was evaluated and
                     and points the operator at the per-tool receipt chain
 required-sensor     a required sensor's matched trigger produced no evidence
                     (receipt-absent, failed, skipped); intelligent-ci mode
-                    only
+                    only; next_action names the rerun or receipt repair
 required-tool-timeout
                     a required sensor's status is timed_out: the lease
                     expired before any threshold evaluated, so this is a
@@ -180,12 +182,17 @@ required-tool-timeout
                     and, when configured, the [tools.<id>.gate] threshold
                     that never evaluated; next_action names the operator
                     move.
+sensor-finding      a required sensor completed and demonstrated a defect;
+                    unlike required-sensor, this is a fail rather than
+                    unavailable evidence
 blocking-finding    today emitted only by the two [gate.blocking] evidence
                     opt-ins (required_proof_unproven,
                     tool_gate_missing_evidence); per-finding-class
                     blocking = true markers are ADR 0002 intent, deferred
                     until findings carry deterministic per-class receipts
                     (src/config.rs GateBlockingPolicy)
+reporter-verdict    strict mode accepted a blocking reporter disposition only
+                    through the configured deterministic policy boundary
 policy              the repo wrote a malformed policy section; parse errors
                     are receipted gate failures, not silent defaults
 internal            declared in the ADR 0002 schema; no run today writes it,
@@ -198,7 +205,7 @@ The two `[gate.blocking]` opt-ins surface as `blocking-finding` reasons, not
 as `required-proof`/`tool-gate` kinds — automation keying on reason kinds
 must expect that.
 
-Every `fail` reason carries a receipt pointer into existing artifacts: proof
+Every `fail` or `inconclusive` reason carries a receipt pointer into existing artifacts: proof
 reasons point into `review/proof_receipts.json#<id>`, required-sensor reasons
 point at `sensors/<id>/ub-review-sensor-status.json` (or
 `review/terminal_state.json` when the receipt itself is absent), tool-gate
@@ -418,10 +425,12 @@ correct.
 
 What can a user rely on?
 The `ub-review.gate_outcome.v1` schema and its required fields; the reason
-kinds; receipt pointers on every fail reason; the exact-`pass` fail-closed
+kinds; receipt pointers on every fail or inconclusive reason; the exact-`pass` fail-closed
 gate check; `fail-on-gate=auto` meaning enforce only in `intelligent-ci`;
-a verdict on every head SHA; quiet synchronize/reopened passes leaving a
-truthful `skipped_pass_policy` receipt.
+a verdict artifact when the workflow completes; quiet synchronize/reopened
+passes leaving a truthful `skipped_pass_policy` receipt. The experimental
+`gate-watchdog` classifier detects missing/cancelled/stale current-head state,
+but independent observation and terminal check publication are not wired yet.
 
 What can break the gate?
 Only repo-written policy outcomes: failed required proof from

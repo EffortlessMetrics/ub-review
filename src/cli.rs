@@ -48,8 +48,11 @@ pub(crate) enum Command {
     /// Artifact-only; never posts or edits GitHub.
     QualityGithubCollect(QualityGithubCollectArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
-    /// resolves on and review/gate_outcome.json records a `fail` conclusion.
+    /// resolves on and the conclusion is `fail` or `inconclusive`.
     GateCheck(GateCheckArgs),
+    /// Classify frozen current-head gate observations and write a watchdog
+    /// receipt. Artifact-only: never queries GitHub or publishes a check.
+    GateWatchdog(GateWatchdogArgs),
     /// Execute a single proof request and write its receipt. Designed for
     /// distributed execution: a `plan` job emits proof requests, `worker`
     /// jobs execute them (locally or remotely), and a `finalize` job
@@ -812,6 +815,20 @@ pub(crate) struct GateCheckArgs {
     /// per-knob warning). See `RunArgs::review_mode`.
     #[arg(long = "review-mode", value_enum, env = "UB_REVIEW_REVIEW_MODE")]
     pub(crate) review_mode: Option<ReviewModePreset>,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct GateWatchdogArgs {
+    /// Frozen observation input produced by a future stable coordinator.
+    #[arg(long, env = "UB_REVIEW_GATE_WATCHDOG_OBSERVATIONS")]
+    pub(crate) observations: PathBuf,
+    /// Versioned watchdog artifact to write.
+    #[arg(
+        long,
+        default_value = "target/ub-review/review/gate_watchdog.json",
+        env = "UB_REVIEW_GATE_WATCHDOG_OUT"
+    )]
+    pub(crate) out: PathBuf,
 }
 
 #[derive(Debug, Args)]
