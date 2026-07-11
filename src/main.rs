@@ -3189,20 +3189,21 @@ fn scheduler_role_stream_id(loop_id: &str) -> Option<&str> {
     }
 }
 
+// Computed via inclusion-exclusion (|A| + |B| - |A ∪ B|) rather than a naive
+// pairwise-interval sum: if either side has already accumulated multiple
+// intervals that overlap each other (the same hazard union_wall_ms exists
+// for, e.g. pipelined sub-phases within one loop), a pairwise sum would
+// count the shared wall time once per overlapping pair on that side and
+// inflate the total. Unioning each side first keeps this exact regardless
+// of self-overlap.
 fn overlap_ms(left: &[LoopInterval], right: &[LoopInterval]) -> u128 {
-    let mut total = 0_u128;
-    for left_interval in left {
-        for right_interval in right {
-            let started = left_interval
-                .started_at_offset_ms
-                .max(right_interval.started_at_offset_ms);
-            let finished = left_interval
-                .finished_at_offset_ms
-                .min(right_interval.finished_at_offset_ms);
-            total = total.saturating_add(finished.saturating_sub(started));
-        }
-    }
-    total
+    let left_wall = union_wall_ms(left);
+    let right_wall = union_wall_ms(right);
+    let combined: Vec<LoopInterval> = left.iter().chain(right).copied().collect();
+    let combined_wall = union_wall_ms(&combined);
+    left_wall
+        .saturating_add(right_wall)
+        .saturating_sub(combined_wall)
 }
 
 fn cmd_doctor(args: DoctorArgs) -> Result<()> {
@@ -9350,6 +9351,47 @@ index 1111111..2222222 100644
         assert_eq!(metrics.investigation_proof_overlap_ms, 30);
         assert_eq!(metrics.model_proof_overlap_ms, 30);
         assert_eq!(metrics.proof_overlap_ms, 30);
+    }
+
+    #[test]
+    fn run_loop_overlap_ms_does_not_double_count_self_overlapping_side() {
+        // Regression: overlap_ms used to sum overlap across every
+        // (left, right) interval pair, so two overlapping sub-phases on one
+        // side (e.g. pipelined model turns) got the shared proof window
+        // counted twice. The union-based fix must report the true union
+        // overlap even when a side's own intervals overlap each other.
+        let mut tracker = super::RunLoopTracker::new();
+        tracker.record_interval(
+            "model",
+            super::LoopInterval {
+                started_at_offset_ms: 0,
+                finished_at_offset_ms: 100,
+            },
+        );
+        tracker.record_interval(
+            "model",
+            super::LoopInterval {
+                started_at_offset_ms: 50,
+                finished_at_offset_ms: 150,
+            },
+        );
+        tracker.record_interval(
+            "proof",
+            super::LoopInterval {
+                started_at_offset_ms: 0,
+                finished_at_offset_ms: 150,
+            },
+        );
+
+        let metrics = tracker.metrics();
+        assert_eq!(metrics.model_wall_ms, 150, "union of [0,100) and [50,150)");
+        assert_eq!(metrics.local_proof_wall_ms, 150);
+        assert_eq!(
+            metrics.investigation_proof_overlap_ms, 150,
+            "overlap must equal the observed union, not 100 + 100 from double-counting [50,100)"
+        );
+        assert_eq!(metrics.model_proof_overlap_ms, 150);
+        assert_eq!(metrics.proof_overlap_ms, 150);
     }
 
     #[test]
