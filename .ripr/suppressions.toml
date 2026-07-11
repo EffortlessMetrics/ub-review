@@ -11945,6 +11945,12 @@ reason = "RIPR 0.10.0 weakly exposes polarity-word iteration despite opposite_po
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:5baac31c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 weakly exposes the polarity predicate closure despite opposite_polarity_claims_are_not_collapsed. Content-addressed current #746 Linux receipt; re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_noise.rs:match_arm:d18ba78c"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 does not associate structural path matching with observation_identity_requires_matching_path_and_kind. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
