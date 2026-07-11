@@ -580,11 +580,30 @@ pub(crate) fn summary_finding_review_dedupe_key(finding: &SummaryOnlyFinding) ->
     }
 }
 
-pub(crate) fn summary_finding_rank(finding: &SummaryOnlyFinding) -> (u8, u8) {
+pub(crate) fn summary_finding_rank(finding: &SummaryOnlyFinding) -> (u8, u8, u8) {
     (
+        summary_finding_evidence_rank(finding),
         severity_rank(&finding.severity),
         confidence_rank(&finding.confidence),
     )
+}
+
+fn summary_finding_evidence_rank(finding: &SummaryOnlyFinding) -> u8 {
+    let evidence = finding.evidence.to_ascii_lowercase();
+    if evidence.contains("executed")
+        || evidence.contains("receipt")
+        || evidence.contains("focused test")
+        || evidence.contains("red/green")
+        || evidence.contains("sensor")
+    {
+        5
+    } else if evidence.contains("source") || evidence.contains("diff") {
+        3
+    } else if evidence.contains("thread") || evidence.contains("existing") {
+        2
+    } else {
+        1
+    }
 }
 
 pub(crate) fn summary_finding_matches_observations(
@@ -611,11 +630,42 @@ pub(crate) fn review_claims_match(left: &str, right: &str) -> bool {
     if opposing_claim_polarity(&left, &right) {
         return false;
     }
+    let Some((left_family, left_markers)) = review_claim_identity(&left) else {
+        return false;
+    };
+    let Some((right_family, right_markers)) = review_claim_identity(&right) else {
+        return false;
+    };
+    if left_family != right_family || left_markers.is_disjoint(&right_markers) {
+        return false;
+    }
     let left_tokens = conflict_tokens(&left);
     let right_tokens = conflict_tokens(&right);
     let smaller = left_tokens.len().min(right_tokens.len());
     let shared = left_tokens.intersection(&right_tokens).count();
     smaller >= 5 && shared >= 4 && shared * 2 >= smaller
+}
+
+const REVIEW_CLAIM_FAMILIES: &[(&str, &[&str])] = &[
+    (
+        "test-oracle",
+        &["assert", "oracle", "tothrow", "discriminat"],
+    ),
+    ("indexing", &["subscript", "postfix", "index", "slice"]),
+    ("error-path", &["error", "propagat", "fallback", "result"]),
+    ("safety", &["unsafe", "safety", "alias", "memory"]),
+    ("workflow", &["workflow", "action", "permission", "pin"]),
+];
+
+fn review_claim_identity(text: &str) -> Option<(&'static str, BTreeSet<String>)> {
+    REVIEW_CLAIM_FAMILIES.iter().find_map(|(family, terms)| {
+        let markers = terms
+            .iter()
+            .filter(|term| text.contains(**term))
+            .map(|term| (*term).to_owned())
+            .collect::<BTreeSet<_>>();
+        (!markers.is_empty()).then_some((*family, markers))
+    })
 }
 
 fn opposing_claim_polarity(left: &str, right: &str) -> bool {
@@ -757,7 +807,7 @@ mod human_output_admission_tests {
                 confidence: "high".to_owned(),
                 reason: "Postfix subscripts are dropped from later variables in declaration lists"
                     .to_owned(),
-                evidence: "focused regression".to_owned(),
+                evidence: "executed focused regression receipt".to_owned(),
             },
         ];
 
@@ -765,6 +815,28 @@ mod human_output_admission_tests {
         ensure!(unique.len() == 1, "paraphrased claim was not deduplicated");
         ensure!(unique[0].lane == "tests", "strongest claim did not survive");
         Ok(())
+    }
+
+    #[test]
+    fn structurally_distinct_summary_claims_with_shared_vocabulary_survive() {
+        let findings = [
+            SummaryOnlyFinding {
+                lane: "parser".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The declaration list drops postfix subscripts for `$x[0]`.".to_owned(),
+                evidence: "source diff".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "parser".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "The declaration list lookahead omits the percent sigil for `%h`."
+                    .to_owned(),
+                evidence: "source diff".to_owned(),
+            },
+        ];
+        assert_eq!(unique_summary_review_findings(&findings).len(), 2);
     }
 
     #[test]
@@ -790,6 +862,28 @@ mod human_output_admission_tests {
         assert!(!review_claims_match(
             "The parser drops default values from later declaration variables.",
             "The parser preserves default values for later declaration variables."
+        ));
+    }
+
+    #[test]
+    fn summary_claim_identity_requires_matching_family_marker() {
+        let postfix_markers = review_claim_identity(
+            "The declaration list drops postfix subscripts from later variables.",
+        )
+        .map(|(_, markers)| markers)
+        .unwrap_or_default();
+        let percent = review_claim_identity(
+            "The declaration list lookahead omits the percent sigil from `%h`.",
+        );
+        assert!(postfix_markers.contains("postfix"));
+        assert!(percent.is_none());
+        assert!(review_claims_match(
+            "Later declaration-list variables can lose postfix subscripts.",
+            "Postfix subscripts are dropped from later variables in declaration lists."
+        ));
+        assert!(!review_claims_match(
+            "The declaration list drops postfix subscripts from `$x[0]`.",
+            "The declaration list lookahead omits the percent sigil for `%h`."
         ));
     }
 
