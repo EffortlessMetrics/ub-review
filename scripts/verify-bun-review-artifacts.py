@@ -5959,14 +5959,17 @@ def require_gate_outcome(root: pathlib.Path) -> None:
             fail(f"gate outcome {field} is invalid: {value!r}")
     if conclusion == "pass" and outcome.get("evidence_gaps_blocking", 0) > 0:
         fail("gate outcome passed with blocking evidence gaps recorded")
-    if (
-        conclusion == "inconclusive"
-        and outcome.get("evidence_gaps_blocking") != len(reasons)
-    ):
+    unavailable_reason_count = sum(
+        1
+        for reason in reasons
+        if isinstance(reason, dict)
+        and reason.get("kind") in GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS
+    )
+    if outcome.get("evidence_gaps_blocking") != unavailable_reason_count:
         fail(
-            "gate outcome inconclusive evidence_gaps_blocking must equal "
+            "gate outcome evidence_gaps_blocking must equal "
             f"its unavailable reason count: gaps={outcome.get('evidence_gaps_blocking')!r} "
-            f"reasons={len(reasons)}"
+            f"unavailable_reasons={unavailable_reason_count}"
         )
     skip_path = root / "review/github-review-skip.json"
     if conclusion in {"fail", "inconclusive"} and skip_path.is_file():
@@ -10585,6 +10588,13 @@ def self_test_gate_outcome_contract() -> None:
         "do not match failed",
         lambda root=root: require_gate_outcome(root),
     )
+    expect_self_test_failure(
+        "gate-outcome fail with incoherent blocking evidence-gap count",
+        "must equal its unavailable reason count",
+        lambda: require_gate_outcome(
+            write_root(outcome(evidence_gaps_blocking=1))
+        ),
+    )
 
 
 def self_test_gate_watchdog_contract() -> None:
@@ -10683,6 +10693,23 @@ def self_test_gate_watchdog_contract() -> None:
                         {
                             **pending["reasons"][0],
                             "kind": "coordinator-crash",
+                        }
+                    ],
+                }
+            )
+        ),
+    )
+    expect_self_test_failure(
+        "watchdog inconclusive with pending-only reason",
+        "is invalid for state",
+        lambda: require_gate_watchdog(
+            write_root(
+                {
+                    **inconclusive,
+                    "reasons": [
+                        {
+                            **inconclusive["reasons"][0],
+                            "kind": "awaiting-run",
                         }
                     ],
                 }
