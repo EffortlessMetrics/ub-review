@@ -3135,7 +3135,7 @@ required = true
     let request = &proof_requests[0];
     assert_eq!(request["lane"], "intelligent-ci-policy");
     assert_eq!(request["command"], "cargo check --workspace --locked");
-    assert_eq!(request["status"], "requested");
+    assert_eq!(request["status"], "deferred");
     assert_eq!(request["cost"], "focused-build");
     assert_eq!(request["required"], true);
     let requested_by = request["requested_by"]
@@ -4912,10 +4912,21 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
         .map(|request| json_str_field(request, "id").map(ToOwned::to_owned))
         .collect::<Result<Vec<_>>>()?;
     assert_ne!(request_ids[0], request_ids[1]);
+    assert!(duplicate_requests.iter().all(|request| {
+        matches!(
+            request["status"].as_str(),
+            Some("satisfied")
+                | Some("executed")
+                | Some("deferred")
+                | Some("failed")
+                | Some("deduplicated")
+        )
+    }));
     assert!(
         duplicate_requests
             .iter()
-            .all(|request| request["status"].as_str() == Some("requested"))
+            .any(|request| request["status"].as_str() == Some("deduplicated")),
+        "duplicate requests must expose a terminal deduplicated disposition"
     );
 
     let groups: Vec<serde_json::Value> =
@@ -4924,7 +4935,7 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
         .iter()
         .find(|group| group["command"].as_str() == Some(duplicate_command))
         .ok_or_else(|| anyhow::anyhow!("duplicate proof request group missing"))?;
-    assert_eq!(group["status"], "requested");
+    assert_eq!(group["status"], "executed");
     assert_eq!(group["duplicate_count"], 2);
     assert_eq!(group["request_ids"], serde_json::json!(request_ids));
     assert!(group["requested_by"].as_array().is_some_and(|lanes| {

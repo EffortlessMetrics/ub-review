@@ -3075,6 +3075,14 @@ impl EventLog {
         writeln!(&mut *file)?;
         Ok(())
     }
+
+    fn sync(&self) -> Result<()> {
+        let file = self
+            .file
+            .lock()
+            .map_err(|_| anyhow::anyhow!("event log mutex poisoned"))?;
+        file.sync_data().context("sync event log")
+    }
 }
 
 fn start_run_loop(
@@ -3602,10 +3610,6 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
     if config.review.github_summary && !args.no_github_summary {
         append_github_step_summary(&summary)?;
     }
-    event_log.append(
-        "run_finished",
-        serde_json::json!({"run_dir": args.review.out}),
-    )?;
     println!("wrote {}", args.review.out.display());
     println!("open {}/running-summary.md", args.review.out.display());
     Ok(RunCompletion {
@@ -4765,6 +4769,8 @@ fn write_review_artifacts(
     write_witness_artifacts(out, &witnesses)?;
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
+    review.proof_requests =
+        terminalize_proof_requests(&review.proof_requests, &review.proof_receipts);
     write_proof_request_artifacts(
         out,
         diff,
@@ -4905,6 +4911,8 @@ fn write_review_artifacts(
             build_github_review_skip_receipt(args, &review, config.review_body.summary_only_body),
         )?;
     }
+    event_log.append("run_finished", serde_json::json!({"run_dir": out}))?;
+    event_log.sync()?;
     Ok(gate_outcome)
 }
 
@@ -5507,17 +5515,17 @@ mod tests {
         run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
         run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
         runtime_profile_override, selected_provider_spec, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, validate_failed_objection,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_inline_candidate, validate_model_observation, validate_pr_review_body_policy,
-        validate_run_args, validate_summary_only_candidate, wait_for_child_output_files,
-        write_candidate_artifacts, write_final_orchestrator_artifact,
-        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
-        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
-        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
-        write_proof_request_artifacts, write_resolved_candidate_artifacts,
-        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
-        write_witness_artifacts,
+        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
+        validate_failed_objection, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_inline_candidate,
+        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
+        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
+        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
+        write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
+        write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
+        write_proof_receipt_artifacts, write_proof_request_artifacts,
+        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
+        write_sensor_status, write_witness_artifacts,
     };
 
     #[test]
@@ -19902,7 +19910,7 @@ index 1111111..2222222 100644
             serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
         assert_eq!(
             serde_json::to_value(&proof_json)?,
-            serde_json::to_value(&canonical_proof_requests)?
+            serde_json::to_value(terminalize_proof_requests(&canonical_proof_requests, &[]))?
         );
         let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path()

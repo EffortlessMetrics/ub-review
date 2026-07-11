@@ -182,13 +182,14 @@ pub(crate) fn write_proof_request_artifacts(
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
-    let proof_groups = proof_request_groups(proof_requests);
+    let terminal_requests = terminalize_proof_requests(proof_requests, proof_receipts);
+    let proof_groups = proof_request_groups(&terminal_requests);
     let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
     let focused_build_plans =
         focused_build_plans_from_requests(proof_requests, proof_budget(profile)?);
     fs::write(
         review_dir.join("proof_requests.json"),
-        serde_json::to_vec_pretty(proof_requests)?,
+        serde_json::to_vec_pretty(&terminal_requests)?,
     )?;
     fs::write(
         review_dir.join("proof_request_groups.json"),
@@ -204,7 +205,7 @@ pub(crate) fn write_proof_request_artifacts(
         .with_context(|| format!("create {}", proof_request_dir.display()))?;
 
     let mut ndjson = String::new();
-    for request in proof_requests {
+    for request in &terminal_requests {
         ndjson.push_str(&serde_json::to_string(request)?);
         ndjson.push('\n');
         fs::write(
@@ -225,7 +226,7 @@ pub(crate) fn write_proof_request_artifacts(
             plan.push_str(&format!(
                 "Grouped proof broker tasks: {} unique from {} request(s).\n\n",
                 proof_groups.len(),
-                proof_requests.len()
+                terminal_requests.len()
             ));
             for group in &proof_groups {
                 plan.push_str(&format!(
@@ -468,12 +469,8 @@ pub(crate) fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<Proof
             duplicate_count: 0,
         });
         group.required |= request.required;
-        match request.status.as_str() {
-            "requested" => group.status = "requested".to_owned(),
-            "unsupported" if group.status != "requested" => {
-                group.status = "unsupported".to_owned();
-            }
-            _ => {}
+        if proof_request_status_rank(&request.status) > proof_request_status_rank(&group.status) {
+            group.status = request.status.clone();
         }
         push_unique(&mut group.requested_by, &request.lane);
         for lane in &request.requested_by {
@@ -484,6 +481,78 @@ pub(crate) fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<Proof
         group.duplicate_count += 1;
     }
     groups.into_values().collect()
+}
+
+pub(crate) fn terminalize_proof_requests(
+    requests: &[ProofRequest],
+    receipts: &[ProofReceipt],
+) -> Vec<ProofRequest> {
+    requests
+        .iter()
+        .map(|request| {
+            if request.status != "requested" {
+                return request.clone();
+            }
+            let matching = receipts
+                .iter()
+                .filter(|receipt| receipt.request_ids.iter().any(|id| id == &request.id))
+                .collect::<Vec<_>>();
+            let mut terminal = request.clone();
+            if matching.is_empty() {
+                terminal.status = "deferred".to_owned();
+                terminal.reason = format!(
+                    "{} Terminal disposition: deferred; no proof receipt was produced.",
+                    request.reason
+                );
+                return terminal;
+            }
+            if matching.iter().any(|receipt| {
+                receipt.request_ids.len() > 1 && receipt.request_ids.first() != Some(&request.id)
+            }) {
+                terminal.status = "deduplicated".to_owned();
+                terminal.reason = format!(
+                    "{} Terminal disposition: deduplicated into receipt `{}`.",
+                    request.reason, matching[0].id
+                );
+                return terminal;
+            }
+            let receipt = matching[0];
+            terminal.status = proof_request_terminal_status(&receipt.result).to_owned();
+            terminal.reason = format!(
+                "{} Terminal disposition: {}; receipt `{}` result `{}`.",
+                request.reason, terminal.status, receipt.id, receipt.result
+            );
+            terminal
+        })
+        .collect()
+}
+
+fn proof_request_terminal_status(result: &str) -> &'static str {
+    match result {
+        "discriminating" | "head_passed" | "sanitizer_clean" => "satisfied",
+        "non_discriminating" | "executed" => "executed",
+        "skipped_budget" | "skipped_profile" | "skipped_nightly" | "skipped_unresolved" => {
+            "deferred"
+        }
+        "head_failed" | "base_patch_failed" | "sanitizer_ub_detected" | "timed_out" | "failed" => {
+            "failed"
+        }
+        _ => "executed",
+    }
+}
+
+fn proof_request_status_rank(status: &str) -> u8 {
+    match status {
+        "failed" => 7,
+        "deferred" => 6,
+        "satisfied" => 5,
+        "executed" => 4,
+        "deduplicated" => 3,
+        "requested" => 2,
+        "unsupported" => 1,
+        "invalid" => 0,
+        _ => 0,
+    }
 }
 
 #[expect(
@@ -691,7 +760,7 @@ mod tests {
         assert_eq!(group.reasons.len(), 2);
         assert_eq!(group.duplicate_count, 2);
         assert!(group.required);
-        assert_eq!(group.status, "requested");
+        assert_eq!(group.status, "deferred");
         assert!(proof_plan.contains("Grouped proof broker tasks: 1 unique from 2 request(s)."));
         assert!(proof_plan.contains("merged_requests=2"));
         Ok(())
@@ -1293,6 +1362,109 @@ index 1111111..2222222 100644
     }
 
     #[test]
+    fn terminalize_proof_requests_closes_receipted_and_unreceipted_requests() {
+        let base_request = ProofRequest {
+            schema: PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "request-primary".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test -p parser".to_owned(),
+            reason: "Run the changed parser test.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let requests = vec![
+            base_request.clone(),
+            ProofRequest {
+                id: "request-duplicate".to_owned(),
+                ..base_request.clone()
+            },
+            ProofRequest {
+                id: "request-deferred".to_owned(),
+                ..base_request
+            },
+        ];
+        let receipt = ProofReceipt {
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: "receipt-primary".to_owned(),
+            kind: "focused-head".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["proof-broker".to_owned()],
+            request_ids: vec!["request-primary".to_owned(), "request-duplicate".to_owned()],
+            commands: Vec::new(),
+            result: "head_passed".to_owned(),
+            reason: "changed parser test passed".to_owned(),
+        };
+        let terminal = terminalize_proof_requests(&requests, &[receipt]);
+        assert_eq!(terminal[0].status, "satisfied");
+        assert_eq!(terminal[1].status, "deduplicated");
+        assert_eq!(terminal[2].status, "deferred");
+        assert!(terminal.iter().all(|request| request.status != "requested"));
+        assert_eq!(proof_request_groups(&terminal)[0].status, "deferred");
+    }
+
+    #[test]
+    fn terminalize_proof_requests_maps_every_receipt_outcome() {
+        let results = [
+            ("discriminating", "satisfied"),
+            ("head_passed", "satisfied"),
+            ("sanitizer_clean", "satisfied"),
+            ("non_discriminating", "executed"),
+            ("executed", "executed"),
+            ("skipped_budget", "deferred"),
+            ("skipped_profile", "deferred"),
+            ("skipped_nightly", "deferred"),
+            ("skipped_unresolved", "deferred"),
+            ("head_failed", "failed"),
+            ("base_patch_failed", "failed"),
+            ("sanitizer_ub_detected", "failed"),
+            ("timed_out", "failed"),
+            ("failed", "failed"),
+            ("unknown", "executed"),
+        ];
+        for (index, (result, expected)) in results.into_iter().enumerate() {
+            let request = ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: format!("request-{index}"),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: "cargo test -p parser".to_owned(),
+                reason: "exercise terminal outcome".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            };
+            let receipt = ProofReceipt {
+                schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+                id: format!("receipt-{index}"),
+                kind: "focused-head".to_owned(),
+                base: "base".to_owned(),
+                head: "head".to_owned(),
+                test_patch_mode: "head-only".to_owned(),
+                requested_by: vec!["proof-broker".to_owned()],
+                request_ids: vec![request.id.clone()],
+                commands: Vec::new(),
+                result: result.to_owned(),
+                reason: "terminal outcome fixture".to_owned(),
+            };
+            let terminal = terminalize_proof_requests(&[request], &[receipt]);
+            assert_eq!(terminal[0].status, expected, "result={result}");
+        }
+        assert_eq!(
+            super::proof_request_terminal_status("skipped_profile"),
+            "deferred"
+        );
+        assert_eq!(super::proof_request_terminal_status("timed_out"), "failed");
+        assert_eq!(super::proof_request_status_rank("failed"), 7);
+        assert_eq!(super::proof_request_status_rank("invalid"), 0);
+    }
+
+    #[test]
     fn proof_request_artifacts_write_focused_planner_without_execution() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let patch = "\
@@ -1360,7 +1532,7 @@ index 1111111..2222222 100644
         assert!(
             proof_groups
                 .iter()
-                .any(|group| { group.status == "requested" && group.cost == "focused-build" })
+                .any(|group| { group.status == "deferred" && group.cost == "focused-build" })
         );
         assert!(proof_plan.contains(
             "head=`cwd=target/ub-review/proof-worktrees/head bun bd test test/js/bun/md/md-edge-cases.test.ts -t"
