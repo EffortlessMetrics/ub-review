@@ -56,6 +56,8 @@ the artifact verifier     scripts/verify-bun-review-artifacts.py, the
                           contract enforcement itself
 gate-check                reads review/gate_outcome.json (also verifier-
                           covered since #340, require_gate_outcome)
+gate-watchdog             reads frozen observations and writes optional
+                          review/gate_watchdog.json; no GitHub side effects
 action outputs            path mapping only: gate-outcome-path,
                           review-json-path, metrics-json-path,
                           github-review-path, post-* paths (action.yml)
@@ -64,6 +66,14 @@ action outputs            path mapping only: gate-outcome-path,
 ## Inputs
 
 The out directory (`--out`, default `target/ub-review`; action input `out`).
+
+`gate-watchdog --observations` additionally consumes
+`ub-review.gate_watchdog_input.v1`: an expected head and required-check
+identity, expected required-proof IDs, workflow/check observations, and
+run-attempt-bound coordinator, proof, and downloaded Actions artifact
+observations. The downloaded artifact observation carries the Actions artifact
+ID/name plus the canonical `review/gate_outcome.json` receipt; local file
+existence alone is not upload evidence.
 Verifier invocation: positional out dir plus `--expected-review-profile`,
 `--expected-repo-kind`, `--min-ok-model-lanes`, and `--self-test` (no out
 dir; runs the script's own fixture checks).
@@ -119,8 +129,10 @@ resource_leases.ndjson
 
 ```text
 gate_outcome.json              ub-review.gate_outcome.v1 (spec 0003 owns the
-                               field contract; enforced by gate-check, not
-                               by the verifier - see fail-closed section)
+                               field contract; enforced by gate-check and
+                               audited by the verifier - see fail-closed section)
+gate_watchdog.json             ub-review.gate_watchdog.v1 (experimental;
+                               verified when present)
 metrics.json                   integer schema_version 1; run/streams/
                                scheduler_roles/loops/phases/models; the
                                count-parity anchor for the whole tree
@@ -616,6 +628,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | sensors/<id>/ub-review-sensor-status.json (all six sensors) | stable | status enum + mandatory reason | downstream automation | required (require_common_tree, require_sensor_receipts) |
 | root NDJSON streams (candidates, resolved_candidates, model_stages, witnesses, proof_requests, proof_tasks, proof_receipts, receipt_routes, tool_gate_outcomes, resource_leases, follow_up_results, follow_up_outputs, follow_up_questions) | stable | per-stream vN lines | downstream automation | required (per-stream require_* functions, line parity with review/ arrays) |
 | review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
+| review/gate_watchdog.json | experimental | gate_watchdog.v1 | future stable coordinator | optional; verified when present (require_gate_watchdog, #745) |
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
 | review/floor-trend.json | stable | floor_trend.v1; window_scope single_run_v1 | downstream automation (floor-time telemetry seed) | required (require_floor_trend, #338) |
