@@ -45,6 +45,10 @@ Do not reopen these without a concrete failing receipt.
   preserves distinct claims with shared vocabulary (PRs #749/#750).
 - Internal planner language is withheld to artifacts rather than failing a
   valid code gate at the final compiler boundary (PR #751).
+- The artifact verifier now enforces watchdog cross-field coherence (PR #753),
+  and direct runs fail closed for every non-pass gate conclusion (PR #754).
+  Both slices have successful artifact verification but remain unmergeable while
+  the required gate reports the upstream RIPR exposure blocker.
 
 ## PR-by-PR status
 
@@ -111,7 +115,9 @@ leases, bounded receipts, and follow-up routing. PR #747 closes the final
 artifact request queue so no `requested` status reaches the reporter. The
 remaining proof-depth gap is production sanitizer/mutation execution; issue
 #681 preserves the sanitizer route while its current consumer diff is held on
-the upstream RIPR semantic-probe boundary.
+the upstream RIPR semantic-probe boundary. The preserved watchdog branch also
+has local receipt provenance hardening (`8391ed0`), but it is not published
+while the same RIPR blocker remains unresolved.
 
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
@@ -206,7 +212,8 @@ extracting when next touched:
   must name the exact candidate SHA, pre-tag receipts, archive/checksum names,
   downstream smoke plan, and rollback before maintainer authorization.
 - **RIPR semantic-probe contract:** #748 (transactional inline delivery),
-  #681 (production sanitizer witness), and #745 (terminal watchdog) have
+  #681 (production sanitizer witness), #745 (terminal watchdog), and the
+  published follow-ups #753/#754 have
   green functional proof but remain unpublished or unmergeable while RIPR
   reports unresolved CLI/subprocess or semantic-probe exposure gaps. No
   aliases or threshold relaxation are permitted; current upstream tracking is
