@@ -510,20 +510,29 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     )
     .with_context(|| format!("parse {}", args.review_json.display()))?;
     validate_github_review_payload_for_post(args, &review)?;
-    let api_payload = github_review_post_payload(&review)?;
-    let post_payload = args.out.join("github-review-post-payload.json");
-    fs::write(&post_payload, serde_json::to_vec_pretty(&api_payload)?)?;
+    let comments = github_review_post_comments(&review)?;
+    let pending_payload = GitHubPendingReviewPayload {
+        body: review.body.clone(),
+        comments,
+    };
+    let legacy_payload = github_review_post_payload(&review)?;
+    fs::write(
+        args.out.join("github-review-post-payload.json"),
+        serde_json::to_vec_pretty(&legacy_payload)?,
+    )?;
+    let pending_path = args.out.join("github-review-pending-payload.json");
+    fs::write(&pending_path, serde_json::to_vec_pretty(&pending_payload)?)?;
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
         args.github_api_url.trim_end_matches('/'),
         repo,
         pull_number
     );
-    let output = run_curl_json_post(
+    let pending_output = run_curl_json_post(
         Path::new("."),
         &url,
         &format!("Authorization: Bearer {token}"),
-        &post_payload,
+        &pending_path,
         &[
             "Accept: application/vnd.github+json",
             "Content-Type: application/json",
@@ -531,24 +540,92 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         ],
         60,
     )
-    .with_context(|| "run GitHub review curl")?;
-    let response_text = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr_text = String::from_utf8_lossy(&output.stderr).to_string();
-    fs::write(args.out.join("post-stdout.json"), &response_text)?;
-    fs::write(args.out.join("post-stderr.txt"), &stderr_text)?;
-    let response = serde_json::from_str(&response_text).unwrap_or_else(|_| {
-        serde_json::json!({
-            "raw": response_text,
-        })
-    });
-    if !output.status.success() {
+    .with_context(|| "create pending GitHub review")?;
+    let pending_text = String::from_utf8_lossy(&pending_output.stdout).to_string();
+    fs::write(args.out.join("pending-review-stdout.json"), &pending_text)?;
+    fs::write(
+        args.out.join("pending-review-stderr.txt"),
+        String::from_utf8_lossy(&pending_output.stderr).as_ref(),
+    )?;
+    let pending_response: serde_json::Value = serde_json::from_str(&pending_text)
+        .with_context(|| "parse pending GitHub review response")?;
+    let review_id = pending_response
+        .get("id")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| anyhow::anyhow!("pending GitHub review response omitted numeric id"))?;
+    if !pending_output.status.success() {
         bail!(
-            "GitHub review post failed with exit code {:?} and http status {:?}: {}",
-            output.status.code(),
-            output.http_status,
-            stderr_text
+            "pending GitHub review failed with exit code {:?} and http status {:?}: {}",
+            pending_output.status.code(),
+            pending_output.http_status,
+            String::from_utf8_lossy(&pending_output.stderr)
         );
     }
+    let pending_comments_url = format!("{url}/{review_id}/comments");
+    let comments_output = run_curl_json_request(
+        Path::new("."),
+        "GET",
+        &pending_comments_url,
+        &format!("Authorization: Bearer {token}"),
+        None,
+        &[
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    )
+    .with_context(|| "list pending GitHub review comments")?;
+    let comments_text = String::from_utf8_lossy(&comments_output.stdout).to_string();
+    fs::write(
+        args.out.join("pending-review-comments.json"),
+        &comments_text,
+    )?;
+    let posted_comment_ids = parse_github_review_comment_ids(&comments_text)?;
+    if !comments_output.status.success()
+        || posted_comment_ids.len() != pending_payload.comments.len()
+    {
+        let deleted = delete_pending_github_review(args, &url, review_id, token);
+        bail!(
+            "pending GitHub review comment receipt was incomplete (expected {}, got {}); cleanup={deleted}",
+            pending_payload.comments.len(),
+            posted_comment_ids.len()
+        );
+    }
+    let submit_path = args.out.join("github-review-submit-payload.json");
+    let submit_payload = GitHubSubmitReviewPayload {
+        event: review.event.clone(),
+        body: review.body.clone(),
+    };
+    fs::write(&submit_path, serde_json::to_vec_pretty(&submit_payload)?)?;
+    let submit_output = run_curl_json_post(
+        Path::new("."),
+        &format!("{url}/{review_id}/events"),
+        &format!("Authorization: Bearer {token}"),
+        &submit_path,
+        &[
+            "Accept: application/vnd.github+json",
+            "Content-Type: application/json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    )
+    .with_context(|| "submit pending GitHub review")?;
+    let submit_text = String::from_utf8_lossy(&submit_output.stdout).to_string();
+    fs::write(args.out.join("submit-review-stdout.json"), &submit_text)?;
+    fs::write(
+        args.out.join("submit-review-stderr.txt"),
+        String::from_utf8_lossy(&submit_output.stderr).as_ref(),
+    )?;
+    if !submit_output.status.success() {
+        let deleted = delete_pending_github_review(args, &url, review_id, token);
+        bail!(
+            "GitHub review submit failed with exit code {:?} and http status {:?}; cleanup={deleted}",
+            submit_output.status.code(),
+            submit_output.http_status
+        );
+    }
+    let response = serde_json::from_str(&submit_text)
+        .unwrap_or_else(|_| serde_json::json!({"raw": submit_text}));
     let review_metadata = read_github_review_metadata(args);
     Ok(PostResultReceipt {
         schema_version: 1,
@@ -556,7 +633,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         repo: repo.clone(),
         repo_valid: true,
         pull_number,
-        comments: review.comments.len(),
+        comments: posted_comment_ids.len(),
         review_json: args.review_json.display().to_string(),
         review_json_exists: args.review_json.exists(),
         review_json_valid: review_metadata
@@ -581,17 +658,69 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         off_diff_comment_count: review_metadata
             .as_ref()
             .and_then(|review| review.off_diff_comment_count),
-        http_status: output.http_status,
+        http_status: submit_output.http_status,
         token_present: true,
-        payload_written: post_payload.exists(),
-        post_stdout_written: args.out.join("post-stdout.json").exists(),
-        post_stderr_written: args.out.join("post-stderr.txt").exists(),
+        payload_written: pending_path.exists() && submit_path.exists(),
+        post_stdout_written: args.out.join("submit-review-stdout.json").exists(),
+        post_stderr_written: args.out.join("submit-review-stderr.txt").exists(),
         response,
+        delivery_status: "submitted".to_owned(),
+        review_id: Some(review_id),
+        posted_comment_ids,
+        submitted: true,
+        pending_review_deleted: false,
+        head_sha: std::env::var("GITHUB_SHA").ok(),
     })
 }
 
+fn delete_pending_github_review(args: &PostArgs, url: &str, review_id: u64, token: &str) -> bool {
+    let output = run_curl_json_request(
+        Path::new("."),
+        "DELETE",
+        &format!("{url}/{review_id}"),
+        &format!("Authorization: Bearer {token}"),
+        None,
+        &[
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    );
+    let ok = output.as_ref().is_ok_and(|output| output.status.success());
+    let _ = fs::write(
+        args.out.join("pending-review-delete.json"),
+        serde_json::json!({"review_id": review_id, "deleted": ok}).to_string(),
+    );
+    ok
+}
+
+pub(crate) fn parse_github_review_comment_ids(body: &str) -> Result<Vec<u64>> {
+    let comments: Vec<serde_json::Value> =
+        serde_json::from_str(body).with_context(|| "parse pending GitHub review comments")?;
+    comments
+        .into_iter()
+        .map(|comment| {
+            comment
+                .get("id")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| anyhow::anyhow!("pending GitHub review comment omitted numeric id"))
+        })
+        .collect()
+}
+
 pub(crate) fn github_review_post_payload(review: &GitHubReview) -> Result<GitHubReviewPostPayload> {
-    let comments = review
+    let comments = github_review_post_comments(review)?;
+    Ok(GitHubReviewPostPayload {
+        event: review.event.clone(),
+        body: review.body.clone(),
+        comments,
+    })
+}
+
+pub(crate) fn github_review_post_comments(
+    review: &GitHubReview,
+) -> Result<Vec<GitHubReviewPostComment>> {
+    review
         .comments
         .iter()
         .map(|comment| {
@@ -602,12 +731,7 @@ pub(crate) fn github_review_post_payload(review: &GitHubReview) -> Result<GitHub
                 body: github_review_post_comment_body(comment)?,
             })
         })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(GitHubReviewPostPayload {
-        event: review.event.clone(),
-        body: review.body.clone(),
-        comments,
-    })
+        .collect::<Result<Vec<_>>>()
 }
 
 pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> Result<String> {

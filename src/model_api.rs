@@ -331,12 +331,34 @@ pub(crate) fn run_curl_json_send(
     headers: &[&str],
     timeout_sec: u64,
 ) -> Result<HttpPostOutput> {
-    let (stdout_path, stderr_path) = curl_temp_output_paths(request_path);
+    run_curl_json_request(
+        root,
+        method,
+        url,
+        auth_header,
+        Some(request_path),
+        headers,
+        timeout_sec,
+    )
+}
+
+pub(crate) fn run_curl_json_request(
+    root: &Path,
+    method: &str,
+    url: &str,
+    auth_header: &str,
+    request_path: Option<&Path>,
+    headers: &[&str],
+    timeout_sec: u64,
+) -> Result<HttpPostOutput> {
+    let fallback_request_path = root.join("ub-review-curl-request");
+    let output_anchor = request_path.unwrap_or(&fallback_request_path);
+    let (stdout_path, stderr_path) = curl_temp_output_paths(output_anchor);
     let stdout =
         File::create(&stdout_path).with_context(|| format!("create {}", stdout_path.display()))?;
     let stderr =
         File::create(&stderr_path).with_context(|| format!("create {}", stderr_path.display()))?;
-    let data_binary_arg = curl_data_binary_arg(request_path)?;
+    let data_binary_arg = request_path.map(curl_data_binary_arg).transpose()?;
     let mut command = ProcessCommand::new("curl");
     command
         .arg("-sS")
@@ -348,9 +370,11 @@ pub(crate) fn run_curl_json_send(
         .arg("-X")
         .arg(method)
         .arg("-K")
-        .arg("-")
-        .arg("--data-binary")
-        .arg(data_binary_arg)
+        .arg("-");
+    if let Some(data_binary_arg) = data_binary_arg {
+        command.arg("--data-binary").arg(data_binary_arg);
+    }
+    command
         .arg(url)
         .current_dir(root)
         .stdin(Stdio::piped())

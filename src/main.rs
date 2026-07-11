@@ -620,6 +620,12 @@ struct PostResultReceipt {
     post_stdout_written: bool,
     post_stderr_written: bool,
     response: serde_json::Value,
+    delivery_status: String,
+    review_id: Option<u64>,
+    posted_comment_ids: Vec<u64>,
+    submitted: bool,
+    pending_review_deleted: bool,
+    head_sha: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -2364,6 +2370,18 @@ struct GitHubReviewPostPayload {
     event: String,
     body: String,
     comments: Vec<GitHubReviewPostComment>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GitHubPendingReviewPayload {
+    body: String,
+    comments: Vec<GitHubReviewPostComment>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct GitHubSubmitReviewPayload {
+    event: String,
+    body: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -23550,6 +23568,17 @@ index 1111111..2222222 100644
             body.contains("```suggestion\nlet header = guarded_header_read(ptr)?;\n```"),
             "post body must render GitHub suggestion markdown: {body}"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn pending_review_comment_receipt_requires_numeric_ids() -> Result<()> {
+        let ids = super::parse_github_review_comment_ids(r#"[{"id":101},{"id":202}]"#)?;
+        assert_eq!(ids, vec![101, 202]);
+        let err = super::parse_github_review_comment_ids(r#"[{"body":"missing id"}]"#)
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing comment id unexpectedly passed"))?;
+        assert!(err.to_string().contains("omitted numeric id"));
         Ok(())
     }
 
