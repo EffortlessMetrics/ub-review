@@ -224,6 +224,9 @@ pub(crate) fn compile_review_surface(
         }
         pr_body = cap_review_body(pr_body.clone(), input.args.review_body_max_bytes);
     }
+    // The renderer may honor a larger artifact/configuration budget, but the
+    // human-facing contract is always bounded by the hard PR body wall.
+    pr_body = cap_review_body(pr_body, MAX_PR_REVIEW_BODY_BYTES);
     let substantive_summary_only_findings =
         count_substantive_summary_only_findings(input.summary_only_findings);
     let mut suppressed_artifact_only_pr_body = false;
