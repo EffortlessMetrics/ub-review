@@ -197,7 +197,8 @@ pub(crate) fn render_pull_request_review_body(
     review_body_max_bytes: usize,
 ) -> String {
     let mut text = String::new();
-    let observation_items = unique_review_observations(observations);
+    let observation_items =
+        unique_review_observations_by_claim(unique_review_observations(observations));
     let pr_observation_items = observation_items
         .iter()
         .filter(|observation| {
@@ -318,14 +319,8 @@ pub(crate) fn render_pull_request_review_body(
         text.push('\n');
     }
 
-    if !inline_comments.is_empty()
-        || !summary_concerns.is_empty()
-        || !concern_observations.is_empty()
-    {
+    if !summary_concerns.is_empty() || !concern_observations.is_empty() {
         text.push_str("\n## Confirmed findings\n\n");
-        for comment in inline_comments {
-            render_pr_model_signal(&mut text, &comment.body);
-        }
         for observation in &concern_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }

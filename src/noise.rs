@@ -116,7 +116,8 @@ pub(crate) fn is_tool_status_only_gap(text: &str) -> bool {
 }
 
 pub(crate) fn is_pr_body_meta_review_noise(text: &str) -> bool {
-    text.contains("cached prior observation")
+    is_internal_review_machinery_text(text)
+        || text.contains("cached prior observation")
         || text.contains("refuter demoted inline candidate")
         || text.contains("gate proof is pending")
         || text.contains("cannot perform from cached context")
@@ -135,6 +136,20 @@ pub(crate) fn is_pr_body_meta_review_noise(text: &str) -> bool {
         || is_self_test_meta_review_noise(text)
         || is_checkout_persistence_no_change_noise(text)
         || text.contains("actionlint ran ok")
+}
+
+pub(crate) fn is_internal_review_machinery_text(text: &str) -> bool {
+    [
+        "inline candidate",
+        "duplicate candidate",
+        "duplicate inline",
+        "merged into path",
+        "lane conflict",
+        "cross-lane conflict",
+        "resolve cross-lane",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
 }
 
 pub(crate) fn is_checkout_persistence_no_change_noise(text: &str) -> bool {
@@ -533,30 +548,21 @@ pub(crate) fn unique_summary_review_findings<'a>(
     findings: impl IntoIterator<Item = &'a SummaryOnlyFinding>,
 ) -> Vec<&'a SummaryOnlyFinding> {
     let mut unique = Vec::<&SummaryOnlyFinding>::new();
-    let mut indexes = BTreeMap::<String, usize>::new();
 
     for finding in findings {
-        let key = summary_finding_review_dedupe_key(finding);
-        if let Some(index) = indexes.get(&key).copied() {
+        let index = unique
+            .iter()
+            .position(|existing| review_claims_match(&existing.reason, &finding.reason));
+        if let Some(index) = index {
             if summary_finding_rank(finding) > summary_finding_rank(unique[index]) {
                 unique[index] = finding;
             }
         } else {
-            indexes.insert(key, unique.len());
             unique.push(finding);
         }
     }
 
     unique
-}
-
-pub(crate) fn summary_finding_review_dedupe_key(finding: &SummaryOnlyFinding) -> String {
-    let normalized = normalized_review_text(&reviewer_facing_pr_text(&finding.reason));
-    if normalized.chars().count() >= 24 {
-        normalized
-    } else {
-        format!("{}:{normalized}", finding.lane)
-    }
 }
 
 pub(crate) fn summary_finding_rank(finding: &SummaryOnlyFinding) -> (u8, u8) {
@@ -570,11 +576,61 @@ pub(crate) fn summary_finding_matches_observations(
     finding: &SummaryOnlyFinding,
     observations: &[ObservationGroup],
 ) -> bool {
-    let summary = normalized_review_text(&format!("{} {}", finding.reason, finding.evidence));
-    observations.iter().any(|observation| {
-        let claim = normalized_review_text(&observation.claim);
-        claim.len() >= 24 && (summary.contains(&claim) || claim.contains(&summary))
-    })
+    let summary = format!("{} {}", finding.reason, finding.evidence);
+    observations
+        .iter()
+        .any(|observation| review_claims_match(&summary, &observation.claim))
+}
+
+pub(crate) fn review_claims_match(left: &str, right: &str) -> bool {
+    let left = normalized_review_text(&reviewer_facing_pr_text(left));
+    let right = normalized_review_text(&reviewer_facing_pr_text(right));
+    if left.chars().count() < 16 || right.chars().count() < 16 {
+        return left == right;
+    }
+    if left.contains(&right) || right.contains(&left) {
+        return true;
+    }
+    let left_tokens = conflict_tokens(&left);
+    let right_tokens = conflict_tokens(&right);
+    let smaller = left_tokens.len().min(right_tokens.len());
+    let shared = left_tokens.intersection(&right_tokens).count();
+    smaller >= 4 && shared >= 4 && shared * 5 >= smaller * 3
+}
+
+pub(crate) fn unique_review_observations_by_claim(
+    observations: Vec<ObservationGroup>,
+) -> Vec<ObservationGroup> {
+    let mut unique = Vec::<ObservationGroup>::new();
+    for observation in observations {
+        let index = unique.iter().position(|existing| {
+            observation_paths_compatible(existing, &observation)
+                && review_claims_match(&existing.claim, &observation.claim)
+        });
+        if let Some(index) = index {
+            if observation_group_rank(&observation) > observation_group_rank(&unique[index]) {
+                unique[index] = observation;
+            }
+        } else {
+            unique.push(observation);
+        }
+    }
+    unique
+}
+
+fn observation_paths_compatible(left: &ObservationGroup, right: &ObservationGroup) -> bool {
+    match (&left.path, &right.path) {
+        (Some(left), Some(right)) => left == right,
+        _ => true,
+    }
+}
+
+fn observation_group_rank(observation: &ObservationGroup) -> (u8, u8, u8) {
+    (
+        observation_status_rank(&observation.status),
+        severity_rank(&observation.severity),
+        confidence_rank(&observation.confidence),
+    )
 }
 
 pub(crate) fn summary_finding_has_cross_lane_conflict(
@@ -609,4 +665,50 @@ pub(crate) fn normalized_review_text(value: &str) -> String {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod human_output_admission_tests {
+    use super::*;
+    use anyhow::ensure;
+
+    #[test]
+    fn paraphrased_summary_findings_compile_to_one_claim() -> Result<()> {
+        let findings = [
+            SummaryOnlyFinding {
+                lane: "parser".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium".to_owned(),
+                reason: "Later declaration-list variables can lose postfix subscripts".to_owned(),
+                evidence: "source inspection".to_owned(),
+            },
+            SummaryOnlyFinding {
+                lane: "tests".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                reason: "Postfix subscripts are dropped from later variables in declaration lists"
+                    .to_owned(),
+                evidence: "focused regression".to_owned(),
+            },
+        ];
+
+        let unique = unique_summary_review_findings(&findings);
+        ensure!(unique.len() == 1, "paraphrased claim was not deduplicated");
+        ensure!(unique[0].lane == "tests", "strongest claim did not survive");
+        Ok(())
+    }
+
+    #[test]
+    fn internal_inline_planning_language_is_artifact_only() -> Result<()> {
+        for phrase in [
+            "duplicate inline candidate merged into path:122",
+            "resolve cross-lane conflict before posting",
+        ] {
+            ensure!(
+                is_internal_review_machinery_text(phrase),
+                "internal phrase was admitted: {phrase}"
+            );
+        }
+        Ok(())
+    }
 }

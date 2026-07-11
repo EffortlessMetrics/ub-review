@@ -189,15 +189,10 @@ pub(crate) fn compile_review_surface(
     // passes it through verbatim — it is the reporter's editorial judgment,
     // not a deterministic finding the compiler ranks or suppresses (firewall,
     // not truth reducer). Subject only to the existing body-size limit.
-    if let Some(distillation) = input.reporter_distillation {
+    if let (true, Some(distillation)) = (pr_body.is_empty(), input.reporter_distillation) {
         let trimmed = distillation.trim();
         if !trimmed.is_empty() {
-            let reporter_section = format!("{REPORTER_SUMMARY_HEADING}\n\n{trimmed}\n\n");
-            pr_body = if pr_body.is_empty() {
-                reporter_section.trim_end().to_owned()
-            } else {
-                format!("{reporter_section}{pr_body}")
-            };
+            pr_body = format!("{REPORTER_SUMMARY_HEADING}\n\n{trimmed}");
         }
     }
     // Release lane step 5: suggested follow-ups render last - they explain
@@ -366,9 +361,7 @@ const MAX_PR_REVIEW_BODY_BULLETS: usize = 12;
 
 pub(crate) fn is_suppressible_pr_body_policy_error(error: &anyhow::Error) -> bool {
     let text = error.to_string();
-    text.contains("artifact-only boilerplate")
-        || text.contains("refuted-only artifact note")
-        || text.contains("not concise enough")
+    text.contains("artifact-only boilerplate") || text.contains("refuted-only artifact note")
 }
 
 pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
@@ -376,11 +369,12 @@ pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPoli
 }
 
 /// Body-policy validation with an optional waiver for the suppressible
-/// classes (`is_suppressible_pr_body_policy_error`: conciseness, artifact-only
-/// boilerplate, refuted-only note). The waiver exists for exactly one caller
+/// classes (`is_suppressible_pr_body_policy_error`: artifact-only boilerplate
+/// and refuted-only notes). The waiver exists for exactly one caller
 /// posture: `[review_body].summary_only_body` decided to post a body the
 /// suppressor would have withheld. The non-suppressible checks (lane,
-/// provider, and sensor tables plus the execution summary) always run.
+/// size, internal-machinery, provider, and sensor walls plus the execution
+/// summary always run.
 pub(crate) fn validate_pr_review_body_policy_with_waiver(
     body: &str,
     policy: &ReviewBodyPolicy,
@@ -390,20 +384,23 @@ pub(crate) fn validate_pr_review_body_policy_with_waiver(
     if trimmed.is_empty() {
         return Ok(());
     }
+    if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
+        bail!(
+            "github review body is not concise enough: {} bytes over max {}",
+            trimmed.len(),
+            MAX_PR_REVIEW_BODY_BYTES
+        );
+    }
+    let bullet_count = pr_body_bullet_count(trimmed);
+    if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
+        bail!(
+            "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
+        );
+    }
+    if is_internal_review_machinery_text(&trimmed.to_ascii_lowercase()) {
+        bail!("github review body contains internal review machinery");
+    }
     if !waive_suppressible {
-        if trimmed.len() > MAX_PR_REVIEW_BODY_BYTES {
-            bail!(
-                "github review body is not concise enough: {} bytes over max {}",
-                trimmed.len(),
-                MAX_PR_REVIEW_BODY_BYTES
-            );
-        }
-        let bullet_count = pr_body_bullet_count(trimmed);
-        if bullet_count > MAX_PR_REVIEW_BODY_BULLETS {
-            bail!(
-                "github review body is not concise enough: {bullet_count} bullets over max {MAX_PR_REVIEW_BODY_BULLETS}"
-            );
-        }
         if has_forbidden_pr_review_boilerplate(trimmed) {
             bail!("github review body contains artifact-only boilerplate");
         }
@@ -469,6 +466,13 @@ pub(crate) fn has_forbidden_pr_review_boilerplate(body: &str) -> bool {
             "## residual risk",
             "cached prior observation",
             "refuter demoted inline candidate",
+            "inline candidate",
+            "duplicate candidate",
+            "duplicate inline",
+            "merged into path",
+            "lane conflict",
+            "cross-lane conflict",
+            "resolve cross-lane",
             "gate proof is pending",
             "cannot perform from cached context",
             "commit-existence/ancestry proof",
