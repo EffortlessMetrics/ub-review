@@ -1,7 +1,7 @@
 //! Gate verdict surface: the `gate_outcome.json` writer-side contract and
 //! its enforcement. `build_gate_outcome` derives the deterministic verdict
 //! (model output never feeds it); `cmd_gate_check` is the single source of
-//! truth that turns a recorded `fail` conclusion into a non-zero exit.
+//! truth that turns a recorded non-pass conclusion into a non-zero exit.
 //! Extracted from main.rs as pure code motion (cleanup train PR 2); spec
 //! 0003 owns the field contract and the verifier audits the artifact.
 
@@ -163,7 +163,7 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
                 .unwrap_or_else(|| "missing".to_owned());
             let message = format!(
                 "gate enforcement is on but {} records unrecognized conclusion {value} \
-                 (expected exactly `pass` or `fail`); failing closed",
+                  (expected exactly `pass`, `fail`, or `inconclusive`); failing closed",
                 path.display()
             );
             println!("::error::{message}");
@@ -212,11 +212,12 @@ pub(crate) struct GateToolGateCounts {
 }
 
 pub(crate) fn run_gate_failure_message(completion: &RunCompletion) -> Option<String> {
-    if !completion.fail_on_gate || completion.gate_conclusion != "fail" {
+    if !completion.fail_on_gate || completion.gate_conclusion == "pass" {
         return None;
     }
     Some(format!(
-        "gate conclusion is `fail`; receipts are in review/gate_outcome.json under {}",
+        "gate conclusion is `{}`; receipts are in review/gate_outcome.json under {}",
+        completion.gate_conclusion,
         completion.run_dir.display()
     ))
 }
@@ -565,7 +566,10 @@ pub(crate) fn required_sensor_gap_reason(issue: &SensorEvidenceIssue) -> GateRea
             issue.status, issue.reason
         ),
         receipt: required_sensor_gap_receipt(issue),
-        next_action: None,
+        next_action: Some(format!(
+            "rerun required sensor `{}` or repair its evidence receipt",
+            issue.sensor
+        )),
     }
 }
 
@@ -1223,7 +1227,12 @@ mod tests {
         assert_eq!(reason.receipt, direct_reason.receipt);
         assert_eq!(reason.next_action, direct_reason.next_action);
         let serialized = serde_json::to_value(reason)?;
-        assert!(serialized.get("next_action").is_none());
+        assert_eq!(
+            serialized
+                .get("next_action")
+                .and_then(serde_json::Value::as_str),
+            Some("rerun required sensor `actionlint` or repair its evidence receipt")
+        );
         assert_eq!(gate.conclusion, "inconclusive");
         Ok(())
     }
