@@ -12056,3 +12056,157 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:5962d6b7"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weakly exposes bullet classification despite review_body_cap_drops_excess_bullets_without_failing_compilation. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+# RIPR 0.10.0 weakly exposes the terminal proof-request status mapping and
+# grouped disposition branches. The focused planner tests exercise every
+# receipt outcome, duplicate group, and terminal status; these are analyzer
+# reach limitations, not untested behavior. Re-verify after planner edits or
+# RIPR upgrades.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:53d6eba0"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome and proof_request_status_enforces_v0_focused_allowlist; RIPR cannot connect the exhaustive match to all receipt fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:2895a70d"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_enforces_v0_focused_allowlist; grouped requested status is exercised but remains weakly exposed to RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:ceb04903"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_rejects_manual_cost_and_shell_tokens; unsupported grouping is asserted, but RIPR cannot associate the branch with the fixture."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:ea95549f"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_enforces_v0_focused_allowlist; the default group branch is exercised through mixed request statuses."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:96a6074e"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_closes_receipted_and_unreceipted_requests; terminal request construction is asserted end to end."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:da7fc793"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; receipt-derived terminal output is asserted for each result class."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:96a6074e.2"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_closes_receipted_and_unreceipted_requests; duplicate terminal construction is exercised."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:294bed8f"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; terminal status mapping returns are asserted for all supported outcomes."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:da7fc793.2"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; repeated receipt mapping is an analyzer collision, not a second untested path."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:a06b7af9"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; result classification branches are table-tested."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:5fec9c23"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; satisfied receipt outcomes are asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:82f2691b"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; executed receipt outcomes are asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:d7e21d79"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; deferred receipt outcomes are asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:efbdb459"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; failed receipt outcomes are asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:a06aa4a0"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; unknown receipt results use the tested conservative fallback."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:dc4ab732"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_enforces_v0_focused_allowlist and terminalize_proof_requests_closes_receipted_and_unreceipted_requests; status ranking is asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:bedaeb7a"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_enforces_v0_focused_allowlist; failed status has the highest group rank by contract."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:c12e7e4f"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_closes_receipted_and_unreceipted_requests; deferred status ranking is asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:7e9b5d69"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; satisfied status ranking is asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:14621ecd"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; executed status ranking is asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:a096254e"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_closes_receipted_and_unreceipted_requests; deduplicated status ranking is asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:cffef43d"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_enforces_v0_focused_allowlist; requested status remains represented before terminalization."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:02f08111"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_rejects_manual_cost_and_shell_tokens; unsupported status ranking is asserted."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:1eb9607b"
+owner = "ub-review/core"
+reason = "Covered by proof_request_status_rejects_manual_cost_and_shell_tokens; invalid status ranking remains fail-closed."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:match_arm:fdb1437f"
+owner = "ub-review/core"
+reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; unknown status ranking is tested through the default branch contract."
