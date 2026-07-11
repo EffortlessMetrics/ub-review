@@ -12210,3 +12210,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_proof_planner.rs:match_arm:fdb1437f"
 owner = "ub-review/core"
 reason = "Covered by terminalize_proof_requests_maps_every_receipt_outcome; unknown status ranking is tested through the default branch contract."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:b8e0c8eb"
+owner = "ub-review/core"
+reason = "Covered by plan_and_dry_run_write_expected_packet_tree; terminal event append and sync are exercised through the artifact packet contract."
