@@ -12240,3 +12240,27 @@ kind = "exposure_gap"
 finding_id = "probe:src_validate.rs:return_value:f8f749fe"
 owner = "ub-review/core"
 reason = "Covered by evidence_rank_is_receipt_first_then_source_thread_and_model and inline_findings_rank_executed_evidence_before_model_confidence; receipt-backed evidence wins ranking."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:308c3851"
+owner = "ub-review/core"
+reason = "Covered by summary_claim_identity_requires_matching_family_marker; missing identity is rejected before summary claim merging."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:1816efd1"
+owner = "ub-review/core"
+reason = "Covered by summary_claim_identity_requires_matching_family_marker and structurally_distinct_summary_claims_with_shared_vocabulary; family or marker mismatch retains both claims."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:field_construction:5bfe6f5f"
+owner = "ub-review/core"
+reason = "Covered by summary_claim_identity_requires_matching_family_marker; the approved family table drives deterministic identity selection."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:call_deletion:b5a41fc6"
+owner = "ub-review/core"
+reason = "Covered by summary_claim_identity_requires_matching_family_marker; marker extraction is asserted for matching and distinct claims."
