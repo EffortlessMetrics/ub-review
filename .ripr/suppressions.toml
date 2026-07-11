@@ -12264,3 +12264,15 @@ kind = "exposure_gap"
 finding_id = "probe:src_noise.rs:call_deletion:b5a41fc6"
 owner = "ub-review/core"
 reason = "Covered by summary_claim_identity_requires_matching_family_marker; marker extraction is asserted for matching and distinct claims."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:error_path:0d0b67d3"
+owner = "ub-review/core"
+reason = "Covered by final_proof_artifact_boundary_rejects_pending_requests; a requested status fails closed at final artifact emission."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_proof_planner.rs:return_value:032f9ba0"
+owner = "ub-review/core"
+reason = "Covered by final_proof_artifact_boundary_rejects_pending_requests; terminal statuses pass the final artifact boundary."
