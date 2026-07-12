@@ -699,6 +699,13 @@ pub(crate) fn adjudicate_claim_graph_conflicts(
         if let Some(claim) = graph.claims.iter().find(|claim| claim.id == topic.claim_id) {
             topic.status = claim.state.key().to_owned();
         }
+        if graph
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.loser.as_deref() == Some(topic.claim_id.as_str()))
+        {
+            topic.delivery = "no-human-surface".to_owned();
+        }
     }
 }
 

@@ -811,6 +811,9 @@ mod tests {
                 claim.source_lane == "lane-a" && claim.state == ClaimState::Refuted
             })
         );
+        ensure!(graph.topics.iter().any(|topic| {
+            topic.source_lane == "lane-a" && topic.delivery == "no-human-surface"
+        }));
         ensure!(
             reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).is_empty(),
             "proof-refuted inline surface must not render"
