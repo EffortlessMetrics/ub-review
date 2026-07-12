@@ -152,6 +152,9 @@ pub(crate) fn build_active_claim_graph(
             }
         }
         for receipt in proof_receipts {
+            if !receipt.head.eq_ignore_ascii_case(head_sha) {
+                continue;
+            }
             if receipt
                 .requested_by
                 .iter()
@@ -697,6 +700,57 @@ mod tests {
             &context("dddddddddddddddddddddddddddddddddddddddd"),
         );
         ensure!(stale.topics[0].thread_disposition == "superseded_by_head_change");
+        Ok(())
+    }
+
+    #[test]
+    fn active_graph_does_not_reuse_stale_proof_receipts() -> Result<()> {
+        let head = "ffffffffffffffffffffffffffffffffffffffff";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "observation-stale-proof".to_owned(),
+            lane: "tests".to_owned(),
+            question: "answer".to_owned(),
+            claim: "later subscript is dropped".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "fingerprint".to_owned(),
+            evidence: Vec::new(),
+            dedupe_key: "later-subscript".to_owned(),
+            source: "test".to_owned(),
+        };
+        let stale_receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "proof-stale-head".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            head: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: Vec::new(),
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "proof belongs to an earlier head".to_owned(),
+        };
+
+        let graph = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            &[],
+            &[],
+            &[],
+            std::slice::from_ref(&stale_receipt),
+            &context(head),
+        );
+
+        ensure!(graph.topics.len() == 1);
+        ensure!(graph.topics[0].proof_receipts.is_empty());
+        ensure!(graph.topics[0].evidence.is_empty());
+        ensure!(graph.evidence_gaps.len() == 1);
         Ok(())
     }
 
