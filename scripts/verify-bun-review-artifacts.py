@@ -1884,6 +1884,11 @@ def require_claim_graph(root: pathlib.Path) -> None:
     topics = graph.get("topics")
     if not isinstance(claims, list) or not isinstance(topics, list):
         fail("claim_graph.json claims/topics must be arrays")
+    for field in ("conflicts", "evidence_gaps"):
+        if not isinstance(graph.get(field), list):
+            fail(f"claim_graph.json {field} must be an array")
+    if graph.get("mode") not in {"active", "shadow"}:
+        fail(f"claim_graph.json mode is invalid: {graph.get('mode')!r}")
     claim_ids = []
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict) or not isinstance(claim.get("id"), str):
@@ -10924,27 +10929,51 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
 def self_test_claim_graph_contract() -> None:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
-        write_self_test_json(
-            root / "review/claim_graph.json",
-            {
-                "schema": CLAIM_GRAPH_SCHEMA,
-                "head_sha": "HEAD",
-                "claims": [{"id": "claim-1"}],
-                "topics": [
-                    {
-                        "claim_id": "claim-1",
-                        "head_sha": "HEAD",
-                        "thread_disposition": "novel",
-                        "existing_threads": [],
-                        "stale_threads": [],
-                        "proof_receipts": [],
-                    }
-                ],
-            },
-        )
+        graph = {
+            "schema": CLAIM_GRAPH_SCHEMA,
+            "head_sha": "HEAD",
+            "claims": [{"id": "claim-1"}],
+            "topics": [
+                {
+                    "claim_id": "claim-1",
+                    "head_sha": "HEAD",
+                    "thread_disposition": "novel",
+                    "existing_threads": [],
+                    "stale_threads": [],
+                    "proof_receipts": [],
+                }
+            ],
+            "conflicts": [],
+            "evidence_gaps": [],
+            "mode": "active",
+        }
+
+        def write_graph(overrides: dict | None = None) -> pathlib.Path:
+            candidate = dict(graph)
+            if overrides:
+                candidate.update(overrides)
+            write_self_test_json(root / "review/claim_graph.json", candidate)
+            return root
+
+        write_graph()
         write_self_test_json(root / "review/metrics.json", {"head": "HEAD"})
         write_self_test_json(root / "review/proof_receipts.json", [])
         require_claim_graph(root)
+        expect_self_test_failure(
+            "claim graph invalid mode",
+            "mode is invalid",
+            lambda: require_claim_graph(write_graph({"mode": "unknown"})),
+        )
+        expect_self_test_failure(
+            "claim graph conflicts shape",
+            "conflicts must be an array",
+            lambda: require_claim_graph(write_graph({"conflicts": {}})),
+        )
+        expect_self_test_failure(
+            "claim graph evidence gaps shape",
+            "evidence_gaps must be an array",
+            lambda: require_claim_graph(write_graph({"evidence_gaps": {}})),
+        )
 
 
 def run_self_tests() -> None:
