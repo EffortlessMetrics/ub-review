@@ -38,12 +38,6 @@ pub fn prepend_to_path(dir: &Path) -> Result<String> {
     Ok(std::env::join_paths(paths)?.to_string_lossy().into_owned())
 }
 
-pub fn spawn_fake_github_review_api(
-    comment_ids: Vec<u64>,
-) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
-    spawn_fake_github_review_api_with_expected_requests(comment_ids, 3)
-}
-
 pub fn spawn_fake_github_review_api_with_expected_requests(
     comment_ids: Vec<u64>,
     expected_requests: usize,

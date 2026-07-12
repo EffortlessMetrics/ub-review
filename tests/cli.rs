@@ -6462,11 +6462,80 @@ fn post_head_mismatch_fails_before_pending_review_creation() -> Result<()> {
 }
 
 #[test]
+fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- An expected current head is required.",
+            "comments": []
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 0)?;
+
+    run(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.is_empty(),
+        "missing expected head must not call GitHub"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    anyhow::ensure!(
+        head_check["status"] == "unavailable",
+        "missing expected head must be receipted"
+    );
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    anyhow::ensure!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("refusing to post")),
+        "missing expected head must fail closed: {post_error:#?}"
+    );
+    anyhow::ensure!(
+        !out.join("github-review-pending-payload.json").exists()
+            || !out.join("pending-review-stdout.json").exists(),
+        "missing expected head must not create a pending review"
+    );
+    Ok(())
+}
+
+#[test]
 fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
     let diff_patch = temp.path().join("diff.patch");
+    let event_path = temp.path().join("event.json");
     let out = temp.path().join("post");
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
     fs::write(
         &diff_patch,
         "diff --git a/src/lib.rs b/src/lib.rs\nindex 1111111..2222222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let header = unsafe { ptr.cast::<Header>().read() };\n     len\n}\n",
@@ -6485,9 +6554,9 @@ fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
         }))?,
     )?;
     let (github_api_url, handle) =
-        spawn_fake_github_review_api_with_expected_requests(Vec::new(), 3)?;
+        spawn_fake_github_review_api_with_expected_requests(Vec::new(), 4)?;
 
-    run(
+    run_with_env(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -6507,12 +6576,13 @@ fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
             "--github-api-url",
             &github_api_url,
         ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 3);
+    assert_eq!(requests.len(), 4);
     assert!(
-        requests[2].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+        requests[3].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
     );
     let post_error: serde_json::Value =
         serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
@@ -6534,8 +6604,15 @@ fn post_payload_renders_suggestion_blocks_for_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
     let diff_patch = temp.path().join("diff.patch");
+    let event_path = temp.path().join("event.json");
     let out = temp.path().join("post");
     let token = "test-token-redacted";
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
     fs::write(
         &diff_patch,
         "\
@@ -6568,9 +6645,10 @@ index 1111111..2222222 100644
         }))?,
     )
     .with_context(|| format!("write {}", review_json.display()))?;
-    let (github_api_url, handle) = spawn_fake_github_review_api(vec![654])?;
+    let (github_api_url, handle) =
+        spawn_fake_github_review_api_with_expected_requests(vec![654], 4)?;
 
-    run(
+    run_with_env(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -6590,22 +6668,23 @@ index 1111111..2222222 100644
             "--github-api-url",
             &github_api_url,
         ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 3);
-    let request_text = &requests[0];
+    assert_eq!(requests.len(), 4);
+    let request_text = &requests[1];
     assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
     assert!(
         !request_text.contains("\"suggestion\""),
         "GitHub API payload must not contain internal suggestion field: {request_text}"
     );
     assert!(
-        requests[1]
+        requests[2]
             .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
     );
     assert!(
-        requests[2]
+        requests[3]
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
 

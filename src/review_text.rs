@@ -522,10 +522,14 @@ fn verify_current_pr_head(
             &receipt_path,
             serde_json::to_vec_pretty(&serde_json::json!({
                 "status": "unavailable",
-                "reason": "no pull_request.head.sha event field or claim graph head_sha was available"
+                "reason": "no pull_request.head.sha event field or claim graph head_sha was available",
+                "repo": repo,
+                "pull_number": pull_number
             }))?,
         )?;
-        return Ok(());
+        bail!(
+            "current pull request head is unavailable; refusing to post without an expected head SHA"
+        );
     };
 
     let url = format!(
