@@ -4760,6 +4760,8 @@ fn write_review_artifacts(
     );
     compiler_inline_comments =
         reconcile_inline_comments(&pre_compile_claim_graph, &compiler_inline_comments);
+    compiler_summary_only_findings =
+        reconcile_summary_only_findings(&pre_compile_claim_graph, &compiler_summary_only_findings);
     write_claim_graph(out, &pre_compile_claim_graph)?;
     write_final_compiler_input_artifact(
         out,

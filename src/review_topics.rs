@@ -241,6 +241,16 @@ pub(crate) fn reconcile_inline_comments(
         .iter()
         .filter(|comment| {
             let claim_id = topic_claim_id_for_inline(comment);
+            let refuted_by_adjudication = graph.topics.iter().any(|topic| {
+                topic.status == "refuted"
+                    && (topic.claim_id == claim_id
+                        || subject_tokens_overlap(&topic.subject, &comment.body))
+                    && topic.path.as_deref() == Some(comment.path.as_str())
+                    && topic.anchor == Some(comment.line)
+            });
+            if refuted_by_adjudication {
+                return false;
+            }
             let covered_by_current_thread = graph.topics.iter().any(|topic| {
                 (topic.claim_id == claim_id
                     || subject_tokens_overlap(&topic.subject, &comment.body))
@@ -252,6 +262,26 @@ pub(crate) fn reconcile_inline_comments(
                 return false;
             }
             seen_claims.insert(topic_claim_id_for_inline(comment))
+        })
+        .cloned()
+        .collect()
+}
+
+/// Apply the same current-head adjudication to summary-only findings. A
+/// refuted summary surface remains in the claim graph for auditability but
+/// must not compete with the proof-backed disposition in public prose.
+pub(crate) fn reconcile_summary_only_findings(
+    graph: &ClaimGraph,
+    findings: &[SummaryOnlyFinding],
+) -> Vec<SummaryOnlyFinding> {
+    findings
+        .iter()
+        .filter(|finding| {
+            !graph.topics.iter().any(|topic| {
+                topic.status == "refuted"
+                    && subject_tokens_overlap(&topic.subject, &finding.reason)
+                    && topic.source_lane == finding.lane
+            })
         })
         .cloned()
         .collect()
@@ -773,6 +803,21 @@ mod tests {
             graph.claims.iter().any(|claim| {
                 claim.source_lane == "lane-a" && claim.state == ClaimState::Refuted
             })
+        );
+        ensure!(
+            reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).is_empty(),
+            "proof-refuted inline surface must not render"
+        );
+        let summary = SummaryOnlyFinding {
+            lane: "lane-a".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            reason: candidate.body.clone(),
+            evidence: candidate.evidence.clone(),
+        };
+        ensure!(
+            reconcile_summary_only_findings(&graph, std::slice::from_ref(&summary)).is_empty(),
+            "proof-refuted summary surface must not render"
         );
         Ok(())
     }
