@@ -1733,6 +1733,49 @@ def require_gate_config(path: str, gate: object) -> None:
         fail(f"{path} gate.post_review_on is not a string array: {gate!r}")
 
 
+def require_reply_candidates(root: pathlib.Path) -> bool:
+    path = root / "review/reply-candidates.json"
+    if not path.exists():
+        return False
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail("reply-candidates.json is not an object")
+    if artifact.get("schema") != "ub-review.github_review_reply_candidates.v1":
+        fail("reply-candidates.json has the wrong schema")
+    head_sha = artifact.get("head_sha")
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        fail("reply-candidates.json head_sha is not a 40-hex SHA")
+    claim_graph = load_json(root / "review/claim_graph.json")
+    if claim_graph.get("head_sha") != head_sha:
+        fail("reply-candidates.json head_sha does not match claim_graph.json")
+    replies = artifact.get("replies")
+    if not isinstance(replies, list) or not replies:
+        fail("reply-candidates.json replies must be a non-empty array")
+    seen_comment_ids: set[int] = set()
+    for index, reply in enumerate(replies):
+        if not isinstance(reply, dict):
+            fail(f"reply-candidates.json replies[{index}] is not an object")
+        claim_id = reply.get("claim_id")
+        if not isinstance(claim_id, str) or not claim_id:
+            fail(f"reply-candidates.json replies[{index}] claim_id is invalid")
+        if reply.get("head_sha") != head_sha:
+            fail(f"reply-candidates.json replies[{index}] head_sha does not match artifact")
+        comment_id = reply.get("comment_id")
+        if not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id <= 0:
+            fail(f"reply-candidates.json replies[{index}] comment_id is invalid")
+        if comment_id in seen_comment_ids:
+            fail(f"reply-candidates.json duplicates comment_id {comment_id}")
+        seen_comment_ids.add(comment_id)
+        body = reply.get("body")
+        if not isinstance(body, str) or not body.strip() or len(body) > 1_200:
+            fail(f"reply-candidates.json replies[{index}] body is invalid")
+        if not re.match(r"^\[[a-z0-9-]+\]", body):
+            fail(f"reply-candidates.json replies[{index}] body lacks a safe prefix")
+        no_standalone_approval_line(body, path)
+        require_pr_review_body_policy(body, path)
+    return True
+
+
 def require_review(
     root: pathlib.Path,
     max_inline_comments: int | None,
@@ -1817,19 +1860,23 @@ def require_review(
 
     github_review_path = root / "review/github-review.json"
     github_skip_path = root / "review/github-review-skip.json"
+    reply_candidates_present = require_reply_candidates(root)
     if github_review_path.exists():
         github_review = load_json(github_review_path)
         if github_review.get("event") != "COMMENT":
             fail(f"github-review.json event expected COMMENT, got {github_review.get('event')!r}")
         body = github_review.get("body")
-        if not isinstance(body, str) or not has_reviewer_value_heading(body):
+        if not isinstance(body, str) or (
+            not has_reviewer_value_heading(body) and not reply_candidates_present
+        ):
             fail("github-review.json body is missing reviewer-value content")
-        no_standalone_approval_line(body, github_review_path)
-        require_pr_review_body_policy(
-            body,
-            github_review_path,
-            waive_suppressible=effective_summary_only_body(root) != "suppress",
-        )
+        if body:
+            no_standalone_approval_line(body, github_review_path)
+            require_pr_review_body_policy(
+                body,
+                github_review_path,
+                waive_suppressible=effective_summary_only_body(root) != "suppress",
+            )
         comments = github_review.get("comments")
         if not isinstance(comments, list):
             fail("github-review.json comments is not an array")
@@ -1843,6 +1890,8 @@ def require_review(
         for index, comment in enumerate(comments):
             require_github_comment(comment, index)
     else:
+        if reply_candidates_present:
+            fail("reply-candidates.json requires github-review.json")
         skip = load_json(github_skip_path)
         if skip.get("status") != "skipped":
             fail(f"github-review-skip.json status expected skipped, got {skip.get('status')!r}")
@@ -7920,6 +7969,42 @@ def self_test_empty_candidate_artifacts_without_dir() -> None:
         require_candidate_artifacts(root, review)
 
 
+def self_test_reply_candidates_contract() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = pathlib.Path(directory)
+        (root / "review").mkdir()
+        head_sha = "a" * 40
+        write_self_test_json(root / "review/claim_graph.json", {"head_sha": head_sha})
+        write_self_test_json(
+            root / "review/reply-candidates.json",
+            {
+                "schema": "ub-review.github_review_reply_candidates.v1",
+                "head_sha": head_sha,
+                "replies": [
+                    {
+                        "claim_id": "claim-parser-postfix",
+                        "head_sha": head_sha,
+                        "comment_id": 456,
+                        "body": "[ub-review] Confirmed by focused execution. Receipt: `proof:red-green:123`.",
+                    }
+                ],
+            },
+        )
+        if not require_reply_candidates(root):
+            fail("reply candidate self-test did not recognize a valid artifact")
+        expect_self_test_failure(
+            "reply candidate head mismatch",
+            "does not match claim_graph.json",
+            lambda: write_self_test_json(
+                root / "review/reply-candidates.json",
+                {
+                    "schema": "ub-review.github_review_reply_candidates.v1",
+                    "head_sha": "b" * 40,
+                    "replies": [],
+                },
+            )
+            or require_reply_candidates(root),
+        )
 def self_test_lane_packet_pr_thread_seed_contract() -> None:
     lane_path = pathlib.Path("lanes/ub-memory-lifetime.md")
     require_lane_packet_pr_thread_seed(
@@ -11590,6 +11675,7 @@ def run_self_tests() -> None:
     self_test_source_route_late_proof_routes_and_suppresses_task()
     self_test_final_tool_gate_routes_to_relevant_lanes()
     self_test_empty_candidate_artifacts_without_dir()
+    self_test_reply_candidates_contract()
     self_test_lane_packet_pr_thread_seed_contract()
     expect_self_test_failure(
         "non-empty candidate artifacts without directory",
