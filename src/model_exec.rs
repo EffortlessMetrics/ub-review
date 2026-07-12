@@ -822,6 +822,7 @@ Focus: {focus}
 Use the cached shared context. You are an advisory proof-planner lane for the intelligent-ci gate.
 The deterministic planner remains the source of proof_tasks.ndjson. Add only proof requests or observations that would improve the central proof broker's plan.
 If impact_candidates are present in the planner input, prioritize proof that targets the highest-ranked candidates the deterministic planner skipped.
+Prefer typed `proof_intents` for new proof requests: describe the question and expected answer shape, and let the deterministic broker resolve an approved command.
 
 IMPORTANT: proof commands must use the EXACT syntax the proof broker's allowlist accepts.
 - Use `--package <name>` not `-p <name>`.
@@ -890,7 +891,7 @@ Return only one strict JSON object:
   ]
 }}
 
-Hard caps: at most 2 observations, 2 failed_objections, and 2 proof_requests.
+Hard caps: at most 2 observations, 2 failed_objections, 2 proof_requests, and 2 proof_intents.
 Do not emit inline_comments, candidate_findings, summary_only_findings, or PR-facing findings.
 Do not duplicate proof already represented in Current deterministic planner output.
 Do not post, mutate files, or run shell commands. Lanes request proof; only the central broker executes.
@@ -1218,11 +1219,11 @@ Use the cached shared context. Return only one strict JSON object:
   ]
 }}
 
-Hard caps: at most 3 observations, 2 candidate_findings, 1 summary_only_findings item, 2 failed_objections, and 1 proof_request.
+Hard caps: at most 3 observations, 2 candidate_findings, 1 summary_only_findings item, 2 failed_objections, 1 proof_request, and 2 proof_intents.
 If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
-Do not post, mutate files, or run shell commands. Request executable proof only through `proof_requests`.
+Do not post, mutate files, or run shell commands. Request executable proof through `proof_requests` or `proof_intents`.
 Prefer `proof_intents` for new requests: describe the claim question and expected
 answer, and let the deterministic broker choose an approved command. `target`
 is a repository symbol or test/package label, never a shell command.

@@ -5878,7 +5878,7 @@ mod tests {
     }
 
     #[test]
-    fn lane_prompt_keeps_execution_in_proof_requests() {
+    fn lane_prompt_routes_execution_through_typed_or_legacy_requests() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let spec = direct_minimax_spec(&args);
         let lane = lane_plan("tests-red-green");
@@ -5886,7 +5886,11 @@ mod tests {
         let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
 
         assert!(prompt.contains("Do not post, mutate files, or run shell commands"));
-        assert!(prompt.contains("Request executable proof only through `proof_requests`"));
+        assert!(
+            prompt.contains("Request executable proof through `proof_requests` or `proof_intents`")
+        );
+        assert!(prompt.contains("at most 3 observations, 2 candidate_findings"));
+        assert!(prompt.contains("2 proof_intents"));
         assert!(prompt.contains("focused command requested from central proof broker"));
     }
 
