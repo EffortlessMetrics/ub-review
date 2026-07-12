@@ -164,15 +164,7 @@ pub(crate) fn build_active_claim_graph(
             if !receipt.head.eq_ignore_ascii_case(head_sha) {
                 continue;
             }
-            if receipt
-                .requested_by
-                .iter()
-                .any(|lane| lane == &topic.source_lane)
-                || receipt
-                    .request_ids
-                    .iter()
-                    .any(|id| id.contains(&topic.claim_id))
-            {
+            if receipt_supports_topic(receipt, topic, proof_requests) {
                 push_unique(&mut topic.proof_receipts, receipt.id.clone());
                 topic.evidence.push(EvidenceRef {
                     class: EvidenceClass::ProofReceipt,
@@ -397,6 +389,7 @@ pub(crate) fn build_reply_candidates(
     head_sha: &str,
     comments: &[ReviewInlineComment],
     proof_receipts: &[ProofReceipt],
+    proof_requests: &[ProofRequest],
     thread_context: &PrThreadContext,
 ) -> Vec<GitHubReviewReply> {
     let mut seen_comment_ids = std::collections::BTreeSet::new();
@@ -419,11 +412,7 @@ pub(crate) fn build_reply_candidates(
                 return None;
             }
             let receipt = proof_receipts.iter().find(|receipt| {
-                receipt.head.eq_ignore_ascii_case(head_sha)
-                    && receipt
-                        .requested_by
-                        .iter()
-                        .any(|lane| lane == &comment.lane)
+                receipt_supports_inline_comment(receipt, head_sha, comment, proof_requests)
             })?;
             Some(GitHubReviewReply {
                 claim_id: topic_claim_id_for_inline(comment),
@@ -434,6 +423,66 @@ pub(crate) fn build_reply_candidates(
             })
         })
         .collect()
+}
+
+fn receipt_supports_topic(
+    receipt: &ProofReceipt,
+    topic: &ReviewTopic,
+    proof_requests: &[ProofRequest],
+) -> bool {
+    receipt
+        .requested_by
+        .iter()
+        .any(|lane| lane == &topic.source_lane)
+        && receipt.request_ids.iter().any(|request_id| {
+            proof_requests.iter().any(|request| {
+                request.id == *request_id
+                    && request
+                        .requested_by
+                        .iter()
+                        .any(|lane| lane == &topic.source_lane)
+                    && claim_text_matches(
+                        &format!("{} {}", topic.subject, topic.mechanism),
+                        &format!("{} {}", request.reason, request.command),
+                    )
+            })
+        })
+}
+
+fn receipt_supports_inline_comment(
+    receipt: &ProofReceipt,
+    head_sha: &str,
+    comment: &ReviewInlineComment,
+    proof_requests: &[ProofRequest],
+) -> bool {
+    receipt.head.eq_ignore_ascii_case(head_sha)
+        && receipt
+            .requested_by
+            .iter()
+            .any(|lane| lane == &comment.lane)
+        && receipt.request_ids.iter().any(|request_id| {
+            proof_requests.iter().any(|request| {
+                request.id == *request_id
+                    && request
+                        .requested_by
+                        .iter()
+                        .any(|lane| lane == &comment.lane)
+                    && claim_text_matches(
+                        &format!("{} {}", comment.body, comment.evidence),
+                        &format!("{} {}", request.reason, request.command),
+                    )
+            })
+        })
+}
+
+fn claim_text_matches(left: &str, right: &str) -> bool {
+    let left = canonical_tokens(left);
+    let right = canonical_tokens(right);
+    left.iter().any(|token| {
+        token.len() >= 6
+            && !low_information_thread_token(token)
+            && right.iter().any(|candidate| candidate == token)
+    })
 }
 
 fn inline_body_matches_thread(comment: &ReviewInlineComment, thread: &ReviewThreadRecord) -> bool {
@@ -970,13 +1019,27 @@ mod tests {
             result: "discriminating".to_owned(),
             reason: "focused proof confirms the thread".to_owned(),
         };
+        let request = ProofRequest {
+            schema: "proof".to_owned(),
+            id: "request-disposition".to_owned(),
+            lane: "tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            command: "cargo test --locked parser subscript".to_owned(),
+            reason: "Confirm the later subscript behavior".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "executed".to_owned(),
+        };
+        let mut linked_receipt = receipt.clone();
+        linked_receipt.request_ids = vec![request.id.clone()];
         let corroborated = build_active_claim_graph(
             head,
             std::slice::from_ref(&observation),
             &[],
             &[],
-            &[],
-            std::slice::from_ref(&receipt),
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&linked_receipt),
             &context(head),
         );
         ensure!(corroborated.topics[0].thread_disposition == "corroborated_with_new_evidence");
@@ -1142,12 +1205,25 @@ mod tests {
             request_ids: vec!["request-1".to_owned()],
             commands: Vec::new(),
             result: "discriminating".to_owned(),
-            reason: "focused proof".to_owned(),
+            reason: "subscript focused proof".to_owned(),
+        };
+        let request = ProofRequest {
+            schema: "proof".to_owned(),
+            id: "request-1".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test --locked parser subscript".to_owned(),
+            reason: "Does the subscript remain indexed?".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "executed".to_owned(),
         };
         let replies = build_reply_candidates(
             head,
             &comments,
             std::slice::from_ref(&receipt),
+            std::slice::from_ref(&request),
             &thread_context,
         );
         ensure!(replies.len() == 1);
@@ -1158,6 +1234,25 @@ mod tests {
         ensure!(replies[0].body.contains("Confirmed by focused execution"));
         ensure!(replies[0].body.contains("proof:red-green:123"));
 
+        let mut unrelated_receipt = receipt.clone();
+        unrelated_receipt.id = "proof:allocator".to_owned();
+        unrelated_receipt.request_ids = vec!["request-2".to_owned()];
+        let mut unrelated_request = request.clone();
+        unrelated_request.id = "request-2".to_owned();
+        unrelated_request.reason = "Does the allocator lifetime remain bounded?".to_owned();
+        unrelated_request.command = "cargo test --locked allocator lifetime".to_owned();
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                std::slice::from_ref(&unrelated_receipt),
+                std::slice::from_ref(&unrelated_request),
+                &thread_context,
+            )
+            .is_empty(),
+            "same-lane proof for another claim must not reply to this thread"
+        );
+
         let mut stale_receipt = receipt.clone();
         stale_receipt.id = "proof:stale".to_owned();
         stale_receipt.head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned();
@@ -1166,6 +1261,7 @@ mod tests {
                 head,
                 &comments,
                 std::slice::from_ref(&stale_receipt),
+                std::slice::from_ref(&request),
                 &thread_context
             )
             .is_empty()
@@ -1175,18 +1271,29 @@ mod tests {
                 head,
                 &comments,
                 &[stale_receipt, receipt.clone()],
+                std::slice::from_ref(&request),
                 &thread_context
             )
             .len()
                 == 1
         );
-        ensure!(build_reply_candidates(head, &comments, &[], &thread_context).is_empty());
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                &[],
+                std::slice::from_ref(&request),
+                &thread_context
+            )
+            .is_empty()
+        );
         thread_context.threads[0].in_reply_to = Some("111".to_owned());
         ensure!(
             build_reply_candidates(
                 head,
                 &comments,
                 std::slice::from_ref(&receipt),
+                std::slice::from_ref(&request),
                 &thread_context
             )
             .is_empty()

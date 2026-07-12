@@ -540,6 +540,18 @@ mod tests {
             &fixture.buggy_head_sha,
             std::slice::from_ref(&candidate),
             std::slice::from_ref(&reply_receipt),
+            &[ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "parser:later-variable-subscript".to_owned(),
+                lane: "fixture".to_owned(),
+                requested_by: vec!["fixture".to_owned()],
+                command: "cargo test --locked parser subscripts".to_owned(),
+                reason: "Confirm subscripts on later variables remain indexed".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "executed".to_owned(),
+            }],
             &production_thread_context(&fixture, &fixture.buggy_head_sha),
         );
         require(

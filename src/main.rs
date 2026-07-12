@@ -4841,6 +4841,7 @@ fn write_review_artifacts(
         &diff.head,
         &compiler_inline_comments,
         &review.proof_receipts,
+        &review.proof_requests,
         &review.pr_thread_context,
     );
     compiler_inline_comments =
