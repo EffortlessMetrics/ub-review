@@ -546,7 +546,7 @@ mod tests {
                 path: "src/parser.rs".to_owned(),
                 line: 12,
                 side: "RIGHT".to_owned(),
-                body: "duplicate finding".to_owned(),
+                body: "subscript finding".to_owned(),
                 evidence: "receipt".to_owned(),
                 suggestion: None,
             },
