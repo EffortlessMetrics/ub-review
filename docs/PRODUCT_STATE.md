@@ -164,7 +164,10 @@ this branch does not duplicate that posting implementation.
 `has_forbidden_pr_review_boilerplate` rejects lane rosters, tool tables,
 provider status, command logs, generic caveats, successful-tool
 announcements, approval filler, and machine-state summaries. Body byte
-and bullet caps enforced. Refuted-only and summary-only posts governed.
+and bullet caps enforced. Refuted-only and summary-only posts governed. Body
+quality is separate from finding quality: when noisy PR prose is suppressed,
+independently validated inline findings remain eligible for concise inline-only
+delivery.
 
 ### PR 7 — Provider and cache reliability — DONE
 

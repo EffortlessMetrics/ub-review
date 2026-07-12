@@ -14907,6 +14907,50 @@ required_proof_unprooven = true
     }
 
     #[test]
+    fn compiler_surface_keeps_valid_inline_findings_when_body_is_suppressed() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let inline_comments = [ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/main.rs".to_owned(),
+            line: 100,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] lane roster leaked into otherwise actionable finding.".to_owned(),
+            evidence: "focused regression receipt".to_owned(),
+            suggestion: None,
+        }];
+
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline_comments,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+            reporter_distillation: None,
+        })?;
+
+        assert!(surface.github_review.body.is_empty());
+        assert_eq!(surface.github_review.comments.len(), 1);
+        assert!(surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "prepared");
+        Ok(())
+    }
+
+    #[test]
     fn compiler_surface_caps_inline_comments_after_value_ranking() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.max_inline_comments = 1;

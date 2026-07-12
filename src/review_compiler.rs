@@ -109,9 +109,9 @@ pub(crate) struct CompiledReviewSurface {
     pub(crate) artifact_body: String,
     pub(crate) github_review: GitHubReview,
     pub(crate) should_prepare_github_review: bool,
-    /// True when `[review_body].summary_only_body` posted a body the
-    /// suppressor classified as no-value boilerplate; the payload writer
-    /// waives the suppressible body-policy checks for exactly this case.
+    /// True when the PR body was suppressed as no-value or internal
+    /// machinery; independently validated inline findings may still be
+    /// posted when this is true.
     pub(crate) summary_only_policy_posted: bool,
     pub(crate) review_payload_status: &'static str,
     pub(crate) terminal_state: ReviewTerminalState,
@@ -258,11 +258,10 @@ pub(crate) fn compile_review_surface(
             suppressed_artifact_only_pr_body = true;
         }
     }
-    let pr_inline_comments: &[ReviewInlineComment] = if suppressed_artifact_only_pr_body {
-        &[]
-    } else {
-        &pr_inline_candidates
-    };
+    // Body quality is a separate boundary from inline finding quality. If
+    // prose is suppressed, retain validated inline findings as the concise
+    // reviewer surface rather than turning a formatting defect into silence.
+    let pr_inline_comments: &[ReviewInlineComment] = &pr_inline_candidates;
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -280,7 +279,6 @@ pub(crate) fn compile_review_surface(
     let pass_policy_permits_post =
         pass_policy_permits_review_post(input.args.posting, input.run_pass, input.post_review_on);
     let should_prepare_github_review = pass_policy_permits_post
-        && !suppressed_artifact_only_pr_body
         && (summary_only_policy_posted
             || should_prepare_github_review_payload(
                 input.args,
