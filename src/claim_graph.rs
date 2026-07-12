@@ -1,11 +1,10 @@
 //! Claim graph v1: structured claims with typed evidence references, causal
 //! relevance paths, conflict records, and claim states.
 //!
-//! **Shadow mode**: this module builds and emits the claim graph artifact
-//! but does NOT change the review compiler's behavior. The compiler still
-//! consumes raw observations and candidates. The shadow artifact lets us
-//! compare what the claim graph WOULD say against what the current review
-//! surface produces.
+//! The legacy shadow builder remains available for early-failure artifacts.
+//! Production runs overwrite the same artifact at the final compiler boundary
+//! with current-head `ReviewTopic` records that carry thread, proof, and
+//! delivery links.
 //!
 //! Order 3 of the evidence-control-plane epic (#655).
 
@@ -15,12 +14,18 @@ use std::path::Path;
 use crate::artifacts::CLAIM_GRAPH_SCHEMA;
 
 /// The complete claim graph for a single run. Written to
-/// `review/claim_graph.json` as a shadow artifact.
+/// `review/claim_graph.json`; `mode` distinguishes early shadow output from
+/// the active final graph.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ClaimGraph {
     pub(crate) schema: &'static str,
+    /// Exact PR head this graph certifies. Empty only for the legacy shadow
+    /// graph emitted before final evidence exists.
+    pub(crate) head_sha: String,
     /// All claims in the graph.
     pub(crate) claims: Vec<ClaimNode>,
+    /// Current-head review topics compiled from claims, threads, and receipts.
+    pub(crate) topics: Vec<crate::ReviewTopic>,
     /// Detected conflicts between claims.
     pub(crate) conflicts: Vec<ConflictRecord>,
     /// Evidence gaps: claims that need evidence but don't have it.
@@ -358,7 +363,9 @@ pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
 
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
+        head_sha: String::new(),
         claims: Vec::new(),
+        topics: Vec::new(),
         conflicts: Vec::new(),
         evidence_gaps: Vec::new(),
         mode: "shadow",
@@ -454,7 +461,9 @@ pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph
 
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
+        head_sha: String::new(),
         claims: nodes,
+        topics: Vec::new(),
         conflicts,
         evidence_gaps,
         mode: "shadow",
@@ -683,7 +692,7 @@ pub(crate) fn check_causal_relevance(relevance: &RelevancePath) -> RelevanceChec
     }
 }
 
-/// Write the claim graph as a shadow artifact.
+/// Write the claim graph artifact.
 pub(crate) fn write_claim_graph(out: &Path, graph: &ClaimGraph) -> anyhow::Result<()> {
     let path = out.join("review").join("claim_graph.json");
     if let Some(dir) = path.parent() {

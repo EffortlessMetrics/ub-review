@@ -77,11 +77,11 @@ ub-review runner"):
   action ref looks like a release tag (`v` plus a digit), it tries the
   release download; a non-tag ref (the commit-SHA pin) gets a notice and
   goes straight to the source build;
-- `release` tries the download first and falls back to the source build on
-  any download/checksum/extraction failure, with a workflow warning; the one
-  hard-error path is a malformed `release-version` or `release-asset`
-  input, which fails the job in `validate_release_request` before any URL
-  is constructed;
+- `release` tries the download first but fails the job when the release asset,
+  checksum, or extraction is unavailable; explicit release mode never silently
+  substitutes a source build. The one hard-error path before the download is
+  malformed `release-version` or `release-asset` input, which fails the job in
+  `validate_release_request` before any URL is constructed;
 - `source` is the deterministic fallback: copy the action source into
   `RUNNER_TEMP`, `cargo generate-lockfile`, then
   `cargo build --locked --release`, honoring a caller-set
@@ -253,12 +253,11 @@ doctor pins              CORE_REVIEW_TOOLS = tokmd, cargo-allow, ripr,
 
 ## Fail-closed behavior
 
-- Release download failures fail closed into the source build, never into
-  "no binary": every download, checksum, and extraction error branch of
-  `download_release_binary` returns to `build_from_source` - the
-  input-validation branches inside it (`validate_release_request`)
-  hard-fail the job instead, by design - and the extracted candidate must
-  be an executable named `ub-review` before it is accepted (action.yml).
+- In `auto` mode, release download failures fail closed into the source build,
+  never into "no binary". In explicit `release` mode, the same failures stop
+  the job rather than silently changing install policy; the extracted
+  candidate must be an executable named `ub-review` before it is accepted
+  (action.yml).
 - Release request inputs are validated before any URL is constructed: bare
   file names only, restricted charset, no traversal (action.yml
   `validate_release_request`); the release workflow refuses malformed tags

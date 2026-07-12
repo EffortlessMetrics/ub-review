@@ -17,6 +17,7 @@ pub(crate) fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<P
         thread_context_path: None,
         thread_context: None,
         thread_context_truncated: false,
+        threads: Vec::new(),
     };
 
     if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH") {
@@ -75,6 +76,7 @@ pub(crate) fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<P
                         &api_context.thread_context,
                         args.pr_thread_context_max_bytes,
                     );
+                    context.threads.extend(api_context.threads);
                 }
                 Err(err) => context
                     .warnings
@@ -105,6 +107,19 @@ pub(crate) struct GitHubThreadApiRequest<'a> {
 pub(crate) struct GitHubThreadApiContext {
     pub(crate) sources: Vec<String>,
     pub(crate) thread_context: String,
+    pub(crate) threads: Vec<ReviewThreadRecord>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ReviewThreadRecord {
+    pub(crate) id: String,
+    pub(crate) kind: String,
+    pub(crate) author: String,
+    pub(crate) body: String,
+    pub(crate) path: Option<String>,
+    pub(crate) line: Option<u32>,
+    pub(crate) commit_id: Option<String>,
+    pub(crate) state: Option<String>,
 }
 
 pub(crate) fn github_thread_api_request<'a>(
@@ -172,6 +187,7 @@ pub(crate) fn read_github_pr_thread_context(
     ];
     let mut sections = Vec::new();
     let mut sources = Vec::new();
+    let mut threads = Vec::new();
     for (kind, url) in endpoints {
         let value = run_github_api_get(root, &url, request.auth)
             .with_context(|| format!("fetch GitHub PR thread {kind}"))?;
@@ -180,6 +196,7 @@ pub(crate) fn read_github_pr_thread_context(
             request.repo, request.pull_number, kind
         ));
         sections.push(render_github_pr_thread_section(kind, &value, max_bytes));
+        threads.extend(github_thread_records(kind, &value));
     }
 
     let mut text = String::new();
@@ -194,7 +211,56 @@ pub(crate) fn read_github_pr_thread_context(
     Ok(GitHubThreadApiContext {
         sources,
         thread_context: bounded.text,
+        threads,
     })
+}
+
+fn github_thread_records(kind: &str, value: &serde_json::Value) -> Vec<ReviewThreadRecord> {
+    value
+        .as_array()
+        .into_iter()
+        .flatten()
+        .map(|item| ReviewThreadRecord {
+            id: item
+                .get("id")
+                .and_then(serde_json::Value::as_u64)
+                .map(|id| id.to_string())
+                .or_else(|| {
+                    item.get("node_id")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
+                .unwrap_or_else(|| "unknown-thread".to_owned()),
+            kind: kind.to_owned(),
+            author: item
+                .pointer("/user/login")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unknown")
+                .to_owned(),
+            body: item
+                .get("body")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or_default()
+                .to_owned(),
+            path: item
+                .get("path")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+            line: item
+                .get("line")
+                .or_else(|| item.get("original_line"))
+                .and_then(serde_json::Value::as_u64)
+                .and_then(|line| u32::try_from(line).ok()),
+            commit_id: item
+                .get("commit_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+            state: item
+                .get("state")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
+        })
+        .collect()
 }
 
 pub(crate) fn run_github_api_get(root: &Path, url: &str, auth: &str) -> Result<serde_json::Value> {

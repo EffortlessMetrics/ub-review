@@ -278,6 +278,49 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
     Ok((url, handle))
 }
 
+pub fn spawn_fake_openai_provider_with_statuses(
+    statuses: Vec<u16>,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
+    let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let expected_requests = statuses.len();
+        let mut deadline = Instant::now() + Duration::from_secs(120);
+        let mut requests = Vec::new();
+        while requests.len() < expected_requests {
+            match listener.accept() {
+                Ok((stream, _addr)) => {
+                    let status = statuses
+                        .get(requests.len())
+                        .copied()
+                        .ok_or_else(|| anyhow::anyhow!("fake provider status missing"))?;
+                    requests.push(handle_fake_openai_request_with_status(
+                        stream,
+                        "fake provider status response",
+                        Duration::ZERO,
+                        status,
+                    )?);
+                    deadline = Instant::now() + Duration::from_secs(120);
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        bail!(
+                            "fake provider received {} of {} requests",
+                            requests.len(),
+                            expected_requests
+                        );
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(requests)
+    });
+    Ok((url, handle))
+}
+
 pub fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
     static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     // Recover a poisoned lock instead of erroring: one failing test must
@@ -299,9 +342,18 @@ pub fn fake_openai_lane_content() -> String {
 }
 
 pub fn handle_fake_openai_request(
+    stream: TcpStream,
+    content: &str,
+    response_delay: Duration,
+) -> Result<String> {
+    handle_fake_openai_request_with_status(stream, content, response_delay, 200)
+}
+
+fn handle_fake_openai_request_with_status(
     mut stream: TcpStream,
     content: &str,
     response_delay: Duration,
+    status: u16,
 ) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -334,19 +386,33 @@ pub fn handle_fake_openai_request(
     if !response_delay.is_zero() {
         thread::sleep(response_delay);
     }
-    let response_body = serde_json::to_vec(&serde_json::json!({
-        "choices": [
-            {
-                "message": {
-                    "content": content
+    let response_body = if status >= 400 {
+        serde_json::to_vec(&serde_json::json!({
+            "error": {"message": content}
+        }))?
+    } else {
+        serde_json::to_vec(&serde_json::json!({
+            "choices": [
+                {
+                    "message": {
+                        "content": content
+                    }
                 }
-            }
-        ]
-    }))?;
+            ]
+        }))?
+    };
+    let reason = match status {
+        200 => "OK",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        _ => "Fake Provider Status",
+    };
     write!(
         stream,
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        response_body.len(),
     )?;
     stream.write_all(&response_body)?;
     Ok(request_text)
