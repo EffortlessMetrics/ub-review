@@ -779,6 +779,16 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             err.into(),
         ));
     }
+    // Revalidate immediately before submission. The pending review and its
+    // inline comments may have taken long enough for the PR head to advance;
+    // posting a review pinned to the earlier commit would create a stale
+    // human-facing receipt. A mismatch cleans up the pending review and
+    // leaves the post stage fail-closed.
+    if let Err(err) = verify_current_pr_head(args, repo, pull_number, token) {
+        return Err(cleanup_pending_review_error(
+            args, &url, review_id, token, err,
+        ));
+    }
     let submit_output = match run_curl_json_post(
         Path::new("."),
         &format!("{url}/{review_id}/events"),

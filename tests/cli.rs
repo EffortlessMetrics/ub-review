@@ -6293,7 +6293,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             "comments": []
         }))?,
     )?;
-    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 4)?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 5)?;
 
     run_with_env(
         temp.path(),
@@ -6317,7 +6317,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 5);
     assert!(requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"));
     let request_text = &requests[1];
     assert!(
@@ -6334,10 +6334,11 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
     );
     assert!(
-        requests[3]
+        requests[4]
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
-    assert!(requests[3].contains("\"event\": \"COMMENT\""));
+    assert!(requests[3].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"));
+    assert!(requests[4].contains("\"event\": \"COMMENT\""));
     assert!(request_text.contains("\"commit_id\": \"test-head-sha\""));
     assert!(request_text.contains("\"comments\": []"));
 
@@ -6549,7 +6550,7 @@ fn post_claim_graph_head_fallback_survives_invalid_event_path() -> Result<()> {
             "head_sha": "test-head-sha"
         }))?,
     )?;
-    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 4)?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 5)?;
 
     run_with_env(
         temp.path(),
@@ -6574,7 +6575,7 @@ fn post_claim_graph_head_fallback_survives_invalid_event_path() -> Result<()> {
 
     let requests = join_fake_provider(handle)?;
     anyhow::ensure!(
-        requests.len() == 4,
+        requests.len() == 5,
         "claim graph fallback should complete the transactional post: {requests:#?}"
     );
     let head_check: serde_json::Value =
@@ -6778,6 +6779,92 @@ fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
 }
 
 #[test]
+fn post_head_change_after_pending_comments_cleans_up_without_submit() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let diff_patch = temp.path().join("diff.patch");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
+    fs::write(
+        &diff_patch,
+        "diff --git a/src/lib.rs b/src/lib.rs\nindex 1111111..2222222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let header = unsafe { ptr.cast::<Header>().read() };\n     len\n}\n",
+    )?;
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Verification questions\n\n- Confirm the focused proof.",
+            "comments": [{
+                "path": "src/lib.rs",
+                "line": 1,
+                "side": "RIGHT",
+                "body": "[tests] focused proof receipt is missing."
+            }]
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_head_sequence(
+        vec![
+            "test-head-sha".to_owned(),
+            "test-head-sha".to_owned(),
+            "test-head-sha".to_owned(),
+            "advanced-head-sha".to_owned(),
+        ],
+        vec![654],
+        5,
+    )?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--diff-patch",
+            path_str(&diff_patch)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 5
+            && requests[3].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1")
+            && requests[4].starts_with(
+                "DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987 HTTP/1.1"
+            ),
+        "head change after pending comments must clean up without submit: {requests:#?}"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    assert_eq!(head_check["status"], "mismatch");
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("cleanup=true"))
+    );
+    Ok(())
+}
+
+#[test]
 fn post_payload_renders_suggestion_blocks_for_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
@@ -6824,7 +6911,7 @@ index 1111111..2222222 100644
     )
     .with_context(|| format!("write {}", review_json.display()))?;
     let (github_api_url, handle) =
-        spawn_fake_github_review_api_with_expected_requests(vec![654], 4)?;
+        spawn_fake_github_review_api_with_expected_requests(vec![654], 5)?;
 
     run_with_env(
         temp.path(),
@@ -6850,7 +6937,7 @@ index 1111111..2222222 100644
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 4);
+    assert_eq!(requests.len(), 5);
     let request_text = &requests[1];
     assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
     assert!(
@@ -6862,7 +6949,7 @@ index 1111111..2222222 100644
             .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
     );
     assert!(
-        requests[3]
+        requests[4]
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
 

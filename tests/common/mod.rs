@@ -42,6 +42,18 @@ pub fn spawn_fake_github_review_api_with_expected_requests(
     comment_ids: Vec<u64>,
     expected_requests: usize,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_github_review_api_with_head_sequence(
+        vec!["test-head-sha".to_owned()],
+        comment_ids,
+        expected_requests,
+    )
+}
+
+pub fn spawn_fake_github_review_api_with_head_sequence(
+    head_shas: Vec<String>,
+    comment_ids: Vec<u64>,
+    expected_requests: usize,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
@@ -51,7 +63,16 @@ pub fn spawn_fake_github_review_api_with_expected_requests(
         while requests.len() < expected_requests {
             match listener.accept() {
                 Ok((stream, _addr)) => {
-                    requests.push(handle_fake_github_review_request(stream, &comment_ids)?);
+                    let head_sha = head_shas
+                        .get(requests.len())
+                        .or_else(|| head_shas.last())
+                        .map(String::as_str)
+                        .unwrap_or("test-head-sha");
+                    requests.push(handle_fake_github_review_request(
+                        stream,
+                        &comment_ids,
+                        head_sha,
+                    )?);
                 }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     if Instant::now() >= deadline {
@@ -71,7 +92,11 @@ pub fn spawn_fake_github_review_api_with_expected_requests(
     Ok((url, handle))
 }
 
-fn handle_fake_github_review_request(mut stream: TcpStream, comment_ids: &[u64]) -> Result<String> {
+fn handle_fake_github_review_request(
+    mut stream: TcpStream,
+    comment_ids: &[u64],
+    head_sha: &str,
+) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -109,7 +134,7 @@ fn handle_fake_github_review_request(mut stream: TcpStream, comment_ids: &[u64])
         (
             "200 OK",
             serde_json::to_vec(&serde_json::json!({
-                "head": {"sha": "test-head-sha"}
+                "head": {"sha": head_sha}
             }))?,
         )
     } else if request_line.starts_with("GET ") && request_line.contains("/comments") {
