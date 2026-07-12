@@ -217,8 +217,10 @@ pub(crate) fn reconcile_inline_comments(
     comments
         .iter()
         .filter(|comment| {
+            let claim_id = topic_claim_id_for_inline(comment);
             let covered_by_current_thread = graph.topics.iter().any(|topic| {
-                topic.path.as_deref() == Some(comment.path.as_str())
+                topic.claim_id == claim_id
+                    && topic.path.as_deref() == Some(comment.path.as_str())
                     && topic.anchor == Some(comment.line)
                     && !topic.existing_threads.is_empty()
             });
@@ -345,7 +347,26 @@ fn thread_body_matches(topic: &ReviewTopic, thread: &ReviewThreadRecord) -> bool
     let thread_tokens = canonical_tokens(&thread.body);
     topic_tokens
         .iter()
+        .filter(|token| !low_information_thread_token(token))
         .any(|token| token.len() >= 6 && thread_tokens.iter().any(|candidate| candidate == token))
+}
+
+fn low_information_thread_token(token: &str) -> bool {
+    matches!(
+        token,
+        "finding"
+            | "issue"
+            | "problem"
+            | "review"
+            | "change"
+            | "changed"
+            | "code"
+            | "line"
+            | "path"
+            | "check"
+            | "needs"
+            | "should"
+    )
 }
 
 fn claim_status_key(status: &str) -> String {
@@ -545,6 +566,40 @@ mod tests {
         let reconciled = reconcile_inline_comments(&graph, &comments);
         ensure!(reconciled.len() == 1);
         ensure!(reconciled[0].path == "src/other.rs");
+        Ok(())
+    }
+
+    #[test]
+    fn current_thread_does_not_suppress_distinct_claim_at_same_anchor() -> Result<()> {
+        let head = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        let comments = vec![
+            ReviewInlineComment {
+                lane: "tests".to_owned(),
+                severity: "high".to_owned(),
+                confidence: "high".to_owned(),
+                path: "src/parser.rs".to_owned(),
+                line: 12,
+                side: "RIGHT".to_owned(),
+                body: "subscript finding".to_owned(),
+                evidence: "receipt".to_owned(),
+                suggestion: None,
+            },
+            ReviewInlineComment {
+                lane: "tests".to_owned(),
+                severity: "medium".to_owned(),
+                confidence: "medium-high".to_owned(),
+                path: "src/parser.rs".to_owned(),
+                line: 12,
+                side: "RIGHT".to_owned(),
+                body: "attribute lowering finding".to_owned(),
+                evidence: "receipt".to_owned(),
+                suggestion: None,
+            },
+        ];
+        let graph = build_active_claim_graph(head, &[], &comments, &[], &[], &[], &context(head));
+        let reconciled = reconcile_inline_comments(&graph, &comments);
+        ensure!(reconciled.len() == 1);
+        ensure!(reconciled[0].body == "attribute lowering finding");
         Ok(())
     }
 }
