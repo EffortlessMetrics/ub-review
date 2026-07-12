@@ -2365,6 +2365,7 @@ struct GitHubReviewReply {
     claim_id: String,
     head_sha: String,
     comment_id: u64,
+    receipt_id: String,
     body: String,
 }
 
@@ -12008,6 +12009,7 @@ index 1111111..2222222 100644
             claim_id: "claim-parser-postfix".to_owned(),
             head_sha: head.to_owned(),
             comment_id: 456,
+            receipt_id: "proof:red-green:123".to_owned(),
             body: "[ub-review] Confirmed by focused execution. Receipt: `proof:red-green:123`."
                 .to_owned(),
         };

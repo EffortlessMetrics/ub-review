@@ -1766,6 +1766,9 @@ def require_reply_candidates(root: pathlib.Path) -> bool:
         if comment_id in seen_comment_ids:
             fail(f"reply-candidates.json duplicates comment_id {comment_id}")
         seen_comment_ids.add(comment_id)
+        receipt_id = reply.get("receipt_id")
+        if not isinstance(receipt_id, str) or not receipt_id.strip():
+            fail(f"reply-candidates.json replies[{index}] receipt_id is invalid")
         body = reply.get("body")
         if not isinstance(body, str) or not body.strip() or len(body) > 1_200:
             fail(f"reply-candidates.json replies[{index}] body is invalid")
@@ -7985,6 +7988,7 @@ def self_test_reply_candidates_contract() -> None:
                         "claim_id": "claim-parser-postfix",
                         "head_sha": head_sha,
                         "comment_id": 456,
+                        "receipt_id": "proof:red-green:123",
                         "body": "[ub-review] Confirmed by focused execution. Receipt: `proof:red-green:123`.",
                     }
                 ],
@@ -8001,6 +8005,26 @@ def self_test_reply_candidates_contract() -> None:
                     "schema": "ub-review.github_review_reply_candidates.v1",
                     "head_sha": "b" * 40,
                     "replies": [],
+                },
+            )
+            or require_reply_candidates(root),
+        )
+        expect_self_test_failure(
+            "reply candidate receipt linkage",
+            "receipt_id is invalid",
+            lambda: write_self_test_json(
+                root / "review/reply-candidates.json",
+                {
+                    "schema": "ub-review.github_review_reply_candidates.v1",
+                    "head_sha": head_sha,
+                    "replies": [
+                        {
+                            "claim_id": "claim-parser-postfix",
+                            "head_sha": head_sha,
+                            "comment_id": 456,
+                            "body": "[ub-review] Confirmed by focused execution. Receipt: `proof:red-green:123`.",
+                        }
+                    ],
                 },
             )
             or require_reply_candidates(root),

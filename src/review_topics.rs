@@ -429,6 +429,7 @@ pub(crate) fn build_reply_candidates(
                 claim_id: topic_claim_id_for_inline(comment),
                 head_sha: head_sha.to_owned(),
                 comment_id,
+                receipt_id: receipt.id.clone(),
                 body: render_reply_body(receipt),
             })
         })
@@ -1153,6 +1154,7 @@ mod tests {
         ensure!(replies[0].claim_id == topic_claim_id_for_inline(&comments[0]));
         ensure!(replies[0].comment_id == 456);
         ensure!(replies[0].head_sha == head);
+        ensure!(replies[0].receipt_id == "proof:red-green:123");
         ensure!(replies[0].body.contains("Confirmed by focused execution"));
         ensure!(replies[0].body.contains("proof:red-green:123"));
 
