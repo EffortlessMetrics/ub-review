@@ -128,8 +128,10 @@ adjudication (resolving which side wins using proof receipts) is the open
 next step (tracked in epic #655, milestone 4). Diff-irrelevance is
 guidance text, not enforced routing. Cross-section body dedupe is doctrine
 and structural cross-section claim identity is now implemented (PRs #749/#750).
-Transactional inline delivery remains in draft PR #748 pending the upstream
-RIPR CLI-subprocess analyzer contract.
+Transactional inline delivery remains in draft PR #748. The upstream RIPR
+CLI-subprocess analyzer contract is now merged in RIPR #1455, with the
+structured warning consumer and 0.10.1 release-prep work merged in #1457 and
+#1456.
 
 ### Proof request execution and terminalization — PARTIAL
 
@@ -154,9 +156,8 @@ thread are withheld from a second comment; stale threads do not suppress new
 delivery. Transactional replies and confirmed GitHub delivery receipts remain
 the separate #748 seam. That PR already carries the pending-review ->
 comment-list -> submit lifecycle, cleanup receipts, and focused mismatch
-coverage; its authoritative gate is currently blocked only by the RIPR
-subprocess-analysis boundary tracked in upstream issue #1454, so this branch
-does not duplicate that posting implementation.
+coverage; its hosted gate still awaits a published RIPR 0.10.1 artifact, so
+this branch does not duplicate that posting implementation.
 
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
@@ -225,7 +226,9 @@ an external repository. A read-only release workflow dispatch on 2026-07-12
 completed the build, checksum, and archive-upload stages on `main` (run
 29182345044); no tag or release was created, and the Linux asset was not
 executed on Windows. The actual v0.1.0 tag remains an explicitly authorized
-release action.
+release action. Current release-installed pilot drafts are Bun #34046 and
+perl-lsp-swarm #4015; both remain unable to prove the release path until
+ub-review publishes v0.1.0.
 
 Read-only GitHub inspection found the current adoption blockers:
 
