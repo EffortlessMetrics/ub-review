@@ -133,6 +133,9 @@ Transactional inline delivery remains in draft PR #748. The upstream RIPR
 CLI-subprocess analyzer contract is now merged in RIPR #1455, with the
 structured warning consumer and 0.10.1 release-prep work merged in #1457 and
 #1456.
+Its posting path verifies the current pull-request head before creating a
+pending review and fails closed when neither the PR event nor the claim graph
+supplies an expected head SHA.
 
 ### Proof request execution and terminalization — PARTIAL
 
