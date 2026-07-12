@@ -186,6 +186,16 @@ pub(crate) struct ProofPortfolioSelection {
     pub(crate) runtime: ProofPortfolioRuntime,
 }
 
+fn remaining_focused_proof_budget_after(
+    total_budget: ProofBudget,
+    existing_leases: &[ResourceLease],
+    new_leases: &[ResourceLease],
+) -> ProofBudget {
+    let mut all_leases = existing_leases.to_vec();
+    all_leases.extend(new_leases.iter().cloned());
+    remaining_focused_proof_budget(total_budget, &all_leases)
+}
+
 #[derive(Clone, Copy)]
 enum PortfolioCandidate {
     Test(usize),
@@ -621,7 +631,11 @@ pub(crate) fn run_request_proof_broker_v0(
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
-    let final_budget = remaining_focused_proof_budget(total_budget, &result.resource_leases);
+    let final_budget = remaining_focused_proof_budget_after(
+        total_budget,
+        existing_leases,
+        &result.resource_leases,
+    );
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
@@ -707,7 +721,11 @@ pub(crate) fn run_follow_up_proof_broker_v0(
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
-    let final_budget = remaining_focused_proof_budget(total_budget, &result.resource_leases);
+    let final_budget = remaining_focused_proof_budget_after(
+        total_budget,
+        existing_leases,
+        &result.resource_leases,
+    );
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
@@ -1188,6 +1206,37 @@ mod tests {
             per_command_timeout_sec: 300,
             max_total_seconds: max_seconds,
         }
+    }
+
+    fn granted_focused_test_lease(id: &str, timeout_sec: u64) -> ResourceLease {
+        focused_test_resource_lease(
+            &focused_test_task(id, Vec::new(), timeout_sec),
+            proof_budget_for_test(2, 120),
+            ProofLeaseBudget {
+                cpu: 1,
+                memory_mb: 512,
+                disk_mb: 64,
+                network: false,
+                scratch: true,
+            },
+            "granted",
+            "test lease",
+        )
+    }
+
+    #[test]
+    fn final_budget_accounts_for_existing_and_new_leases() {
+        let existing = granted_focused_test_lease("existing", 30);
+        let new = granted_focused_test_lease("new", 30);
+        let remaining = remaining_focused_proof_budget_after(
+            proof_budget_for_test(2, 120),
+            std::slice::from_ref(&existing),
+            std::slice::from_ref(&new),
+        );
+
+        assert_eq!(remaining.max_focused_tests, 0);
+        assert_eq!(remaining.max_focused_test_files, 0);
+        assert_eq!(remaining.max_total_seconds, 0);
     }
 
     fn portfolio_runtime_for_test(
