@@ -920,13 +920,25 @@ mod tests {
             result: "head_failed".to_owned(),
             reason: "focused proof refutes the preservation claim".to_owned(),
         };
+        let request = ProofRequest {
+            schema: "proof-request".to_owned(),
+            id: "request-refutation-1".to_owned(),
+            lane: "lane-b".to_owned(),
+            requested_by: vec!["lane-b".to_owned()],
+            command: "cargo test --locked --test buffer_resize_view_length".to_owned(),
+            reason: "Buffer resize loses active view length".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "failed".to_owned(),
+        };
 
         let graph = build_active_claim_graph(
             head,
             std::slice::from_ref(&refutation),
             std::slice::from_ref(&candidate),
             &[],
-            &[],
+            std::slice::from_ref(&request),
             std::slice::from_ref(&receipt),
             &context(head),
         );
