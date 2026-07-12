@@ -8421,12 +8421,20 @@ index 1111111..2222222 100644
       "proof_kind": "focused-test",
       "target": "parser_list_item_postfix",
       "estimated_value": "high"
+    },
+    {
+      "claim_id": "unsafe-intent",
+      "question": "must be rejected",
+      "expected_answer_shape": "no execution",
+      "proof_kind": "focused-test",
+      "target": "cargo;rm",
+      "estimated_value": "high"
     }
   ]
 }"#,
         )?;
         assert!(output.proof_requests.is_empty());
-        assert_eq!(output.proof_intents.len(), 1);
+        assert_eq!(output.proof_intents.len(), 2);
 
         let mut inline_comments = Vec::new();
         let mut summary_only_findings = Vec::new();
