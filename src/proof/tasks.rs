@@ -225,7 +225,10 @@ pub(crate) fn resolve_proof_intents_to_requests(
     default_timeout_sec: u64,
 ) -> Vec<ProofRequest> {
     let candidates = focused_test_candidates_from_diff(diff, &[]);
-    let timeout_sec = default_timeout_sec.max(1);
+    // Keep model-native intents inside the same bounded request contract as
+    // the legacy planner. The profile default may be 1800 seconds, while a
+    // single proof request is intentionally capped at 900 seconds.
+    let timeout_sec = default_timeout_sec.clamp(1, 900);
     let mut requests = Vec::new();
     for intent in intents {
         if intent.status != "requested" {
@@ -1027,6 +1030,29 @@ mod tests {
             intents[3].resolved_request_id.is_none(),
             "unsupported intent must not receive a request identity"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_intent_timeout_is_bounded_to_proof_request_contract() -> anyhow::Result<()> {
+        let diff = model_intent_diff();
+        let mut intents = vec![model_intent(
+            ProofKind::FocusedBuild,
+            "bounded-intent",
+            "workspace",
+        )];
+        let requests = resolve_proof_intents_to_requests(&diff, &mut intents, 1_800);
+        anyhow::ensure!(requests.len() == 1);
+        anyhow::ensure!(requests[0].timeout_sec == 900);
+
+        let mut zero_timeout_intents = vec![model_intent(
+            ProofKind::FocusedBuild,
+            "minimum-intent",
+            "workspace",
+        )];
+        let minimum = resolve_proof_intents_to_requests(&diff, &mut zero_timeout_intents, 0);
+        anyhow::ensure!(minimum.len() == 1);
+        anyhow::ensure!(minimum[0].timeout_sec == 1);
         Ok(())
     }
 
