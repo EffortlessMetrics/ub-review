@@ -6526,6 +6526,117 @@ fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
 }
 
 #[test]
+fn post_reply_candidates_posts_direct_reply_with_receipt() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let reply_candidates = temp.path().join("reply-candidates.json");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    let token = "test-token-redacted";
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "",
+            "comments": []
+        }))?,
+    )?;
+    fs::write(
+        &reply_candidates,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.github_review_reply_candidates.v1",
+            "head_sha": "test-head-sha",
+            "replies": [{
+                "claim_id": "claim-parser-postfix",
+                "head_sha": "test-head-sha",
+                "comment_id": 456,
+                "body": "[tests-oracle] Confirmed by focused execution: the new subscript case fails before the patch and passes on this head."
+            }]
+        }))?,
+    )?;
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 2)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            token,
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 2
+            && requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1")
+            && requests[1].starts_with(
+                "POST /repos/EffortlessMetrics/ub-review/pulls/123/comments/456/replies HTTP/1.1"
+            ),
+        "reply delivery must use the direct GitHub reply endpoint: {requests:#?}"
+    );
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-result.json"))?)?;
+    anyhow::ensure!(
+        result["status"] == "ok"
+            && result["reply_count"] == 1
+            && result["reply_delivery_status"] == "posted"
+            && result["comments"] == 0,
+        "reply result must be receipted without a duplicate inline comment: {result:#?}"
+    );
+    let delivery: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("reply-delivery.json"))?)?;
+    anyhow::ensure!(
+        delivery["status"] == "posted" && delivery["posted_reply_ids"] == serde_json::json!([987]),
+        "reply delivery receipt must record the posted comment id: {delivery:#?}"
+    );
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("reply-456-receipt.json"))?)?;
+    anyhow::ensure!(
+        receipt["claim_id"] == "claim-parser-postfix"
+            && receipt["source_comment_id"] == 456
+            && receipt["reply_comment_id"] == 987,
+        "per-reply receipt must preserve claim and GitHub ids: {receipt:#?}"
+    );
+    anyhow::ensure!(
+        !out.join("github-review-pending-payload.json").exists(),
+        "reply-only delivery must not create a grouped review"
+    );
+    for path in [
+        out.join("reply-456-payload.json"),
+        out.join("reply-456-stdout.json"),
+        out.join("reply-456-stderr.txt"),
+        out.join("reply-456-receipt.json"),
+        out.join("reply-delivery.json"),
+    ] {
+        let text = fs::read_to_string(path)?;
+        anyhow::ensure!(!text.contains(token), "reply artifact leaked token");
+        anyhow::ensure!(
+            !text.contains("Authorization"),
+            "reply artifact leaked auth header"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");

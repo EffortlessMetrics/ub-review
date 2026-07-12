@@ -204,6 +204,10 @@ github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_empty_smoke); comments may include
                                optional `suggestion` only when sourced from
                                unsafe-review concrete replacement text
+reply-candidates.json          optional ub-review.github_review_reply_candidates.v1;
+                               current-head reply targets are posted as
+                               direct review-comment replies and receipted
+                               under the post output directory
 provider-preflight-status.json provider/endpoint/status/cache_usage receipts
 shared_context.md              the shared model context
 shared_context_cache_block.md  byte-equal mirror of shared_context.md
@@ -643,6 +647,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/pr_thread_context.json | stable | pr_thread_context.v1 | downstream automation | required (require_review) |
 | review/claim_graph.json | stable | claim_graph.v1; exact head parity with metrics/proof receipts, claim/topic parity, and thread disposition enum | downstream automation; reviewer reconciliation | required (require_claim_graph) |
 | review/github-review.json XOR github-review-skip.json | stable | none (field-checked; skip statuses pinned) | `ub-review post` (cmd_post); downstream automation | required (require_common_tree XOR; require_review; require_pr_review_body_policy) |
+| review/reply-candidates.json | optional | github_review_reply_candidates.v1; exact current-head SHA and top-level review-comment targets | `ub-review post` (cmd_post) | required when replies are prepared; each target receives a delivery receipt |
 | review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
 | review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |
 | review/observations.json + unique/merged/dropped_observations.json | stable | per-record fields, grouped records | downstream automation | required (require_metrics, require_observation_schema, require_observation_summary_artifacts) |

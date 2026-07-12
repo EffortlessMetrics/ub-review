@@ -150,6 +150,12 @@ review/github-review.json        event == "COMMENT"; body within
                                  optional suggestion is allowed only on
                                  unsafe-review comments with bounded concrete
                                  replacement text
+review/reply-candidates.json     optional; when present, schema
+                                 ub-review.github_review_reply_candidates.v1,
+                                 one exact current-head SHA, and only
+                                 receipt-backed top-level review-comment
+                                 targets; replies use GitHub's
+                                 review-comment reply endpoint
 review/github-review-skip.json   XOR with github-review.json; status one of
                                  skipped_empty_smoke |
                                  skipped_artifact_only_body |

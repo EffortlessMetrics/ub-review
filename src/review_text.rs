@@ -595,7 +595,47 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             .with_context(|| format!("read {}", args.review_json.display()))?,
     )
     .with_context(|| format!("parse {}", args.review_json.display()))?;
-    validate_github_review_payload_for_post(args, &review)?;
+    let reply_candidates = read_reply_candidates(args)?;
+    let replies = reply_candidates
+        .as_ref()
+        .map(|artifact| artifact.replies.as_slice())
+        .unwrap_or_default();
+    if replies.is_empty() {
+        validate_github_review_payload_for_post(args, &review)?;
+    } else if review.event != "COMMENT" {
+        bail!("github review event must be COMMENT when reply candidates are present");
+    } else if !review.body.trim().is_empty() {
+        let policy = post_review_body_policy(args);
+        validate_pr_review_body_policy_with_waiver(
+            &review.body,
+            &policy,
+            summary_only_body_waives_post_validation(&policy),
+        )?;
+    }
+    if !replies.is_empty() && review.comments.is_empty() {
+        verify_current_pr_head(args, repo, pull_number, token)?;
+        let expected_sha = expected_pr_head_sha(args).ok_or_else(|| {
+            anyhow::anyhow!("current pull request head disappeared while validating replies")
+        })?;
+        let artifact = reply_candidates
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("reply candidates disappeared while posting"))?;
+        if artifact.head_sha != expected_sha {
+            bail!(
+                "reply candidate head {} does not match expected current head {}",
+                artifact.head_sha,
+                expected_sha
+            );
+        }
+        let posted_reply_ids = post_github_replies(args, repo, pull_number, token, replies)?;
+        return Ok(reply_only_post_result(
+            args,
+            repo,
+            pull_number,
+            &review,
+            posted_reply_ids,
+        ));
+    }
     let comments = github_review_post_comments(&review)?;
     let pending_payload = GitHubPendingReviewPayload {
         body: review.body.clone(),
@@ -609,6 +649,18 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let pending_path = args.out.join("github-review-pending-payload.json");
     fs::write(&pending_path, serde_json::to_vec_pretty(&pending_payload)?)?;
     verify_current_pr_head(args, repo, pull_number, token)?;
+    if let Some(artifact) = &reply_candidates {
+        let expected_sha = expected_pr_head_sha(args).ok_or_else(|| {
+            anyhow::anyhow!("current pull request head disappeared while validating replies")
+        })?;
+        if artifact.head_sha != expected_sha {
+            bail!(
+                "reply candidate head {} does not match expected current head {}",
+                artifact.head_sha,
+                expected_sha
+            );
+        }
+    }
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
         args.github_api_url.trim_end_matches('/'),
@@ -774,6 +826,11 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             submit_output.http_status
         );
     }
+    let posted_reply_ids = if replies.is_empty() {
+        Vec::new()
+    } else {
+        post_github_replies(args, repo, pull_number, token, replies)?
+    };
     let response = serde_json::from_str(&submit_text)
         .unwrap_or_else(|_| serde_json::json!({"raw": submit_text}));
     let review_metadata = read_github_review_metadata(args);
@@ -784,6 +841,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         repo_valid: true,
         pull_number,
         comments: posted_comment_ids.len(),
+        reply_count: posted_reply_ids.len(),
         review_json: args.review_json.display().to_string(),
         review_json_exists: args.review_json.exists(),
         review_json_valid: review_metadata
@@ -817,10 +875,59 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         delivery_status: "submitted".to_owned(),
         review_id: Some(review_id),
         posted_comment_ids,
+        posted_reply_ids,
+        reply_delivery_status: if replies.is_empty() {
+            "none".to_owned()
+        } else {
+            "posted".to_owned()
+        },
         submitted: true,
         pending_review_deleted: false,
         head_sha: std::env::var("GITHUB_SHA").ok(),
     })
+}
+
+fn reply_only_post_result(
+    args: &PostArgs,
+    repo: &str,
+    pull_number: u64,
+    review: &GitHubReview,
+    posted_reply_ids: Vec<u64>,
+) -> PostResultReceipt {
+    PostResultReceipt {
+        schema_version: 1,
+        status: "ok".to_owned(),
+        repo: repo.to_owned(),
+        repo_valid: true,
+        pull_number,
+        comments: 0,
+        reply_count: posted_reply_ids.len(),
+        review_json: args.review_json.display().to_string(),
+        review_json_exists: args.review_json.exists(),
+        review_json_valid: true,
+        review_event: Some(review.event.clone()),
+        review_body_bytes: Some(review.body.len()),
+        review_comment_count: Some(0),
+        diff_patch: post_diff_patch_path(args).display().to_string(),
+        diff_patch_exists: false,
+        diff_patch_valid: false,
+        diff_line_count: None,
+        off_diff_comment_count: Some(0),
+        http_status: None,
+        token_present: true,
+        payload_written: args.out.join("reply-delivery.json").exists(),
+        post_stdout_written: false,
+        post_stderr_written: false,
+        response: serde_json::json!({"reply_comment_ids": posted_reply_ids}),
+        delivery_status: "replies_submitted".to_owned(),
+        review_id: None,
+        posted_comment_ids: Vec::new(),
+        posted_reply_ids,
+        reply_delivery_status: "posted".to_owned(),
+        submitted: false,
+        pending_review_deleted: false,
+        head_sha: std::env::var("GITHUB_SHA").ok(),
+    }
 }
 
 fn http_output_succeeded(output: &HttpPostOutput) -> bool {
@@ -900,6 +1007,193 @@ pub(crate) fn github_review_post_comments(
             })
         })
         .collect::<Result<Vec<_>>>()
+}
+
+const GITHUB_REVIEW_REPLY_CANDIDATES_SCHEMA: &str = "ub-review.github_review_reply_candidates.v1";
+
+fn reply_candidates_path(args: &PostArgs) -> PathBuf {
+    args.review_json
+        .parent()
+        .map(|parent| parent.join("reply-candidates.json"))
+        .unwrap_or_else(|| args.out.join("reply-candidates.json"))
+}
+
+fn read_reply_candidates(args: &PostArgs) -> Result<Option<GitHubReviewReplyCandidates>> {
+    let path = reply_candidates_path(args);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let artifact: GitHubReviewReplyCandidates = serde_json::from_slice(
+        &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+    )
+    .with_context(|| format!("parse {}", path.display()))?;
+    if artifact.schema != GITHUB_REVIEW_REPLY_CANDIDATES_SCHEMA {
+        bail!("reply candidate schema must be {GITHUB_REVIEW_REPLY_CANDIDATES_SCHEMA}");
+    }
+    if artifact.head_sha.trim().is_empty() {
+        bail!("reply candidate artifact head_sha must not be empty");
+    }
+    for reply in &artifact.replies {
+        if reply.claim_id.trim().is_empty() {
+            bail!("reply candidate claim_id must not be empty");
+        }
+        if reply.head_sha != artifact.head_sha {
+            bail!("reply candidate head_sha must match the artifact head_sha");
+        }
+        if reply.comment_id == 0 {
+            bail!("reply candidate comment_id must be positive");
+        }
+        if reply.body.trim().is_empty() || reply.body.chars().count() > 1_200 {
+            bail!("reply candidate body must be non-empty and at most 1200 chars");
+        }
+        if !has_lane_prefix(&reply.body) {
+            bail!("reply candidate body must start with a lane prefix");
+        }
+        if has_standalone_approval_line(&reply.body)
+            || has_forbidden_pr_review_boilerplate(&reply.body)
+        {
+            bail!("reply candidate body contains forbidden review boilerplate");
+        }
+    }
+    Ok(Some(artifact))
+}
+
+fn post_github_replies(
+    args: &PostArgs,
+    repo: &str,
+    pull_number: u64,
+    token: &str,
+    replies: &[GitHubReviewReply],
+) -> Result<Vec<u64>> {
+    let base_url = format!(
+        "{}/repos/{repo}/pulls/{pull_number}/comments",
+        args.github_api_url.trim_end_matches('/')
+    );
+    let mut posted_reply_ids = Vec::new();
+    for reply in replies {
+        let payload_path = args
+            .out
+            .join(format!("reply-{}-payload.json", reply.comment_id));
+        fs::write(
+            &payload_path,
+            serde_json::to_vec_pretty(&serde_json::json!({"body": reply.body}))?,
+        )?;
+        let output = match run_curl_json_post(
+            Path::new("."),
+            &format!("{base_url}/{}/replies", reply.comment_id),
+            &format!("Authorization: Bearer {token}"),
+            &payload_path,
+            &[
+                "Accept: application/vnd.github+json",
+                "Content-Type: application/json",
+                "X-GitHub-Api-Version: 2022-11-28",
+            ],
+            60,
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                write_reply_delivery_receipt(
+                    args,
+                    replies,
+                    &posted_reply_ids,
+                    "failed",
+                    Some(&err.to_string()),
+                )?;
+                return Err(err)
+                    .with_context(|| format!("post reply to review comment {}", reply.comment_id));
+            }
+        };
+        fs::write(
+            args.out
+                .join(format!("reply-{}-stdout.json", reply.comment_id)),
+            &output.stdout,
+        )?;
+        fs::write(
+            args.out
+                .join(format!("reply-{}-stderr.txt", reply.comment_id)),
+            &output.stderr,
+        )?;
+        if !http_output_succeeded(&output) {
+            let error = anyhow::anyhow!(
+                "reply to review comment {} failed with exit code {:?} and http status {:?}",
+                reply.comment_id,
+                output.status.code(),
+                output.http_status
+            );
+            write_reply_delivery_receipt(
+                args,
+                replies,
+                &posted_reply_ids,
+                "failed",
+                Some(&error.to_string()),
+            )?;
+            return Err(error);
+        }
+        let response: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+            Ok(response) => response,
+            Err(error) => {
+                write_reply_delivery_receipt(
+                    args,
+                    replies,
+                    &posted_reply_ids,
+                    "failed",
+                    Some(&error.to_string()),
+                )?;
+                return Err(error).with_context(|| {
+                    format!("parse reply response for comment {}", reply.comment_id)
+                });
+            }
+        };
+        let reply_id = match response.get("id").and_then(serde_json::Value::as_u64) {
+            Some(reply_id) => reply_id,
+            None => {
+                let error = anyhow::anyhow!("reply response omitted numeric id");
+                write_reply_delivery_receipt(
+                    args,
+                    replies,
+                    &posted_reply_ids,
+                    "failed",
+                    Some(&error.to_string()),
+                )?;
+                return Err(error);
+            }
+        };
+        posted_reply_ids.push(reply_id);
+        fs::write(
+            args.out
+                .join(format!("reply-{}-receipt.json", reply.comment_id)),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.github_review_reply_receipt.v1",
+                "status": "posted",
+                "claim_id": reply.claim_id,
+                "head_sha": reply.head_sha,
+                "source_comment_id": reply.comment_id,
+                "reply_comment_id": reply_id
+            }))?,
+        )?;
+    }
+    write_reply_delivery_receipt(args, replies, &posted_reply_ids, "posted", None)?;
+    Ok(posted_reply_ids)
+}
+
+fn write_reply_delivery_receipt(
+    args: &PostArgs,
+    replies: &[GitHubReviewReply],
+    posted_reply_ids: &[u64],
+    status: &str,
+    error: Option<&str>,
+) -> Result<()> {
+    fs::write(
+        args.out.join("reply-delivery.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.github_review_reply_delivery.v1",
+            "status": status,
+            "candidate_count": replies.len(),
+            "posted_reply_ids": posted_reply_ids,
+            "error": error
+        }))?,
+    )?;
+    Ok(())
 }
 
 pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> Result<String> {

@@ -603,6 +603,7 @@ struct PostResultReceipt {
     repo_valid: bool,
     pull_number: u64,
     comments: usize,
+    reply_count: usize,
     review_json: String,
     review_json_exists: bool,
     review_json_valid: bool,
@@ -623,6 +624,8 @@ struct PostResultReceipt {
     delivery_status: String,
     review_id: Option<u64>,
     posted_comment_ids: Vec<u64>,
+    posted_reply_ids: Vec<u64>,
+    reply_delivery_status: String,
     submitted: bool,
     pending_review_deleted: bool,
     head_sha: Option<String>,
@@ -2348,6 +2351,21 @@ struct GitHubReview {
     event: String,
     body: String,
     comments: Vec<GitHubReviewComment>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct GitHubReviewReply {
+    claim_id: String,
+    head_sha: String,
+    comment_id: u64,
+    body: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct GitHubReviewReplyCandidates {
+    schema: String,
+    head_sha: String,
+    replies: Vec<GitHubReviewReply>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
