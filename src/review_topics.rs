@@ -20,6 +20,8 @@ pub(crate) struct ReviewTopic {
     pub(crate) failure_family: String,
     pub(crate) mechanism: String,
     pub(crate) status: String,
+    /// Current-head reconciliation result against the imported PR thread.
+    pub(crate) thread_disposition: String,
     pub(crate) severity: String,
     pub(crate) evidence: Vec<EvidenceRef>,
     pub(crate) existing_threads: Vec<String>,
@@ -127,7 +129,7 @@ pub(crate) fn build_active_claim_graph(
             .iter()
             .filter(|thread| same_surface(topic, thread))
             .collect::<Vec<_>>();
-        for thread in matching_threads {
+        for thread in &matching_threads {
             let is_current = thread
                 .commit_id
                 .as_deref()
@@ -167,6 +169,7 @@ pub(crate) fn build_active_claim_graph(
                 });
             }
         }
+        topic.thread_disposition = thread_disposition(topic, &matching_threads);
     }
 
     let mut claims = Vec::with_capacity(topics.len());
@@ -277,6 +280,7 @@ fn upsert_topic(topics: &mut BTreeMap<String, ReviewTopic>, head_sha: &str, seed
             failure_family: seed.failure_family,
             mechanism: seed.mechanism,
             status: seed.status,
+            thread_disposition: "novel".to_owned(),
             severity: seed.severity,
             evidence: seed.evidence,
             existing_threads: Vec::new(),
@@ -349,6 +353,44 @@ fn thread_body_matches(topic: &ReviewTopic, thread: &ReviewThreadRecord) -> bool
         .iter()
         .filter(|token| !low_information_thread_token(token))
         .any(|token| token.len() >= 6 && thread_tokens.iter().any(|candidate| candidate == token))
+}
+
+fn thread_disposition(topic: &ReviewTopic, matching_threads: &[&ReviewThreadRecord]) -> String {
+    if topic.existing_threads.is_empty() {
+        return if topic.stale_threads.is_empty() {
+            "novel".to_owned()
+        } else {
+            "superseded_by_head_change".to_owned()
+        };
+    }
+    if topic.status == "refuted" {
+        return "refuted_by_new_evidence".to_owned();
+    }
+    if matching_threads.iter().any(|thread| {
+        topic.existing_threads.contains(&thread.id) && accepted_tradeoff_thread(thread)
+    }) {
+        return "accepted_tradeoff".to_owned();
+    }
+    if !topic.proof_receipts.is_empty() {
+        "corroborated_with_new_evidence".to_owned()
+    } else {
+        "already_covered".to_owned()
+    }
+}
+
+fn accepted_tradeoff_thread(thread: &ReviewThreadRecord) -> bool {
+    if !thread
+        .state
+        .as_deref()
+        .is_some_and(|state| state.eq_ignore_ascii_case("resolved"))
+    {
+        return false;
+    }
+    let body = thread.body.to_ascii_lowercase();
+    body.contains("accepted tradeoff")
+        || body.contains("accepted trade-off")
+        || body.contains("intentional tradeoff")
+        || body.contains("intentional trade-off")
 }
 
 fn low_information_thread_token(token: &str) -> bool {
@@ -489,7 +531,93 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].existing_threads == ["current-thread"]);
         ensure!(graph.topics[0].stale_threads == ["stale-thread"]);
+        ensure!(graph.topics[0].thread_disposition == "already_covered");
         ensure!(graph.claims[0].state == ClaimState::Confirmed);
+        Ok(())
+    }
+
+    #[test]
+    fn thread_disposition_tracks_new_evidence_refutation_tradeoff_and_stale_heads() -> Result<()> {
+        let head = "cccccccccccccccccccccccccccccccccccccccc";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "observation-disposition".to_owned(),
+            lane: "tests".to_owned(),
+            question: "answer".to_owned(),
+            claim: "later subscript is dropped".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "fingerprint".to_owned(),
+            evidence: vec!["focused proof".to_owned()],
+            dedupe_key: "later-subscript".to_owned(),
+            source: "test".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "proof-disposition".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: Vec::new(),
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "focused proof confirms the thread".to_owned(),
+        };
+        let corroborated = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            &[],
+            &[],
+            &[],
+            std::slice::from_ref(&receipt),
+            &context(head),
+        );
+        ensure!(corroborated.topics[0].thread_disposition == "corroborated_with_new_evidence");
+
+        let mut refuted_observation = observation.clone();
+        refuted_observation.status = "refuted".to_owned();
+        let refuted = build_active_claim_graph(
+            head,
+            &[refuted_observation],
+            &[],
+            &[],
+            &[],
+            &[],
+            &context(head),
+        );
+        ensure!(refuted.topics[0].thread_disposition == "refuted_by_new_evidence");
+
+        let mut tradeoff_context = context(head);
+        tradeoff_context.threads[0].state = Some("resolved".to_owned());
+        tradeoff_context.threads[0].body =
+            "accepted tradeoff: keep the current subscript behavior".to_owned();
+        let tradeoff = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            &[],
+            &[],
+            &[],
+            &[],
+            &tradeoff_context,
+        );
+        ensure!(tradeoff.topics[0].thread_disposition == "accepted_tradeoff");
+
+        let stale = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            &[],
+            &[],
+            &[],
+            &[],
+            &context("dddddddddddddddddddddddddddddddddddddddd"),
+        );
+        ensure!(stale.topics[0].thread_disposition == "superseded_by_head_change");
         Ok(())
     }
 
