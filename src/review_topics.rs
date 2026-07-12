@@ -419,10 +419,11 @@ pub(crate) fn build_reply_candidates(
                 return None;
             }
             let receipt = proof_receipts.iter().find(|receipt| {
-                receipt
-                    .requested_by
-                    .iter()
-                    .any(|lane| lane == &comment.lane)
+                receipt.head.eq_ignore_ascii_case(head_sha)
+                    && receipt
+                        .requested_by
+                        .iter()
+                        .any(|lane| lane == &comment.lane)
             })?;
             Some(GitHubReviewReply {
                 claim_id: topic_claim_id_for_inline(comment),
@@ -1155,6 +1156,28 @@ mod tests {
         ensure!(replies[0].body.contains("Confirmed by focused execution"));
         ensure!(replies[0].body.contains("proof:red-green:123"));
 
+        let mut stale_receipt = receipt.clone();
+        stale_receipt.id = "proof:stale".to_owned();
+        stale_receipt.head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned();
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                std::slice::from_ref(&stale_receipt),
+                &thread_context
+            )
+            .is_empty()
+        );
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                &[stale_receipt, receipt.clone()],
+                &thread_context
+            )
+            .len()
+                == 1
+        );
         ensure!(build_reply_candidates(head, &comments, &[], &thread_context).is_empty());
         thread_context.threads[0].in_reply_to = Some("111".to_owned());
         ensure!(
