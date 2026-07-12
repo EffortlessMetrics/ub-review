@@ -171,6 +171,14 @@ delivery. Successful lane/provider/sensor tables and execution summaries are
 also suppressed as review-quality defects rather than becoming code-gate
 failures.
 
+Run metrics now keep reviewer-value signals separate from GitHub delivery:
+`prepared_inline_comments` and `prepared_review_body` describe the payload
+compiled by `run`; proof request status counts and terminal rate show whether
+the request queue closed; and receipt counters distinguish current-head,
+stale-head, and request-linked evidence, including proof-driven conclusion
+changes. `post_status` remains `not_attempted_by_run` until the post stage
+writes its receipt, so prepared output is never reported as delivered.
+
 ### PR 7 — Provider and cache reliability — DONE
 
 `max_concurrency` enforced. Backpressure diverts to fallback on

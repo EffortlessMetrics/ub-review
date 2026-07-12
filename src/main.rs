@@ -1073,12 +1073,21 @@ struct ReviewMetrics {
     models: ModelMetrics,
     inline_comments: usize,
     github_review_comments: usize,
+    prepared_inline_comments: usize,
+    prepared_review_body: bool,
     summary_only_findings: usize,
     observations: usize,
     follow_up_results: FollowUpResultMetrics,
     final_follow_up_tasks: usize,
     proof_requests: usize,
+    proof_request_status_counts: BTreeMap<String, usize>,
+    proof_requests_terminal: usize,
+    proof_request_terminal_rate: Option<f64>,
     proof_receipts: usize,
+    proof_receipts_current_head: usize,
+    proof_receipts_stale_head: usize,
+    proof_receipts_with_request_links: usize,
+    proof_changed_conclusions: usize,
     resource_leases: usize,
     off_diff_candidates_rejected: usize,
     missing_or_failed_sensor_evidence: usize,
@@ -5174,6 +5183,33 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
     run.model_call_duration_ms_sum = model_call_duration_ms_sum(review, follow_up_results);
     run.proof_command_duration_ms_sum = proof_command_duration_ms_sum(&review.proof_receipts);
     let prompt_cache = model_prompt_cache_metrics(review, follow_up_results, args);
+    let proof_request_status_counts = status_counts(
+        review
+            .proof_requests
+            .iter()
+            .map(|request| request.status.as_str()),
+    );
+    let proof_requests_terminal = review
+        .proof_requests
+        .iter()
+        .filter(|request| request.status != "requested")
+        .count();
+    let proof_request_terminal_rate = (!review.proof_requests.is_empty())
+        .then(|| proof_requests_terminal as f64 / review.proof_requests.len() as f64);
+    let proof_receipts_current_head = review
+        .proof_receipts
+        .iter()
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(&diff.head))
+        .count();
+    let proof_receipts_with_request_links = review
+        .proof_receipts
+        .iter()
+        .filter(|receipt| !receipt.request_ids.is_empty())
+        .count();
+    let (proof_changed_conclusions, _) = crate::calibration::detect_proof_changed_conclusions(
+        &out.join("review"),
+        &review.proof_receipts,
+    );
 
     ReviewMetrics {
         schema_version: 1,
@@ -5233,6 +5269,8 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         },
         inline_comments: review.inline_comments.len(),
         github_review_comments: github_review.map_or(0, |review| review.comments.len()),
+        prepared_inline_comments: github_review.map_or(0, |review| review.comments.len()),
+        prepared_review_body: github_review.is_some_and(|review| !review.body.trim().is_empty()),
         summary_only_findings: review.summary_only_findings.len(),
         observations: observations_count,
         follow_up_results: FollowUpResultMetrics {
@@ -5245,7 +5283,17 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         },
         final_follow_up_tasks,
         proof_requests: review.proof_requests.len(),
+        proof_request_status_counts,
+        proof_requests_terminal,
+        proof_request_terminal_rate,
         proof_receipts: review.proof_receipts.len(),
+        proof_receipts_current_head,
+        proof_receipts_stale_head: review
+            .proof_receipts
+            .len()
+            .saturating_sub(proof_receipts_current_head),
+        proof_receipts_with_request_links,
+        proof_changed_conclusions,
         resource_leases: review.resource_leases.len(),
         off_diff_candidates_rejected: review
             .summary_only_findings
@@ -17438,6 +17486,87 @@ index 1111111..2222222 100644
         assert_eq!(metrics.resource_leases, 0);
         assert_eq!(metrics.github_review_body_bytes, "pr body".len());
         assert_eq!(metrics.artifact_review_body_bytes, "artifact body".len());
+    }
+
+    #[test]
+    fn review_metrics_separate_prepared_output_and_receipt_freshness() {
+        let request = |id: &str, status: &str| ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: id.to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test --locked focused_case".to_owned(),
+            reason: "focused proof fixture".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: status.to_owned(),
+        };
+        let mut review = test_review_artifacts();
+        review.proof_requests = vec![
+            request("proof-executed", "executed"),
+            request("proof-deduplicated", "deduplicated"),
+            request("proof-requested", "requested"),
+        ];
+
+        let mut current = test_proof_receipt("passed", "passed");
+        current.id = "proof-current".to_owned();
+        current.request_ids = vec!["proof-executed".to_owned()];
+        let mut stale = test_proof_receipt("passed", "passed");
+        stale.id = "proof-stale".to_owned();
+        stale.head = "older-head".to_owned();
+        stale.request_ids.clear();
+        review.proof_receipts = vec![current, stale];
+
+        let github_review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: "Prepared synthesis".to_owned(),
+            comments: vec![
+                GitHubReviewComment {
+                    path: "src/lib.rs".to_owned(),
+                    line: 10,
+                    side: "RIGHT".to_owned(),
+                    body: "First finding".to_owned(),
+                    suggestion: None,
+                },
+                GitHubReviewComment {
+                    path: "src/lib.rs".to_owned(),
+                    line: 20,
+                    side: "RIGHT".to_owned(),
+                    body: "Second finding".to_owned(),
+                    suggestion: None,
+                },
+            ],
+        };
+        let diff = test_diff();
+        let metrics = build_review_metrics(ReviewMetricsInput {
+            out: Path::new("target/ub-review-metrics"),
+            diff: &diff,
+            plan: &test_plan(Vec::new()),
+            review: &review,
+            github_review: Some(&github_review),
+            review_payload_status: "prepared",
+            observations_count: 0,
+            follow_up_results: &[],
+            final_follow_up_tasks: 0,
+            run: test_run_loop_metrics(),
+            elapsed: std::time::Duration::from_secs(1),
+            args: &test_run_args(PathBuf::from("target/ub-review-metrics")),
+        });
+
+        assert_eq!(metrics.github_review_comments, 2);
+        assert_eq!(metrics.prepared_inline_comments, 2);
+        assert!(metrics.prepared_review_body);
+        assert_eq!(metrics.proof_requests, 3);
+        assert_eq!(metrics.proof_requests_terminal, 2);
+        assert_eq!(metrics.proof_request_terminal_rate, Some(2.0 / 3.0));
+        assert_eq!(metrics.proof_request_status_counts["deduplicated"], 1);
+        assert_eq!(metrics.proof_receipts, 2);
+        assert_eq!(metrics.proof_receipts_current_head, 1);
+        assert_eq!(metrics.proof_receipts_stale_head, 1);
+        assert_eq!(metrics.proof_receipts_with_request_links, 1);
+        assert_eq!(metrics.proof_changed_conclusions, 0);
+        assert_eq!(metrics.post_status, "not_attempted_by_run");
     }
 
     #[test]

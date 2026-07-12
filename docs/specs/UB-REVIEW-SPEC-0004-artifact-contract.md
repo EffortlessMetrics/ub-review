@@ -123,7 +123,11 @@ gate_outcome.json              ub-review.gate_outcome.v1 (spec 0003 owns the
                                by the verifier - see fail-closed section)
 metrics.json                   integer schema_version 1; run/streams/
                                scheduler_roles/loops/phases/models; the
-                               count-parity anchor for the whole tree
+                               count-parity anchor for the whole tree;
+                               additive reviewer-value fields distinguish
+                               prepared output, terminal proof dispositions,
+                               current/stale proof receipts, and post-stage
+                               delivery state
 ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
                                cost basis, token/cache counters, and
                                explicit missing[] entries for unavailable
