@@ -16625,9 +16625,15 @@ required_proof_unprooven = true
     fn pr_review_body_uses_missing_proof_receipt_instead_of_duplicate_test_witness_question() {
         let mut receipt = test_red_green_proof_receipt("timed_out", "timed_out");
         receipt.commands[1].timed_out = true;
+        receipt.request_ids = vec!["markdown-red-green-witness".to_owned()];
+        let mut unrelated_receipt = test_red_green_proof_receipt("timed_out", "timed_out");
+        unrelated_receipt.id = "proof-unrelated".to_owned();
+        unrelated_receipt.requested_by = vec!["architecture".to_owned()];
+        unrelated_receipt.request_ids = vec!["architecture-unrelated".to_owned()];
+        unrelated_receipt.commands[0].command = "cargo test unrelated-question".to_owned();
         let observations = vec![test_observation(
             "tests-oracle",
-            "The new test needs a witnessed old-main red run.",
+            "Changed parser route remains unevaluated.",
             "missing-evidence",
             "open",
             "medium",
@@ -16650,13 +16656,14 @@ required_proof_unprooven = true
                 evidence: "duplicate lane summary".to_owned(),
             }],
             &observations,
-            &[receipt],
+            &[receipt, unrelated_receipt],
             60_000,
             ReviewBodyAudience::PullRequest,
         );
 
         assert!(body.contains("## Evidence gaps"));
         assert!(body.contains("Focused proof timed out"));
+        assert!(!body.contains("unrelated-question"));
         assert!(!body.contains("## Verification questions"));
         assert!(!body.contains("Needs one test-proof clarification before upstream."));
         assert!(!body.contains("witnessed old-main red run"));
@@ -16839,7 +16846,17 @@ index 1111111..2222222 100644
 
     #[test]
     fn pr_review_body_renders_non_discriminating_proof_as_evidence_gap() {
-        let receipt = test_red_green_proof_receipt("non_discriminating", "passed");
+        let mut receipt = test_red_green_proof_receipt("non_discriminating", "passed");
+        receipt.request_ids = vec!["markdown-red-green-witness".to_owned()];
+        let observations = vec![test_observation(
+            "tests-oracle",
+            "Changed parser route remains unevaluated.",
+            "missing-evidence",
+            "open",
+            "medium",
+            "high",
+            "markdown-red-green-witness",
+        )];
         let body = render_review_body(
             "abc123",
             &test_plan(Vec::new()),
@@ -16849,7 +16866,7 @@ index 1111111..2222222 100644
             &[] as &[ModelEvidenceIssue],
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
-            &[] as &[Observation],
+            &observations,
             &[receipt],
             60_000,
             ReviewBodyAudience::PullRequest,
@@ -16896,7 +16913,17 @@ index 1111111..2222222 100644
 
     #[test]
     fn pr_review_body_collapses_timed_out_proof_to_missing_evidence() {
-        let receipt = test_proof_receipt("timed_out", "timed_out");
+        let mut receipt = test_proof_receipt("timed_out", "timed_out");
+        receipt.request_ids = vec!["markdown-red-green-witness".to_owned()];
+        let observations = vec![test_observation(
+            "tests-oracle",
+            "Changed parser route remains unevaluated.",
+            "missing-evidence",
+            "open",
+            "medium",
+            "high",
+            "markdown-red-green-witness",
+        )];
         let body = render_review_body(
             "abc123",
             &test_plan(Vec::new()),
@@ -16906,7 +16933,7 @@ index 1111111..2222222 100644
             &[] as &[ModelEvidenceIssue],
             &[] as &[ReviewInlineComment],
             &[] as &[SummaryOnlyFinding],
-            &[] as &[Observation],
+            &observations,
             &[receipt],
             60_000,
             ReviewBodyAudience::PullRequest,
