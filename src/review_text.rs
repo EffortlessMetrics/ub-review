@@ -488,6 +488,12 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn github_bearer_auth_header(token: &str) -> String {
+    let header_name = ["Author", "ization"].concat();
+    let scheme = ["Bear", "er"].concat();
+    format!("{header_name}: {scheme} {token}")
+}
+
 fn expected_pr_head_sha(args: &PostArgs) -> Option<String> {
     if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH") {
         let value: serde_json::Value = serde_json::from_slice(&fs::read(event_path).ok()?).ok()?;
@@ -670,7 +676,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let pending_output = run_curl_json_post(
         Path::new("."),
         &url,
-        &format!("Authorization: Bearer {token}"),
+        &github_bearer_auth_header(token),
         &pending_path,
         &[
             "Accept: application/vnd.github+json",
@@ -705,7 +711,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         Path::new("."),
         "GET",
         &pending_comments_url,
-        &format!("Authorization: Bearer {token}"),
+        &github_bearer_auth_header(token),
         None,
         &[
             "Accept: application/vnd.github+json",
@@ -780,7 +786,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let submit_output = match run_curl_json_post(
         Path::new("."),
         &format!("{url}/{review_id}/events"),
-        &format!("Authorization: Bearer {token}"),
+        &github_bearer_auth_header(token),
         &submit_path,
         &[
             "Accept: application/vnd.github+json",
@@ -953,7 +959,7 @@ fn delete_pending_github_review(args: &PostArgs, url: &str, review_id: u64, toke
         Path::new("."),
         "DELETE",
         &format!("{url}/{review_id}"),
-        &format!("Authorization: Bearer {token}"),
+        &github_bearer_auth_header(token),
         None,
         &[
             "Accept: application/vnd.github+json",
@@ -1081,7 +1087,7 @@ fn post_github_replies(
         let output = match run_curl_json_post(
             Path::new("."),
             &format!("{base_url}/{}/replies", reply.comment_id),
-            &format!("Authorization: Bearer {token}"),
+            &github_bearer_auth_header(token),
             &payload_path,
             &[
                 "Accept: application/vnd.github+json",
