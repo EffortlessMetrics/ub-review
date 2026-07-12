@@ -196,7 +196,7 @@ pub(crate) const STANDARD_IMAGE_CARGO_ALLOW_VERSION: &str = "0.1.8";
 // dogfooded local ripr 0.5.0 lacked the subcommand the image's newer ripr
 // accepted). Pins move together with scripts/install-gh-runner-tools.sh and
 // scripts/install-review-image-tools.sh.
-pub(crate) const STANDARD_IMAGE_RIPR_VERSION: &str = "0.10.0";
+pub(crate) const STANDARD_IMAGE_RIPR_VERSION: &str = "0.10.1";
 pub(crate) const STANDARD_IMAGE_UNSAFE_REVIEW_VERSION: &str = "0.3.4";
 // The actionlint version deliberately omits the `v` prefix: the doctor
 // version-matcher parses `actionlint version v1.7.12` and strips the `v`
