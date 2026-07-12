@@ -290,6 +290,10 @@ impl RelevanceKind {
 pub(crate) struct ConflictRecord {
     /// IDs of the conflicting claims.
     pub(crate) claim_ids: Vec<String>,
+    /// Claim selected by evidence precedence, when the conflict resolved.
+    pub(crate) winner: Option<String>,
+    /// Claim defeated by evidence precedence, when the conflict resolved.
+    pub(crate) loser: Option<String>,
     /// The nature of the conflict.
     pub(crate) description: String,
     /// Whether the conflict has been resolved (and how).
@@ -449,6 +453,8 @@ pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph
             if a.source_lane != b.source_lane && subjects_overlap(&a.subject, &b.subject) {
                 conflicts.push(ConflictRecord {
                     claim_ids: vec![a.id.clone(), b.id.clone()],
+                    winner: None,
+                    loser: None,
                     description: format!(
                         "Lanes `{}` and `{}` disagree on overlapping subject",
                         a.source_lane, b.source_lane
@@ -661,6 +667,8 @@ pub(crate) fn adjudicate_claim_graph_conflicts(
         let result = adjudicate_conflict(&left, &right);
         graph.conflicts.push(ConflictRecord {
             claim_ids: vec![left.id.clone(), right.id.clone()],
+            winner: result.winner.clone(),
+            loser: result.loser.clone(),
             description: format!(
                 "Explicit cross-lane conflict between `{}` and `{}`",
                 left.source_lane, right.source_lane

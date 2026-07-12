@@ -242,7 +242,7 @@ pub(crate) fn reconcile_inline_comments(
         .filter(|comment| {
             let claim_id = topic_claim_id_for_inline(comment);
             let refuted_by_adjudication = graph.topics.iter().any(|topic| {
-                topic.status == "refuted"
+                topic_is_adjudicated_loser(graph, topic)
                     && (topic.claim_id == claim_id
                         || subject_tokens_overlap(&topic.subject, &comment.body))
                     && topic.path.as_deref() == Some(comment.path.as_str())
@@ -278,13 +278,20 @@ pub(crate) fn reconcile_summary_only_findings(
         .iter()
         .filter(|finding| {
             !graph.topics.iter().any(|topic| {
-                topic.status == "refuted"
+                topic_is_adjudicated_loser(graph, topic)
                     && subject_tokens_overlap(&topic.subject, &finding.reason)
                     && topic.source_lane == finding.lane
             })
         })
         .cloned()
         .collect()
+}
+
+fn topic_is_adjudicated_loser(graph: &ClaimGraph, topic: &ReviewTopic) -> bool {
+    graph
+        .conflicts
+        .iter()
+        .any(|conflict| conflict.loser.as_deref() == Some(topic.claim_id.as_str()))
 }
 
 /// Preserve candidates resolved away by the follow-up pass in the claim
@@ -819,6 +826,30 @@ mod tests {
             reconcile_summary_only_findings(&graph, std::slice::from_ref(&summary)).is_empty(),
             "proof-refuted summary surface must not render"
         );
+        let distinct = ReviewInlineComment {
+            lane: "lane-a".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/buffer.rs".to_owned(),
+            line: 11,
+            side: "RIGHT".to_owned(),
+            body: "Buffer resize updates capacity bookkeeping".to_owned(),
+            evidence: "separate capacity invariant".to_owned(),
+            suggestion: None,
+        };
+        let graph_with_distinct = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&refutation),
+            &[candidate.clone(), distinct.clone()],
+            &[],
+            &[],
+            std::slice::from_ref(&receipt),
+            &context(head),
+        );
+        let remaining =
+            reconcile_inline_comments(&graph_with_distinct, &[candidate, distinct.clone()]);
+        ensure!(remaining.len() == 1);
+        ensure!(remaining[0].line == distinct.line);
         Ok(())
     }
 
