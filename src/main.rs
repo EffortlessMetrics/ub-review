@@ -4830,13 +4830,19 @@ fn write_review_artifacts(
     write_resource_lease_artifacts(out, &review.resource_leases)?;
     review.proof_requests =
         terminalize_proof_requests(&review.proof_requests, &review.proof_receipts);
-    let active_claim_graph = build_active_claim_graph(
+    let mut active_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,
         &compiler_inline_comments,
         &compiler_summary_only_findings,
         &review.proof_requests,
         &review.proof_receipts,
+        &review.pr_thread_context,
+    );
+    add_resolved_candidate_topics(
+        &mut active_claim_graph,
+        &diff.head,
+        &resolved_away_candidates,
         &review.pr_thread_context,
     );
     write_claim_graph(out, &active_claim_graph)?;

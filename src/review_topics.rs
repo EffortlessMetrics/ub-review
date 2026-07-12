@@ -236,6 +236,85 @@ pub(crate) fn reconcile_inline_comments(
         .collect()
 }
 
+/// Preserve candidates resolved away by the follow-up pass in the claim
+/// graph. They are intentionally absent from public delivery, but their
+/// current-head disposition explains why the reviewer stays silent.
+pub(crate) fn add_resolved_candidate_topics(
+    graph: &mut ClaimGraph,
+    head_sha: &str,
+    candidates: &[&CandidateRecord],
+    thread_context: &PrThreadContext,
+) {
+    for candidate in candidates {
+        let mechanism = stable_mechanism(&candidate.disposition, &candidate.claim);
+        let claim_id = structural_claim_id(
+            candidate.path.as_deref(),
+            candidate.line,
+            "resolved-candidate",
+            &mechanism,
+            &candidate.claim,
+        );
+        if graph.claims.iter().any(|claim| claim.id == claim_id) {
+            continue;
+        }
+        let mut topic = ReviewTopic {
+            claim_id: claim_id.clone(),
+            head_sha: head_sha.to_owned(),
+            path: candidate.path.clone(),
+            anchor: candidate.line,
+            symbol: None,
+            failure_family: "resolved-candidate".to_owned(),
+            mechanism,
+            status: "refuted".to_owned(),
+            thread_disposition: "fixed_on_current_head".to_owned(),
+            severity: candidate.severity.clone(),
+            evidence: vec![EvidenceRef {
+                class: EvidenceClass::ModelInterpretation,
+                reference: format!("review/resolved_candidates.json#{}", candidate.id),
+                detail: candidate.evidence.clone(),
+            }],
+            existing_threads: Vec::new(),
+            stale_threads: Vec::new(),
+            proof_requests: Vec::new(),
+            proof_receipts: Vec::new(),
+            delivery: "no-human-surface".to_owned(),
+            source_lane: candidate.lane.clone(),
+            subject: candidate.claim.clone(),
+        };
+        let matching_threads = thread_context
+            .threads
+            .iter()
+            .filter(|thread| same_surface(&topic, thread))
+            .collect::<Vec<_>>();
+        for thread in matching_threads {
+            if thread
+                .commit_id
+                .as_deref()
+                .is_some_and(|commit| commit.eq_ignore_ascii_case(head_sha))
+            {
+                push_unique(&mut topic.existing_threads, thread.id.clone());
+            } else {
+                push_unique(&mut topic.stale_threads, thread.id.clone());
+            }
+        }
+        graph.claims.push(ClaimNode {
+            id: claim_id.clone(),
+            subject: topic.subject.clone(),
+            source_lane: topic.source_lane.clone(),
+            state: ClaimState::Refuted,
+            supporting_evidence: topic.evidence.clone(),
+            contradicting_evidence: Vec::new(),
+            relevance: relevance_for_path(topic.path.as_deref()),
+            severity: topic.severity.clone(),
+        });
+        graph.topics.push(topic);
+    }
+    graph.claims.sort_by(|left, right| left.id.cmp(&right.id));
+    graph
+        .topics
+        .sort_by(|left, right| left.claim_id.cmp(&right.claim_id));
+}
+
 pub(crate) fn topic_claim_id_for_inline(comment: &ReviewInlineComment) -> String {
     structural_claim_id(
         Some(&comment.path),
@@ -618,6 +697,47 @@ mod tests {
             &context("dddddddddddddddddddddddddddddddddddddddd"),
         );
         ensure!(stale.topics[0].thread_disposition == "superseded_by_head_change");
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_candidates_remain_as_fixed_current_head_topics() -> Result<()> {
+        let head = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        let candidate = CandidateRecord {
+            schema: "candidate".to_owned(),
+            id: "candidate-fixed".to_owned(),
+            lane: "tests".to_owned(),
+            source: "inline-comment".to_owned(),
+            status: "confirmed".to_owned(),
+            disposition: "refuted".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            claim: "subscript finding".to_owned(),
+            evidence: "follow-up proof refuted the candidate".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            side: Some("RIGHT".to_owned()),
+        };
+        let mut graph = build_active_claim_graph(
+            head,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &context("dddddddddddddddddddddddddddddddddddddddd"),
+        );
+        add_resolved_candidate_topics(
+            &mut graph,
+            head,
+            &[&candidate],
+            &context("dddddddddddddddddddddddddddddddddddddddd"),
+        );
+        ensure!(graph.topics.len() == 1);
+        ensure!(graph.claims.len() == 1);
+        ensure!(graph.topics[0].thread_disposition == "fixed_on_current_head");
+        ensure!(graph.topics[0].stale_threads == ["current-thread", "stale-thread"]);
+        ensure!(graph.claims[0].state == ClaimState::Refuted);
         Ok(())
     }
 
