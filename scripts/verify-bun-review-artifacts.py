@@ -97,6 +97,7 @@ THREAD_DISPOSITIONS = {
     "corroborated_with_new_evidence",
     "refuted_by_new_evidence",
     "accepted_tradeoff",
+    "fixed_on_current_head",
     "superseded_by_head_change",
 }
 SECRET_VALUE_NAMES = [

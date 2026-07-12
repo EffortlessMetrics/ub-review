@@ -148,8 +148,8 @@ current versus stale thread references, proof request/receipt links, and
 delivery state. Each topic also records the current thread disposition
 (`novel`, `already_covered`, `corroborated_with_new_evidence`,
 `refuted_by_new_evidence`, `accepted_tradeoff`, or
-`superseded_by_head_change`). Current-head inline candidates already covered
-by an anchored
+`fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
+candidates already covered by an anchored
 thread are withheld from a second comment; stale threads do not suppress new
 delivery. Transactional replies and confirmed GitHub delivery receipts remain
 the separate #748 seam. That PR already carries the pending-review ->
