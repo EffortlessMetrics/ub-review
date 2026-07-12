@@ -5003,7 +5003,11 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
     let evidence_gaps = input.missing_or_failed_sensor_evidence.len()
         + input.missing_or_failed_model_evidence.len();
     let reviewer_value_present = input.should_prepare_github_review
-        || has_reviewer_value(input.inline_comments, input.pr_body);
+        || has_reviewer_value(input.inline_comments, input.pr_body)
+        || input
+            .proof_receipts
+            .iter()
+            .any(proof_receipt_is_test_proof_result);
 
     let (status, reason) = if reviewer_value_present {
         let reason = if input.should_prepare_github_review {
