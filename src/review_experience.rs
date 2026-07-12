@@ -311,6 +311,21 @@ mod tests {
                 }),
             "fixture receipt context is incomplete",
         )?;
+        for required_kind in [
+            "focused-test",
+            "full-suite",
+            "artifact-verifier",
+            "cargo-allow",
+            "heavy-witness",
+        ] {
+            require(
+                fixture
+                    .receipts
+                    .iter()
+                    .any(|receipt| receipt.kind == required_kind),
+                format!("fixture is missing {required_kind} receipt context"),
+            )?;
+        }
         require(
             fixture.base_sha != fixture.buggy_head_sha,
             "base and buggy heads must differ",
@@ -387,6 +402,12 @@ mod tests {
                 surfaced_claims.len() == surfaced_claims.iter().collect::<BTreeSet<_>>().len(),
                 "each claim may have at most one human-facing location",
             )?;
+            if head.sha == fixture.buggy_head_sha {
+                require(
+                    head.public_surface.len() <= 3,
+                    "buggy head exceeded the few-public-surfaces budget",
+                )?;
+            }
 
             for item in &head.public_surface {
                 require(
