@@ -1871,6 +1871,15 @@ def require_claim_graph(root: pathlib.Path) -> None:
     head_sha = graph.get("head_sha")
     if not isinstance(head_sha, str) or not head_sha.strip():
         fail("claim_graph.json head_sha is empty")
+    metrics = load_json(root / "review/metrics.json")
+    if not isinstance(metrics, dict) or metrics.get("head") != head_sha:
+        fail("claim_graph.json head_sha does not match metrics.json head")
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    if not isinstance(proof_receipts, list):
+        fail("proof_receipts.json is not an array")
+    for index, receipt in enumerate(proof_receipts):
+        if not isinstance(receipt, dict) or receipt.get("head") != head_sha:
+            fail(f"proof_receipts.json[{index}] head does not match claim graph head")
     claims = graph.get("claims")
     topics = graph.get("topics")
     if not isinstance(claims, list) or not isinstance(topics, list):
@@ -10933,6 +10942,8 @@ def self_test_claim_graph_contract() -> None:
                 ],
             },
         )
+        write_self_test_json(root / "review/metrics.json", {"head": "HEAD"})
+        write_self_test_json(root / "review/proof_receipts.json", [])
         require_claim_graph(root)
 
 
