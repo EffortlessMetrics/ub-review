@@ -4505,7 +4505,10 @@ fn write_review_artifacts(
         event_log,
         &message_log,
     ) {
-        Ok(()) => "completed",
+        Ok(calls) => {
+            model_calls_used = model_calls_used.saturating_add(calls);
+            "completed"
+        }
         Err(e) => {
             let _ = event_log.append(
                 "reporter_error",
@@ -4639,7 +4642,7 @@ fn write_review_artifacts(
         "investigation",
         "follow-up",
     )?;
-    run_follow_up_model_pass(
+    let follow_up_model_calls = run_follow_up_model_pass(
         FollowUpRunContext {
             root,
             out,
@@ -4655,6 +4658,7 @@ fn write_review_artifacts(
         &mut follow_up_results,
         &mut follow_up_outputs,
     )?;
+    model_calls_used = model_calls_used.saturating_add(follow_up_model_calls);
     finish_run_loop(
         event_log,
         run_started,
@@ -4710,17 +4714,28 @@ fn write_review_artifacts(
         box_state,
         run_started,
     )?;
+    let follow_up_proof_receipts = follow_up_proof_result.proof_receipts;
     review
         .resource_leases
         .extend(follow_up_proof_result.resource_leases);
-    route_follow_up_proof_receipts(
-        &message_log,
+    route_follow_up_proof_receipts(&message_log, event_log, &follow_up_proof_receipts);
+    let reconsideration_result = run_receipt_reconsiderations(
+        root,
+        &review_dir,
+        &shared_context,
+        &mut review.model_lanes,
+        &follow_up_proof_receipts,
+        args,
+        model_calls_used,
         event_log,
-        &follow_up_proof_result.proof_receipts,
+        &message_log,
+    )?;
+    review.proof_receipts.extend(follow_up_proof_receipts);
+    apply_receipt_reconsiderations(
+        &mut review.observations,
+        &reconsideration_result.reconsiderations,
     );
-    review
-        .proof_receipts
-        .extend(follow_up_proof_result.proof_receipts);
+    write_receipt_reconsideration_artifact(out, &reconsideration_result)?;
     finish_run_loop(
         event_log,
         run_started,
@@ -4816,6 +4831,7 @@ fn write_review_artifacts(
                 "review/proof_receipts.json",
                 "review/tool-gate-outcomes.json",
                 "review/receipt_routes.json",
+                "review/receipt_reconsiderations.json",
                 "review/final_orchestrator_plan.json",
                 "review/claim_graph.json",
                 "review/pr_thread_context.json",

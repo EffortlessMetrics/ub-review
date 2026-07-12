@@ -163,6 +163,15 @@ evidence-precedence conflicts now carry winner/loser claim IDs, and final
 surface reconciliation suppresses only the adjudicated loser while retaining
 it in the claim graph artifact.
 
+Late proof now has a lane-reconsideration boundary as well: follow-up receipts
+are routed to the message bus, receipt-linked lanes receive a bounded
+evidence-reconsideration turn before final claim compilation, and exact request
+IDs are required before an answer can change an observation disposition. The
+turns, `review/receipt_reconsiderations.json`, and `TopicUpdate` messages are
+auditable; unrelated claims owned by the same lane remain unchanged. Model
+budget exhaustion or a failed reconsideration is recorded as an internal
+terminal/deferred result and does not become maintainer homework.
+
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
 `has_forbidden_pr_review_boilerplate` rejects lane rosters, tool tables,

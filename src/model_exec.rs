@@ -414,7 +414,7 @@ pub(crate) fn run_reporter_coordination(
     model_calls_used: usize,
     event_log: &EventLog,
     message_log: &MessageLog,
-) -> Result<()> {
+) -> Result<usize> {
     let digests = lane_digests_from_receipts(model_lanes);
     if digests.is_empty() || model_calls_used >= args.max_model_calls {
         let reason = if digests.is_empty() {
@@ -430,7 +430,7 @@ pub(crate) fn run_reporter_coordination(
             vec![],
             serde_json::json!({"topic": "reporter_skipped", "reason": reason}),
         );
-        return Ok(());
+        return Ok(0);
     }
     let spec = direct_minimax_spec(args);
     let prefix_hash = sha256_hex(shared_context.as_bytes());
@@ -463,7 +463,7 @@ pub(crate) fn run_reporter_coordination(
                 vec![],
                 serde_json::json!({"topic": "reporter_failed", "error": format!("{e:#}")}),
             );
-            return Ok(());
+            return Ok(1);
         }
     };
     let conclusion = parse_reporter_conclusion(&content.json_payload, &cohort_id, &thread_id);
@@ -585,6 +585,7 @@ pub(crate) fn run_reporter_coordination(
             .collect();
         let re_prompt = reporter_prompt(&updated_digests, late_sensor_evidence);
         let re_dir = review_dir.join("threads").join("reporter");
+        calls_used += 1;
         if let Ok(re_content) = call_model_prompt_content(
             root,
             &re_dir,
@@ -639,6 +640,317 @@ pub(crate) fn run_reporter_coordination(
         }
     }
 
+    Ok(calls_used.saturating_sub(model_calls_used))
+}
+
+/// A lane's answer after deterministic proof arrived after the reporter's
+/// first pass.  The request IDs are retained so the final claim compiler can
+/// update only the claims that the receipt explicitly answers.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ReceiptReconsideration {
+    pub(crate) lane: String,
+    pub(crate) receipt_ids: Vec<String>,
+    pub(crate) request_ids: Vec<String>,
+    pub(crate) conclusion: String,
+    pub(crate) disposition: String,
+    pub(crate) changed: bool,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub(crate) struct ReceiptReconsiderationResult {
+    pub(crate) reconsiderations: Vec<ReceiptReconsideration>,
+    pub(crate) calls_attempted: usize,
+}
+
+/// Render the bounded, answer-shaped prompt used when proof lands after the
+/// ordinary reporter continuation.  This is deliberately separate from the
+/// reporter question prompt: the new evidence, rather than another model
+/// opinion, is the reason the lane is being reopened.
+pub(crate) fn receipt_reconsideration_prompt(
+    lane: &str,
+    prior_conclusion: &str,
+    receipts: &[&ProofReceipt],
+) -> String {
+    let mut prompt = format!(
+        "# Evidence reconsideration: `{lane}`\n\n\
+         ## Prior conclusion\n\n{prior_conclusion}\n\n\
+         ## New deterministic receipts\n\n"
+    );
+    for receipt in receipts {
+        let reason: String = receipt.reason.chars().take(800).collect();
+        prompt.push_str(&format!(
+            "- receipt `{}`: result=`{}`; reason=`{}`; request_ids=`{}`\n",
+            receipt.id,
+            receipt.result,
+            reason,
+            receipt.request_ids.join(", "),
+        ));
+    }
+    prompt.push_str(
+        "\n## Task\n\n\
+         Reconsider only the claims linked by these request IDs. Return strict JSON:\n\
+         {\"conclusion\":\"...\",\"changed\":true|false,\
+         \"disposition\":\"confirm|refute|narrow|park|withdraw|unchanged\"}.\n\
+         `changed` is true only when the receipt changes the prior conclusion.\n",
+    );
+    prompt
+}
+
+fn next_lane_turn_number(review_dir: &Path, lane: &str) -> u32 {
+    let Some(entries) = review_dir.join("threads").join(lane).read_dir().ok() else {
+        return 1;
+    };
+    entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| entry.file_name().into_string().ok())
+        .filter_map(|name| {
+            name.strip_prefix("turn-")?
+                .strip_suffix(".json")?
+                .parse::<u32>()
+                .ok()
+        })
+        .max()
+        .map_or(1, |turn| turn.saturating_add(1))
+}
+
+/// Reopen receipt-linked lanes after the late proof broker.  The function is
+/// intentionally bounded by the remaining model budget and skips the
+/// compiler-only route.  It returns auditable answers; the caller applies
+/// those answers to observations only when request identity is exact.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "receipt reconsideration carries the immutable run context and the bounded model budget"
+)]
+pub(crate) fn run_receipt_reconsiderations(
+    root: &Path,
+    review_dir: &Path,
+    shared_context: &str,
+    model_lanes: &mut [ModelLaneReceipt],
+    receipts: &[ProofReceipt],
+    args: &RunArgs,
+    model_calls_used: usize,
+    event_log: &EventLog,
+    message_log: &MessageLog,
+) -> Result<ReceiptReconsiderationResult> {
+    let mut receipts_by_lane = BTreeMap::<String, Vec<&ProofReceipt>>::new();
+    for receipt in receipts {
+        for consumer in receipt_route_consumers(receipt) {
+            if consumer != "compiler"
+                && model_lanes
+                    .iter()
+                    .any(|lane| lane.lane == consumer && !lane.thread_id.is_empty())
+            {
+                receipts_by_lane.entry(consumer).or_default().push(receipt);
+            }
+        }
+    }
+
+    let mut result = ReceiptReconsiderationResult::default();
+    let spec = direct_minimax_spec(args);
+    for (lane_id, lane_receipts) in receipts_by_lane {
+        if model_calls_used.saturating_add(result.calls_attempted) >= args.max_model_calls {
+            let _ = event_log.append(
+                "receipt_reconsideration_deferred",
+                serde_json::json!({"lane": lane_id, "reason": "model-budget-exhausted"}),
+            );
+            break;
+        }
+        let Some(lane) = model_lanes.iter().find(|lane| lane.lane == lane_id) else {
+            continue;
+        };
+        let prior_conclusion = lane.reason.clone();
+        let prompt = receipt_reconsideration_prompt(&lane_id, &prior_conclusion, &lane_receipts);
+        let turn = next_lane_turn_number(review_dir, &lane_id);
+        let lane_dir = review_dir.join("threads").join(&lane_id);
+        fs::create_dir_all(&lane_dir)?;
+        let prompt_path = lane_dir.join(format!("evidence-reconsideration-{turn:03}.md"));
+        fs::write(&prompt_path, &prompt)?;
+        result.calls_attempted = result.calls_attempted.saturating_add(1);
+
+        let content = match call_model_prompt_content(
+            root,
+            &lane_dir,
+            &spec,
+            Some(shared_context),
+            true,
+            &prompt,
+            args,
+        ) {
+            Ok(content) => content,
+            Err(error) => {
+                let _ = event_log.append(
+                    "receipt_reconsideration_failed",
+                    serde_json::json!({"lane": lane_id, "error": format!("{error:#}")}),
+                );
+                continue;
+            }
+        };
+        let parsed = serde_json::from_str::<serde_json::Value>(&content.json_payload).ok();
+        let conclusion = parsed
+            .as_ref()
+            .and_then(|value| value.get("conclusion"))
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_owned();
+        let changed = parsed
+            .as_ref()
+            .and_then(|value| value.get("changed"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let disposition = parsed
+            .as_ref()
+            .and_then(|value| value.get("disposition"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| {
+                matches!(
+                    *value,
+                    "confirm" | "refute" | "narrow" | "park" | "withdraw" | "unchanged"
+                )
+            })
+            .unwrap_or("unchanged")
+            .to_owned();
+        let receipt_ids = lane_receipts
+            .iter()
+            .map(|receipt| receipt.id.clone())
+            .collect();
+        let request_ids = lane_receipts
+            .iter()
+            .flat_map(|receipt| receipt.request_ids.iter().cloned())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        let turn_ref = format!("review/threads/{lane_id}/turn-{turn:03}.json");
+        let reconsideration = ReceiptReconsideration {
+            lane: lane_id.clone(),
+            receipt_ids,
+            request_ids: request_ids.clone(),
+            conclusion: conclusion.clone(),
+            disposition: disposition.clone(),
+            changed,
+        };
+        let turn_record = LaneThreadTurn {
+            schema: LANE_THREAD_SCHEMA.to_owned(),
+            thread_id: lane.thread_id.clone(),
+            turn,
+            stage: "follow-up-evidence".to_owned(),
+            prompt_packet_path: format!(
+                "review/threads/{lane_id}/evidence-reconsideration-{turn:03}.md"
+            ),
+            response_summary: conclusion.clone(),
+            routed_evidence_refs: lane_receipts
+                .iter()
+                .map(|receipt| format!("review/proof_receipts.json#{}", receipt.id))
+                .collect(),
+            receipt_ref: turn_ref.clone(),
+        };
+        write_lane_thread_turn(
+            review_dir,
+            &lane_id,
+            &turn_record,
+            &lane.cohort_id,
+            "follow-up-evidence-answered",
+        )?;
+        let _ = message_log.append(
+            CrossLaneMessageKind::LaneAnswer,
+            &lane_id,
+            "reporter",
+            turn,
+            lane_receipts
+                .iter()
+                .map(|receipt| format!("review/proof_receipts.json#{}", receipt.id))
+                .collect(),
+            serde_json::json!({
+                "source": "proof-receipt",
+                "conclusion": conclusion.clone(),
+                "changed": changed,
+                "disposition": disposition.clone(),
+                "request_ids": request_ids.clone(),
+            }),
+        );
+        let _ = message_log.append(
+            CrossLaneMessageKind::TopicUpdate,
+            &lane_id,
+            "compiler",
+            turn,
+            lane_receipts
+                .iter()
+                .map(|receipt| format!("review/proof_receipts.json#{}", receipt.id))
+                .collect(),
+            serde_json::json!({
+                "source": "proof-receipt",
+                "changed": changed,
+                "disposition": disposition,
+                "request_ids": request_ids,
+            }),
+        );
+        if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id)
+            && !reconsideration.conclusion.is_empty()
+        {
+            lane.reason = reconsideration.conclusion.clone();
+            lane.turn = turn;
+        }
+        result.reconsiderations.push(reconsideration);
+    }
+    Ok(result)
+}
+
+/// Apply only exact request-linked reconsiderations to observations.  A lane
+/// may own several unrelated claims; lane ownership alone must never rewrite
+/// all of them from one receipt.
+pub(crate) fn apply_receipt_reconsiderations(
+    observations: &mut [Observation],
+    reconsiderations: &[ReceiptReconsideration],
+) -> usize {
+    let mut changed = 0;
+    for reconsideration in reconsiderations {
+        if !reconsideration.changed || reconsideration.request_ids.is_empty() {
+            continue;
+        }
+        for observation in observations.iter_mut().filter(|observation| {
+            observation.lane == reconsideration.lane
+                && reconsideration.request_ids.iter().any(|request_id| {
+                    request_id == &observation.id || request_id == &observation.dedupe_key
+                })
+        }) {
+            let next_status = match reconsideration.disposition.as_str() {
+                "confirm" => Some("confirmed"),
+                "refute" => Some("refuted"),
+                "park" => Some("parked"),
+                "withdraw" => Some("dropped"),
+                "narrow" | "unchanged" => None,
+                _ => None,
+            };
+            if let Some(status) = next_status {
+                observation.status = status.to_owned();
+            }
+            observation.evidence.push(format!(
+                "receipt reconsideration: {} ({})",
+                reconsideration.conclusion, reconsideration.disposition
+            ));
+            observation.source = "proof-reconsideration".to_owned();
+            changed += 1;
+        }
+    }
+    changed
+}
+
+pub(crate) fn write_receipt_reconsideration_artifact(
+    out: &Path,
+    result: &ReceiptReconsiderationResult,
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir)?;
+    let artifact = serde_json::json!({
+        "schema": "ub-review.receipt_reconsiderations.v1",
+        "source_artifacts": ["review/proof_receipts.json", "review/messages.ndjson"],
+        "calls_attempted": result.calls_attempted,
+        "reconsiderations": result.reconsiderations,
+    });
+    fs::write(
+        review_dir.join("receipt_reconsiderations.json"),
+        serde_json::to_vec_pretty(&artifact)?,
+    )?;
     Ok(())
 }
 
@@ -1441,4 +1753,73 @@ fn validate_proof_intent(
         requested_by: vec![lane.id.clone()],
         status: "requested".to_owned(),
     })
+}
+
+#[cfg(test)]
+mod receipt_reconsideration_tests {
+    use super::*;
+
+    fn observation(id: &str) -> Observation {
+        Observation {
+            schema: "observation".to_owned(),
+            id: id.to_owned(),
+            lane: "tests-oracle".to_owned(),
+            question: "does the focused proof answer this claim?".to_owned(),
+            claim: id.to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: format!("fingerprint-{id}"),
+            evidence: vec!["model observation".to_owned()],
+            dedupe_key: format!("dedupe-{id}"),
+            source: "model".to_owned(),
+        }
+    }
+
+    #[test]
+    fn reconsideration_prompt_is_answer_shaped_and_claim_linked() {
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "receipt-1".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["claim-1".to_owned()],
+            commands: Vec::new(),
+            result: "head_failed".to_owned(),
+            reason: "the focused test still fails".to_owned(),
+        };
+        let prompt =
+            receipt_reconsideration_prompt("tests-oracle", "the prior conclusion", &[&receipt]);
+        assert!(prompt.contains("receipt-1"));
+        assert!(prompt.contains("claim-1"));
+        assert!(prompt.contains("confirm|refute|narrow|park|withdraw|unchanged"));
+    }
+
+    #[test]
+    fn reconsideration_updates_only_exactly_linked_observations() {
+        let mut observations = vec![observation("claim-1"), observation("claim-2")];
+        let updates = vec![ReceiptReconsideration {
+            lane: "tests-oracle".to_owned(),
+            receipt_ids: vec!["receipt-1".to_owned()],
+            request_ids: vec!["claim-1".to_owned()],
+            conclusion: "the focused proof refutes claim-1".to_owned(),
+            disposition: "refute".to_owned(),
+            changed: true,
+        }];
+
+        assert_eq!(
+            apply_receipt_reconsiderations(&mut observations, &updates),
+            1
+        );
+        assert_eq!(observations[0].status, "refuted");
+        assert_eq!(observations[0].source, "proof-reconsideration");
+        assert_eq!(observations[1].status, "confirmed");
+        assert_eq!(observations[1].source, "model");
+    }
 }
