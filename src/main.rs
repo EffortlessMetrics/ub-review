@@ -5645,6 +5645,7 @@ mod tests {
     use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
     use std::process::{Command as ProcessCommand, Stdio};
+    use std::sync::Mutex;
     use std::thread;
     use std::time::{Duration, Instant};
 
@@ -5709,6 +5710,14 @@ mod tests {
         write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
         write_sensor_status, write_witness_artifacts,
     };
+
+    static LOOPBACK_API_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    pub(super) fn loopback_api_test_lock() -> std::sync::MutexGuard<'static, ()> {
+        LOOPBACK_API_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     #[test]
     fn doctor_tool_install_hints_name_exact_core_tool_fixes() {
@@ -12665,6 +12674,7 @@ index 1111111..2222222 100644
 
     #[test]
     fn pr_thread_context_fetches_github_thread_snapshot() -> Result<()> {
+        let _loopback = loopback_api_test_lock();
         let temp = tempfile::tempdir()?;
         let (github_api_url, handle) = spawn_fake_github_thread_api(3)?;
         let mut args = test_run_args(temp.path().join("out"));
@@ -18632,6 +18642,7 @@ index 1111111..2222222 100644
 
     #[test]
     fn quality_github_collect_writes_raw_receipts_for_outcomes() -> Result<()> {
+        let _loopback = loopback_api_test_lock();
         let temp = tempfile::tempdir()?;
         let source = temp.path().join("github");
         fs::create_dir_all(&source)?;
@@ -18788,34 +18799,84 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    /// Serve each loopback request in its own handler thread. The test suite
+    /// runs many fake GitHub APIs concurrently; handling one accepted stream
+    /// inline can leave later clients queued long enough to see connection
+    /// refused on Windows. Results retain accept order so callers can keep
+    /// asserting request sequencing, while handler errors are returned rather
+    /// than being hidden behind an incomplete request count.
+    fn collect_fake_http_requests<F>(
+        listener: TcpListener,
+        expected_requests: usize,
+        label: &str,
+        handler: F,
+    ) -> Result<Vec<String>>
+    where
+        F: Fn(TcpStream) -> Result<String> + Send + Sync + 'static,
+    {
+        listener.set_nonblocking(true)?;
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let handler = std::sync::Arc::new(handler);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let mut accepted = 0usize;
+        let mut completed = 0usize;
+        let mut requests = Vec::with_capacity(expected_requests);
+
+        while accepted < expected_requests {
+            match listener.accept() {
+                Ok((stream, _addr)) => {
+                    let index = accepted;
+                    accepted += 1;
+                    let handler = std::sync::Arc::clone(&handler);
+                    let sender = sender.clone();
+                    thread::spawn(move || {
+                        let result = handler(stream);
+                        let _ = sender.send((index, result));
+                    });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
+                Err(error) => return Err(error.into()),
+            }
+
+            while let Ok((index, result)) = receiver.try_recv() {
+                completed += 1;
+                requests.push((index, result?));
+            }
+            if Instant::now() >= deadline {
+                bail!(
+                    "{label} accepted {accepted} of {expected_requests} requests and completed {completed}"
+                );
+            }
+            if accepted < expected_requests {
+                thread::sleep(Duration::from_millis(10));
+            }
+        }
+        drop(sender);
+
+        while completed < expected_requests {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            let (index, result) = receiver
+                .recv_timeout(remaining)
+                .map_err(|error| anyhow::anyhow!("{label} handler did not complete: {error}"))?;
+            completed += 1;
+            requests.push((index, result?));
+        }
+        requests.sort_by_key(|(index, _)| *index);
+        Ok(requests.into_iter().map(|(_, request)| request).collect())
+    }
+
     fn spawn_fake_quality_github_graphql_api(
         expected_requests: usize,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
         let url = format!("http://{}/graphql", listener.local_addr()?);
         let handle = thread::spawn(move || -> Result<Vec<String>> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let mut requests = Vec::new();
-            while requests.len() < expected_requests {
-                match listener.accept() {
-                    Ok((stream, _addr)) => {
-                        requests.push(handle_fake_quality_github_graphql_request(stream)?);
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            bail!(
-                                "fake GitHub GraphQL API received {} of {} requests",
-                                requests.len(),
-                                expected_requests
-                            );
-                        }
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Ok(requests)
+            collect_fake_http_requests(
+                listener,
+                expected_requests,
+                "fake GitHub GraphQL API",
+                handle_fake_quality_github_graphql_request,
+            )
         });
         Ok((url, handle))
     }
@@ -21010,6 +21071,7 @@ index 1111111..2222222 100644
 
     #[test]
     fn issue_broker_executes_plan_with_duplicate_search_and_receipts() -> Result<()> {
+        let _loopback = loopback_api_test_lock();
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("post-out");
         fs::create_dir_all(&out)?;
@@ -21096,30 +21158,14 @@ index 1111111..2222222 100644
         expected_requests: usize,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
         let handle = thread::spawn(move || -> Result<Vec<String>> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let mut requests = Vec::new();
-            while requests.len() < expected_requests {
-                match listener.accept() {
-                    Ok((stream, _addr)) => {
-                        requests.push(handle_fake_issue_broker_request(stream)?);
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            bail!(
-                                "fake issue broker API received {} of {} requests",
-                                requests.len(),
-                                expected_requests
-                            );
-                        }
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Ok(requests)
+            collect_fake_http_requests(
+                listener,
+                expected_requests,
+                "fake issue broker API",
+                handle_fake_issue_broker_request,
+            )
         });
         Ok((url, handle))
     }
@@ -22671,30 +22717,14 @@ index 1111111..2222222 100644
         expected_requests: usize,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
-        listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
         let handle = thread::spawn(move || -> Result<Vec<String>> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let mut requests = Vec::new();
-            while requests.len() < expected_requests {
-                match listener.accept() {
-                    Ok((stream, _addr)) => {
-                        requests.push(handle_fake_github_thread_request(stream)?);
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            bail!(
-                                "fake GitHub thread API received {} of {} requests",
-                                requests.len(),
-                                expected_requests
-                            );
-                        }
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Ok(requests)
+            collect_fake_http_requests(
+                listener,
+                expected_requests,
+                "fake GitHub thread API",
+                handle_fake_github_thread_request,
+            )
         });
         Ok((url, handle))
     }
