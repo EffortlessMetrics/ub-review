@@ -126,24 +126,35 @@ SECRET_HEADER_PATTERNS = [
         "Authorization header",
         re.compile(
             r"(?im)\bAuthorization\s*:\s*(?:Bearer\s+)?"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?P<value>(?!redacted\b|\[redacted\]|\*\*\*)"
+            r"[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})"
         ),
     ),
     (
         "Bearer token",
         re.compile(
             r"(?im)\bBearer\s+"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?P<value>(?!redacted\b|\[redacted\]|\*\*\*)"
+            r"[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})"
         ),
     ),
     (
         "API key header",
         re.compile(
             r"(?im)\bX-API-Key\s*:\s*"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?P<value>(?!redacted\b|\[redacted\]|\*\*\*)"
+            r"[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})"
         ),
     ),
 ]
+SAFE_SECRET_HEADER_VALUES = {
+    "authentication",
+    "authorization",
+    "credential",
+    "credentials",
+    "header",
+    "headers",
+}
 SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"(?im)\b("
     + "|".join(re.escape(name) for name in SECRET_VALUE_NAMES)
@@ -237,7 +248,8 @@ def looks_like_secret_assignment_value(value: str) -> bool:
 
 def secret_leak_marker(text: str) -> str | None:
     for label, pattern in SECRET_HEADER_PATTERNS:
-        if pattern.search(text):
+        match = pattern.search(text)
+        if match and match.group("value").lower() not in SAFE_SECRET_HEADER_VALUES:
             return label
     for match in SECRET_ASSIGNMENT_PATTERN.finditer(text):
         if looks_like_secret_assignment_value(match.group(3)):
@@ -11064,6 +11076,10 @@ def self_test_claim_graph_contract() -> None:
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
+    if secret_leak_marker("Bearer authentication") is not None:
+        fail("self-test prose Bearer authentication was treated as a leak")
+    if secret_leak_marker("Authorization: Bearer test-token-redacted") != "Authorization header":
+        fail("self-test credential-shaped Bearer value was not detected")
     self_test_claim_graph_contract()
     if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
