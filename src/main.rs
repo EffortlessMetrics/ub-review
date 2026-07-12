@@ -2392,6 +2392,7 @@ struct GitHubReviewPostPayload {
 
 #[derive(Clone, Debug, Serialize)]
 struct GitHubPendingReviewPayload {
+    commit_id: String,
     body: String,
     comments: Vec<GitHubReviewPostComment>,
 }

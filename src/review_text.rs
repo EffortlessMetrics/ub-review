@@ -495,15 +495,15 @@ fn github_bearer_auth_header(token: &str) -> String {
 }
 
 fn expected_pr_head_sha(args: &PostArgs) -> Option<String> {
-    if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH") {
-        let value: serde_json::Value = serde_json::from_slice(&fs::read(event_path).ok()?).ok()?;
-        if let Some(sha) = value
+    if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH")
+        && let Ok(bytes) = fs::read(event_path)
+        && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes)
+        && let Some(sha) = value
             .pointer("/pull_request/head/sha")
             .and_then(serde_json::Value::as_str)
             .filter(|sha| !sha.trim().is_empty())
-        {
-            return Some(sha.to_owned());
-        }
+    {
+        return Some(sha.to_owned());
     }
 
     let claim_graph_path = args.review_json.parent()?.join("claim_graph.json");
@@ -521,7 +521,7 @@ fn verify_current_pr_head(
     repo: &str,
     pull_number: u64,
     token: &str,
-) -> Result<()> {
+) -> Result<String> {
     let receipt_path = args.out.join("post-head-check.json");
     let Some(expected_sha) = expected_pr_head_sha(args) else {
         fs::write(
@@ -577,7 +577,7 @@ fn verify_current_pr_head(
             "current pull request head changed before posting (expected {expected_sha}, got {current_sha})"
         );
     }
-    Ok(())
+    Ok(expected_sha)
 }
 
 pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
@@ -619,10 +619,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         )?;
     }
     if !replies.is_empty() && review.comments.is_empty() {
-        verify_current_pr_head(args, repo, pull_number, token)?;
-        let expected_sha = expected_pr_head_sha(args).ok_or_else(|| {
-            anyhow::anyhow!("current pull request head disappeared while validating replies")
-        })?;
+        let expected_sha = verify_current_pr_head(args, repo, pull_number, token)?;
         let artifact = reply_candidates
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("reply candidates disappeared while posting"))?;
@@ -639,11 +636,14 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             repo,
             pull_number,
             &review,
+            &expected_sha,
             posted_reply_ids,
         ));
     }
+    let expected_sha = verify_current_pr_head(args, repo, pull_number, token)?;
     let comments = github_review_post_comments(&review)?;
     let pending_payload = GitHubPendingReviewPayload {
+        commit_id: expected_sha.clone(),
         body: review.body.clone(),
         comments,
     };
@@ -654,18 +654,14 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     )?;
     let pending_path = args.out.join("github-review-pending-payload.json");
     fs::write(&pending_path, serde_json::to_vec_pretty(&pending_payload)?)?;
-    verify_current_pr_head(args, repo, pull_number, token)?;
-    if let Some(artifact) = &reply_candidates {
-        let expected_sha = expected_pr_head_sha(args).ok_or_else(|| {
-            anyhow::anyhow!("current pull request head disappeared while validating replies")
-        })?;
-        if artifact.head_sha != expected_sha {
-            bail!(
-                "reply candidate head {} does not match expected current head {}",
-                artifact.head_sha,
-                expected_sha
-            );
-        }
+    if let Some(artifact) = &reply_candidates
+        && artifact.head_sha != expected_sha
+    {
+        bail!(
+            "reply candidate head {} does not match expected current head {}",
+            artifact.head_sha,
+            expected_sha
+        );
     }
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
@@ -889,7 +885,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         },
         submitted: true,
         pending_review_deleted: false,
-        head_sha: std::env::var("GITHUB_SHA").ok(),
+        head_sha: Some(expected_sha),
     })
 }
 
@@ -898,6 +894,7 @@ fn reply_only_post_result(
     repo: &str,
     pull_number: u64,
     review: &GitHubReview,
+    head_sha: &str,
     posted_reply_ids: Vec<u64>,
 ) -> PostResultReceipt {
     PostResultReceipt {
@@ -932,7 +929,7 @@ fn reply_only_post_result(
         reply_delivery_status: "posted".to_owned(),
         submitted: false,
         pending_review_deleted: false,
-        head_sha: std::env::var("GITHUB_SHA").ok(),
+        head_sha: Some(head_sha.to_owned()),
     }
 }
 

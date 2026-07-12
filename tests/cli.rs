@@ -6338,6 +6338,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
     assert!(requests[3].contains("\"event\": \"COMMENT\""));
+    assert!(request_text.contains("\"commit_id\": \"test-head-sha\""));
     assert!(request_text.contains("\"comments\": []"));
 
     let post_result_path = out.join("post-result.json");
@@ -6361,6 +6362,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert_eq!(post_result["review_json_valid"], true);
     assert_eq!(post_result["review_event"], "COMMENT");
     assert_eq!(post_result["review_comment_count"], 0);
+    assert_eq!(post_result["head_sha"], "test-head-sha");
     assert_eq!(post_result["diff_patch_exists"], false);
     assert_eq!(post_result["http_status"], 201);
     assert_eq!(post_result["token_present"], true);
@@ -6526,6 +6528,68 @@ fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
 }
 
 #[test]
+fn post_claim_graph_head_fallback_survives_invalid_event_path() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let claim_graph = temp.path().join("claim_graph.json");
+    let invalid_event_path = temp.path().join("invalid-event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- Claim-graph head fallback remains current.",
+            "comments": []
+        }))?,
+    )?;
+    fs::write(
+        &claim_graph,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": "test-head-sha"
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 4)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&invalid_event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 4,
+        "claim graph fallback should complete the transactional post: {requests:#?}"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    anyhow::ensure!(
+        head_check["status"] == "matched" && head_check["expected_head_sha"] == "test-head-sha",
+        "claim graph fallback must retain the verified head receipt: {head_check:#?}"
+    );
+    let post_result: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-result.json"))?)?;
+    assert_eq!(post_result["head_sha"], "test-head-sha");
+    Ok(())
+}
+
+#[test]
 fn post_reply_candidates_posts_direct_reply_with_receipt() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
@@ -6598,7 +6662,8 @@ fn post_reply_candidates_posts_direct_reply_with_receipt() -> Result<()> {
         result["status"] == "ok"
             && result["reply_count"] == 1
             && result["reply_delivery_status"] == "posted"
-            && result["comments"] == 0,
+            && result["comments"] == 0
+            && result["head_sha"] == "test-head-sha",
         "reply result must be receipted without a duplicate inline comment: {result:#?}"
     );
     let delivery: serde_json::Value =
