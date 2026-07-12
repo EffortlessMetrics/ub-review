@@ -48,6 +48,82 @@ pub(crate) struct ProofRequest {
     pub(crate) status: String,
 }
 
+/// Answer-shaped proof intent retained alongside the legacy executable
+/// request. The model may ask a question, but Rust still resolves and runs
+/// only the approved command carried by `ProofRequest`.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ProofIntent {
+    pub(crate) id: String,
+    pub(crate) claim_id: String,
+    pub(crate) question: String,
+    pub(crate) expected_answer_shape: String,
+    pub(crate) proof_kind: ProofKind,
+    pub(crate) target: String,
+    pub(crate) estimated_value: String,
+    pub(crate) requested_by: Vec<String>,
+    pub(crate) status: String,
+}
+
+/// The deterministic broker's answer for one executable proof candidate.
+/// This is deliberately separate from public review prose: it records why a
+/// candidate was selected, answered by a receipt, or safely left unexecuted.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ProofPortfolioDecision {
+    pub(crate) task_id: String,
+    pub(crate) kind: String,
+    pub(crate) status: String,
+    pub(crate) reason: String,
+    pub(crate) required: bool,
+    pub(crate) estimated_cost_sec: u64,
+    pub(crate) request_ids: Vec<String>,
+    pub(crate) receipt_ids: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ProofPortfolioArtifact {
+    pub(crate) schema: &'static str,
+    pub(crate) phase: &'static str,
+    pub(crate) head: String,
+    pub(crate) budget_seconds: u64,
+    pub(crate) remaining_seconds: u64,
+    pub(crate) candidate_count: usize,
+    pub(crate) selected_task_ids: Vec<String>,
+    pub(crate) runtime: ProofPortfolioRuntime,
+    pub(crate) decisions: Vec<ProofPortfolioDecision>,
+}
+
+/// The live execution envelope visible to deterministic portfolio selection.
+/// It is copied into the artifact so a later reviewer can distinguish a
+/// declined proof from one that did not fit the runner or remaining deadline.
+#[derive(Clone, Copy, Debug, Serialize)]
+pub(crate) struct ProofPortfolioRuntime {
+    pub(crate) cpus: usize,
+    pub(crate) free_mem_mb: Option<u64>,
+    pub(crate) free_disk_mb: Option<u64>,
+    pub(crate) load_1m: Option<f32>,
+    pub(crate) github_actions: bool,
+    pub(crate) deadline_remaining_seconds: u64,
+    pub(crate) lease: ProofLeaseBudget,
+}
+
+impl ProofPortfolioRuntime {
+    pub(crate) fn from_box_state(
+        box_state: &BoxState,
+        deadline_remaining_seconds: u64,
+        lease: ProofLeaseBudget,
+    ) -> Self {
+        Self {
+            cpus: box_state.cpus,
+            free_mem_mb: box_state.free_mem_mb,
+            free_disk_mb: box_state.free_disk_mb,
+            load_1m: box_state.load_1m,
+            github_actions: box_state.github_actions,
+            deadline_remaining_seconds,
+            lease,
+        }
+    }
+}
+
 /// Typed proof intent (Order 2 of epic #655). Replaces the command-string +
 /// cost-classification model with a semantic kind that the executor maps to
 /// allowlisted repository-approved commands. Models submit typed intents;
@@ -403,6 +479,8 @@ pub(crate) struct ProofPlannerInput<'a> {
     pub(crate) changed_files: &'a [String],
     pub(crate) pr_thread_context_status: &'a str,
     pub(crate) proof_requests: &'a [ProofRequest],
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub(crate) proof_intents: Vec<ProofIntent>,
     pub(crate) runtime_budget: ProofPlannerRuntimeBudget,
     pub(crate) box_shape: &'a BoxState,
     /// Impact-plan candidate tasks the model can select from (implementation
@@ -480,7 +558,7 @@ pub(crate) struct ProofBudget {
     pub(crate) max_total_seconds: u64,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub(crate) struct ProofLeaseBudget {
     pub(crate) cpu: u32,
     pub(crate) memory_mb: u64,

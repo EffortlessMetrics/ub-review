@@ -232,6 +232,12 @@ proof_request_groups.json      ub-review.proof_request_group.v1
 proof_planner_input.json       ub-review.proof_planner_input.v1
 proof_planner_output.json      ub-review.proof_planner_output.v1; tasks are
                                ub-review.proof_task.v1
+proof_intents.json             answer-shaped proof intent records; each links
+                               a stable claim identity to expected evidence
+proof_portfolio.json           ub-review.proof_portfolio.v1; deterministic
+                               value-ranked selection and receipt dispositions;
+                               includes the observed runner lease, box
+                               capacity, and remaining hard-deadline window
 proof_receipts.json            ub-review.proof_receipt.v1 records
 receipt_routes.json            ub-review.receipt_routes.v1; route entries
                                ub-review.receipt_route.v1, phase
@@ -639,7 +645,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/model_stages.json | stable | model_stage.v1 records | downstream automation | required (require_model_stage_artifacts) |
 | review/final_compiler_input.json | stable | final_compiler_input.v2 | downstream automation | required (require_final_compiler_input) |
 | review/witnesses.json + witness_registry.json | stable | witness.v1, witness_registry.v1 | downstream automation | required (require_witness_artifacts, require_witness_registry) |
-| review/proof_requests.json + proof_request_groups.json + proof_planner_input.json + proof_planner_output.json + proof_receipts.json | stable | proof_request_group.v1, proof_planner_input.v1, proof_planner_output.v1, proof_task.v1, proof_receipt.v1 | downstream automation | required (require_proof_request_groups, require_proof_planner_artifacts, schema checks) |
+| review/proof_requests.json + proof_request_groups.json + proof_planner_input.json + proof_planner_output.json + proof_intents.json + proof_portfolio.json + proof_receipts.json | stable | proof_request_group.v1, proof_planner_input.v1, proof_planner_output.v1, proof_task.v1, proof_intent records, proof_portfolio.v1, proof_receipt.v1 | downstream automation | required (require_proof_request_groups, require_proof_planner_artifacts, schema checks) |
 | review/receipt_routes.json + resource_leases.json | stable | receipt_routes.v1/receipt_route.v1, resource_lease.v1; route entries carry exact proof receipt and matching lease anchors in source_artifacts | downstream automation | required (require_receipt_route_artifacts, require_resource_lease_artifacts) |
 | review/proof_plan.md, review/resource_plan.md | stable (existence only) | none; prose uncontracted | humans | required (require_common_tree) |
 | candidates/<sanitized-id>.json | stable | candidate.v1 copies, exact set | downstream automation | conditional (require_candidate_artifacts; dir required iff array non-empty) |

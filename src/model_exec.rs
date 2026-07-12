@@ -877,6 +877,16 @@ Return only one strict JSON object:
       "timeout_sec": 300,
       "required": false
     }}
+  ],
+  "proof_intents": [
+    {{
+      "claim_id": "stable-claim-id",
+      "question": "the material question this proof should answer",
+      "expected_answer_shape": "the observable result that confirms or refutes it",
+      "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
+      "target": "safe repository test, package, symbol, or route target",
+      "estimated_value": "high|medium-high|medium|low"
+    }}
   ]
 }}
 
@@ -902,6 +912,7 @@ pub(crate) fn apply_proof_planner_model_output(
     line_map: &BTreeSet<(String, u32)>,
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
+    proof_intents: &mut Vec<ProofIntent>,
 ) {
     let advisory_output = LaneModelOutput {
         summary: None,
@@ -911,6 +922,7 @@ pub(crate) fn apply_proof_planner_model_output(
         observations: output.observations,
         failed_objections: output.failed_objections,
         proof_requests: output.proof_requests,
+        proof_intents: output.proof_intents,
         issue_candidates: output.issue_candidates,
         degraded: output.degraded,
     };
@@ -926,6 +938,7 @@ pub(crate) fn apply_proof_planner_model_output(
             summary_only_findings: &mut ignored_summary_only_findings,
             model_observations,
             proof_requests,
+            proof_intents,
             issue_candidates: &mut ignored_issue_candidates,
         },
     );
@@ -1192,6 +1205,16 @@ Use the cached shared context. Return only one strict JSON object:
       "timeout_sec": 300,
       "required": false
     }}
+  ],
+  "proof_intents": [
+    {{
+      "claim_id": "stable-claim-id",
+      "question": "the material question this proof should answer",
+      "expected_answer_shape": "the observable result that confirms or refutes it",
+      "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
+      "target": "safe repository test, package, symbol, or route target",
+      "estimated_value": "high|medium-high|medium|low"
+    }}
   ]
 }}
 
@@ -1200,6 +1223,9 @@ If there is no blocker/high/medium actionable issue, use empty arrays and put th
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
 Do not post, mutate files, or run shell commands. Request executable proof only through `proof_requests`.
+Prefer `proof_intents` for new requests: describe the claim question and expected
+answer, and let the deterministic broker choose an approved command. `target`
+is a repository symbol or test/package label, never a shell command.
 IMPORTANT: proof commands must use exact syntax the broker accepts. Use `--package <name>` (not `-p`), always include `--locked`. Examples: `cargo test --locked --package <name> --test <target>`, `cargo check --locked --package <name>`, `cargo doc --locked --package <name> --no-deps`. Commands with `-p`, missing `--locked`, or shell pipes will be rejected.
 Do not guess line numbers. Do not use deletion-side comments. Do not output a standalone approval.
 Calibration: do not introduce `Box::from(slice)` / `Box::<[u8]>::from(slice)` allocation-failure analysis unless the current PR diff, seeded thread, or a candidate explicitly raises that objection. When raised, allocation failure does not return `None`, an empty box, or a recoverable fallback; return it as a refuted false-premise failed_objection, not as a candidate finding."#,
@@ -1228,6 +1254,7 @@ pub(crate) struct ModelOutputSinks<'a> {
     pub(crate) summary_only_findings: &'a mut Vec<SummaryOnlyFinding>,
     pub(crate) model_observations: &'a mut Vec<Observation>,
     pub(crate) proof_requests: &'a mut Vec<ProofRequest>,
+    pub(crate) proof_intents: &'a mut Vec<ProofIntent>,
     pub(crate) issue_candidates: &'a mut Vec<IssueCandidate>,
 }
 
@@ -1242,6 +1269,7 @@ pub(crate) fn apply_model_output(
         summary_only_findings,
         model_observations,
         proof_requests,
+        proof_intents,
         issue_candidates,
     } = sinks;
     for mut candidate in output.issue_candidates {
@@ -1316,6 +1344,11 @@ pub(crate) fn apply_model_output(
     for request in output.proof_requests {
         proof_requests.push(validate_proof_request(lane, request, proof_requests.len()));
     }
+    for intent in output.proof_intents {
+        if let Some(intent) = validate_proof_intent(lane, intent, proof_intents.len()) {
+            proof_intents.push(intent);
+        }
+    }
     for candidate in output
         .candidate_findings
         .into_iter()
@@ -1361,4 +1394,50 @@ pub(crate) fn apply_model_output(
             Err(finding) => summary_only_findings.push(finding),
         }
     }
+}
+
+fn validate_proof_intent(
+    lane: &LanePlan,
+    intent: ModelProofIntent,
+    ordinal: usize,
+) -> Option<ProofIntent> {
+    let claim_id = intent.claim_id.trim();
+    let question = intent.question.trim();
+    let expected_answer_shape = intent.expected_answer_shape.trim();
+    let target = intent.target.trim();
+    if claim_id.is_empty()
+        || question.is_empty()
+        || expected_answer_shape.is_empty()
+        || target.is_empty()
+        || has_shell_control_token(target)
+        || target.chars().any(char::is_whitespace)
+    {
+        return None;
+    }
+    let digest = sha256_hex(
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n{}",
+            lane.id,
+            claim_id,
+            question,
+            expected_answer_shape,
+            intent.proof_kind.key(),
+            target
+        )
+        .as_bytes(),
+    );
+    Some(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], ordinal),
+        claim_id: claim_id.to_owned(),
+        question: truncate_chars(question, 500),
+        expected_answer_shape: truncate_chars(expected_answer_shape, 300),
+        proof_kind: intent.proof_kind,
+        target: target.to_owned(),
+        estimated_value: intent
+            .estimated_value
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "medium".to_owned()),
+        requested_by: vec![lane.id.clone()],
+        status: "requested".to_owned(),
+    })
 }

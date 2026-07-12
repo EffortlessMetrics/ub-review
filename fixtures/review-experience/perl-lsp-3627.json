@@ -1,0 +1,190 @@
+{
+  "schema": "ub-review.review-experience-fixture.v1",
+  "case_id": "perl-lsp-swarm#3627",
+  "repository": "EffortlessMetrics/perl-lsp-swarm",
+  "pull_number": 3627,
+  "title": "fix(parser): normalize unparenthesized declaration lists",
+  "base_sha": "1fdd9912ce1e02b0433b3b2acbbff2364c992535",
+  "buggy_head_sha": "c3010d9003d281d3345d47da61e34a769a6e1cc6",
+  "fixed_head_sha": "49bf6fca53e2873ebca198e9c2d683aab12007bc",
+  "pr_body": {
+    "claim": "Normalize my, our, and state unparenthesized variable lists into the existing VariableListDeclaration AST form.",
+    "focused_command": "cargo test -p perl-parser-core --test ripr_seam_proof_unparenthesized_declarations --profile agent --locked",
+    "other_commands": [
+      "cargo check --all-targets -p perl-parser-core --profile agent --locked",
+      "cargo clippy -p perl-parser-core --profile agent --locked -- -D warnings -A missing_docs",
+      "git diff --check"
+    ],
+    "known_red": "The full parser-core suite retains an unrelated Windows stack-overflow failure in engine::parser::tests::test_deep_nesting_stack_overflow."
+  },
+  "diff": [
+    {
+      "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
+      "hunk": "The declaration parser adds unparenthesized list normalization, uses parse_postfix_chain for list items, and adds comma_starts_variable_declaration plus variable_with_attributes helpers."
+    },
+    {
+      "path": "crates/perl-parser-core/tests/ripr_seam_proof_unparenthesized_declarations.rs",
+      "hunk": "The seam proof covers my initializer lists, our/state AST lists, and initializer argument commas; the buggy version lacks the later-subscript, percent-sigil, HIR our/state, and attribute cases."
+    }
+  ],
+  "receipts": [
+    { "kind": "focused-test", "status": "claimed_pass", "command": "cargo test -p perl-parser-core --test ripr_seam_proof_unparenthesized_declarations --profile agent --locked" },
+    { "kind": "full-suite", "status": "failed_timeout", "command": "cargo test --locked --package perl-parser-core" },
+    { "kind": "artifact-verifier", "status": "failed_unrelated", "command": "artifact verifier" },
+    { "kind": "cargo-allow", "status": "failed_without_receipt", "command": "cargo-allow" },
+    { "kind": "heavy-witness", "status": "skipped", "command": "cargo-mutants / miri / sanitizer" }
+  ],
+  "claims": [
+    {
+      "id": "parser:later-variable-subscript",
+      "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
+      "symbol": "parse_unparenthesized_declaration",
+      "failure_family": "parser-grammar",
+      "mechanism": "later-list-item-postfix-only-arrow",
+      "anchor": 122,
+      "fixed_on_head": "49bf6fca53e2873ebca198e9c2d683aab12007bc"
+    },
+    {
+      "id": "parser:percent-sigil-lookahead",
+      "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
+      "symbol": "comma_starts_variable_declaration",
+      "failure_family": "parser-grammar",
+      "mechanism": "percent-sigil-rejected-by-lookahead",
+      "anchor": 196,
+      "fixed_on_head": "49bf6fca53e2873ebca198e9c2d683aab12007bc"
+    },
+    {
+      "id": "parser:our-state-hir-coverage",
+      "path": "crates/perl-parser-core/tests/ripr_seam_proof_unparenthesized_declarations.rs",
+      "symbol": "our_and_state_support_unparenthesized_declaration_lists",
+      "failure_family": "test-oracle",
+      "mechanism": "ast-only-without-lowered-hir-assertion",
+      "anchor": 75,
+      "fixed_on_head": "49bf6fca53e2873ebca198e9c2d683aab12007bc"
+    },
+    {
+      "id": "parser:attribute-list-coverage",
+      "path": "crates/perl-parser-core/tests/ripr_seam_proof_unparenthesized_declarations.rs",
+      "symbol": "variable_with_attributes",
+      "failure_family": "test-oracle",
+      "mechanism": "unparenthesized-attribute-wrapper-uncovered",
+      "anchor": 41,
+      "fixed_on_head": "49bf6fca53e2873ebca198e9c2d683aab12007bc"
+    }
+  ],
+  "threads": [
+    {
+      "id": "3558771748",
+      "author": "factory-droid[bot]",
+      "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
+      "anchor": 122,
+      "symbol": "parse_unparenthesized_declaration",
+      "failure_family": "parser-grammar",
+      "mechanism": "later-list-item-postfix-only-arrow",
+      "status": "open",
+      "body": "Subscripts on later variables in unparenthesized lists are silently dropped; the parenthesized sibling path preserves them."
+    },
+    {
+      "id": "3558766461",
+      "author": "cubic-dev-ai[bot]",
+      "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
+      "anchor": 196,
+      "symbol": "comma_starts_variable_declaration",
+      "failure_family": "parser-grammar",
+      "mechanism": "percent-sigil-rejected-by-lookahead",
+      "status": "open",
+      "body": "The lookahead rejects TokenKind::Percent, so my $x, %h misses list normalization."
+    },
+    {
+      "id": "3558766476",
+      "author": "cubic-dev-ai[bot]",
+      "path": "crates/perl-parser-core/tests/ripr_seam_proof_unparenthesized_declarations.rs",
+      "anchor": 75,
+      "symbol": "our_and_state_support_unparenthesized_declaration_lists",
+      "failure_family": "test-oracle",
+      "mechanism": "ast-only-without-lowered-hir-assertion",
+      "status": "open",
+      "body": "The test only proves AST shape for our/state and does not prove lower_ast produces list HIR."
+    },
+    {
+      "id": "3558766480",
+      "author": "cubic-dev-ai[bot]",
+      "path": "crates/perl-parser-core/tests/ripr_seam_proof_unparenthesized_declarations.rs",
+      "anchor": 41,
+      "symbol": "variable_with_attributes",
+      "failure_family": "test-oracle",
+      "mechanism": "unparenthesized-attribute-wrapper-uncovered",
+      "status": "open",
+      "body": "The new attribute wrapper path has no unparenthesized list regression test."
+    },
+    {
+      "id": "3558707519",
+      "author": "sourcery-ai[bot]",
+      "path": "crates/perl-parser-core/tests/ripr_seam_proof_unparenthesized_declarations.rs",
+      "anchor": 41,
+      "symbol": "variable_with_attributes",
+      "failure_family": "test-oracle",
+      "mechanism": "unparenthesized-attribute-wrapper-uncovered",
+      "status": "open",
+      "body": "Add an attribute-bearing unparenthesized list test and assert AST wrapping plus HIR bindings."
+    },
+    {
+      "id": "4671303561",
+      "author": "github-actions[bot]",
+      "path": "",
+      "anchor": null,
+      "symbol": "review-summary",
+      "failure_family": "review-output",
+      "mechanism": "repeated-verification-and-planner-language",
+      "status": "open",
+      "body": "The review summary repeats existing findings, exposes duplicate inline planning, and renders skipped or unrelated proof gaps."
+    }
+  ],
+  "heads": [
+    {
+      "sha": "c3010d9003d281d3345d47da61e34a769a6e1cc6",
+      "expected_dispositions": [
+        { "claim_id": "parser:later-variable-subscript", "disposition": "already_covered" },
+        { "claim_id": "parser:percent-sigil-lookahead", "disposition": "already_covered" },
+        { "claim_id": "parser:our-state-hir-coverage", "disposition": "already_covered" },
+        { "claim_id": "parser:attribute-list-coverage", "disposition": "already_covered" }
+      ],
+      "public_surface": [
+        {
+          "claim_id": "parser:later-variable-subscript",
+          "action": "reply",
+          "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
+          "line": 122,
+          "head_sha": "c3010d9003d281d3345d47da61e34a769a6e1cc6",
+          "body": "Confirmed by focused execution: the later subscript case fails before the patch and passes on this head."
+        }
+      ],
+      "forbidden_public_fragments": [
+        "duplicate inline candidate merged into",
+        "lane",
+        "proof request",
+        "cargo-allow",
+        "workspace-state",
+        "heavy witness"
+      ]
+    },
+    {
+      "sha": "49bf6fca53e2873ebca198e9c2d683aab12007bc",
+      "expected_dispositions": [
+        { "claim_id": "parser:later-variable-subscript", "disposition": "fixed_on_current_head" },
+        { "claim_id": "parser:percent-sigil-lookahead", "disposition": "fixed_on_current_head" },
+        { "claim_id": "parser:our-state-hir-coverage", "disposition": "fixed_on_current_head" },
+        { "claim_id": "parser:attribute-list-coverage", "disposition": "fixed_on_current_head" }
+      ],
+      "public_surface": [],
+      "forbidden_public_fragments": [
+        "duplicate inline candidate merged into",
+        "lane",
+        "proof request",
+        "cargo-allow",
+        "workspace-state",
+        "heavy witness"
+      ]
+    }
+  ]
+}
