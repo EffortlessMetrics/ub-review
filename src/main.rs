@@ -1075,6 +1075,7 @@ struct ReviewMetrics {
     github_review_comments: usize,
     prepared_inline_comments: usize,
     prepared_review_body: bool,
+    github_review_reply_candidates: usize,
     summary_only_findings: usize,
     observations: usize,
     follow_up_results: FollowUpResultMetrics,
@@ -5260,6 +5261,13 @@ fn write_reply_candidates_artifact(
     Ok(())
 }
 
+fn reply_candidate_count(out: &Path) -> usize {
+    fs::read(out.join("review/reply-candidates.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<GitHubReviewReplyCandidates>(&bytes).ok())
+        .map_or(0, |artifact| artifact.replies.len())
+}
+
 struct ReviewMetricsInput<'a> {
     out: &'a Path,
     diff: &'a DiffContext,
@@ -5400,6 +5408,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review_comments: github_review.map_or(0, |review| review.comments.len()),
         prepared_inline_comments: github_review.map_or(0, |review| review.comments.len()),
         prepared_review_body: github_review.is_some_and(|review| !review.body.trim().is_empty()),
+        github_review_reply_candidates: reply_candidate_count(out),
         summary_only_findings: review.summary_only_findings.len(),
         observations: observations_count,
         follow_up_results: FollowUpResultMetrics {
@@ -5764,13 +5773,13 @@ mod tests {
         provider_concurrency_limits, provider_spec_for_lane_with_key_state,
         read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
         render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
-        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, selected_provider_spec, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
-        validate_failed_objection, validate_github_review_payload,
+        render_summary, reply_candidate_count, resolved_candidate_records,
+        resolved_minimax_prompt_cache, resolved_provider_policy, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_available_model_lanes_with_runner,
+        run_gate_failure_message, run_refuter_pass, runtime_fallback_retry_spec,
+        runtime_profile_from_toml, runtime_profile_override, selected_provider_spec,
+        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_failed_objection, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate,
         validate_model_observation, validate_pr_review_body_policy, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
@@ -12011,8 +12020,10 @@ index 1111111..2222222 100644
         );
         assert_eq!(artifact.head_sha, head);
         assert_eq!(artifact.replies[0].comment_id, 456);
+        assert_eq!(reply_candidate_count(temp.path()), 1);
         write_reply_candidates_artifact(&review_dir, head, &[])?;
         assert!(!review_dir.join("reply-candidates.json").exists());
+        assert_eq!(reply_candidate_count(temp.path()), 0);
         Ok(())
     }
 
