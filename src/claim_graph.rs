@@ -482,7 +482,6 @@ fn subjects_overlap(a: &str, b: &str) -> bool {
 
 /// Result of adjudicating a conflict between two claims.
 /// (Order 4 of epic #655.)
-#[cfg(test)]
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct AdjudicationResult {
     /// The winning claim ID (if any).
@@ -513,7 +512,6 @@ pub(crate) struct AdjudicationResult {
 /// - If neither side has any evidence, both become Inconclusive.
 /// - A ProofReceipt always wins (ResolvedByProof); other wins are
 ///   ResolvedByPrecedence.
-#[cfg(test)]
 pub(crate) fn adjudicate_conflict(claim_a: &ClaimNode, claim_b: &ClaimNode) -> AdjudicationResult {
     let best_a = best_evidence_class(&claim_a.supporting_evidence);
     let best_b = best_evidence_class(&claim_b.supporting_evidence);
@@ -609,7 +607,6 @@ pub(crate) fn adjudicate_conflict(claim_a: &ClaimNode, claim_b: &ClaimNode) -> A
 }
 
 /// Get the highest-precedence (lowest ordinal) evidence class from a list.
-#[cfg(test)]
 fn best_evidence_class(evidence: &[EvidenceRef]) -> Option<EvidenceClass> {
     evidence
         .iter()
@@ -618,11 +615,82 @@ fn best_evidence_class(evidence: &[EvidenceRef]) -> Option<EvidenceClass> {
 }
 
 /// Determine the ConflictResolution based on the winning evidence class.
-#[cfg(test)]
 fn resolution_for_class(class: &EvidenceClass) -> ConflictResolution {
     match class {
         EvidenceClass::ProofReceipt => ConflictResolution::ResolvedByProof,
         _ => ConflictResolution::ResolvedByPrecedence,
+    }
+}
+
+/// Apply evidence precedence to explicit conflict pairs in a production claim
+/// graph. Conflict pairs are supplied by a surface-aware detector; this
+/// function intentionally does not infer conflicts from loose text overlap,
+/// because distinct claims may share vocabulary without contradicting one
+/// another.
+pub(crate) fn adjudicate_claim_graph_conflicts(
+    graph: &mut ClaimGraph,
+    conflict_pairs: &[(String, String)],
+) {
+    for (left_id, right_id) in conflict_pairs {
+        let Some(left) = graph
+            .claims
+            .iter()
+            .find(|claim| claim.id == *left_id)
+            .cloned()
+        else {
+            continue;
+        };
+        let Some(right) = graph
+            .claims
+            .iter()
+            .find(|claim| claim.id == *right_id)
+            .cloned()
+        else {
+            continue;
+        };
+        if left.id == right.id
+            || graph.conflicts.iter().any(|conflict| {
+                conflict.claim_ids.len() == 2
+                    && conflict.claim_ids.contains(&left.id)
+                    && conflict.claim_ids.contains(&right.id)
+            })
+        {
+            continue;
+        }
+
+        let result = adjudicate_conflict(&left, &right);
+        graph.conflicts.push(ConflictRecord {
+            claim_ids: vec![left.id.clone(), right.id.clone()],
+            description: format!(
+                "Explicit cross-lane conflict between `{}` and `{}`",
+                left.source_lane, right.source_lane
+            ),
+            resolution: result.resolution.clone(),
+        });
+
+        for claim in &mut graph.claims {
+            if claim.id == left.id {
+                claim.state = if result.winner.as_deref() == Some(left.id.as_str()) {
+                    result.winner_state.clone()
+                } else if result.loser.as_deref() == Some(left.id.as_str()) {
+                    result.loser_state.clone()
+                } else {
+                    result.winner_state.clone()
+                };
+            } else if claim.id == right.id {
+                claim.state = if result.winner.as_deref() == Some(right.id.as_str()) {
+                    result.winner_state.clone()
+                } else {
+                    result.loser_state.clone()
+                };
+            }
+        }
+    }
+
+    for topic in &mut graph.topics {
+        if let Some(claim) = graph.claims.iter().find(|claim| claim.id == topic.claim_id) {
+            topic.status = claim.state.key().to_owned();
+        }
     }
 }
 

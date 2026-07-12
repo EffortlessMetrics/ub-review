@@ -208,7 +208,7 @@ pub(crate) fn build_active_claim_graph(
         });
     }
 
-    ClaimGraph {
+    let mut graph = ClaimGraph {
         schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
         head_sha: head_sha.to_owned(),
         claims,
@@ -216,7 +216,15 @@ pub(crate) fn build_active_claim_graph(
         conflicts: Vec::new(),
         evidence_gaps,
         mode: "active",
-    }
+    };
+    let conflict_pairs = explicit_conflict_pairs(
+        &graph.topics,
+        inline_comments,
+        summary_only_findings,
+        observations,
+    );
+    adjudicate_claim_graph_conflicts(&mut graph, &conflict_pairs);
+    graph
 }
 
 /// Keep the final compiler from opening a second current-head comment at a
@@ -495,6 +503,70 @@ fn accepted_tradeoff_thread(thread: &ReviewThreadRecord) -> bool {
         || body.contains("intentional trade-off")
 }
 
+/// Find only conflicts already identified by the surface-aware cross-lane
+/// detector. This avoids treating shared vocabulary as contradiction and keeps
+/// structural distinctions such as separate parser mechanisms intact.
+fn explicit_conflict_pairs(
+    topics: &[ReviewTopic],
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+    observations: &[Observation],
+) -> Vec<(String, String)> {
+    let surfaces = conflict_surfaces(inline_comments, summary_only_findings);
+    let refutations = observations
+        .iter()
+        .filter(|observation| observation_is_cross_lane_refutation(observation))
+        .collect::<Vec<_>>();
+    let mut pairs: Vec<(String, String)> = Vec::new();
+    for surface in surfaces {
+        for refutation in &refutations {
+            if surface.lane == refutation.lane
+                || !surface_conflicts_with_refutation(&surface, refutation)
+            {
+                continue;
+            }
+            let Some(surface_topic) = topics
+                .iter()
+                .filter(|topic| {
+                    topic.source_lane == surface.lane
+                        && topic.path == surface.path
+                        && topic.anchor == surface.line
+                        && subject_tokens_overlap(&topic.subject, &surface.claim)
+                })
+                .min_by_key(|topic| topic.claim_id.as_str())
+            else {
+                continue;
+            };
+            let Some(refutation_topic) = topics
+                .iter()
+                .filter(|topic| {
+                    topic.source_lane == refutation.lane
+                        && topic.path == refutation.path
+                        && topic.anchor == refutation.line
+                        && subject_tokens_overlap(&topic.subject, &refutation.claim)
+                })
+                .min_by_key(|topic| topic.claim_id.as_str())
+            else {
+                continue;
+            };
+            if surface_topic.claim_id == refutation_topic.claim_id {
+                continue;
+            }
+            let pair = (
+                surface_topic.claim_id.clone(),
+                refutation_topic.claim_id.clone(),
+            );
+            if !pairs.iter().any(|existing| {
+                (existing.0 == pair.0 && existing.1 == pair.1)
+                    || (existing.0 == pair.1 && existing.1 == pair.0)
+            }) {
+                pairs.push(pair);
+            }
+        }
+    }
+    pairs
+}
+
 fn low_information_thread_token(token: &str) -> bool {
     matches!(
         token,
@@ -635,6 +707,73 @@ mod tests {
         ensure!(graph.topics[0].stale_threads == ["stale-thread"]);
         ensure!(graph.topics[0].thread_disposition == "already_covered");
         ensure!(graph.claims[0].state == ClaimState::Confirmed);
+        Ok(())
+    }
+
+    #[test]
+    fn active_graph_resolves_explicit_conflict_using_proof_precedence() -> Result<()> {
+        let head = "dddddddddddddddddddddddddddddddddddddddd";
+        let candidate = ReviewInlineComment {
+            lane: "lane-a".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/buffer.rs".to_owned(),
+            line: 10,
+            side: "RIGHT".to_owned(),
+            body: "Buffer resize preserves active view length".to_owned(),
+            evidence: "validated active view length on the changed line".to_owned(),
+            suggestion: None,
+        };
+        let refutation = Observation {
+            schema: "observation".to_owned(),
+            id: "refutation-1".to_owned(),
+            lane: "lane-b".to_owned(),
+            question: "does the resize preserve the view?".to_owned(),
+            claim: "Buffer resize loses active view length".to_owned(),
+            kind: "resolved-check".to_owned(),
+            status: "refuted".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            path: Some("src/buffer.rs".to_owned()),
+            line: Some(10),
+            fingerprint: "refutation-fingerprint".to_owned(),
+            evidence: vec!["focused proof refutes active view length".to_owned()],
+            dedupe_key: "buffer-resize-view-length".to_owned(),
+            source: "tests".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "proof-refutation-1".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["lane-b".to_owned()],
+            request_ids: vec!["request-refutation-1".to_owned()],
+            commands: Vec::new(),
+            result: "head_failed".to_owned(),
+            reason: "focused proof refutes the preservation claim".to_owned(),
+        };
+
+        let graph = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&refutation),
+            std::slice::from_ref(&candidate),
+            &[],
+            &[],
+            std::slice::from_ref(&receipt),
+            &context(head),
+        );
+        ensure!(graph.conflicts.len() == 1);
+        ensure!(graph.conflicts[0].resolution == ConflictResolution::ResolvedByProof);
+        ensure!(graph.claims.iter().any(|claim| {
+            claim.source_lane == "lane-b" && claim.state == ClaimState::Confirmed
+        }));
+        ensure!(
+            graph.claims.iter().any(|claim| {
+                claim.source_lane == "lane-a" && claim.state == ClaimState::Refuted
+            })
+        );
         Ok(())
     }
 

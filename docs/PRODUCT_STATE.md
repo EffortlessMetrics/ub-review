@@ -123,9 +123,10 @@ Per-comment and same-claim dedupe is implemented.
 **Status:** Cross-lane contradiction detection and suppression are DONE
 (issue-ledger #147 closed by PRs #459/#460: surface-aware lane gating +
 explicit cross-lane conflict receipts). Conflicted findings are suppressed
-and replaced with a verification question. Deeper evidence-precedence
-adjudication (resolving which side wins using proof receipts) is the open
-next step (tracked in epic #655, milestone 4). Diff-irrelevance is
+and replaced with a verification question. Evidence-precedence adjudication
+is now active in the final claim graph for those explicit conflict pairs:
+proof receipts outrank validated facts, citations, and model interpretations;
+equal-precedence conflicts remain explicitly conflicted. Diff-irrelevance is
 guidance text, not enforced routing. Cross-section body dedupe is doctrine
 and structural cross-section claim identity is now implemented (PRs #749/#750).
 Transactional inline delivery remains in draft PR #748. The upstream RIPR
