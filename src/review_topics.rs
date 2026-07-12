@@ -84,11 +84,20 @@ pub(crate) fn build_active_claim_graph(
     }
 
     for comment in inline_comments {
+        let matching_observation = observations.iter().find(|observation| {
+            observation.path.as_deref() == Some(comment.path.as_str())
+                && observation.line == Some(comment.line)
+                && subject_tokens_overlap(&observation.claim, &comment.body)
+        });
         let seed = TopicSeed {
             path: Some(comment.path.clone()),
             line: Some(comment.line),
-            failure_family: "inline-finding".to_owned(),
-            mechanism: stable_mechanism("", &comment.body),
+            failure_family: matching_observation
+                .map(|observation| observation.kind.clone())
+                .unwrap_or_else(|| "inline-finding".to_owned()),
+            mechanism: matching_observation
+                .map(|observation| stable_mechanism(&observation.dedupe_key, &observation.claim))
+                .unwrap_or_else(|| stable_mechanism("", &comment.body)),
             status: "confirmed".to_owned(),
             severity: comment.severity.clone(),
             evidence: vec![EvidenceRef {
@@ -225,7 +234,8 @@ pub(crate) fn reconcile_inline_comments(
         .filter(|comment| {
             let claim_id = topic_claim_id_for_inline(comment);
             let covered_by_current_thread = graph.topics.iter().any(|topic| {
-                topic.claim_id == claim_id
+                (topic.claim_id == claim_id
+                    || subject_tokens_overlap(&topic.subject, &comment.body))
                     && topic.path.as_deref() == Some(comment.path.as_str())
                     && topic.anchor == Some(comment.line)
                     && !topic.existing_threads.is_empty()
@@ -418,6 +428,16 @@ fn canonical_tokens(value: &str) -> Vec<String> {
         .filter(|token| !token.is_empty())
         .map(str::to_ascii_lowercase)
         .collect()
+}
+
+fn subject_tokens_overlap(left: &str, right: &str) -> bool {
+    let left = canonical_tokens(left);
+    let right = canonical_tokens(right);
+    left.iter()
+        .filter(|token| token.len() >= 6 && !low_information_thread_token(token))
+        .filter(|token| right.iter().any(|candidate| candidate == *token))
+        .count()
+        >= 2
 }
 
 fn same_surface(topic: &ReviewTopic, thread: &ReviewThreadRecord) -> bool {

@@ -92,10 +92,26 @@ struct ExpectedDisposition {
 struct PublicSurfaceItem {
     claim_id: String,
     action: String,
+    #[serde(default)]
+    thread_id: Option<String>,
     path: Option<String>,
     line: Option<u32>,
     head_sha: String,
     body: String,
+    #[serde(default)]
+    delivery_receipt: Option<FixtureDeliveryReceipt>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FixtureDeliveryReceipt {
+    status: String,
+    action: String,
+    claim_id: String,
+    head_sha: String,
+    #[serde(default)]
+    source_thread_id: Option<String>,
+    #[serde(default)]
+    comment_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -382,6 +398,38 @@ mod tests {
                     require(item.path.is_some(), "inline delivery is missing a path")?;
                     require(item.line.is_some(), "inline delivery is missing a line")?;
                 }
+                let delivery = item
+                    .delivery_receipt
+                    .as_ref()
+                    .ok_or_else(|| "public surface item is missing delivery receipt".to_owned())?;
+                require(
+                    delivery.status == "posted"
+                        && delivery.action == item.action
+                        && delivery.claim_id == item.claim_id
+                        && delivery.head_sha == head.sha,
+                    format!("delivery receipt is not bound to {}", item.claim_id),
+                )?;
+                require(
+                    delivery.comment_id.is_some(),
+                    format!(
+                        "delivery receipt is missing comment id for {}",
+                        item.claim_id
+                    ),
+                )?;
+                if item.action == "reply" {
+                    let thread_id = item
+                        .thread_id
+                        .as_deref()
+                        .ok_or_else(|| "reply delivery is missing source thread".to_owned())?;
+                    require(
+                        fixture.threads.iter().any(|thread| thread.id == thread_id),
+                        format!("reply delivery names unknown thread {thread_id}"),
+                    )?;
+                    require(
+                        delivery.source_thread_id.as_deref() == Some(thread_id),
+                        format!("reply receipt is not bound to thread {thread_id}"),
+                    )?;
+                }
             }
 
             for forbidden in &head.forbidden_public_fragments {
@@ -439,6 +487,17 @@ mod tests {
             "production graph did not retain the current fixture thread",
         )?;
         require(
+            current_graph.topics.len() == fixture.claims.len(),
+            "production graph collapsed structurally distinct fixture claims",
+        )?;
+        require(
+            current_graph
+                .topics
+                .iter()
+                .all(|topic| topic.thread_disposition == "already_covered"),
+            "current-head fixture threads were not classified as already covered",
+        )?;
+        require(
             reconcile_inline_comments(&current_graph, std::slice::from_ref(&candidate)).is_empty(),
             "production reconciliation did not suppress a current-thread duplicate",
         )?;
@@ -457,6 +516,13 @@ mod tests {
         require(
             stale_reconciled.len() == 1,
             "production reconciliation incorrectly suppressed a stale-thread candidate",
+        )?;
+        require(
+            stale_graph.topics.iter().all(|topic| {
+                topic.head_sha == fixture.fixed_head_sha
+                    && topic.thread_disposition == "superseded_by_head_change"
+            }),
+            "fixed-head graph did not invalidate the prior review certification",
         )?;
         Ok(())
     }

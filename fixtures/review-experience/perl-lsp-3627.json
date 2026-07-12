@@ -153,10 +153,19 @@
         {
           "claim_id": "parser:later-variable-subscript",
           "action": "reply",
+          "thread_id": "3558771748",
           "path": "crates/perl-parser-core/src/engine/parser/variables.rs",
           "line": 122,
           "head_sha": "c3010d9003d281d3345d47da61e34a769a6e1cc6",
-          "body": "Confirmed by focused execution: the later subscript case fails before the patch and passes on this head."
+          "body": "Confirmed by focused execution: the later subscript case fails before the patch and passes on this head.",
+          "delivery_receipt": {
+            "status": "posted",
+            "action": "reply",
+            "claim_id": "parser:later-variable-subscript",
+            "head_sha": "c3010d9003d281d3345d47da61e34a769a6e1cc6",
+            "source_thread_id": "3558771748",
+            "comment_id": "fixture-reply-3558771748"
+          }
         }
       ],
       "forbidden_public_fragments": [
