@@ -159,7 +159,8 @@ delivery state. Each topic also records the current thread disposition
 `fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
 candidates already covered by an anchored
 thread are withheld from a second comment; stale threads do not suppress new
-delivery. When new receipt-backed evidence reaches an existing top-level
+delivery. Proof request and receipt links are claim-specific: sharing a lane
+does not attach unrelated proof to every topic. When new receipt-backed evidence reaches an existing top-level
 thread, this branch emits `review/reply-candidates.json` with the exact head,
 claim, and GitHub comment target; without new evidence it remains silent.
 Draft PR #748 consumes that artifact through GitHub's direct reply endpoint
