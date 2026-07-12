@@ -4934,6 +4934,7 @@ fn write_review_artifacts(
     write_resource_lease_artifacts(out, &review.resource_leases)?;
     review.proof_requests =
         terminalize_proof_requests(&review.proof_requests, &review.proof_receipts);
+    write_terminal_proof_intents(out, &review.proof_requests, &review.proof_intents)?;
     let mut active_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,

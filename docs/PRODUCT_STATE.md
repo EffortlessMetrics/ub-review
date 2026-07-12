@@ -96,7 +96,9 @@ use exact changed candidates or `cargo-test:<name>`; package labels are reserved
 for focused builds. Duplicate intents and equivalent legacy requests share one
 request; unsupported kinds and targets terminalize as
 `unsupported` rather than entering the runnable queue. Legacy command-shaped
-requests remain accepted for compatibility.
+requests remain accepted for compatibility. The final artifact boundary
+rewrites `review/proof_intents.json` after receipts so no `requested` or
+`resolved_to_approved_task` intent remains exposed.
 
 **Gap:** Native sanitizer, mutation, Miri, source-route, and external-check
 executor routes still require their own approved task adapters; they remain

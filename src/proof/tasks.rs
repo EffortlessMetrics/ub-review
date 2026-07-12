@@ -1136,6 +1136,38 @@ mod tests {
     }
 
     #[test]
+    fn terminal_proof_intent_artifact_mirrors_request_disposition() -> anyhow::Result<()> {
+        let request = ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "intent-request".to_owned(),
+            lane: "tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            command: "cargo check --locked --workspace".to_owned(),
+            reason: "answer the claim".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "satisfied".to_owned(),
+        };
+        let mut intent = model_intent(ProofKind::FocusedBuild, "model-intent", "workspace");
+        intent.status = "resolved_to_approved_task".to_owned();
+        intent.resolved_request_id = Some(request.id.clone());
+
+        let terminal = terminalize_proof_intents(&[request], &[intent]);
+        let resolved = terminal
+            .iter()
+            .find(|intent| intent.id == "model-intent")
+            .ok_or_else(|| anyhow::anyhow!("resolved model intent missing"))?;
+        anyhow::ensure!(
+            resolved.status == "satisfied",
+            "intent must mirror the terminal request disposition: {}",
+            resolved.status
+        );
+        ensure_terminal_proof_intents(&terminal)?;
+        Ok(())
+    }
+
+    #[test]
     fn focused_proof_budget_allows_next_enforces_count_file_and_time_caps() {
         let budget = ProofBudget {
             max_focused_test_files: 1,
