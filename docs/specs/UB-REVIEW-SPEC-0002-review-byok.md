@@ -156,6 +156,8 @@ review/reply-candidates.json     optional; when present, schema
                                  receipt-backed top-level review-comment
                                  targets; replies use GitHub's
                                  review-comment reply endpoint
+                                 and grouped review submission rechecks the
+                                 PR head immediately before submit
 review/github-review-skip.json   XOR with github-review.json; status one of
                                  skipped_empty_smoke |
                                  skipped_artifact_only_body |
