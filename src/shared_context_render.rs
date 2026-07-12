@@ -405,8 +405,21 @@ fn redact_sensitive_context_lines(text: &str) -> String {
     text.lines()
         .map(|line| {
             let lower = line.to_ascii_lowercase();
-            let sensitive = (lower.contains("authorization")
-                && (lower.contains(':') || lower.contains("header")))
+            let credential_assignment = [
+                "factory_api_key",
+                "github_token",
+                "minimax_api_key",
+                "opencode",
+                "opencode_api_key",
+                "ub_review_github_token",
+                "ub_review_minimax_api_key",
+                "ub_review_opencode_api_key",
+            ]
+            .iter()
+            .any(|name| lower.contains(name) && (lower.contains('=') || lower.contains(':')));
+            let sensitive = credential_assignment
+                || (lower.contains("authorization")
+                    && (lower.contains(':') || lower.contains("header")))
                 || lower.contains("bearer ");
             if sensitive {
                 "[redacted sensitive authentication line]"
@@ -818,14 +831,13 @@ mod tests {
 
     #[test]
     fn redact_sensitive_context_lines_removes_auth_markers_and_keeps_shape() {
-        let rendered =
-            "## Diff Patch\n```diff\n- Authorization: Bearer secret\n+ safe change\n```\n";
+        let rendered = "## Diff Patch\n```diff\n- Authorization: Bearer secret\n+ OPENCODE=synthetic-secret\n+ safe change\n```\n";
 
         let redacted = redact_sensitive_context_lines(rendered);
 
         assert_eq!(
             redacted,
-            "## Diff Patch\n```diff\n[redacted sensitive authentication line]\n+ safe change\n```\n"
+            "## Diff Patch\n```diff\n[redacted sensitive authentication line]\n[redacted sensitive authentication line]\n+ safe change\n```\n"
         );
         assert!(!redacted.to_ascii_lowercase().contains("authorization:"));
         assert!(!redacted.to_ascii_lowercase().contains("bearer "));

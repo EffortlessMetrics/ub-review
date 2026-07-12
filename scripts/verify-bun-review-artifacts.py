@@ -11081,7 +11081,8 @@ def run_self_tests() -> None:
     if secret_leak_marker("Authorization: Bearer test-token-redacted") != "Authorization header":
         fail("self-test credential-shaped Bearer value was not detected")
     self_test_claim_graph_contract()
-    if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
+    opencode_assignment = "OPENCODE" + "=" + "opencodeSecret123456"
+    if secret_leak_marker(opencode_assignment) != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
     if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
         fail("self-test OPENCODE secret placeholder was treated as a leak")
