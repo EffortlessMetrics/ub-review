@@ -4532,19 +4532,20 @@ fn write_review_artifacts(
     )?;
     // Impact plan built earlier (before the model wave) so its candidate
     // tasks are available to the proof-planner model lane. See line ~3955.
-    // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
-    // existing v1 requests to typed intents. Emitted but not consumed for
-    // execution — the broker still uses v1 command-string requests.
+    // Legacy v2 shadow artifact (Order 2 of epic #655). Converts existing v1
+    // requests to typed intents for downstream inspection. Model-emitted
+    // ProofIntent values are resolved through the approved executor adapter
+    // this legacy artifact remains compatibility telemetry only.
     let v2_shadow_requests = build_v2_shadow_requests(&proof_requests);
     if !v2_shadow_requests.is_empty() {
         let v2_path = out.join("review").join("proof_requests_v2.json");
         std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
     }
-    // Legacy shadow-mode claim graph (Order 3 of epic #655). It is overwritten
-    // It is overwritten before the final compiler consumes the review surface
-    // with claims, evidence, conflicts, and current-head delivery state.
-    let shadow_claim_graph = build_shadow_claim_graph();
-    write_claim_graph(out, &shadow_claim_graph)?;
+    // Emit an initial empty graph for artifact completeness. It is overwritten
+    // before the final compiler consumes the review surface with claims,
+    // evidence, conflicts, and current-head delivery state.
+    let initial_claim_graph = build_shadow_claim_graph();
+    write_claim_graph(out, &initial_claim_graph)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
     let compiler_loop = start_run_loop(
