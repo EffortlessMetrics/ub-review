@@ -238,7 +238,9 @@ proof_portfolio.json           ub-review.proof_portfolio.v1; deterministic
                                value-ranked selection and receipt dispositions;
                                includes the observed runner lease, box
                                capacity, and remaining hard-deadline window
-proof_receipts.json            ub-review.proof_receipt.v1 records
+proof_receipts.json            ub-review.proof_receipt.v1 records; receipts
+                               may link to current claims only when `head`
+                               matches the current review head
 receipt_routes.json            ub-review.receipt_routes.v1; route entries
                                ub-review.receipt_route.v1, phase
                                initial-diff-receipt | model-request-receipt
