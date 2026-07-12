@@ -120,6 +120,8 @@ pub(crate) struct ReviewThreadRecord {
     pub(crate) line: Option<u32>,
     pub(crate) commit_id: Option<String>,
     pub(crate) state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) in_reply_to: Option<String>,
 }
 
 pub(crate) fn github_thread_api_request<'a>(
@@ -259,6 +261,10 @@ fn github_thread_records(kind: &str, value: &serde_json::Value) -> Vec<ReviewThr
                 .get("state")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_owned),
+            in_reply_to: item
+                .get("in_reply_to_id")
+                .and_then(serde_json::Value::as_u64)
+                .map(|id| id.to_string()),
         })
         .collect()
 }

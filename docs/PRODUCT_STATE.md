@@ -159,14 +159,16 @@ delivery state. Each topic also records the current thread disposition
 `fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
 candidates already covered by an anchored
 thread are withheld from a second comment; stale threads do not suppress new
-delivery. Transactional replies and confirmed GitHub delivery receipts remain
-the separate #748 seam. That PR already carries the pending-review ->
-comment-list -> submit lifecycle, cleanup receipts, and focused mismatch
-coverage; its hosted gate still awaits a published RIPR 0.10.1 artifact, so
-this branch does not duplicate that posting implementation. Explicit
-evidence-precedence conflicts now carry winner/loser claim IDs, and final
-surface reconciliation suppresses only the adjudicated loser while retaining
-it in the claim graph artifact.
+delivery. When new receipt-backed evidence reaches an existing top-level
+thread, this branch emits `review/reply-candidates.json` with the exact head,
+claim, and GitHub comment target; without new evidence it remains silent.
+Draft PR #748 consumes that artifact through GitHub's direct reply endpoint
+and records per-reply delivery receipts. The upstream RIPR CLI-subprocess
+analyzer contract is merged in #1455, but the hosted gate still awaits a
+published RIPR 0.10.1 artifact; this branch does not duplicate that posting
+implementation. Explicit evidence-precedence conflicts now carry winner/loser
+claim IDs, and final surface reconciliation suppresses only the adjudicated
+loser while retaining it in the claim graph artifact.
 
 Late proof now has a lane-reconsideration boundary as well: follow-up receipts
 are routed to the message bus, receipt-linked lanes receive a bounded

@@ -226,6 +226,7 @@ mod tests {
                     line: thread.anchor,
                     commit_id: Some(thread_commit.to_owned()),
                     state: Some(thread.status.clone()),
+                    in_reply_to: None,
                 })
                 .collect(),
         }
