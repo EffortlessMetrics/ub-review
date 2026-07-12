@@ -935,7 +935,7 @@ mod tests {
     }
 
     #[test]
-    fn answer_shaped_intents_resolve_only_to_approved_targets() {
+    fn answer_shaped_intents_resolve_only_to_approved_targets() -> anyhow::Result<()> {
         let diff = model_intent_diff();
         let mut intents = vec![
             model_intent(
@@ -952,30 +952,49 @@ mod tests {
         ];
         let requests = resolve_proof_intents_to_requests(&diff, &mut intents, 90);
 
-        assert_eq!(requests.len(), 2);
-        assert!(requests.iter().any(|request| {
-            request.id == "bun-intent"
-                && request.command == "bun bd test test/parser/parser.test.ts"
-                && request.cost == "focused-test"
-                && request.timeout_sec == 90
-        }));
-        assert!(requests.iter().any(|request| {
-            request.id == "workspace-intent"
-                && request.command == "cargo check --locked --workspace"
-                && request.cost == "focused-build"
-        }));
-        assert_eq!(intents[0].status, "resolved_to_approved_task");
-        assert_eq!(
-            intents[0].resolved_request_id.as_deref(),
-            Some("bun-intent")
+        anyhow::ensure!(requests.len() == 2, "expected two approved requests");
+        anyhow::ensure!(
+            requests.iter().any(|request| {
+                request.id == "bun-intent"
+                    && request.command == "bun bd test test/parser/parser.test.ts"
+                    && request.cost == "focused-test"
+                    && request.timeout_sec == 90
+            }),
+            "Bun intent did not resolve to its approved task"
         );
-        assert_eq!(intents[1].status, "resolved_to_approved_task");
-        assert_eq!(intents[2].status, "unsupported");
-        assert!(intents[2].resolved_request_id.is_none());
+        anyhow::ensure!(
+            requests.iter().any(|request| {
+                request.id == "workspace-intent"
+                    && request.command == "cargo check --locked --workspace"
+                    && request.cost == "focused-build"
+            }),
+            "workspace intent did not resolve to its approved task"
+        );
+        anyhow::ensure!(
+            intents[0].status == "resolved_to_approved_task",
+            "Bun intent did not terminalize as resolved"
+        );
+        anyhow::ensure!(
+            intents[0].resolved_request_id.as_deref() == Some("bun-intent"),
+            "Bun intent did not retain its request identity"
+        );
+        anyhow::ensure!(
+            intents[1].status == "resolved_to_approved_task",
+            "workspace intent did not terminalize as resolved"
+        );
+        anyhow::ensure!(
+            intents[2].status == "unsupported",
+            "unsupported intent did not terminalize as unsupported"
+        );
+        anyhow::ensure!(
+            intents[2].resolved_request_id.is_none(),
+            "unsupported intent must not receive a request identity"
+        );
+        Ok(())
     }
 
     #[test]
-    fn duplicate_intents_share_one_request_and_terminalize_the_duplicate() {
+    fn duplicate_intents_share_one_request_and_terminalize_the_duplicate() -> anyhow::Result<()> {
         let diff = model_intent_diff();
         let mut intents = vec![
             model_intent(ProofKind::FocusedBuild, "build-a", "workspace"),
@@ -983,12 +1002,31 @@ mod tests {
         ];
         let requests = resolve_proof_intents_to_requests(&diff, &mut intents, 60);
 
-        assert_eq!(requests.len(), 1);
-        assert_eq!(requests[0].id, "build-a");
-        assert_eq!(requests[0].requested_by, ["tests"]);
-        assert_eq!(intents[0].status, "resolved_to_approved_task");
-        assert_eq!(intents[1].status, "deduplicated");
-        assert_eq!(intents[1].resolved_request_id.as_deref(), Some("build-a"));
+        anyhow::ensure!(
+            requests.len() == 1,
+            "duplicate intents must share one request"
+        );
+        anyhow::ensure!(
+            requests[0].id == "build-a",
+            "first intent must own the request"
+        );
+        anyhow::ensure!(
+            requests[0].requested_by == ["tests"],
+            "shared request must preserve the requesting lane"
+        );
+        anyhow::ensure!(
+            intents[0].status == "resolved_to_approved_task",
+            "first intent did not terminalize as resolved"
+        );
+        anyhow::ensure!(
+            intents[1].status == "deduplicated",
+            "duplicate intent did not terminalize as deduplicated"
+        );
+        anyhow::ensure!(
+            intents[1].resolved_request_id.as_deref() == Some("build-a"),
+            "duplicate intent did not point to the shared request"
+        );
+        Ok(())
     }
 
     #[test]
