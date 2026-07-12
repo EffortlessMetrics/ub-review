@@ -4020,6 +4020,41 @@ fn apply_unsafe_review_comment_plan_candidates(
     apply_model_output(&lane, output, line_map, sinks);
 }
 
+fn route_follow_up_proof_receipts(
+    message_log: &MessageLog,
+    event_log: &EventLog,
+    receipts: &[ProofReceipt],
+) {
+    for receipt in receipts {
+        let references = vec![format!("review/proof_receipts.json#{}", receipt.id)];
+        for consumer in receipt_route_consumers(receipt) {
+            if let Err(error) = message_log.append(
+                CrossLaneMessageKind::EvidenceRouted,
+                "proof-broker",
+                &consumer,
+                0,
+                references.clone(),
+                serde_json::json!({
+                    "receipt_id": &receipt.id,
+                    "result": &receipt.result,
+                    "reason": &receipt.reason,
+                    "phase": "follow-up",
+                    "reconsider": true,
+                }),
+            ) {
+                let _ = event_log.append(
+                    "message_log_error",
+                    serde_json::json!({
+                        "receipt": &receipt.id,
+                        "kind": "evidence_routed",
+                        "error": format!("{error:#}"),
+                    }),
+                );
+            }
+        }
+    }
+}
+
 #[expect(
     clippy::too_many_arguments,
     reason = "tracked in policy/allow.toml#clippy-too-many-arguments-artifact-writers"
@@ -4676,11 +4711,16 @@ fn write_review_artifacts(
         run_started,
     )?;
     review
-        .proof_receipts
-        .extend(follow_up_proof_result.proof_receipts);
-    review
         .resource_leases
         .extend(follow_up_proof_result.resource_leases);
+    route_follow_up_proof_receipts(
+        &message_log,
+        event_log,
+        &follow_up_proof_result.proof_receipts,
+    );
+    review
+        .proof_receipts
+        .extend(follow_up_proof_result.proof_receipts);
     finish_run_loop(
         event_log,
         run_started,
@@ -19979,6 +20019,39 @@ index 1111111..2222222 100644
                 .is_some_and(Vec::is_empty),
             "final routed proof should resolve the proof-confirmation follow-up task"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn follow_up_proof_receipts_route_reconsideration_messages() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let message_log = crate::MessageLog::open(&review_dir.join("messages.ndjson"))?;
+        let event_log = EventLog::open(&temp.path().join("events.ndjson"))?;
+        let mut receipt = test_proof_receipt("discriminating", "passed");
+        receipt.id = "proof-follow-up-reconsideration".to_owned();
+        receipt.kind = "focused-head".to_owned();
+        receipt.requested_by = vec!["proof-broker".to_owned(), "tests-oracle".to_owned()];
+        receipt.request_ids = vec!["follow-up-proof-1".to_owned()];
+
+        super::route_follow_up_proof_receipts(&message_log, &event_log, &[receipt]);
+
+        let messages = crate::read_messages_ndjson(&review_dir);
+        let destinations = messages
+            .iter()
+            .map(|message| message.to.as_str())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(messages.len(), 3);
+        assert!(destinations.contains("tests-oracle"));
+        assert!(destinations.contains("opposition"));
+        assert!(destinations.contains("compiler"));
+        assert!(messages.iter().all(|message| {
+            message.kind == crate::CrossLaneMessageKind::EvidenceRouted
+                && message.payload["reconsider"] == serde_json::json!(true)
+                && message.references
+                    == ["review/proof_receipts.json#proof-follow-up-reconsideration"]
+        }));
         Ok(())
     }
 
