@@ -488,6 +488,88 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn expected_pr_head_sha(args: &PostArgs) -> Option<String> {
+    if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH") {
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(event_path).ok()?).ok()?;
+        if let Some(sha) = value
+            .pointer("/pull_request/head/sha")
+            .and_then(serde_json::Value::as_str)
+            .filter(|sha| !sha.trim().is_empty())
+        {
+            return Some(sha.to_owned());
+        }
+    }
+
+    let claim_graph_path = args.review_json.parent()?.join("claim_graph.json");
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(claim_graph_path).ok()?).ok()?;
+    value
+        .get("head_sha")
+        .and_then(serde_json::Value::as_str)
+        .filter(|sha| !sha.trim().is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn verify_current_pr_head(
+    args: &PostArgs,
+    repo: &str,
+    pull_number: u64,
+    token: &str,
+) -> Result<()> {
+    let receipt_path = args.out.join("post-head-check.json");
+    let Some(expected_sha) = expected_pr_head_sha(args) else {
+        fs::write(
+            &receipt_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "status": "unavailable",
+                "reason": "no pull_request.head.sha event field or claim graph head_sha was available"
+            }))?,
+        )?;
+        return Ok(());
+    };
+
+    let url = format!(
+        "{}/repos/{repo}/pulls/{pull_number}",
+        args.github_api_url.trim_end_matches('/')
+    );
+    let response = match run_github_api_get(Path::new("."), &url, token) {
+        Ok(response) => response,
+        Err(err) => {
+            fs::write(
+                &receipt_path,
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "status": "failed",
+                    "expected_head_sha": expected_sha,
+                    "reason": format!("current PR head lookup failed: {err:#}")
+                }))?,
+            )?;
+            return Err(err).context("verify current GitHub pull request head");
+        }
+    };
+    let current_sha = response
+        .pointer("/head/sha")
+        .and_then(serde_json::Value::as_str)
+        .filter(|sha| !sha.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("GitHub pull request response omitted head.sha"))?;
+    let matched = current_sha == expected_sha;
+    fs::write(
+        &receipt_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "status": if matched { "matched" } else { "mismatch" },
+            "expected_head_sha": expected_sha,
+            "current_head_sha": current_sha,
+            "repo": repo,
+            "pull_number": pull_number
+        }))?,
+    )?;
+    if !matched {
+        bail!(
+            "current pull request head changed before posting (expected {expected_sha}, got {current_sha})"
+        );
+    }
+    Ok(())
+}
+
 pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let token = args
         .github_token
@@ -522,6 +604,7 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     )?;
     let pending_path = args.out.join("github-review-pending-payload.json");
     fs::write(&pending_path, serde_json::to_vec_pretty(&pending_payload)?)?;
+    verify_current_pr_head(args, repo, pull_number, token)?;
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
         args.github_api_url.trim_end_matches('/'),

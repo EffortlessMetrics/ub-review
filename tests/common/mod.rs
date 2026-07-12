@@ -108,6 +108,16 @@ fn handle_fake_github_review_request(mut stream: TcpStream, comment_ids: &[u64])
     let request_line = headers.lines().next().unwrap_or_default().to_owned();
     let (status_line, response_body) = if request_line.starts_with("DELETE ") {
         ("204 No Content", Vec::new())
+    } else if request_line.starts_with("GET ")
+        && request_line.contains("/pulls/")
+        && !request_line.contains("/comments")
+    {
+        (
+            "200 OK",
+            serde_json::to_vec(&serde_json::json!({
+                "head": {"sha": "test-head-sha"}
+            }))?,
+        )
     } else if request_line.starts_with("GET ") && request_line.contains("/comments") {
         let comments = comment_ids
             .iter()

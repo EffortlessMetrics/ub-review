@@ -6276,8 +6276,15 @@ index 1111111..2222222 100644
 fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
+    let event_path = temp.path().join("event.json");
     let out = temp.path().join("post");
     let token = "test-token-redacted";
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
     fs::write(
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -6286,9 +6293,9 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             "comments": []
         }))?,
     )?;
-    let (github_api_url, handle) = spawn_fake_github_review_api(vec![])?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 4)?;
 
-    run(
+    run_with_env(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -6306,11 +6313,13 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             "--github-api-url",
             &github_api_url,
         ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 3);
-    let request_text = &requests[0];
+    assert_eq!(requests.len(), 4);
+    assert!(requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"));
+    let request_text = &requests[1];
     assert!(
         request_text
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews HTTP/1.1")
@@ -6321,14 +6330,14 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             .any(|request| request.contains("Authorization: Bearer test-token-redacted"))
     );
     assert!(
-        requests[1]
+        requests[2]
             .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
     );
     assert!(
-        requests[2]
+        requests[3]
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
-    assert!(requests[2].contains("\"event\": \"COMMENT\""));
+    assert!(requests[3].contains("\"event\": \"COMMENT\""));
     assert!(request_text.contains("\"comments\": []"));
 
     let post_result_path = out.join("post-result.json");
@@ -6360,6 +6369,9 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert_eq!(post_result["post_stderr_written"], true);
     assert_eq!(post_result["response"]["id"], 987);
     assert_eq!(post_result["response"]["state"], "COMMENTED");
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    assert_eq!(head_check["status"], "matched");
 
     for path in [
         post_result_path,
@@ -6374,6 +6386,78 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
         assert!(!text.contains("Authorization"));
         assert!(!text.contains("Bearer"));
     }
+    Ok(())
+}
+
+#[test]
+fn post_head_mismatch_fails_before_pending_review_creation() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- Current-head proof is required.",
+            "comments": []
+        }))?,
+    )?;
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "stale-head-sha"}}
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 1)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 1
+            && requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"),
+        "head verification must be the only request before a mismatch: {requests:#?}"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    anyhow::ensure!(
+        head_check["status"] == "mismatch",
+        "head mismatch must be receipted"
+    );
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    anyhow::ensure!(
+        post_error["status"] == "failed"
+            && post_error["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("current pull request head changed")),
+        "stale head must fail closed: {post_error:#?}"
+    );
+    anyhow::ensure!(
+        !out.join("pending-review-stdout.json").exists()
+            && !out.join("submit-review-stdout.json").exists(),
+        "stale head must not create or submit a pending review"
+    );
     Ok(())
 }
 
