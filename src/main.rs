@@ -4440,14 +4440,7 @@ fn write_review_artifacts(
         &mut proof_intents,
         profile.budgets.default_timeout_sec,
     );
-    for request in intent_requests {
-        if !proof_requests
-            .iter()
-            .any(|existing| existing.id == request.id)
-        {
-            proof_requests.push(request);
-        }
-    }
+    append_resolved_intent_requests(&mut proof_requests, &mut proof_intents, intent_requests);
     attach_request_metadata_to_focused_receipts(
         diff,
         &proof_requests,

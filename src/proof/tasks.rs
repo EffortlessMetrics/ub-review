@@ -272,20 +272,44 @@ pub(crate) fn resolve_proof_intents_to_requests(
     requests
 }
 
+/// Merge resolved model-intent requests into the existing request portfolio.
+/// A legacy request with the same approved command and cost is the same proof
+/// obligation even when its id was allocated by a different planner pass.
+pub(crate) fn append_resolved_intent_requests(
+    proof_requests: &mut Vec<ProofRequest>,
+    intents: &mut [ProofIntent],
+    intent_requests: Vec<ProofRequest>,
+) {
+    for request in intent_requests {
+        let existing_index = proof_requests.iter().position(|existing| {
+            existing.id == request.id
+                || (existing.command == request.command && existing.cost == request.cost)
+        });
+        let Some(existing_index) = existing_index else {
+            proof_requests.push(request);
+            continue;
+        };
+
+        let existing_id = proof_requests[existing_index].id.clone();
+        for lane in request.requested_by {
+            push_unique(&mut proof_requests[existing_index].requested_by, &lane);
+        }
+        if let Some(intent) = intents
+            .iter_mut()
+            .find(|intent| intent.resolved_request_id.as_deref() == Some(request.id.as_str()))
+        {
+            intent.status = "deduplicated".to_owned();
+            intent.resolved_request_id = Some(existing_id);
+        }
+    }
+}
+
 fn resolve_intent_target(
     intent: &ProofIntent,
     candidates: &[FocusedTestTask],
 ) -> Option<(String, String)> {
     match intent.proof_kind {
         ProofKind::FocusedTest | ProofKind::BasePlusTests => {
-            if let Some(name) = intent.target.strip_prefix("cargo-package:") {
-                if !safe_cargo_target_name(name) {
-                    return None;
-                }
-                let command = format!("cargo test --locked --package {name}");
-                focused_cargo_test_command_spec(&command)?;
-                return Some((command, "focused-test".to_owned()));
-            }
             if let Some(name) = intent.target.strip_prefix("cargo-test:") {
                 if !safe_cargo_target_name(name) {
                     return None;
@@ -945,6 +969,11 @@ mod tests {
             ),
             model_intent(ProofKind::FocusedBuild, "workspace-intent", "workspace"),
             model_intent(
+                ProofKind::FocusedTest,
+                "package-test-intent",
+                "cargo-package:crate",
+            ),
+            model_intent(
                 ProofKind::SanitizerWitness,
                 "unsupported-intent",
                 "arbitrary-target",
@@ -984,10 +1013,18 @@ mod tests {
         );
         anyhow::ensure!(
             intents[2].status == "unsupported",
-            "unsupported intent did not terminalize as unsupported"
+            "package test intent did not terminalize as unsupported"
         );
         anyhow::ensure!(
             intents[2].resolved_request_id.is_none(),
+            "package test intent must not receive a request identity"
+        );
+        anyhow::ensure!(
+            intents[3].status == "unsupported",
+            "unsupported intent did not terminalize as unsupported"
+        );
+        anyhow::ensure!(
+            intents[3].resolved_request_id.is_none(),
             "unsupported intent must not receive a request identity"
         );
         Ok(())
@@ -1025,6 +1062,49 @@ mod tests {
         anyhow::ensure!(
             intents[1].resolved_request_id.as_deref() == Some("build-a"),
             "duplicate intent did not point to the shared request"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn equivalent_legacy_request_deduplicates_resolved_intent() -> anyhow::Result<()> {
+        let diff = model_intent_diff();
+        let mut intents = vec![model_intent(
+            ProofKind::FocusedBuild,
+            "model-build",
+            "workspace",
+        )];
+        let intent_requests = resolve_proof_intents_to_requests(&diff, &mut intents, 60);
+        let mut proof_requests = vec![ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "legacy-build".to_owned(),
+            lane: "legacy-planner".to_owned(),
+            requested_by: vec!["legacy-planner".to_owned()],
+            command: "cargo check --locked --workspace".to_owned(),
+            reason: "legacy request".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "requested".to_owned(),
+        }];
+
+        append_resolved_intent_requests(&mut proof_requests, &mut intents, intent_requests);
+
+        anyhow::ensure!(
+            proof_requests.len() == 1,
+            "equivalent legacy request must not be duplicated"
+        );
+        anyhow::ensure!(
+            proof_requests[0].requested_by == ["legacy-planner", "tests"],
+            "deduplication must retain both requesting lanes"
+        );
+        anyhow::ensure!(
+            intents[0].status == "deduplicated",
+            "intent must terminalize as deduplicated"
+        );
+        anyhow::ensure!(
+            intents[0].resolved_request_id.as_deref() == Some("legacy-build"),
+            "intent must point to the existing request"
         );
         Ok(())
     }

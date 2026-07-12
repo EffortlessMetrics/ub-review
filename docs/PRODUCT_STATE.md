@@ -91,8 +91,10 @@ declines from safe deadline wind-down.
 Model lanes may now submit answer-shaped intents without a command field. Rust
 validates their claim, question, expected answer, typed proof kind, and safe
 repository target, then resolves focused-test and focused-build intents to
-approved task templates before the existing broker executes them. Duplicate
-intents share one request; unsupported kinds and targets terminalize as
+approved task templates before the existing broker executes them. Focused tests
+use exact changed candidates or `cargo-test:<name>`; package labels are reserved
+for focused builds. Duplicate intents and equivalent legacy requests share one
+request; unsupported kinds and targets terminalize as
 `unsupported` rather than entering the runnable queue. Legacy command-shaped
 requests remain accepted for compatibility.
 
