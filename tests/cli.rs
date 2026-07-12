@@ -4724,6 +4724,98 @@ fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Re
 }
 
 #[test]
+fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+
+    let primary_key = "dummy-primary-key-for-authority-test";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--fail-on-gate",
+            "true",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "correctness",
+            "--tools",
+            "cargo-allow",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 1);
+
+    let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("review/provider-preflight-status.json"),
+    )?)?;
+    let preflight = preflights
+        .as_array()
+        .and_then(|receipts| receipts.first())
+        .ok_or_else(|| anyhow::anyhow!("missing provider outage receipt"))?;
+    assert_eq!(preflight["status"], "failed");
+    assert_eq!(preflight["http_status"], 503);
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    assert!(review["model_lanes"].as_array().is_some_and(|lanes| {
+        lanes
+            .iter()
+            .any(|lane| lane["status"] == "preflight_failed")
+    }));
+
+    let terminal: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/terminal_state.json"))?)?;
+    assert!(matches!(
+        terminal["status"].as_str(),
+        Some("artifact-only") | Some("failed-to-review")
+    ));
+
+    let gate: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert_eq!(gate["conclusion"], "pass");
+    assert_eq!(gate["evidence_gaps_blocking"], 0);
+    assert!(gate["evidence_gaps_advisory"].as_u64().unwrap_or_default() > 0);
+    assert!(gate["reasons"].as_array().is_some_and(Vec::is_empty));
+    Ok(())
+}
+
+#[test]
 fn intelligent_ci_runs_advisory_proof_planner_lane_before_request_broker() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
