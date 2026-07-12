@@ -145,6 +145,7 @@ pub(crate) fn proof_intent_from_request(request: &ProofRequest) -> ProofIntent {
         estimated_value: estimated_value.to_owned(),
         requested_by: request.requested_by.clone(),
         status: request.status.clone(),
+        resolved_request_id: None,
     }
 }
 

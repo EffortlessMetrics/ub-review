@@ -4435,6 +4435,19 @@ fn write_review_artifacts(
     // are available for routing to lanes in the multi-turn continuation.
     // Previously this ran after the reporter, meaning continuation prompts
     // never saw proof evidence. (Order 9c fix of #678.)
+    let intent_requests = resolve_proof_intents_to_requests(
+        diff,
+        &mut proof_intents,
+        profile.budgets.default_timeout_sec,
+    );
+    for request in intent_requests {
+        if !proof_requests
+            .iter()
+            .any(|existing| existing.id == request.id)
+        {
+            proof_requests.push(request);
+        }
+    }
     attach_request_metadata_to_focused_receipts(
         diff,
         &proof_requests,

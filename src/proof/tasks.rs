@@ -214,6 +214,132 @@ pub(crate) fn focused_test_candidates_from_requests(
     tasks
 }
 
+/// Resolve answer-shaped model intents into legacy proof requests only when
+/// the target names a deterministic, repository-approved task. The returned
+/// requests are then handled by the existing broker, leases, receipts, and
+/// terminal disposition machinery. An unresolved intent is terminalized as
+/// `unsupported` and never becomes a runnable command.
+pub(crate) fn resolve_proof_intents_to_requests(
+    diff: &DiffContext,
+    intents: &mut [ProofIntent],
+    default_timeout_sec: u64,
+) -> Vec<ProofRequest> {
+    let candidates = focused_test_candidates_from_diff(diff, &[]);
+    let timeout_sec = default_timeout_sec.max(1);
+    let mut requests = Vec::new();
+    for intent in intents {
+        if intent.status != "requested" {
+            continue;
+        }
+        let Some((command, cost)) = resolve_intent_target(intent, &candidates) else {
+            intent.status = "unsupported".to_owned();
+            continue;
+        };
+        if let Some(existing) = requests
+            .iter_mut()
+            .find(|request: &&mut ProofRequest| request.command == command && request.cost == cost)
+        {
+            for lane in &intent.requested_by {
+                push_unique(&mut existing.requested_by, lane);
+            }
+            intent.status = "deduplicated".to_owned();
+            intent.resolved_request_id = Some(existing.id.clone());
+            continue;
+        }
+        let request_id = intent.id.clone();
+        intent.status = "resolved_to_approved_task".to_owned();
+        intent.resolved_request_id = Some(request_id.clone());
+        requests.push(ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: request_id,
+            lane: intent
+                .requested_by
+                .first()
+                .cloned()
+                .unwrap_or_else(|| "model-intent".to_owned()),
+            requested_by: intent.requested_by.clone(),
+            command,
+            reason: format!(
+                "{} Expected answer: {}",
+                intent.question, intent.expected_answer_shape
+            ),
+            cost,
+            timeout_sec,
+            required: false,
+            status: "requested".to_owned(),
+        });
+    }
+    requests
+}
+
+fn resolve_intent_target(
+    intent: &ProofIntent,
+    candidates: &[FocusedTestTask],
+) -> Option<(String, String)> {
+    match intent.proof_kind {
+        ProofKind::FocusedTest | ProofKind::BasePlusTests => {
+            if let Some(name) = intent.target.strip_prefix("cargo-package:") {
+                if !safe_cargo_target_name(name) {
+                    return None;
+                }
+                let command = format!("cargo test --locked --package {name}");
+                focused_cargo_test_command_spec(&command)?;
+                return Some((command, "focused-test".to_owned()));
+            }
+            if let Some(name) = intent.target.strip_prefix("cargo-test:") {
+                if !safe_cargo_target_name(name) {
+                    return None;
+                }
+                let command = format!("cargo test --locked --test {name}");
+                focused_cargo_test_command_spec(&command)?;
+                return Some((command, "focused-test".to_owned()));
+            }
+            let matches = candidates
+                .iter()
+                .filter(|task| focused_test_task_matches_target(task, &intent.target))
+                .collect::<Vec<_>>();
+            (matches.len() == 1).then(|| {
+                (
+                    command_display(&proof_task_command_spec(matches[0], "head").argv),
+                    "focused-test".to_owned(),
+                )
+            })
+        }
+        ProofKind::FocusedBuild => {
+            let command = if intent.target == "workspace" {
+                "cargo check --locked --workspace".to_owned()
+            } else if let Some(name) = intent.target.strip_prefix("cargo-package:") {
+                if !safe_cargo_target_name(name) {
+                    return None;
+                }
+                format!("cargo check --locked --package {name}")
+            } else {
+                return None;
+            };
+            focused_build_command_spec(&command)?;
+            Some((command, "focused-build".to_owned()))
+        }
+        _ => None,
+    }
+}
+
+fn focused_test_task_matches_target(task: &FocusedTestTask, target: &str) -> bool {
+    task.id == target
+        || task.file == target
+        || task.test_name.as_deref() == Some(target)
+        || task
+            .test_name
+            .as_deref()
+            .is_some_and(|name| format!("{}::{name}", task.file) == target)
+}
+
+fn safe_cargo_target_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+        })
+}
+
 /// Native v2 proof flow (Order 4b of #678): extract focused-test candidates
 /// from typed `ProofRequestV2`s. Only `ProofKind::FocusedTest` requests map to
 /// focused-test candidates; other kinds (SanitizerWitness, MiriWitness, ...)
@@ -780,6 +906,89 @@ mod tests {
             focused_test_candidates_from_v2(&v2).is_empty(),
             "a non-allowlisted command must produce no candidate (security boundary)"
         );
+    }
+
+    fn model_intent(kind: ProofKind, id: &str, target: &str) -> ProofIntent {
+        ProofIntent {
+            id: id.to_owned(),
+            claim_id: format!("claim-{id}"),
+            question: format!("question-{id}"),
+            expected_answer_shape: "terminal receipt".to_owned(),
+            proof_kind: kind,
+            target: target.to_owned(),
+            estimated_value: "high".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            status: "requested".to_owned(),
+            resolved_request_id: None,
+        }
+    }
+
+    fn model_intent_diff() -> DiffContext {
+        DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: vec!["test/parser/parser.test.ts".to_owned()],
+            patch: String::new(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        }
+    }
+
+    #[test]
+    fn answer_shaped_intents_resolve_only_to_approved_targets() {
+        let diff = model_intent_diff();
+        let mut intents = vec![
+            model_intent(
+                ProofKind::FocusedTest,
+                "bun-intent",
+                "test/parser/parser.test.ts",
+            ),
+            model_intent(ProofKind::FocusedBuild, "workspace-intent", "workspace"),
+            model_intent(
+                ProofKind::SanitizerWitness,
+                "unsupported-intent",
+                "arbitrary-target",
+            ),
+        ];
+        let requests = resolve_proof_intents_to_requests(&diff, &mut intents, 90);
+
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().any(|request| {
+            request.id == "bun-intent"
+                && request.command == "bun bd test test/parser/parser.test.ts"
+                && request.cost == "focused-test"
+                && request.timeout_sec == 90
+        }));
+        assert!(requests.iter().any(|request| {
+            request.id == "workspace-intent"
+                && request.command == "cargo check --locked --workspace"
+                && request.cost == "focused-build"
+        }));
+        assert_eq!(intents[0].status, "resolved_to_approved_task");
+        assert_eq!(
+            intents[0].resolved_request_id.as_deref(),
+            Some("bun-intent")
+        );
+        assert_eq!(intents[1].status, "resolved_to_approved_task");
+        assert_eq!(intents[2].status, "unsupported");
+        assert!(intents[2].resolved_request_id.is_none());
+    }
+
+    #[test]
+    fn duplicate_intents_share_one_request_and_terminalize_the_duplicate() {
+        let diff = model_intent_diff();
+        let mut intents = vec![
+            model_intent(ProofKind::FocusedBuild, "build-a", "workspace"),
+            model_intent(ProofKind::FocusedBuild, "build-b", "workspace"),
+        ];
+        let requests = resolve_proof_intents_to_requests(&diff, &mut intents, 60);
+
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].id, "build-a");
+        assert_eq!(requests[0].requested_by, ["tests"]);
+        assert_eq!(intents[0].status, "resolved_to_approved_task");
+        assert_eq!(intents[1].status, "deduplicated");
+        assert_eq!(intents[1].resolved_request_id.as_deref(), Some("build-a"));
     }
 
     #[test]

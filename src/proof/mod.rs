@@ -62,6 +62,7 @@ pub(crate) struct ProofIntent {
     pub(crate) estimated_value: String,
     pub(crate) requested_by: Vec<String>,
     pub(crate) status: String,
+    pub(crate) resolved_request_id: Option<String>,
 }
 
 /// The deterministic broker's answer for one executable proof candidate.

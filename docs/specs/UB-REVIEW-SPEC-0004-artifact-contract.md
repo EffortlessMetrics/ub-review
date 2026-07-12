@@ -237,7 +237,8 @@ proof_planner_input.json       ub-review.proof_planner_input.v1
 proof_planner_output.json      ub-review.proof_planner_output.v1; tasks are
                                ub-review.proof_task.v1
 proof_intents.json             answer-shaped proof intent records; each links
-                               a stable claim identity to expected evidence
+                               a stable claim identity to expected evidence,
+                               terminal status, and any resolved request id
 proof_portfolio.json           ub-review.proof_portfolio.v1; deterministic
                                value-ranked selection and receipt dispositions;
                                includes the observed runner lease, box
