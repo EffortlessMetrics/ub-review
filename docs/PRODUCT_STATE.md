@@ -255,9 +255,10 @@ trackers, not ub-review rollout infrastructure.
 The single-gate adoption surface is now executable but has not been applied to
 an external repository. A read-only release workflow dispatch on 2026-07-12
 completed the build, checksum, and archive-upload stages on `main` (run
-29182345044); no tag or release was created, and the Linux asset was not
-executed on Windows. The actual v0.1.0 tag remains an explicitly authorized
-release action. Current release-installed pilot drafts are Bun #34046 and
+29182345044); no `v0.1.0` tag or GitHub Release was created, and the Linux
+asset was not executed on Windows. The legacy `v0.1` pin tag exists without
+release assets; the actual v0.1.0 tag remains an explicitly authorized release
+action. Current release-installed pilot drafts are Bun #34046 and
 perl-lsp-swarm #4015; both remain unable to prove the release path until
 ub-review publishes v0.1.0.
 
