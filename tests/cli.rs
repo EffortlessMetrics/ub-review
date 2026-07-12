@@ -6465,6 +6465,7 @@ fn post_head_mismatch_fails_before_pending_review_creation() -> Result<()> {
 fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
+    let missing_event_path = temp.path().join("missing-event.json");
     let out = temp.path().join("post");
     fs::write(
         &review_json,
@@ -6476,7 +6477,7 @@ fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
     )?;
     let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 0)?;
 
-    run(
+    run_with_env(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -6494,6 +6495,7 @@ fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
             "--github-api-url",
             &github_api_url,
         ],
+        &[("GITHUB_EVENT_PATH", path_str(&missing_event_path)?)],
     )?;
 
     let requests = join_fake_provider(handle)?;
