@@ -14951,6 +14951,41 @@ required_proof_unprooven = true
     }
 
     #[test]
+    fn compiler_surface_suppresses_successful_status_tables_without_failing_gate() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let plan = test_plan(Vec::new());
+        let diff = test_diff();
+        let model_lanes = [model_lane_receipt("tests-oracle", "ok")];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &plan,
+            diff: &diff,
+            model_lanes: &model_lanes,
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &[],
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+            reporter_distillation: Some(
+                "## Model lanes\n\n- Lane: `tests`\n  Status: `ok` - completed",
+            ),
+        })?;
+
+        assert!(surface.github_review.body.is_empty());
+        assert!(!surface.should_prepare_github_review);
+        assert_eq!(surface.review_payload_status, "skipped_artifact_only_body");
+        assert_eq!(surface.terminal_state.status, "sufficient");
+        Ok(())
+    }
+
+    #[test]
     fn compiler_surface_caps_inline_comments_after_value_ranking() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.max_inline_comments = 1;

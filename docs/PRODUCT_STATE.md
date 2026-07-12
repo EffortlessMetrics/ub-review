@@ -167,7 +167,9 @@ announcements, approval filler, and machine-state summaries. Body byte
 and bullet caps enforced. Refuted-only and summary-only posts governed. Body
 quality is separate from finding quality: when noisy PR prose is suppressed,
 independently validated inline findings remain eligible for concise inline-only
-delivery.
+delivery. Successful lane/provider/sensor tables and execution summaries are
+also suppressed as review-quality defects rather than becoming code-gate
+failures.
 
 ### PR 7 — Provider and cache reliability — DONE
 

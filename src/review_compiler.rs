@@ -375,7 +375,17 @@ fn is_internal_review_machinery_error(error: &anyhow::Error) -> bool {
 }
 
 fn is_review_output_quality_error(error: &anyhow::Error) -> bool {
-    is_suppressible_pr_body_policy_error(error) || is_internal_review_machinery_error(error)
+    let text = error.to_string();
+    is_suppressible_pr_body_policy_error(error)
+        || is_internal_review_machinery_error(error)
+        || [
+            "successful lane table",
+            "provider status table",
+            "sensor status table",
+            "execution summary",
+        ]
+        .iter()
+        .any(|marker| text.contains(marker))
 }
 
 pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {
