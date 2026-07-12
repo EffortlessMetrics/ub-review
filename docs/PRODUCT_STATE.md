@@ -315,7 +315,7 @@ extracting when next touched:
   green functional proof but remain unpublished or unmergeable while RIPR
   reports unresolved CLI/subprocess or semantic-probe exposure gaps. No
   aliases or threshold relaxation are permitted; current upstream tracking is
-  ripr-swarm#1528 and the related semantic-probe fixes.
+  EffortlessMetrics/ripr#1454 and the related semantic-probe fixes.
 - **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
   and suppression shipped; deeper evidence-precedence adjudication is the open
   next step (epic #655 milestone 4).
