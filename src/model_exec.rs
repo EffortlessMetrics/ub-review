@@ -1535,7 +1535,9 @@ Hard caps: at most 3 observations, 2 candidate_findings, 1 summary_only_findings
 If there is no blocker/high/medium actionable issue, use empty arrays and put the failed-objection audit in summary.
 Only propose candidate_findings for valid RIGHT-side changed or context lines in the PR diff.
 Legacy `inline_comments` is accepted as an alias for `candidate_findings`, but prefer `candidate_findings`.
-Do not post, mutate files, or run shell commands. Request executable proof through `proof_requests` or `proof_intents`.
+Do not post, mutate files, or run shell commands. Request executable proof only
+through typed `proof_intents` or legacy `proof_requests`; the Rust broker owns
+command selection and execution.
 Prefer `proof_intents` for new requests: describe the claim question and expected
 answer, and let the deterministic broker choose an approved command. `target`
 must be an exact deterministic candidate id, changed test file/test name, or
