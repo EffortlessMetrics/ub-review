@@ -151,12 +151,7 @@ pub(crate) fn build_active_claim_graph(
         }
 
         for request in proof_requests {
-            if request
-                .requested_by
-                .iter()
-                .any(|lane| lane == &topic.source_lane)
-                || request.id.contains(&topic.claim_id)
-            {
+            if proof_request_supports_topic(request, topic) {
                 push_unique(&mut topic.proof_requests, request.id.clone());
             }
         }
@@ -436,17 +431,21 @@ fn receipt_supports_topic(
         .any(|lane| lane == &topic.source_lane)
         && receipt.request_ids.iter().any(|request_id| {
             proof_requests.iter().any(|request| {
-                request.id == *request_id
-                    && request
-                        .requested_by
-                        .iter()
-                        .any(|lane| lane == &topic.source_lane)
-                    && claim_text_matches(
-                        &format!("{} {}", topic.subject, topic.mechanism),
-                        &format!("{} {}", request.reason, request.command),
-                    )
+                request.id == *request_id && proof_request_supports_topic(request, topic)
             })
         })
+}
+
+fn proof_request_supports_topic(request: &ProofRequest, topic: &ReviewTopic) -> bool {
+    request
+        .requested_by
+        .iter()
+        .any(|lane| lane == &topic.source_lane)
+        && (request.id.contains(&topic.claim_id)
+            || claim_text_matches(
+                &format!("{} {}", topic.subject, topic.mechanism),
+                &format!("{} {}", request.reason, request.command),
+            ))
 }
 
 fn receipt_supports_inline_comment(
@@ -1304,34 +1303,49 @@ mod tests {
     #[test]
     fn active_graph_keeps_inline_delivery_and_proof_receipt_links() -> Result<()> {
         let head = "cccccccccccccccccccccccccccccccccccccccc";
+        let comments = vec![ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "subscript finding".to_owned(),
+            evidence: "receipt".to_owned(),
+            suggestion: None,
+        }];
+        let request = ProofRequest {
+            schema: "proof".to_owned(),
+            id: "proof-1".to_owned(),
+            lane: "tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            command: "cargo test --locked parser subscript".to_owned(),
+            reason: "answer the subscript claim".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "executed".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "receipt-1".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "base".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec![request.id.clone()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "subscript proof".to_owned(),
+        };
         let graph = build_active_claim_graph(
             head,
             &[],
-            &[ReviewInlineComment {
-                lane: "tests".to_owned(),
-                severity: "high".to_owned(),
-                confidence: "high".to_owned(),
-                path: "src/parser.rs".to_owned(),
-                line: 12,
-                side: "RIGHT".to_owned(),
-                body: "Finding".to_owned(),
-                evidence: "receipt".to_owned(),
-                suggestion: None,
-            }],
+            &comments,
             &[],
-            &[ProofRequest {
-                schema: "proof".to_owned(),
-                id: "proof-1".to_owned(),
-                lane: "tests".to_owned(),
-                requested_by: vec!["tests".to_owned()],
-                command: "cargo test --locked".to_owned(),
-                reason: "answer claim".to_owned(),
-                cost: "focused-test".to_owned(),
-                timeout_sec: 60,
-                required: false,
-                status: "executed".to_owned(),
-            }],
-            &[],
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&receipt),
             &PrThreadContext {
                 threads: Vec::new(),
                 ..context(head)
@@ -1340,6 +1354,29 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].delivery == "inline-candidate");
         ensure!(graph.topics[0].proof_requests == ["proof-1"]);
+        ensure!(graph.topics[0].proof_receipts == ["receipt-1"]);
+
+        let mut unrelated_request = request.clone();
+        unrelated_request.id = "proof-unrelated".to_owned();
+        unrelated_request.reason = "Confirm allocator lifetime".to_owned();
+        unrelated_request.command = "cargo test --locked allocator lifetime".to_owned();
+        let mut unrelated_receipt = receipt.clone();
+        unrelated_receipt.id = "receipt-unrelated".to_owned();
+        unrelated_receipt.request_ids = vec![unrelated_request.id.clone()];
+        let unrelated_graph = build_active_claim_graph(
+            head,
+            &[],
+            &comments,
+            &[],
+            std::slice::from_ref(&unrelated_request),
+            std::slice::from_ref(&unrelated_receipt),
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        ensure!(unrelated_graph.topics[0].proof_requests.is_empty());
+        ensure!(unrelated_graph.topics[0].proof_receipts.is_empty());
         Ok(())
     }
 
