@@ -15,19 +15,13 @@ pub(crate) fn should_prepare_github_review_payload(
     args: &RunArgs,
     inline_comments: &[ReviewInlineComment],
     _summary_only_findings: &[SummaryOnlyFinding],
-    proof_receipts: &[ProofReceipt],
+    _proof_receipts: &[ProofReceipt],
     pr_body: &str,
 ) -> bool {
     if matches!(args.model_mode, ModelMode::Off) {
         return false;
     }
     if has_reviewer_value(inline_comments, pr_body) {
-        return true;
-    }
-    if proof_receipts
-        .iter()
-        .any(proof_receipt_changes_review_value)
-    {
         return true;
     }
     pr_body_has_reviewer_value(pr_body)
