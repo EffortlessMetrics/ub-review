@@ -635,6 +635,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/review.md | stable | seven required headings | humans | required (require_review) |
 | review/terminal_state.json | stable | terminal_state.v1 | downstream automation; gate-check cross-check | required (require_review; status mirror in require_gate_outcome) |
 | review/pr_thread_context.json | stable | pr_thread_context.v1 | downstream automation | required (require_review) |
+| review/claim_graph.json | stable | claim_graph.v1; exact head, claim/topic parity, and thread disposition enum | downstream automation; reviewer reconciliation | required (require_claim_graph) |
 | review/github-review.json XOR github-review-skip.json | stable | none (field-checked; skip statuses pinned) | `ub-review post` (cmd_post); downstream automation | required (require_common_tree XOR; require_review; require_pr_review_body_policy) |
 | review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
 | review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |

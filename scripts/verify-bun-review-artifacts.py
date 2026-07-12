@@ -90,6 +90,15 @@ MAX_PR_REVIEW_BODY_BULLETS = 12
 GITHUB_SUGGESTION_MAX_CHARS = 800
 ARTIFACT_NAME_MAX_CHARS = 96
 ARTIFACT_NAME_HASH_CHARS = 16
+CLAIM_GRAPH_SCHEMA = "ub-review.claim_graph.v1"
+THREAD_DISPOSITIONS = {
+    "novel",
+    "already_covered",
+    "corroborated_with_new_evidence",
+    "refuted_by_new_evidence",
+    "accepted_tradeoff",
+    "superseded_by_head_change",
+}
 SECRET_VALUE_NAMES = [
     "FACTORY_API_KEY",
     "github_token",
@@ -1429,6 +1438,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/cache_manifest.json",
         "review/cache_events.ndjson",
         "review/pr_thread_context.json",
+        "review/claim_graph.json",
         "review/terminal_state.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
@@ -1846,6 +1856,66 @@ def require_review(
         require_skipped_payload_contract(skip, root, github_skip_path)
 
     return review
+
+
+def require_claim_graph(root: pathlib.Path) -> None:
+    graph = load_json(root / "review/claim_graph.json")
+    if not isinstance(graph, dict):
+        fail("claim_graph.json is not an object")
+    if graph.get("schema") != CLAIM_GRAPH_SCHEMA:
+        fail(
+            f"claim_graph.json schema expected {CLAIM_GRAPH_SCHEMA}, "
+            f"got {graph.get('schema')!r}"
+        )
+    head_sha = graph.get("head_sha")
+    if not isinstance(head_sha, str) or not head_sha.strip():
+        fail("claim_graph.json head_sha is empty")
+    claims = graph.get("claims")
+    topics = graph.get("topics")
+    if not isinstance(claims, list) or not isinstance(topics, list):
+        fail("claim_graph.json claims/topics must be arrays")
+    claim_ids = []
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict) or not isinstance(claim.get("id"), str):
+            fail(f"claim_graph.json claims[{index}] is missing id")
+        claim_ids.append(claim["id"])
+    topic_ids = []
+    for index, topic in enumerate(topics):
+        if not isinstance(topic, dict):
+            fail(f"claim_graph.json topics[{index}] is not an object")
+        topic_id = topic.get("claim_id")
+        if not isinstance(topic_id, str) or not topic_id:
+            fail(f"claim_graph.json topics[{index}] is missing claim_id")
+        if topic.get("head_sha") != head_sha:
+            fail(f"claim_graph.json topics[{index}] head_sha does not match graph head")
+        disposition = topic.get("thread_disposition")
+        if disposition not in THREAD_DISPOSITIONS:
+            fail(
+                f"claim_graph.json topics[{index}] thread_disposition invalid: "
+                f"{disposition!r}"
+            )
+        existing = topic.get("existing_threads")
+        stale = topic.get("stale_threads")
+        receipts = topic.get("proof_receipts")
+        if not all(isinstance(value, list) for value in (existing, stale, receipts)):
+            fail(f"claim_graph.json topics[{index}] thread/proof links must be arrays")
+        if disposition == "novel" and (existing or stale):
+            fail(f"claim_graph.json topics[{index}] novel claim has thread links")
+        if disposition == "already_covered" and not existing:
+            fail(f"claim_graph.json topics[{index}] covered claim has no current thread")
+        if disposition == "corroborated_with_new_evidence" and not (existing and receipts):
+            fail(
+                f"claim_graph.json topics[{index}] corroborated claim lacks current thread or receipt"
+            )
+        if disposition == "accepted_tradeoff" and not existing:
+            fail(f"claim_graph.json topics[{index}] accepted tradeoff has no current thread")
+        if disposition == "superseded_by_head_change" and not stale:
+            fail(f"claim_graph.json topics[{index}] superseded claim has no stale thread")
+        topic_ids.append(topic_id)
+    if len(set(claim_ids)) != len(claim_ids) or len(set(topic_ids)) != len(topic_ids):
+        fail("claim_graph.json claim/topic ids are not unique")
+    if set(claim_ids) != set(topic_ids):
+        fail("claim_graph.json claims and topics are not in parity")
 
 
 def require_skipped_payload_contract(receipt: dict, root: pathlib.Path, path: pathlib.Path) -> None:
@@ -10841,9 +10911,34 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
         fail("artifact name sanitizer changed safe replacement behavior")
 
 
+def self_test_claim_graph_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(
+            root / "review/claim_graph.json",
+            {
+                "schema": CLAIM_GRAPH_SCHEMA,
+                "head_sha": "HEAD",
+                "claims": [{"id": "claim-1"}],
+                "topics": [
+                    {
+                        "claim_id": "claim-1",
+                        "head_sha": "HEAD",
+                        "thread_disposition": "novel",
+                        "existing_threads": [],
+                        "stale_threads": [],
+                        "proof_receipts": [],
+                    }
+                ],
+            },
+        )
+        require_claim_graph(root)
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
+    self_test_claim_graph_contract()
     if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
     if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
@@ -11727,6 +11822,7 @@ def main(argv: list[str]) -> int:
     review = require_review(
         root, args.max_inline_comments, args.expected_review_profile
     )
+    require_claim_graph(root)
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
     require_floor_trend(root)
