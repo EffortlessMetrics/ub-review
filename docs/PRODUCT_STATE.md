@@ -158,7 +158,10 @@ delivery. Transactional replies and confirmed GitHub delivery receipts remain
 the separate #748 seam. That PR already carries the pending-review ->
 comment-list -> submit lifecycle, cleanup receipts, and focused mismatch
 coverage; its hosted gate still awaits a published RIPR 0.10.1 artifact, so
-this branch does not duplicate that posting implementation.
+this branch does not duplicate that posting implementation. Explicit
+evidence-precedence conflicts now carry winner/loser claim IDs, and final
+surface reconciliation suppresses only the adjudicated loser while retaining
+it in the claim graph artifact.
 
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
