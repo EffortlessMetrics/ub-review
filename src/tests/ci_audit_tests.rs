@@ -168,29 +168,14 @@ fn ci_required_checks(contexts: &[(&str, &str)]) -> crate::CiRequiredChecks {
 fn spawn_fake_ci_required_checks_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)>
 {
     let listener = TcpListener::bind("127.0.0.1:0")?;
-    listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        let mut requests = Vec::new();
-        while requests.len() < 3 {
-            match listener.accept() {
-                Ok((stream, _addr)) => {
-                    requests.push(handle_fake_ci_required_checks_request(stream)?);
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!(
-                            "fake audit-ci API received {} of 3 requests",
-                            requests.len()
-                        );
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Ok(requests)
+        super::collect_fake_http_requests(
+            listener,
+            3,
+            "fake audit-ci API",
+            handle_fake_ci_required_checks_request,
+        )
     });
     Ok((url, handle))
 }
@@ -198,29 +183,14 @@ fn spawn_fake_ci_required_checks_api() -> Result<(String, thread::JoinHandle<Res
 fn spawn_fake_ci_required_checks_404_api()
 -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
-    listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        let mut requests = Vec::new();
-        while requests.len() < 3 {
-            match listener.accept() {
-                Ok((stream, _addr)) => {
-                    requests.push(handle_fake_ci_required_checks_404_request(stream)?);
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!(
-                            "fake audit-ci 404 API received {} of 3 requests",
-                            requests.len()
-                        );
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Ok(requests)
+        super::collect_fake_http_requests(
+            listener,
+            3,
+            "fake audit-ci 404 API",
+            handle_fake_ci_required_checks_404_request,
+        )
     });
     Ok((url, handle))
 }
@@ -695,6 +665,7 @@ fn ci_required_check_parsers_extract_branch_and_ruleset_contexts() {
 
 #[test]
 fn ci_fetch_required_checks_reads_branch_protection_and_rulesets() -> Result<()> {
+    let _loopback = super::loopback_api_test_lock();
     let temp = tempfile::tempdir()?;
     let (api_url, handle) = spawn_fake_ci_required_checks_api()?;
     let args = crate::AuditCiArgs {
@@ -746,6 +717,7 @@ fn ci_fetch_required_checks_reads_branch_protection_and_rulesets() -> Result<()>
 
 #[test]
 fn ci_fetch_required_checks_treats_not_found_as_evidence_gap() -> Result<()> {
+    let _loopback = super::loopback_api_test_lock();
     let temp = tempfile::tempdir()?;
     let (api_url, handle) = spawn_fake_ci_required_checks_404_api()?;
     let args = crate::AuditCiArgs {
@@ -1255,30 +1227,14 @@ fn spawn_fake_setup_ci_api(
     config_exists: bool,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
-    listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        let mut requests = Vec::new();
-        while requests.len() < expected_requests {
-            match listener.accept() {
-                Ok((stream, _addr)) => {
-                    requests.push(handle_fake_setup_ci_request(stream, config_exists)?);
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!(
-                            "fake setup-ci API received {} of {} requests",
-                            requests.len(),
-                            expected_requests
-                        );
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Ok(requests)
+        super::collect_fake_http_requests(
+            listener,
+            expected_requests,
+            "fake setup-ci API",
+            move |stream| handle_fake_setup_ci_request(stream, config_exists),
+        )
     });
     Ok((url, handle))
 }
@@ -1363,6 +1319,7 @@ fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) -> R
 
 #[test]
 fn setup_ci_open_pr_creates_branch_files_and_pr_with_receipts() -> Result<()> {
+    let _loopback = super::loopback_api_test_lock();
     let temp = tempfile::tempdir()?;
     let out = temp.path().join("run");
     write_setup_ci_fixture(&out.join("ci-audit"))?;
@@ -1506,6 +1463,7 @@ fn setup_ci_open_pr_creates_branch_files_and_pr_with_receipts() -> Result<()> {
 
 #[test]
 fn setup_ci_open_pr_fails_closed_on_existing_config_and_missing_pin() -> Result<()> {
+    let _loopback = super::loopback_api_test_lock();
     let temp = tempfile::tempdir()?;
     let out = temp.path().join("run");
     write_setup_ci_fixture(&out.join("ci-audit"))?;
