@@ -259,7 +259,7 @@ pub(crate) fn render_shared_context(
     // real credentials. Redact those values before the shared context crosses
     // into model/provider storage or durable artifacts; placeholders such as
     // `${{ secrets.OPENCODE }}` remain safe and useful context.
-    let text = redact_shared_context_secret_assignments(&text);
+    let text = redact_sensitive_context_lines(&redact_shared_context_secret_assignments(&text));
     // Derive the ordered source sections from the rendered prefix by scanning
     // for `## ` headers. The prefix is generated here from stable headers, so
     // this reads exactly what was written (no drift). Each section's byte range
@@ -394,6 +394,29 @@ fn shared_context_secret_value_needs_redaction(value: &str) -> bool {
             .chars()
             .any(|character| character.is_ascii_alphabetic())
         && compact.chars().any(|character| character.is_ascii_digit())
+}
+
+/// Remove credential-shaped lines before shared context becomes a durable
+/// artifact or provider cache input. This covers historical diff lines and
+/// PR text that may mention a real header even when the current source no
+/// longer contains it. Redaction is intentionally line-based so the context
+/// remains structurally useful without carrying the sensitive value.
+fn redact_sensitive_context_lines(text: &str) -> String {
+    text.lines()
+        .map(|line| {
+            let lower = line.to_ascii_lowercase();
+            let sensitive = (lower.contains("authorization")
+                && (lower.contains(':') || lower.contains("header")))
+                || lower.contains("bearer ");
+            if sensitive {
+                "[redacted sensitive authentication line]"
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if text.ends_with('\n') { "\n" } else { "" }
 }
 
 /// Scan rendered shared-context Markdown for `## ` headers and produce
@@ -791,6 +814,21 @@ mod tests {
         assert!(redacted.contains("OPENCODE=[redacted]"));
         assert!(redacted.contains("${{ secrets.OPENCODE }}"));
         assert!(redacted.contains("MINIMAX_API_KEY=present"));
+    }
+
+    #[test]
+    fn redact_sensitive_context_lines_removes_auth_markers_and_keeps_shape() {
+        let rendered =
+            "## Diff Patch\n```diff\n- Authorization: Bearer secret\n+ safe change\n```\n";
+
+        let redacted = redact_sensitive_context_lines(rendered);
+
+        assert_eq!(
+            redacted,
+            "## Diff Patch\n```diff\n[redacted sensitive authentication line]\n+ safe change\n```\n"
+        );
+        assert!(!redacted.to_ascii_lowercase().contains("authorization:"));
+        assert!(!redacted.to_ascii_lowercase().contains("bearer "));
     }
 
     #[test]
