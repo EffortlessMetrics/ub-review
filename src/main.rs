@@ -6989,6 +6989,26 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
+    fn release_binary_workflow_records_and_validates_immutable_candidate() {
+        let workflow = include_str!("../.github/workflows/release-binary.yml");
+        for required in [
+            "name: Write immutable release candidate receipt",
+            "ub-review.release_candidate.v1",
+            "candidate_sha=\"$(git rev-parse HEAD)\"",
+            "dist/release-candidate.json",
+            "name: Validate immutable release candidate receipt",
+            "$(jq -r '.head_sha' \"$manifest\")\" = \"$GITHUB_SHA\"",
+            "$(jq -r '.archive_sha256' \"$manifest\")\" = \"$archive_sha256\"",
+            "$(jq -r '.toolchain' \"$manifest\")\" = \"1.95.0\"",
+        ] {
+            assert!(
+                workflow.contains(required),
+                "release candidate contract missing: {required}"
+            );
+        }
+    }
+
+    #[test]
     fn action_release_download_verifies_sha256_receipt() {
         let action = include_str!("../action.yml");
         assert!(
