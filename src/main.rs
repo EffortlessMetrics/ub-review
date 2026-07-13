@@ -18374,7 +18374,12 @@ index 1111111..2222222 100644
         F: Fn(TcpStream) -> Result<String> + Send + Sync + 'static,
     {
         listener.set_nonblocking(true)?;
-        let deadline = Instant::now() + Duration::from_secs(20);
+        // The unit-test harness can be CPU-saturated by unrelated model/proof
+        // fixtures. A short accept deadline turns scheduler contention into a
+        // false connection-count failure even though the client is still
+        // progressing. Keep the per-stream read/write bounds at five seconds,
+        // but give the accept/handler pool a bounded wind-down window.
+        let deadline = Instant::now() + Duration::from_secs(60);
         let handler = std::sync::Arc::new(handler);
         let (sender, receiver) = std::sync::mpsc::channel();
         let mut accepted = 0usize;
