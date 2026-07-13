@@ -6965,6 +6965,20 @@ index 1111111..2222222 100644
         serde_json::from_str(&fs::read_to_string(out.join("post-result.json"))?)?;
     assert_eq!(post_result["status"], "ok");
     assert_eq!(post_result["comments"], 1);
+    let inline_delivery: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(out.join("inline-delivery.json"))?)?;
+    assert_eq!(inline_delivery.as_array().map(Vec::len), Some(1));
+    assert_eq!(inline_delivery[0]["head_sha"], "test-head-sha");
+    assert_eq!(inline_delivery[0]["path"], "src/lib.rs");
+    assert_eq!(inline_delivery[0]["line"], 2);
+    assert_eq!(inline_delivery[0]["review_id"], 987);
+    assert_eq!(inline_delivery[0]["comment_id"], 654);
+    assert_eq!(inline_delivery[0]["status"], "posted");
+    assert!(
+        inline_delivery[0]["claim_id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("claim-"))
+    );
     Ok(())
 }
 

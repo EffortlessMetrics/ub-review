@@ -204,6 +204,11 @@ github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_empty_smoke); comments may include
                                optional `suggestion` only when sourced from
                                unsafe-review concrete replacement text
+inline-delivery.json           optional post-stage array of
+                               ub-review.github_inline_delivery_receipt.v1
+                               records; every posted inline comment names its
+                               claim_id, current head SHA, path, line, review
+                               ID, comment ID, and `status = posted`
 reply-candidates.json          optional ub-review.github_review_reply_candidates.v1;
                                current-head reply targets are posted as
                                direct review-comment replies and receipted
@@ -647,6 +652,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/pr_thread_context.json | stable | pr_thread_context.v1 | downstream automation | required (require_review) |
 | review/claim_graph.json | stable | claim_graph.v1; exact head parity with metrics/proof receipts, claim/topic parity, and thread disposition enum | downstream automation; reviewer reconciliation | required (require_claim_graph) |
 | review/github-review.json XOR github-review-skip.json | stable | none (field-checked; skip statuses pinned) | `ub-review post` (cmd_post); downstream automation | required (require_common_tree XOR; require_review; require_pr_review_body_policy) |
+| post/inline-delivery.json | optional | github_inline_delivery_receipt.v1 per posted inline comment; exact current-head, claim, location, review, and comment IDs | `ub-review post` (cmd_post); final delivery reconciliation | required when grouped inline comments are posted |
 | review/reply-candidates.json | optional | github_review_reply_candidates.v1; exact current-head SHA and top-level review-comment targets | `ub-review post` (cmd_post) | required when replies are prepared; each target receives a delivery receipt |
 | review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
 | review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |

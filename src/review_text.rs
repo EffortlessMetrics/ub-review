@@ -838,6 +838,13 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             submit_output.http_status
         );
     }
+    write_inline_delivery_receipts(
+        &args.out,
+        &review,
+        &expected_sha,
+        review_id,
+        &posted_comment_ids,
+    )?;
     let posted_reply_ids = if replies.is_empty() {
         Vec::new()
     } else {
@@ -994,6 +1001,63 @@ pub(crate) fn parse_github_review_comment_ids(body: &str) -> Result<Vec<u64>> {
                 .ok_or_else(|| anyhow::anyhow!("pending GitHub review comment omitted numeric id"))
         })
         .collect()
+}
+
+/// Persist one current-head receipt for every inline comment confirmed by
+/// GitHub. The API returns comment IDs in the same order as the pending
+/// review's comment list, so the structural claim identity can be paired with
+/// the confirmed ID without exposing claim metadata in the GitHub payload.
+pub(crate) fn write_inline_delivery_receipts(
+    out: &Path,
+    review: &GitHubReview,
+    head_sha: &str,
+    review_id: u64,
+    posted_comment_ids: &[u64],
+) -> Result<()> {
+    if review.comments.len() != posted_comment_ids.len() {
+        bail!(
+            "inline delivery receipt count mismatch (expected {}, got {})",
+            review.comments.len(),
+            posted_comment_ids.len()
+        );
+    }
+    let receipts = review
+        .comments
+        .iter()
+        .zip(posted_comment_ids)
+        .map(|(comment, comment_id)| {
+            serde_json::json!({
+                "schema": "ub-review.github_inline_delivery_receipt.v1",
+                "claim_id": delivery_claim_id(comment),
+                "head_sha": head_sha,
+                "path": comment.path,
+                "line": comment.line,
+                "side": comment.side,
+                "review_id": review_id,
+                "comment_id": comment_id,
+                "status": "posted"
+            })
+        })
+        .collect::<Vec<_>>();
+    fs::write(
+        out.join("inline-delivery.json"),
+        serde_json::to_vec_pretty(&receipts)?,
+    )?;
+    Ok(())
+}
+
+fn delivery_claim_id(comment: &GitHubReviewComment) -> String {
+    topic_claim_id_for_inline(&ReviewInlineComment {
+        lane: String::new(),
+        severity: String::new(),
+        confidence: String::new(),
+        path: comment.path.clone(),
+        line: comment.line,
+        side: comment.side.clone(),
+        body: comment.body.clone(),
+        evidence: String::new(),
+        suggestion: comment.suggestion.clone(),
+    })
 }
 
 pub(crate) fn github_review_post_payload(review: &GitHubReview) -> Result<GitHubReviewPostPayload> {
@@ -1207,6 +1271,74 @@ fn write_reply_delivery_receipt(
         }))?,
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod inline_delivery_tests {
+    use super::*;
+
+    #[test]
+    fn inline_delivery_receipts_bind_claims_to_current_head_and_github_ids() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: String::new(),
+            comments: vec![GitHubReviewComment {
+                path: "src/parser.rs".to_owned(),
+                line: 122,
+                side: "RIGHT".to_owned(),
+                body: "[tests] postfix subscript is dropped".to_owned(),
+                suggestion: None,
+            }],
+        };
+
+        write_inline_delivery_receipts(temp.path(), &review, "head-sha", 123, &[456])?;
+
+        let receipts: Vec<serde_json::Value> =
+            serde_json::from_slice(&fs::read(temp.path().join("inline-delivery.json"))?)?;
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(
+            receipts[0]["schema"],
+            "ub-review.github_inline_delivery_receipt.v1"
+        );
+        assert_eq!(receipts[0]["head_sha"], "head-sha");
+        assert_eq!(receipts[0]["path"], "src/parser.rs");
+        assert_eq!(receipts[0]["line"], 122);
+        assert_eq!(receipts[0]["review_id"], 123);
+        assert_eq!(receipts[0]["comment_id"], 456);
+        assert!(
+            receipts[0]["claim_id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("claim-"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn inline_delivery_receipts_reject_partial_github_confirmation() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: String::new(),
+            comments: vec![GitHubReviewComment {
+                path: "src/parser.rs".to_owned(),
+                line: 122,
+                side: "RIGHT".to_owned(),
+                body: "[tests] postfix subscript is dropped".to_owned(),
+                suggestion: None,
+            }],
+        };
+
+        let error = write_inline_delivery_receipts(temp.path(), &review, "head-sha", 123, &[])
+            .expect_err("partial confirmation must not be receipted as posted");
+        assert!(
+            error
+                .to_string()
+                .contains("inline delivery receipt count mismatch")
+        );
+        assert!(!temp.path().join("inline-delivery.json").exists());
+        Ok(())
+    }
 }
 
 pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> Result<String> {
