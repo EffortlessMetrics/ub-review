@@ -572,6 +572,61 @@ pub(crate) fn run_request_proof_broker_v0(
     box_state: &BoxState,
     run_started: &Instant,
 ) -> Result<ProofBrokerResult> {
+    run_request_proof_broker_v0_with_runners(
+        root,
+        out,
+        diff,
+        profile,
+        proof_requests,
+        existing_receipts,
+        existing_leases,
+        args,
+        box_state,
+        run_started,
+        run_command_to_files,
+        prepare_base_plus_tests_worktree,
+        run_command_to_files,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "request broker keeps proof phases and injected runner boundaries explicit"
+)]
+fn run_request_proof_broker_v0_with_runners<F, G, H>(
+    root: &Path,
+    out: &Path,
+    diff: &DiffContext,
+    profile: &Profile,
+    proof_requests: &[ProofRequest],
+    existing_receipts: &[ProofReceipt],
+    existing_leases: &[ResourceLease],
+    args: &RunArgs,
+    box_state: &BoxState,
+    run_started: &Instant,
+    test_runner: F,
+    prepare_base_plus_tests: G,
+    build_runner: H,
+) -> Result<ProofBrokerResult>
+where
+    F: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+    G: FnMut(&Path, &Path, &DiffContext) -> Result<PathBuf>,
+    H: FnMut(
+        &Path,
+        &[String],
+        &BTreeMap<String, String>,
+        u64,
+        &Path,
+        &Path,
+    ) -> Result<CommandStatus>,
+{
     // Native v2 proof flow (Order 4b of #678): normalize v1 requests to typed
     // v2 once at ingestion, then extract candidates from v2. v2 is now the
     // internal contract; the candidate extractors key off ProofKind, so only
@@ -600,8 +655,8 @@ pub(crate) fn run_request_proof_broker_v0(
         args,
         budget,
         selection.test_tasks,
-        run_command_to_files,
-        prepare_base_plus_tests_worktree,
+        test_runner,
+        prepare_base_plus_tests,
     )?;
     let mut consumed_leases = existing_leases.to_vec();
     consumed_leases.extend(result.resource_leases.clone());
@@ -627,7 +682,7 @@ pub(crate) fn run_request_proof_broker_v0(
         args,
         remaining_budget,
         replan.build_tasks,
-        run_command_to_files,
+        build_runner,
     )?;
     result.proof_receipts.extend(build_result.proof_receipts);
     result.resource_leases.extend(build_result.resource_leases);
@@ -1105,6 +1160,7 @@ mod tests {
     use anyhow::{Result, ensure};
 
     use super::*;
+    use crate::tests::test_run_args;
     use crate::{CommandStatus, DiffContext, DiffFlags};
 
     fn test_diff() -> DiffContext {
@@ -1342,6 +1398,150 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing build portfolio decision"))?;
         ensure!(build_decision.status == "satisfied_by_existing_evidence");
         ensure!(build_decision.receipt_ids == vec!["parser".to_owned()]);
+        Ok(())
+    }
+
+    #[test]
+    fn broker_replans_after_discriminating_test_receipt_before_build_wind_down() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let base_root = temp.path().join("base-plus-tests");
+        fs::create_dir_all(&base_root)?;
+        let diff = test_diff();
+        let test_command = "cargo test --locked --test config_tests".to_owned();
+        let proof_requests = vec![
+            ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: "required-test".to_owned(),
+                lane: "tests-oracle".to_owned(),
+                requested_by: vec!["tests-oracle".to_owned()],
+                command: test_command.clone(),
+                reason: "Answer the required focused regression question.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: true,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: "architecture-build".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo check --workspace --all-targets --locked".to_owned(),
+                reason: "Answer the bounded architecture build question.".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: PROOF_REQUEST_SCHEMA.to_owned(),
+                id: "opposition-test".to_owned(),
+                lane: "opposition".to_owned(),
+                requested_by: vec!["opposition".to_owned()],
+                command: test_command.clone(),
+                reason: "Check the same focused regression independently.".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            },
+        ];
+        let v2_requests = proof_requests
+            .iter()
+            .map(proof_request_to_v2)
+            .collect::<Vec<_>>();
+        let test_candidates = focused_test_candidates_from_v2(&v2_requests);
+        let build_candidates = focused_build_candidates_from_v2(&v2_requests);
+        ensure!(test_candidates.len() == 1);
+        ensure!(build_candidates.len() == 1);
+
+        let mut profile = Profile::default();
+        profile.limits.tests = 1;
+        profile.limits.builds = 1;
+        profile.budgets.proof_max_focused_test_files = 1;
+        profile.budgets.proof_max_focused_tests = 1;
+        profile.budgets.proof_command_timeout_sec = 60;
+        profile.budgets.proof_total_timeout_sec = 120;
+        let args = test_run_args(out.clone());
+        let box_state = BoxState {
+            cpus: 4,
+            free_mem_mb: Some(8_192),
+            free_disk_mb: Some(20_000),
+            load_1m: Some(0.25),
+            github_actions: false,
+        };
+        let mut test_commands = Vec::new();
+        let mut build_commands = Vec::new();
+        let prepared_base_root = base_root.clone();
+        let result = run_request_proof_broker_v0_with_runners(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &proof_requests,
+            &[],
+            &[],
+            &args,
+            &box_state,
+            &Instant::now(),
+            |_root, argv, env, timeout, stdout, stderr| {
+                test_commands.push(command_display_with_env(env, argv));
+                let is_base = stdout.to_string_lossy().contains("base-plus-tests");
+                ensure!(timeout == 60);
+                fs::write(
+                    stdout,
+                    if is_base {
+                        b"base failed\n".as_slice()
+                    } else {
+                        b"head ok\n".as_slice()
+                    },
+                )?;
+                fs::write(stderr, b"")?;
+                Ok(CommandStatus {
+                    exit_code: Some(if is_base { 1 } else { 0 }),
+                    timed_out: false,
+                    success: !is_base,
+                    reason: "fixture receipt".to_owned(),
+                    duration_ms: 1,
+                })
+            },
+            move |_root, _out, _diff| Ok(prepared_base_root.clone()),
+            |_root, argv, _env, _timeout, _stdout, _stderr| {
+                build_commands.push(argv.join(" "));
+                Err(anyhow::anyhow!(
+                    "build should remain unexecuted after test receipt"
+                ))
+            },
+        )?;
+
+        ensure!(test_commands.len() == 2);
+        ensure!(build_commands.is_empty());
+        ensure!(result.proof_receipts.len() == 1);
+        ensure!(result.proof_receipts[0].result == "discriminating");
+        ensure!(result.proof_receipts[0].request_ids.len() == 2);
+
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+        ensure!(
+            artifact["selected_task_ids"]
+                .as_array()
+                .is_some_and(|tasks| tasks.is_empty())
+        );
+        let decisions = artifact["decisions"]
+            .as_array()
+            .ok_or_else(|| anyhow::anyhow!("missing final portfolio decisions"))?;
+        let test_decision = decisions
+            .iter()
+            .find(|decision| decision["task_id"].as_str() == Some(test_candidates[0].id.as_str()))
+            .ok_or_else(|| anyhow::anyhow!("missing final test decision"))?;
+        ensure!(test_decision["status"] == "answered_by_existing_receipt");
+        ensure!(test_decision["receipt_ids"][0] == result.proof_receipts[0].id);
+        let build_decision = decisions
+            .iter()
+            .find(|decision| decision["task_id"].as_str() == Some(build_candidates[0].id.as_str()))
+            .ok_or_else(|| anyhow::anyhow!("missing final build decision"))?;
+        ensure!(build_decision["status"] == "deferred_by_safe_wind_down");
         Ok(())
     }
 
