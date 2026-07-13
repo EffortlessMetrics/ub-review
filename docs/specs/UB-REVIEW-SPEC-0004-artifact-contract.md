@@ -123,7 +123,11 @@ gate_outcome.json              ub-review.gate_outcome.v1 (spec 0003 owns the
                                by the verifier - see fail-closed section)
 metrics.json                   integer schema_version 1; run/streams/
                                scheduler_roles/loops/phases/models; the
-                               count-parity anchor for the whole tree
+                               count-parity anchor for the whole tree;
+                               additive reviewer-value fields distinguish
+                               prepared output, terminal proof dispositions,
+                               current/stale proof receipts, and post-stage
+                               delivery state
 ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
                                cost basis, token/cache counters, and
                                explicit missing[] entries for unavailable
@@ -200,6 +204,15 @@ github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_empty_smoke); comments may include
                                optional `suggestion` only when sourced from
                                unsafe-review concrete replacement text
+inline-delivery.json           optional post-stage array of
+                               ub-review.github_inline_delivery_receipt.v1
+                               records; every posted inline comment names its
+                               claim_id, current head SHA, path, line, review
+                               ID, comment ID, and `status = posted`
+reply-candidates.json          optional ub-review.github_review_reply_candidates.v1;
+                               current-head reply targets are posted as
+                               direct review-comment replies and receipted
+                               under the post output directory
 provider-preflight-status.json provider/endpoint/status/cache_usage receipts
 shared_context.md              the shared model context
 shared_context_cache_block.md  byte-equal mirror of shared_context.md
@@ -232,7 +245,15 @@ proof_request_groups.json      ub-review.proof_request_group.v1
 proof_planner_input.json       ub-review.proof_planner_input.v1
 proof_planner_output.json      ub-review.proof_planner_output.v1; tasks are
                                ub-review.proof_task.v1
-proof_receipts.json            ub-review.proof_receipt.v1 records
+proof_intents.json             answer-shaped proof intent records; each links
+                               a stable claim identity to expected evidence
+proof_portfolio.json           ub-review.proof_portfolio.v1; deterministic
+                               value-ranked selection and receipt dispositions;
+                               includes the observed runner lease, box
+                               capacity, and remaining hard-deadline window
+proof_receipts.json            ub-review.proof_receipt.v1 records; receipts
+                               may link to current claims only when `head`
+                               matches the current review head
 receipt_routes.json            ub-review.receipt_routes.v1; route entries
                                ub-review.receipt_route.v1, phase
                                initial-diff-receipt | model-request-receipt
@@ -629,7 +650,10 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/review.md | stable | seven required headings | humans | required (require_review) |
 | review/terminal_state.json | stable | terminal_state.v1 | downstream automation; gate-check cross-check | required (require_review; status mirror in require_gate_outcome) |
 | review/pr_thread_context.json | stable | pr_thread_context.v1 | downstream automation | required (require_review) |
+| review/claim_graph.json | stable | claim_graph.v1; exact head parity with metrics/proof receipts, claim/topic parity, and thread disposition enum | downstream automation; reviewer reconciliation | required (require_claim_graph) |
 | review/github-review.json XOR github-review-skip.json | stable | none (field-checked; skip statuses pinned) | `ub-review post` (cmd_post); downstream automation | required (require_common_tree XOR; require_review; require_pr_review_body_policy) |
+| post/inline-delivery.json | optional | github_inline_delivery_receipt.v1 per posted inline comment; exact current-head, claim, location, review, and comment IDs | `ub-review post` (cmd_post); final delivery reconciliation | required when grouped inline comments are posted |
+| review/reply-candidates.json | optional | github_review_reply_candidates.v1; exact current-head SHA and top-level review-comment targets | `ub-review post` (cmd_post) | required when replies are prepared; each target receives a delivery receipt |
 | review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
 | review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |
 | review/observations.json + unique/merged/dropped_observations.json | stable | per-record fields, grouped records | downstream automation | required (require_metrics, require_observation_schema, require_observation_summary_artifacts) |
@@ -639,7 +663,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/model_stages.json | stable | model_stage.v1 records | downstream automation | required (require_model_stage_artifacts) |
 | review/final_compiler_input.json | stable | final_compiler_input.v2 | downstream automation | required (require_final_compiler_input) |
 | review/witnesses.json + witness_registry.json | stable | witness.v1, witness_registry.v1 | downstream automation | required (require_witness_artifacts, require_witness_registry) |
-| review/proof_requests.json + proof_request_groups.json + proof_planner_input.json + proof_planner_output.json + proof_receipts.json | stable | proof_request_group.v1, proof_planner_input.v1, proof_planner_output.v1, proof_task.v1, proof_receipt.v1 | downstream automation | required (require_proof_request_groups, require_proof_planner_artifacts, schema checks) |
+| review/proof_requests.json + proof_request_groups.json + proof_planner_input.json + proof_planner_output.json + proof_intents.json + proof_portfolio.json + proof_receipts.json | stable | proof_request_group.v1, proof_planner_input.v1, proof_planner_output.v1, proof_task.v1, proof_intent records, proof_portfolio.v1, proof_receipt.v1 | downstream automation | required (require_proof_request_groups, require_proof_planner_artifacts, schema checks) |
 | review/receipt_routes.json + resource_leases.json | stable | receipt_routes.v1/receipt_route.v1, resource_lease.v1; route entries carry exact proof receipt and matching lease anchors in source_artifacts | downstream automation | required (require_receipt_route_artifacts, require_resource_lease_artifacts) |
 | review/proof_plan.md, review/resource_plan.md | stable (existence only) | none; prose uncontracted | humans | required (require_common_tree) |
 | candidates/<sanitized-id>.json | stable | candidate.v1 copies, exact set | downstream automation | conditional (require_candidate_artifacts; dir required iff array non-empty) |

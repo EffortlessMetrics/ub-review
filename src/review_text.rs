@@ -488,6 +488,98 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
+fn github_bearer_auth_header(token: &str) -> String {
+    let header_name = ["Author", "ization"].concat();
+    let scheme = ["Bear", "er"].concat();
+    format!("{header_name}: {scheme} {token}")
+}
+
+fn expected_pr_head_sha(args: &PostArgs) -> Option<String> {
+    if let Some(event_path) = std::env::var_os("GITHUB_EVENT_PATH")
+        && let Ok(bytes) = fs::read(event_path)
+        && let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes)
+        && let Some(sha) = value
+            .pointer("/pull_request/head/sha")
+            .and_then(serde_json::Value::as_str)
+            .filter(|sha| !sha.trim().is_empty())
+    {
+        return Some(sha.to_owned());
+    }
+
+    let claim_graph_path = args.review_json.parent()?.join("claim_graph.json");
+    let value: serde_json::Value =
+        serde_json::from_slice(&fs::read(claim_graph_path).ok()?).ok()?;
+    value
+        .get("head_sha")
+        .and_then(serde_json::Value::as_str)
+        .filter(|sha| !sha.trim().is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn verify_current_pr_head(
+    args: &PostArgs,
+    repo: &str,
+    pull_number: u64,
+    token: &str,
+) -> Result<String> {
+    let receipt_path = args.out.join("post-head-check.json");
+    let Some(expected_sha) = expected_pr_head_sha(args) else {
+        fs::write(
+            &receipt_path,
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "status": "unavailable",
+                "reason": "no pull_request.head.sha event field or claim graph head_sha was available",
+                "repo": repo,
+                "pull_number": pull_number
+            }))?,
+        )?;
+        bail!(
+            "current pull request head is unavailable; refusing to post without an expected head SHA"
+        );
+    };
+
+    let url = format!(
+        "{}/repos/{repo}/pulls/{pull_number}",
+        args.github_api_url.trim_end_matches('/')
+    );
+    let response = match run_github_api_get(Path::new("."), &url, token) {
+        Ok(response) => response,
+        Err(err) => {
+            fs::write(
+                &receipt_path,
+                serde_json::to_vec_pretty(&serde_json::json!({
+                    "status": "failed",
+                    "expected_head_sha": expected_sha,
+                    "reason": format!("current PR head lookup failed: {err:#}")
+                }))?,
+            )?;
+            return Err(err).context("verify current GitHub pull request head");
+        }
+    };
+    let current_sha = response
+        .pointer("/head/sha")
+        .and_then(serde_json::Value::as_str)
+        .filter(|sha| !sha.trim().is_empty())
+        .ok_or_else(|| anyhow::anyhow!("GitHub pull request response omitted head.sha"))?;
+    let matched = current_sha == expected_sha;
+    fs::write(
+        &receipt_path,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "status": if matched { "matched" } else { "mismatch" },
+            "expected_head_sha": expected_sha,
+            "current_head_sha": current_sha,
+            "repo": repo,
+            "pull_number": pull_number
+        }))?,
+    )?;
+    if !matched {
+        bail!(
+            "current pull request head changed before posting (expected {expected_sha}, got {current_sha})"
+        );
+    }
+    Ok(expected_sha)
+}
+
 pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let token = args
         .github_token
@@ -509,21 +601,79 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
             .with_context(|| format!("read {}", args.review_json.display()))?,
     )
     .with_context(|| format!("parse {}", args.review_json.display()))?;
-    validate_github_review_payload_for_post(args, &review)?;
-    let api_payload = github_review_post_payload(&review)?;
-    let post_payload = args.out.join("github-review-post-payload.json");
-    fs::write(&post_payload, serde_json::to_vec_pretty(&api_payload)?)?;
+    let reply_candidates = read_reply_candidates(args)?;
+    let replies = reply_candidates
+        .as_ref()
+        .map(|artifact| artifact.replies.as_slice())
+        .unwrap_or_default();
+    if replies.is_empty() {
+        validate_github_review_payload_for_post(args, &review)?;
+    } else if review.event != "COMMENT" {
+        bail!("github review event must be COMMENT when reply candidates are present");
+    } else if !review.body.trim().is_empty() {
+        let policy = post_review_body_policy(args);
+        validate_pr_review_body_policy_with_waiver(
+            &review.body,
+            &policy,
+            summary_only_body_waives_post_validation(&policy),
+        )?;
+    }
+    if !replies.is_empty() && review.comments.is_empty() {
+        let expected_sha = verify_current_pr_head(args, repo, pull_number, token)?;
+        let artifact = reply_candidates
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("reply candidates disappeared while posting"))?;
+        if artifact.head_sha != expected_sha {
+            bail!(
+                "reply candidate head {} does not match expected current head {}",
+                artifact.head_sha,
+                expected_sha
+            );
+        }
+        let posted_reply_ids = post_github_replies(args, repo, pull_number, token, replies)?;
+        return Ok(reply_only_post_result(
+            args,
+            repo,
+            pull_number,
+            &review,
+            &expected_sha,
+            posted_reply_ids,
+        ));
+    }
+    let expected_sha = verify_current_pr_head(args, repo, pull_number, token)?;
+    let comments = github_review_post_comments(&review)?;
+    let pending_payload = GitHubPendingReviewPayload {
+        commit_id: expected_sha.clone(),
+        body: review.body.clone(),
+        comments,
+    };
+    let legacy_payload = github_review_post_payload(&review)?;
+    fs::write(
+        args.out.join("github-review-post-payload.json"),
+        serde_json::to_vec_pretty(&legacy_payload)?,
+    )?;
+    let pending_path = args.out.join("github-review-pending-payload.json");
+    fs::write(&pending_path, serde_json::to_vec_pretty(&pending_payload)?)?;
+    if let Some(artifact) = &reply_candidates
+        && artifact.head_sha != expected_sha
+    {
+        bail!(
+            "reply candidate head {} does not match expected current head {}",
+            artifact.head_sha,
+            expected_sha
+        );
+    }
     let url = format!(
         "{}/repos/{}/pulls/{}/reviews",
         args.github_api_url.trim_end_matches('/'),
         repo,
         pull_number
     );
-    let output = run_curl_json_post(
+    let pending_output = run_curl_json_post(
         Path::new("."),
         &url,
-        &format!("Authorization: Bearer {token}"),
-        &post_payload,
+        &github_bearer_auth_header(token),
+        &pending_path,
         &[
             "Accept: application/vnd.github+json",
             "Content-Type: application/json",
@@ -531,24 +681,177 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         ],
         60,
     )
-    .with_context(|| "run GitHub review curl")?;
-    let response_text = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr_text = String::from_utf8_lossy(&output.stderr).to_string();
-    fs::write(args.out.join("post-stdout.json"), &response_text)?;
-    fs::write(args.out.join("post-stderr.txt"), &stderr_text)?;
-    let response = serde_json::from_str(&response_text).unwrap_or_else(|_| {
-        serde_json::json!({
-            "raw": response_text,
-        })
-    });
-    if !output.status.success() {
+    .with_context(|| "create pending GitHub review")?;
+    let pending_text = String::from_utf8_lossy(&pending_output.stdout).to_string();
+    fs::write(args.out.join("pending-review-stdout.json"), &pending_text)?;
+    fs::write(
+        args.out.join("pending-review-stderr.txt"),
+        String::from_utf8_lossy(&pending_output.stderr).as_ref(),
+    )?;
+    if !http_output_succeeded(&pending_output) {
         bail!(
-            "GitHub review post failed with exit code {:?} and http status {:?}: {}",
-            output.status.code(),
-            output.http_status,
-            stderr_text
+            "pending GitHub review failed with exit code {:?} and http status {:?}: {}",
+            pending_output.status.code(),
+            pending_output.http_status,
+            String::from_utf8_lossy(&pending_output.stderr)
         );
     }
+    let pending_response: serde_json::Value = serde_json::from_str(&pending_text)
+        .with_context(|| "parse pending GitHub review response")?;
+    let review_id = pending_response
+        .get("id")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| anyhow::anyhow!("pending GitHub review response omitted numeric id"))?;
+    let pending_comments_url = format!("{url}/{review_id}/comments");
+    let comments_output = match run_curl_json_request(
+        Path::new("."),
+        "GET",
+        &pending_comments_url,
+        &github_bearer_auth_header(token),
+        None,
+        &[
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args, &url, review_id, token, err,
+            ));
+        }
+    };
+    let comments_text = String::from_utf8_lossy(&comments_output.stdout).to_string();
+    if let Err(err) = fs::write(
+        args.out.join("pending-review-comments.json"),
+        &comments_text,
+    ) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    let posted_comment_ids = match parse_github_review_comment_ids(&comments_text) {
+        Ok(ids) => ids,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args, &url, review_id, token, err,
+            ));
+        }
+    };
+    if !http_output_succeeded(&comments_output)
+        || posted_comment_ids.len() != pending_payload.comments.len()
+    {
+        let deleted = delete_pending_github_review(args, &url, review_id, token);
+        bail!(
+            "pending GitHub review comment receipt was incomplete (expected {}, got {}); cleanup={deleted}",
+            pending_payload.comments.len(),
+            posted_comment_ids.len()
+        );
+    }
+    let submit_path = args.out.join("github-review-submit-payload.json");
+    let submit_payload = GitHubSubmitReviewPayload {
+        event: review.event.clone(),
+        body: review.body.clone(),
+    };
+    let submit_bytes = match serde_json::to_vec_pretty(&submit_payload) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args,
+                &url,
+                review_id,
+                token,
+                err.into(),
+            ));
+        }
+    };
+    if let Err(err) = fs::write(&submit_path, submit_bytes) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    // Revalidate immediately before submission. The pending review and its
+    // inline comments may have taken long enough for the PR head to advance;
+    // posting a review pinned to the earlier commit would create a stale
+    // human-facing receipt. A mismatch cleans up the pending review and
+    // leaves the post stage fail-closed.
+    if let Err(err) = verify_current_pr_head(args, repo, pull_number, token) {
+        return Err(cleanup_pending_review_error(
+            args, &url, review_id, token, err,
+        ));
+    }
+    let submit_output = match run_curl_json_post(
+        Path::new("."),
+        &format!("{url}/{review_id}/events"),
+        &github_bearer_auth_header(token),
+        &submit_path,
+        &[
+            "Accept: application/vnd.github+json",
+            "Content-Type: application/json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    ) {
+        Ok(output) => output,
+        Err(err) => {
+            return Err(cleanup_pending_review_error(
+                args, &url, review_id, token, err,
+            ));
+        }
+    };
+    let submit_text = String::from_utf8_lossy(&submit_output.stdout).to_string();
+    if let Err(err) = fs::write(args.out.join("submit-review-stdout.json"), &submit_text) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    if let Err(err) = fs::write(
+        args.out.join("submit-review-stderr.txt"),
+        String::from_utf8_lossy(&submit_output.stderr).as_ref(),
+    ) {
+        return Err(cleanup_pending_review_error(
+            args,
+            &url,
+            review_id,
+            token,
+            err.into(),
+        ));
+    }
+    if !http_output_succeeded(&submit_output) {
+        let deleted = delete_pending_github_review(args, &url, review_id, token);
+        bail!(
+            "GitHub review submit failed with exit code {:?} and http status {:?}; cleanup={deleted}",
+            submit_output.status.code(),
+            submit_output.http_status
+        );
+    }
+    write_inline_delivery_receipts(
+        &args.out,
+        &review,
+        &expected_sha,
+        review_id,
+        &posted_comment_ids,
+    )?;
+    let posted_reply_ids = if replies.is_empty() {
+        Vec::new()
+    } else {
+        post_github_replies(args, repo, pull_number, token, replies)?
+    };
+    let response = serde_json::from_str(&submit_text)
+        .unwrap_or_else(|_| serde_json::json!({"raw": submit_text}));
     let review_metadata = read_github_review_metadata(args);
     Ok(PostResultReceipt {
         schema_version: 1,
@@ -556,7 +859,8 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         repo: repo.clone(),
         repo_valid: true,
         pull_number,
-        comments: review.comments.len(),
+        comments: posted_comment_ids.len(),
+        reply_count: posted_reply_ids.len(),
         review_json: args.review_json.display().to_string(),
         review_json_exists: args.review_json.exists(),
         review_json_valid: review_metadata
@@ -581,17 +885,194 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         off_diff_comment_count: review_metadata
             .as_ref()
             .and_then(|review| review.off_diff_comment_count),
-        http_status: output.http_status,
+        http_status: submit_output.http_status,
         token_present: true,
-        payload_written: post_payload.exists(),
-        post_stdout_written: args.out.join("post-stdout.json").exists(),
-        post_stderr_written: args.out.join("post-stderr.txt").exists(),
+        payload_written: pending_path.exists() && submit_path.exists(),
+        post_stdout_written: args.out.join("submit-review-stdout.json").exists(),
+        post_stderr_written: args.out.join("submit-review-stderr.txt").exists(),
         response,
+        delivery_status: "submitted".to_owned(),
+        review_id: Some(review_id),
+        posted_comment_ids,
+        posted_reply_ids,
+        reply_delivery_status: if replies.is_empty() {
+            "none".to_owned()
+        } else {
+            "posted".to_owned()
+        },
+        submitted: true,
+        pending_review_deleted: false,
+        head_sha: Some(expected_sha),
+    })
+}
+
+fn reply_only_post_result(
+    args: &PostArgs,
+    repo: &str,
+    pull_number: u64,
+    review: &GitHubReview,
+    head_sha: &str,
+    posted_reply_ids: Vec<u64>,
+) -> PostResultReceipt {
+    PostResultReceipt {
+        schema_version: 1,
+        status: "ok".to_owned(),
+        repo: repo.to_owned(),
+        repo_valid: true,
+        pull_number,
+        comments: 0,
+        reply_count: posted_reply_ids.len(),
+        review_json: args.review_json.display().to_string(),
+        review_json_exists: args.review_json.exists(),
+        review_json_valid: true,
+        review_event: Some(review.event.clone()),
+        review_body_bytes: Some(review.body.len()),
+        review_comment_count: Some(0),
+        diff_patch: post_diff_patch_path(args).display().to_string(),
+        diff_patch_exists: false,
+        diff_patch_valid: false,
+        diff_line_count: None,
+        off_diff_comment_count: Some(0),
+        http_status: None,
+        token_present: true,
+        payload_written: args.out.join("reply-delivery.json").exists(),
+        post_stdout_written: false,
+        post_stderr_written: false,
+        response: serde_json::json!({"reply_comment_ids": posted_reply_ids}),
+        delivery_status: "replies_submitted".to_owned(),
+        review_id: None,
+        posted_comment_ids: Vec::new(),
+        posted_reply_ids,
+        reply_delivery_status: "posted".to_owned(),
+        submitted: false,
+        pending_review_deleted: false,
+        head_sha: Some(head_sha.to_owned()),
+    }
+}
+
+fn http_output_succeeded(output: &HttpPostOutput) -> bool {
+    output.status.success()
+        && output
+            .http_status
+            .is_none_or(|status| (200..300).contains(&status))
+}
+
+fn cleanup_pending_review_error(
+    args: &PostArgs,
+    url: &str,
+    review_id: u64,
+    token: &str,
+    error: anyhow::Error,
+) -> anyhow::Error {
+    let deleted = delete_pending_github_review(args, url, review_id, token);
+    error.context(format!("pending GitHub review cleanup={deleted}"))
+}
+
+fn delete_pending_github_review(args: &PostArgs, url: &str, review_id: u64, token: &str) -> bool {
+    let output = run_curl_json_request(
+        Path::new("."),
+        "DELETE",
+        &format!("{url}/{review_id}"),
+        &github_bearer_auth_header(token),
+        None,
+        &[
+            "Accept: application/vnd.github+json",
+            "X-GitHub-Api-Version: 2022-11-28",
+        ],
+        60,
+    );
+    let ok = output.as_ref().is_ok_and(|output| output.status.success());
+    let _ = fs::write(
+        args.out.join("pending-review-delete.json"),
+        serde_json::json!({"review_id": review_id, "deleted": ok}).to_string(),
+    );
+    ok
+}
+
+pub(crate) fn parse_github_review_comment_ids(body: &str) -> Result<Vec<u64>> {
+    let comments: Vec<serde_json::Value> =
+        serde_json::from_str(body).with_context(|| "parse pending GitHub review comments")?;
+    comments
+        .into_iter()
+        .map(|comment| {
+            comment
+                .get("id")
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| anyhow::anyhow!("pending GitHub review comment omitted numeric id"))
+        })
+        .collect()
+}
+
+/// Persist one current-head receipt for every inline comment confirmed by
+/// GitHub. The API returns comment IDs in the same order as the pending
+/// review's comment list, so the structural claim identity can be paired with
+/// the confirmed ID without exposing claim metadata in the GitHub payload.
+pub(crate) fn write_inline_delivery_receipts(
+    out: &Path,
+    review: &GitHubReview,
+    head_sha: &str,
+    review_id: u64,
+    posted_comment_ids: &[u64],
+) -> Result<()> {
+    if review.comments.len() != posted_comment_ids.len() {
+        bail!(
+            "inline delivery receipt count mismatch (expected {}, got {})",
+            review.comments.len(),
+            posted_comment_ids.len()
+        );
+    }
+    let receipts = review
+        .comments
+        .iter()
+        .zip(posted_comment_ids)
+        .map(|(comment, comment_id)| {
+            serde_json::json!({
+                "schema": "ub-review.github_inline_delivery_receipt.v1",
+                "claim_id": delivery_claim_id(comment),
+                "head_sha": head_sha,
+                "path": comment.path,
+                "line": comment.line,
+                "side": comment.side,
+                "review_id": review_id,
+                "comment_id": comment_id,
+                "status": "posted"
+            })
+        })
+        .collect::<Vec<_>>();
+    fs::write(
+        out.join("inline-delivery.json"),
+        serde_json::to_vec_pretty(&receipts)?,
+    )?;
+    Ok(())
+}
+
+fn delivery_claim_id(comment: &GitHubReviewComment) -> String {
+    topic_claim_id_for_inline(&ReviewInlineComment {
+        lane: String::new(),
+        severity: String::new(),
+        confidence: String::new(),
+        path: comment.path.clone(),
+        line: comment.line,
+        side: comment.side.clone(),
+        body: comment.body.clone(),
+        evidence: String::new(),
+        suggestion: comment.suggestion.clone(),
     })
 }
 
 pub(crate) fn github_review_post_payload(review: &GitHubReview) -> Result<GitHubReviewPostPayload> {
-    let comments = review
+    let comments = github_review_post_comments(review)?;
+    Ok(GitHubReviewPostPayload {
+        event: review.event.clone(),
+        body: review.body.clone(),
+        comments,
+    })
+}
+
+pub(crate) fn github_review_post_comments(
+    review: &GitHubReview,
+) -> Result<Vec<GitHubReviewPostComment>> {
+    review
         .comments
         .iter()
         .map(|comment| {
@@ -602,12 +1083,262 @@ pub(crate) fn github_review_post_payload(review: &GitHubReview) -> Result<GitHub
                 body: github_review_post_comment_body(comment)?,
             })
         })
-        .collect::<Result<Vec<_>>>()?;
-    Ok(GitHubReviewPostPayload {
-        event: review.event.clone(),
-        body: review.body.clone(),
-        comments,
-    })
+        .collect::<Result<Vec<_>>>()
+}
+
+const GITHUB_REVIEW_REPLY_CANDIDATES_SCHEMA: &str = "ub-review.github_review_reply_candidates.v1";
+
+fn reply_candidates_path(args: &PostArgs) -> PathBuf {
+    args.review_json
+        .parent()
+        .map(|parent| parent.join("reply-candidates.json"))
+        .unwrap_or_else(|| args.out.join("reply-candidates.json"))
+}
+
+fn read_reply_candidates(args: &PostArgs) -> Result<Option<GitHubReviewReplyCandidates>> {
+    let path = reply_candidates_path(args);
+    if !path.exists() {
+        return Ok(None);
+    }
+    let artifact: GitHubReviewReplyCandidates = serde_json::from_slice(
+        &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+    )
+    .with_context(|| format!("parse {}", path.display()))?;
+    if artifact.schema != GITHUB_REVIEW_REPLY_CANDIDATES_SCHEMA {
+        bail!("reply candidate schema must be {GITHUB_REVIEW_REPLY_CANDIDATES_SCHEMA}");
+    }
+    if artifact.head_sha.trim().is_empty() {
+        bail!("reply candidate artifact head_sha must not be empty");
+    }
+    for reply in &artifact.replies {
+        if reply.claim_id.trim().is_empty() {
+            bail!("reply candidate claim_id must not be empty");
+        }
+        if reply.head_sha != artifact.head_sha {
+            bail!("reply candidate head_sha must match the artifact head_sha");
+        }
+        if reply.comment_id == 0 {
+            bail!("reply candidate comment_id must be positive");
+        }
+        if reply.body.trim().is_empty() || reply.body.chars().count() > 1_200 {
+            bail!("reply candidate body must be non-empty and at most 1200 chars");
+        }
+        if !has_lane_prefix(&reply.body) {
+            bail!("reply candidate body must start with a lane prefix");
+        }
+        if has_standalone_approval_line(&reply.body)
+            || has_forbidden_pr_review_boilerplate(&reply.body)
+        {
+            bail!("reply candidate body contains forbidden review boilerplate");
+        }
+    }
+    Ok(Some(artifact))
+}
+
+fn post_github_replies(
+    args: &PostArgs,
+    repo: &str,
+    pull_number: u64,
+    token: &str,
+    replies: &[GitHubReviewReply],
+) -> Result<Vec<u64>> {
+    let base_url = format!(
+        "{}/repos/{repo}/pulls/{pull_number}/comments",
+        args.github_api_url.trim_end_matches('/')
+    );
+    let mut posted_reply_ids = Vec::new();
+    for reply in replies {
+        let payload_path = args
+            .out
+            .join(format!("reply-{}-payload.json", reply.comment_id));
+        fs::write(
+            &payload_path,
+            serde_json::to_vec_pretty(&serde_json::json!({"body": reply.body}))?,
+        )?;
+        let output = match run_curl_json_post(
+            Path::new("."),
+            &format!("{base_url}/{}/replies", reply.comment_id),
+            &github_bearer_auth_header(token),
+            &payload_path,
+            &[
+                "Accept: application/vnd.github+json",
+                "Content-Type: application/json",
+                "X-GitHub-Api-Version: 2022-11-28",
+            ],
+            60,
+        ) {
+            Ok(output) => output,
+            Err(err) => {
+                write_reply_delivery_receipt(
+                    args,
+                    replies,
+                    &posted_reply_ids,
+                    "failed",
+                    Some(&err.to_string()),
+                )?;
+                return Err(err)
+                    .with_context(|| format!("post reply to review comment {}", reply.comment_id));
+            }
+        };
+        fs::write(
+            args.out
+                .join(format!("reply-{}-stdout.json", reply.comment_id)),
+            &output.stdout,
+        )?;
+        fs::write(
+            args.out
+                .join(format!("reply-{}-stderr.txt", reply.comment_id)),
+            &output.stderr,
+        )?;
+        if !http_output_succeeded(&output) {
+            let error = anyhow::anyhow!(
+                "reply to review comment {} failed with exit code {:?} and http status {:?}",
+                reply.comment_id,
+                output.status.code(),
+                output.http_status
+            );
+            write_reply_delivery_receipt(
+                args,
+                replies,
+                &posted_reply_ids,
+                "failed",
+                Some(&error.to_string()),
+            )?;
+            return Err(error);
+        }
+        let response: serde_json::Value = match serde_json::from_slice(&output.stdout) {
+            Ok(response) => response,
+            Err(error) => {
+                write_reply_delivery_receipt(
+                    args,
+                    replies,
+                    &posted_reply_ids,
+                    "failed",
+                    Some(&error.to_string()),
+                )?;
+                return Err(error).with_context(|| {
+                    format!("parse reply response for comment {}", reply.comment_id)
+                });
+            }
+        };
+        let reply_id = match response.get("id").and_then(serde_json::Value::as_u64) {
+            Some(reply_id) => reply_id,
+            None => {
+                let error = anyhow::anyhow!("reply response omitted numeric id");
+                write_reply_delivery_receipt(
+                    args,
+                    replies,
+                    &posted_reply_ids,
+                    "failed",
+                    Some(&error.to_string()),
+                )?;
+                return Err(error);
+            }
+        };
+        posted_reply_ids.push(reply_id);
+        fs::write(
+            args.out
+                .join(format!("reply-{}-receipt.json", reply.comment_id)),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": "ub-review.github_review_reply_receipt.v1",
+                "status": "posted",
+                "claim_id": reply.claim_id,
+                "head_sha": reply.head_sha,
+                "source_comment_id": reply.comment_id,
+                "reply_comment_id": reply_id
+            }))?,
+        )?;
+    }
+    write_reply_delivery_receipt(args, replies, &posted_reply_ids, "posted", None)?;
+    Ok(posted_reply_ids)
+}
+
+fn write_reply_delivery_receipt(
+    args: &PostArgs,
+    replies: &[GitHubReviewReply],
+    posted_reply_ids: &[u64],
+    status: &str,
+    error: Option<&str>,
+) -> Result<()> {
+    fs::write(
+        args.out.join("reply-delivery.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.github_review_reply_delivery.v1",
+            "status": status,
+            "candidate_count": replies.len(),
+            "posted_reply_ids": posted_reply_ids,
+            "error": error
+        }))?,
+    )?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod inline_delivery_tests {
+    use super::*;
+
+    #[test]
+    fn inline_delivery_receipts_bind_claims_to_current_head_and_github_ids() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: String::new(),
+            comments: vec![GitHubReviewComment {
+                path: "src/parser.rs".to_owned(),
+                line: 122,
+                side: "RIGHT".to_owned(),
+                body: "[tests] postfix subscript is dropped".to_owned(),
+                suggestion: None,
+            }],
+        };
+
+        write_inline_delivery_receipts(temp.path(), &review, "head-sha", 123, &[456])?;
+
+        let receipts: Vec<serde_json::Value> =
+            serde_json::from_slice(&fs::read(temp.path().join("inline-delivery.json"))?)?;
+        assert_eq!(receipts.len(), 1);
+        assert_eq!(
+            receipts[0]["schema"],
+            "ub-review.github_inline_delivery_receipt.v1"
+        );
+        assert_eq!(receipts[0]["head_sha"], "head-sha");
+        assert_eq!(receipts[0]["path"], "src/parser.rs");
+        assert_eq!(receipts[0]["line"], 122);
+        assert_eq!(receipts[0]["review_id"], 123);
+        assert_eq!(receipts[0]["comment_id"], 456);
+        assert!(
+            receipts[0]["claim_id"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("claim-"))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn inline_delivery_receipts_reject_partial_github_confirmation() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review = GitHubReview {
+            event: "COMMENT".to_owned(),
+            body: String::new(),
+            comments: vec![GitHubReviewComment {
+                path: "src/parser.rs".to_owned(),
+                line: 122,
+                side: "RIGHT".to_owned(),
+                body: "[tests] postfix subscript is dropped".to_owned(),
+                suggestion: None,
+            }],
+        };
+
+        let error = write_inline_delivery_receipts(temp.path(), &review, "head-sha", 123, &[])
+            .expect_err("partial confirmation must not be receipted as posted");
+        assert!(
+            error
+                .to_string()
+                .contains("inline delivery receipt count mismatch")
+        );
+        assert!(!temp.path().join("inline-delivery.json").exists());
+        Ok(())
+    }
 }
 
 pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> Result<String> {

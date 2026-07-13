@@ -38,26 +38,133 @@ pub fn prepend_to_path(dir: &Path) -> Result<String> {
     Ok(std::env::join_paths(paths)?.to_string_lossy().into_owned())
 }
 
-pub fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+pub fn spawn_fake_github_review_api_with_expected_requests(
+    comment_ids: Vec<u64>,
+    expected_requests: usize,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_github_review_api_with_head_sequence(
+        vec!["test-head-sha".to_owned()],
+        comment_ids,
+        expected_requests,
+    )
+}
+
+pub fn spawn_fake_github_review_api_with_head_sequence(
+    head_shas: Vec<String>,
+    comment_ids: Vec<u64>,
+    expected_requests: usize,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
     let handle = thread::spawn(move || -> Result<Vec<String>> {
         let deadline = Instant::now() + Duration::from_secs(20);
-        loop {
+        let mut requests = Vec::new();
+        while requests.len() < expected_requests {
             match listener.accept() {
-                Ok((stream, _addr)) => return Ok(vec![handle_fake_github_request(stream)?]),
+                Ok((stream, _addr)) => {
+                    let head_sha = head_shas
+                        .get(requests.len())
+                        .or_else(|| head_shas.last())
+                        .map(String::as_str)
+                        .unwrap_or("test-head-sha");
+                    requests.push(handle_fake_github_review_request(
+                        stream,
+                        &comment_ids,
+                        head_sha,
+                    )?);
+                }
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     if Instant::now() >= deadline {
-                        bail!("fake GitHub API received no requests");
+                        bail!(
+                            "fake GitHub review API received {} of {} requests",
+                            requests.len(),
+                            expected_requests
+                        );
                     }
                     thread::sleep(Duration::from_millis(10));
                 }
                 Err(err) => return Err(err.into()),
             }
         }
+        Ok(requests)
     });
     Ok((url, handle))
+}
+
+fn handle_fake_github_review_request(
+    mut stream: TcpStream,
+    comment_ids: &[u64],
+    head_sha: &str,
+) -> Result<String> {
+    stream.set_nonblocking(false)?;
+    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
+    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let mut headers = String::new();
+    loop {
+        let mut line = String::new();
+        let bytes = reader.read_line(&mut line)?;
+        if bytes == 0 {
+            bail!("fake GitHub review request ended before headers finished");
+        }
+        headers.push_str(&line);
+        if line == "\r\n" || line == "\n" {
+            break;
+        }
+    }
+    let content_length = headers
+        .lines()
+        .find_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())
+                .flatten()
+        })
+        .unwrap_or_default();
+    let mut body = vec![0; content_length];
+    reader.read_exact(&mut body)?;
+    let request_line = headers.lines().next().unwrap_or_default().to_owned();
+    let (status_line, response_body) = if request_line.starts_with("DELETE ") {
+        ("204 No Content", Vec::new())
+    } else if request_line.starts_with("GET ")
+        && request_line.contains("/pulls/")
+        && !request_line.contains("/comments")
+    {
+        (
+            "200 OK",
+            serde_json::to_vec(&serde_json::json!({
+                "head": {"sha": head_sha}
+            }))?,
+        )
+    } else if request_line.starts_with("GET ") && request_line.contains("/comments") {
+        let comments = comment_ids
+            .iter()
+            .map(|id| serde_json::json!({"id": id}))
+            .collect::<Vec<_>>();
+        ("200 OK", serde_json::to_vec(&comments)?)
+    } else if request_line.starts_with("POST ") && request_line.contains("/events") {
+        (
+            "201 Created",
+            serde_json::to_vec(&serde_json::json!({
+                "id": 987,
+                "state": "COMMENTED",
+                "body": "fake review posted"
+            }))?,
+        )
+    } else {
+        (
+            "201 Created",
+            serde_json::to_vec(&serde_json::json!({"id": 987, "state": "PENDING"}))?,
+        )
+    };
+    write!(
+        stream,
+        "HTTP/1.1 {status_line}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        response_body.len()
+    )?;
+    stream.write_all(&response_body)?;
+    Ok(format!("{}{}", headers, String::from_utf8_lossy(&body)))
 }
 
 pub fn spawn_fake_setup_ci_api(
@@ -169,49 +276,6 @@ pub fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) 
     ))
 }
 
-pub fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
-    stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-    let mut reader = BufReader::new(stream.try_clone()?);
-    let mut headers = String::new();
-    loop {
-        let mut line = String::new();
-        let bytes = reader.read_line(&mut line)?;
-        if bytes == 0 {
-            bail!("fake GitHub request ended before headers finished");
-        }
-        headers.push_str(&line);
-        if line == "\r\n" || line == "\n" {
-            break;
-        }
-    }
-    let content_length = headers
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            name.eq_ignore_ascii_case("content-length")
-                .then(|| value.trim().parse::<usize>().ok())
-                .flatten()
-        })
-        .unwrap_or_default();
-    let mut body = vec![0; content_length];
-    reader.read_exact(&mut body)?;
-    let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
-    let response_body = serde_json::to_vec(&serde_json::json!({
-        "id": 987,
-        "state": "COMMENTED",
-        "body": "fake review posted"
-    }))?;
-    write!(
-        stream,
-        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
-    )?;
-    stream.write_all(&response_body)?;
-    Ok(request_text)
-}
-
 pub fn spawn_fake_openai_provider(
     expected_requests: usize,
 ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
@@ -278,6 +342,49 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
     Ok((url, handle))
 }
 
+pub fn spawn_fake_openai_provider_with_statuses(
+    statuses: Vec<u16>,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    let listener = TcpListener::bind("127.0.0.1:0")?;
+    listener.set_nonblocking(true)?;
+    let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
+    let handle = thread::spawn(move || -> Result<Vec<String>> {
+        let expected_requests = statuses.len();
+        let mut deadline = Instant::now() + Duration::from_secs(120);
+        let mut requests = Vec::new();
+        while requests.len() < expected_requests {
+            match listener.accept() {
+                Ok((stream, _addr)) => {
+                    let status = statuses
+                        .get(requests.len())
+                        .copied()
+                        .ok_or_else(|| anyhow::anyhow!("fake provider status missing"))?;
+                    requests.push(handle_fake_openai_request_with_status(
+                        stream,
+                        "fake provider status response",
+                        Duration::ZERO,
+                        status,
+                    )?);
+                    deadline = Instant::now() + Duration::from_secs(120);
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline {
+                        bail!(
+                            "fake provider received {} of {} requests",
+                            requests.len(),
+                            expected_requests
+                        );
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(requests)
+    });
+    Ok((url, handle))
+}
+
 pub fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
     static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     // Recover a poisoned lock instead of erroring: one failing test must
@@ -299,9 +406,18 @@ pub fn fake_openai_lane_content() -> String {
 }
 
 pub fn handle_fake_openai_request(
+    stream: TcpStream,
+    content: &str,
+    response_delay: Duration,
+) -> Result<String> {
+    handle_fake_openai_request_with_status(stream, content, response_delay, 200)
+}
+
+fn handle_fake_openai_request_with_status(
     mut stream: TcpStream,
     content: &str,
     response_delay: Duration,
+    status: u16,
 ) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
@@ -334,19 +450,33 @@ pub fn handle_fake_openai_request(
     if !response_delay.is_zero() {
         thread::sleep(response_delay);
     }
-    let response_body = serde_json::to_vec(&serde_json::json!({
-        "choices": [
-            {
-                "message": {
-                    "content": content
+    let response_body = if status >= 400 {
+        serde_json::to_vec(&serde_json::json!({
+            "error": {"message": content}
+        }))?
+    } else {
+        serde_json::to_vec(&serde_json::json!({
+            "choices": [
+                {
+                    "message": {
+                        "content": content
+                    }
                 }
-            }
-        ]
-    }))?;
+            ]
+        }))?
+    };
+    let reason = match status {
+        200 => "OK",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        _ => "Fake Provider Status",
+    };
     write!(
         stream,
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
+        "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        response_body.len(),
     )?;
     stream.write_all(&response_body)?;
     Ok(request_text)

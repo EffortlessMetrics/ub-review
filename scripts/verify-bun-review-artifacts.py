@@ -90,6 +90,16 @@ MAX_PR_REVIEW_BODY_BULLETS = 12
 GITHUB_SUGGESTION_MAX_CHARS = 800
 ARTIFACT_NAME_MAX_CHARS = 96
 ARTIFACT_NAME_HASH_CHARS = 16
+CLAIM_GRAPH_SCHEMA = "ub-review.claim_graph.v1"
+THREAD_DISPOSITIONS = {
+    "novel",
+    "already_covered",
+    "corroborated_with_new_evidence",
+    "refuted_by_new_evidence",
+    "accepted_tradeoff",
+    "fixed_on_current_head",
+    "superseded_by_head_change",
+}
 SECRET_VALUE_NAMES = [
     "FACTORY_API_KEY",
     "github_token",
@@ -116,24 +126,35 @@ SECRET_HEADER_PATTERNS = [
         "Authorization header",
         re.compile(
             r"(?im)\bAuthorization\s*:\s*(?:Bearer\s+)?"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?P<value>(?!redacted\b|\[redacted\]|\*\*\*)"
+            r"[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})"
         ),
     ),
     (
         "Bearer token",
         re.compile(
             r"(?im)\bBearer\s+"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?P<value>(?!redacted\b|\[redacted\]|\*\*\*)"
+            r"[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})"
         ),
     ),
     (
         "API key header",
         re.compile(
             r"(?im)\bX-API-Key\s*:\s*"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?P<value>(?!redacted\b|\[redacted\]|\*\*\*)"
+            r"[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,})"
         ),
     ),
 ]
+SAFE_SECRET_HEADER_VALUES = {
+    "authentication",
+    "authorization",
+    "credential",
+    "credentials",
+    "header",
+    "headers",
+}
 SECRET_ASSIGNMENT_PATTERN = re.compile(
     r"(?im)\b("
     + "|".join(re.escape(name) for name in SECRET_VALUE_NAMES)
@@ -227,7 +248,8 @@ def looks_like_secret_assignment_value(value: str) -> bool:
 
 def secret_leak_marker(text: str) -> str | None:
     for label, pattern in SECRET_HEADER_PATTERNS:
-        if pattern.search(text):
+        match = pattern.search(text)
+        if match and match.group("value").lower() not in SAFE_SECRET_HEADER_VALUES:
             return label
     for match in SECRET_ASSIGNMENT_PATTERN.finditer(text):
         if looks_like_secret_assignment_value(match.group(3)):
@@ -1429,6 +1451,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/cache_manifest.json",
         "review/cache_events.ndjson",
         "review/pr_thread_context.json",
+        "review/claim_graph.json",
         "review/terminal_state.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
@@ -1722,6 +1745,49 @@ def require_gate_config(path: str, gate: object) -> None:
         fail(f"{path} gate.post_review_on is not a string array: {gate!r}")
 
 
+def require_reply_candidates(root: pathlib.Path) -> bool:
+    path = root / "review/reply-candidates.json"
+    if not path.exists():
+        return False
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail("reply-candidates.json is not an object")
+    if artifact.get("schema") != "ub-review.github_review_reply_candidates.v1":
+        fail("reply-candidates.json has the wrong schema")
+    head_sha = artifact.get("head_sha")
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        fail("reply-candidates.json head_sha is not a 40-hex SHA")
+    claim_graph = load_json(root / "review/claim_graph.json")
+    if claim_graph.get("head_sha") != head_sha:
+        fail("reply-candidates.json head_sha does not match claim_graph.json")
+    replies = artifact.get("replies")
+    if not isinstance(replies, list) or not replies:
+        fail("reply-candidates.json replies must be a non-empty array")
+    seen_comment_ids: set[int] = set()
+    for index, reply in enumerate(replies):
+        if not isinstance(reply, dict):
+            fail(f"reply-candidates.json replies[{index}] is not an object")
+        claim_id = reply.get("claim_id")
+        if not isinstance(claim_id, str) or not claim_id:
+            fail(f"reply-candidates.json replies[{index}] claim_id is invalid")
+        if reply.get("head_sha") != head_sha:
+            fail(f"reply-candidates.json replies[{index}] head_sha does not match artifact")
+        comment_id = reply.get("comment_id")
+        if not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id <= 0:
+            fail(f"reply-candidates.json replies[{index}] comment_id is invalid")
+        if comment_id in seen_comment_ids:
+            fail(f"reply-candidates.json duplicates comment_id {comment_id}")
+        seen_comment_ids.add(comment_id)
+        body = reply.get("body")
+        if not isinstance(body, str) or not body.strip() or len(body) > 1_200:
+            fail(f"reply-candidates.json replies[{index}] body is invalid")
+        if not re.match(r"^\[[a-z0-9-]+\]", body):
+            fail(f"reply-candidates.json replies[{index}] body lacks a safe prefix")
+        no_standalone_approval_line(body, path)
+        require_pr_review_body_policy(body, path)
+    return True
+
+
 def require_review(
     root: pathlib.Path,
     max_inline_comments: int | None,
@@ -1806,19 +1872,23 @@ def require_review(
 
     github_review_path = root / "review/github-review.json"
     github_skip_path = root / "review/github-review-skip.json"
+    reply_candidates_present = require_reply_candidates(root)
     if github_review_path.exists():
         github_review = load_json(github_review_path)
         if github_review.get("event") != "COMMENT":
             fail(f"github-review.json event expected COMMENT, got {github_review.get('event')!r}")
         body = github_review.get("body")
-        if not isinstance(body, str) or not has_reviewer_value_heading(body):
+        if not isinstance(body, str) or (
+            not has_reviewer_value_heading(body) and not reply_candidates_present
+        ):
             fail("github-review.json body is missing reviewer-value content")
-        no_standalone_approval_line(body, github_review_path)
-        require_pr_review_body_policy(
-            body,
-            github_review_path,
-            waive_suppressible=effective_summary_only_body(root) != "suppress",
-        )
+        if body:
+            no_standalone_approval_line(body, github_review_path)
+            require_pr_review_body_policy(
+                body,
+                github_review_path,
+                waive_suppressible=effective_summary_only_body(root) != "suppress",
+            )
         comments = github_review.get("comments")
         if not isinstance(comments, list):
             fail("github-review.json comments is not an array")
@@ -1832,6 +1902,8 @@ def require_review(
         for index, comment in enumerate(comments):
             require_github_comment(comment, index)
     else:
+        if reply_candidates_present:
+            fail("reply-candidates.json requires github-review.json")
         skip = load_json(github_skip_path)
         if skip.get("status") != "skipped":
             fail(f"github-review-skip.json status expected skipped, got {skip.get('status')!r}")
@@ -1846,6 +1918,80 @@ def require_review(
         require_skipped_payload_contract(skip, root, github_skip_path)
 
     return review
+
+
+def require_claim_graph(root: pathlib.Path) -> None:
+    graph = load_json(root / "review/claim_graph.json")
+    if not isinstance(graph, dict):
+        fail("claim_graph.json is not an object")
+    if graph.get("schema") != CLAIM_GRAPH_SCHEMA:
+        fail(
+            f"claim_graph.json schema expected {CLAIM_GRAPH_SCHEMA}, "
+            f"got {graph.get('schema')!r}"
+        )
+    head_sha = graph.get("head_sha")
+    if not isinstance(head_sha, str) or not head_sha.strip():
+        fail("claim_graph.json head_sha is empty")
+    metrics = load_json(root / "review/metrics.json")
+    if not isinstance(metrics, dict) or metrics.get("head") != head_sha:
+        fail("claim_graph.json head_sha does not match metrics.json head")
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    if not isinstance(proof_receipts, list):
+        fail("proof_receipts.json is not an array")
+    for index, receipt in enumerate(proof_receipts):
+        if not isinstance(receipt, dict) or receipt.get("head") != head_sha:
+            fail(f"proof_receipts.json[{index}] head does not match claim graph head")
+    claims = graph.get("claims")
+    topics = graph.get("topics")
+    if not isinstance(claims, list) or not isinstance(topics, list):
+        fail("claim_graph.json claims/topics must be arrays")
+    for field in ("conflicts", "evidence_gaps"):
+        if not isinstance(graph.get(field), list):
+            fail(f"claim_graph.json {field} must be an array")
+    if graph.get("mode") not in {"active", "shadow"}:
+        fail(f"claim_graph.json mode is invalid: {graph.get('mode')!r}")
+    claim_ids = []
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict) or not isinstance(claim.get("id"), str):
+            fail(f"claim_graph.json claims[{index}] is missing id")
+        claim_ids.append(claim["id"])
+    topic_ids = []
+    for index, topic in enumerate(topics):
+        if not isinstance(topic, dict):
+            fail(f"claim_graph.json topics[{index}] is not an object")
+        topic_id = topic.get("claim_id")
+        if not isinstance(topic_id, str) or not topic_id:
+            fail(f"claim_graph.json topics[{index}] is missing claim_id")
+        if topic.get("head_sha") != head_sha:
+            fail(f"claim_graph.json topics[{index}] head_sha does not match graph head")
+        disposition = topic.get("thread_disposition")
+        if disposition not in THREAD_DISPOSITIONS:
+            fail(
+                f"claim_graph.json topics[{index}] thread_disposition invalid: "
+                f"{disposition!r}"
+            )
+        existing = topic.get("existing_threads")
+        stale = topic.get("stale_threads")
+        receipts = topic.get("proof_receipts")
+        if not all(isinstance(value, list) for value in (existing, stale, receipts)):
+            fail(f"claim_graph.json topics[{index}] thread/proof links must be arrays")
+        if disposition == "novel" and (existing or stale):
+            fail(f"claim_graph.json topics[{index}] novel claim has thread links")
+        if disposition == "already_covered" and not existing:
+            fail(f"claim_graph.json topics[{index}] covered claim has no current thread")
+        if disposition == "corroborated_with_new_evidence" and not (existing and receipts):
+            fail(
+                f"claim_graph.json topics[{index}] corroborated claim lacks current thread or receipt"
+            )
+        if disposition == "accepted_tradeoff" and not existing:
+            fail(f"claim_graph.json topics[{index}] accepted tradeoff has no current thread")
+        if disposition == "superseded_by_head_change" and not stale:
+            fail(f"claim_graph.json topics[{index}] superseded claim has no stale thread")
+        topic_ids.append(topic_id)
+    if len(set(claim_ids)) != len(claim_ids) or len(set(topic_ids)) != len(topic_ids):
+        fail("claim_graph.json claim/topic ids are not unique")
+    if set(claim_ids) != set(topic_ids):
+        fail("claim_graph.json claims and topics are not in parity")
 
 
 def require_skipped_payload_contract(receipt: dict, root: pathlib.Path, path: pathlib.Path) -> None:
@@ -7835,6 +7981,42 @@ def self_test_empty_candidate_artifacts_without_dir() -> None:
         require_candidate_artifacts(root, review)
 
 
+def self_test_reply_candidates_contract() -> None:
+    with tempfile.TemporaryDirectory() as directory:
+        root = pathlib.Path(directory)
+        (root / "review").mkdir()
+        head_sha = "a" * 40
+        write_self_test_json(root / "review/claim_graph.json", {"head_sha": head_sha})
+        write_self_test_json(
+            root / "review/reply-candidates.json",
+            {
+                "schema": "ub-review.github_review_reply_candidates.v1",
+                "head_sha": head_sha,
+                "replies": [
+                    {
+                        "claim_id": "claim-parser-postfix",
+                        "head_sha": head_sha,
+                        "comment_id": 456,
+                        "body": "[ub-review] Confirmed by focused execution. Receipt: `proof:red-green:123`.",
+                    }
+                ],
+            },
+        )
+        if not require_reply_candidates(root):
+            fail("reply candidate self-test did not recognize a valid artifact")
+        expect_self_test_failure(
+            "reply candidate head mismatch",
+            "does not match claim_graph.json",
+            lambda: write_self_test_json(
+                root / "review/reply-candidates.json",
+                {
+                    "schema": "ub-review.github_review_reply_candidates.v1",
+                    "head_sha": "b" * 40,
+                    "replies": [],
+                },
+            )
+            or require_reply_candidates(root),
+        )
 def self_test_lane_packet_pr_thread_seed_contract() -> None:
     lane_path = pathlib.Path("lanes/ub-memory-lifetime.md")
     require_lane_packet_pr_thread_seed(
@@ -10841,10 +11023,66 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
         fail("artifact name sanitizer changed safe replacement behavior")
 
 
+def self_test_claim_graph_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        graph = {
+            "schema": CLAIM_GRAPH_SCHEMA,
+            "head_sha": "HEAD",
+            "claims": [{"id": "claim-1"}],
+            "topics": [
+                {
+                    "claim_id": "claim-1",
+                    "head_sha": "HEAD",
+                    "thread_disposition": "novel",
+                    "existing_threads": [],
+                    "stale_threads": [],
+                    "proof_receipts": [],
+                }
+            ],
+            "conflicts": [],
+            "evidence_gaps": [],
+            "mode": "active",
+        }
+
+        def write_graph(overrides: dict | None = None) -> pathlib.Path:
+            candidate = dict(graph)
+            if overrides:
+                candidate.update(overrides)
+            write_self_test_json(root / "review/claim_graph.json", candidate)
+            return root
+
+        write_graph()
+        write_self_test_json(root / "review/metrics.json", {"head": "HEAD"})
+        write_self_test_json(root / "review/proof_receipts.json", [])
+        require_claim_graph(root)
+        expect_self_test_failure(
+            "claim graph invalid mode",
+            "mode is invalid",
+            lambda: require_claim_graph(write_graph({"mode": "unknown"})),
+        )
+        expect_self_test_failure(
+            "claim graph conflicts shape",
+            "conflicts must be an array",
+            lambda: require_claim_graph(write_graph({"conflicts": {}})),
+        )
+        expect_self_test_failure(
+            "claim graph evidence gaps shape",
+            "evidence_gaps must be an array",
+            lambda: require_claim_graph(write_graph({"evidence_gaps": {}})),
+        )
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
-    if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
+    if secret_leak_marker("Bearer authentication") is not None:
+        fail("self-test prose Bearer authentication was treated as a leak")
+    if secret_leak_marker("Authorization: Bearer test-token-redacted") != "Authorization header":
+        fail("self-test credential-shaped Bearer value was not detected")
+    self_test_claim_graph_contract()
+    opencode_assignment = "OPENCODE" + "=" + "opencodeSecret123456"
+    if secret_leak_marker(opencode_assignment) != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
     if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
         fail("self-test OPENCODE secret placeholder was treated as a leak")
@@ -11454,6 +11692,7 @@ def run_self_tests() -> None:
     self_test_source_route_late_proof_routes_and_suppresses_task()
     self_test_final_tool_gate_routes_to_relevant_lanes()
     self_test_empty_candidate_artifacts_without_dir()
+    self_test_reply_candidates_contract()
     self_test_lane_packet_pr_thread_seed_contract()
     expect_self_test_failure(
         "non-empty candidate artifacts without directory",
@@ -11727,6 +11966,7 @@ def main(argv: list[str]) -> int:
     review = require_review(
         root, args.max_inline_comments, args.expected_review_profile
     )
+    require_claim_graph(root)
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
     require_floor_trend(root)

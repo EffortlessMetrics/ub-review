@@ -4608,6 +4608,214 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    init_minimal_repo(&repo)?;
+
+    let primary_key = "dummy-primary-key-for-fallback-test";
+    let fallback_key = "dummy-fallback-key-for-fallback-test";
+    let (primary_url, primary_provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
+    let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "primary-with-fallback",
+            "--minimax-provider-kind",
+            "openai",
+            "--opencode-endpoint-kind",
+            "openai-chat",
+            "--lanes",
+            "correctness",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+            ("UB_REVIEW_OPENCODE_API_KEY", fallback_key),
+            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+        ],
+    )?;
+    let primary_requests = join_fake_provider(primary_provider)?;
+    let fallback_requests = join_fake_provider(fallback_provider)?;
+    assert_eq!(primary_requests.len(), 1);
+    assert_eq!(fallback_requests.len(), 2);
+
+    let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("review/provider-preflight-status.json"),
+    )?)?;
+    let primary_preflight = preflights
+        .as_array()
+        .and_then(|receipts| {
+            receipts
+                .iter()
+                .find(|receipt| receipt["provider"] == "minimax")
+        })
+        .ok_or_else(|| anyhow::anyhow!("primary preflight receipt missing"))?;
+    assert_eq!(primary_preflight["status"], "failed");
+    assert_eq!(primary_preflight["http_status"], 503);
+    let fallback_preflight = preflights
+        .as_array()
+        .and_then(|receipts| {
+            receipts
+                .iter()
+                .find(|receipt| receipt["provider"] == "opencode-go")
+        })
+        .ok_or_else(|| anyhow::anyhow!("fallback preflight receipt missing"))?;
+    assert_eq!(fallback_preflight["status"], "ok");
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    let correctness_lane = review["model_lanes"]
+        .as_array()
+        .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "correctness"))
+        .ok_or_else(|| anyhow::anyhow!("correctness model lane missing"))?;
+    assert_eq!(correctness_lane["status"], "ok");
+    assert_eq!(correctness_lane["provider"], "opencode-go");
+    assert_eq!(
+        correctness_lane["fallback_from"],
+        "minimax:MiniMax-M3:openai-chat"
+    );
+    assert_eq!(correctness_lane["http_status"], 200);
+
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["models"]["model_fallbacks_used"], 1);
+    for relative in collect_relative_file_paths(&out)? {
+        if let Ok(text) = fs::read_to_string(out.join(&relative)) {
+            assert!(
+                !text.contains(primary_key),
+                "primary secret leaked in {relative}"
+            );
+            assert!(
+                !text.contains(fallback_key),
+                "fallback secret leaked in {relative}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+
+    let primary_key = "dummy-primary-key-for-authority-test";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--fail-on-gate",
+            "true",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "correctness",
+            "--tools",
+            "cargo-allow",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 1);
+
+    let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("review/provider-preflight-status.json"),
+    )?)?;
+    let preflight = preflights
+        .as_array()
+        .and_then(|receipts| receipts.first())
+        .ok_or_else(|| anyhow::anyhow!("missing provider outage receipt"))?;
+    assert_eq!(preflight["status"], "failed");
+    assert_eq!(preflight["http_status"], 503);
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    assert!(review["model_lanes"].as_array().is_some_and(|lanes| {
+        lanes
+            .iter()
+            .any(|lane| lane["status"] == "preflight_failed")
+    }));
+
+    let terminal: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/terminal_state.json"))?)?;
+    assert!(matches!(
+        terminal["status"].as_str(),
+        Some("artifact-only") | Some("failed-to-review")
+    ));
+
+    let gate: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert_eq!(gate["conclusion"], "pass");
+    assert_eq!(gate["evidence_gaps_blocking"], 0);
+    assert!(gate["evidence_gaps_advisory"].as_u64().unwrap_or_default() > 0);
+    assert!(gate["reasons"].as_array().is_some_and(Vec::is_empty));
+    Ok(())
+}
+
+#[test]
 fn intelligent_ci_runs_advisory_proof_planner_lane_before_request_broker() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;
@@ -6068,8 +6276,15 @@ index 1111111..2222222 100644
 fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
+    let event_path = temp.path().join("event.json");
     let out = temp.path().join("post");
     let token = "test-token-redacted";
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
     fs::write(
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -6078,9 +6293,9 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             "comments": []
         }))?,
     )?;
-    let (github_api_url, handle) = spawn_fake_github_api()?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 5)?;
 
-    run(
+    run_with_env(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -6098,25 +6313,43 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
             "--github-api-url",
             &github_api_url,
         ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 1);
-    let request_text = &requests[0];
+    assert_eq!(requests.len(), 5);
+    assert!(requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"));
+    let request_text = &requests[1];
     assert!(
         request_text
             .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews HTTP/1.1")
     );
-    assert!(request_text.contains("Authorization: Bearer test-token-redacted"));
-    assert!(request_text.contains("\"event\": \"COMMENT\""));
+    assert!(
+        requests
+            .iter()
+            .any(|request| request.contains("Authorization: Bearer test-token-redacted"))
+    );
+    assert!(
+        requests[2]
+            .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
+    );
+    assert!(
+        requests[4]
+            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
+    );
+    assert!(requests[3].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"));
+    assert!(requests[4].contains("\"event\": \"COMMENT\""));
+    assert!(request_text.contains("\"commit_id\": \"test-head-sha\""));
     assert!(request_text.contains("\"comments\": []"));
 
     let post_result_path = out.join("post-result.json");
     assert!(post_result_path.exists());
     assert!(!out.join("post-error.json").exists());
     assert!(out.join("github-review-post-payload.json").exists());
-    assert!(out.join("post-stdout.json").exists());
-    assert!(out.join("post-stderr.txt").exists());
+    assert!(out.join("pending-review-stdout.json").exists());
+    assert!(out.join("pending-review-stderr.txt").exists());
+    assert!(out.join("submit-review-stdout.json").exists());
+    assert!(out.join("submit-review-stderr.txt").exists());
 
     let post_result_text = fs::read_to_string(&post_result_path)?;
     let post_result: serde_json::Value = serde_json::from_str(&post_result_text)?;
@@ -6130,6 +6363,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert_eq!(post_result["review_json_valid"], true);
     assert_eq!(post_result["review_event"], "COMMENT");
     assert_eq!(post_result["review_comment_count"], 0);
+    assert_eq!(post_result["head_sha"], "test-head-sha");
     assert_eq!(post_result["diff_patch_exists"], false);
     assert_eq!(post_result["http_status"], 201);
     assert_eq!(post_result["token_present"], true);
@@ -6138,12 +6372,17 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert_eq!(post_result["post_stderr_written"], true);
     assert_eq!(post_result["response"]["id"], 987);
     assert_eq!(post_result["response"]["state"], "COMMENTED");
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    assert_eq!(head_check["status"], "matched");
 
     for path in [
         post_result_path,
         out.join("github-review-post-payload.json"),
-        out.join("post-stdout.json"),
-        out.join("post-stderr.txt"),
+        out.join("pending-review-stdout.json"),
+        out.join("pending-review-stderr.txt"),
+        out.join("submit-review-stdout.json"),
+        out.join("submit-review-stderr.txt"),
     ] {
         let text = fs::read_to_string(path)?;
         assert!(!text.contains(token));
@@ -6154,12 +6393,491 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
 }
 
 #[test]
+fn post_head_mismatch_fails_before_pending_review_creation() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- Current-head proof is required.",
+            "comments": []
+        }))?,
+    )?;
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "stale-head-sha"}}
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 1)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 1
+            && requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1"),
+        "head verification must be the only request before a mismatch: {requests:#?}"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    anyhow::ensure!(
+        head_check["status"] == "mismatch",
+        "head mismatch must be receipted"
+    );
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    anyhow::ensure!(
+        post_error["status"] == "failed"
+            && post_error["reason"]
+                .as_str()
+                .is_some_and(|reason| reason.contains("current pull request head changed")),
+        "stale head must fail closed: {post_error:#?}"
+    );
+    anyhow::ensure!(
+        !out.join("pending-review-stdout.json").exists()
+            && !out.join("submit-review-stdout.json").exists(),
+        "stale head must not create or submit a pending review"
+    );
+    Ok(())
+}
+
+#[test]
+fn post_missing_expected_head_fails_closed_before_github_post() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let missing_event_path = temp.path().join("missing-event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- An expected current head is required.",
+            "comments": []
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 0)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&missing_event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.is_empty(),
+        "missing expected head must not call GitHub"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    anyhow::ensure!(
+        head_check["status"] == "unavailable",
+        "missing expected head must be receipted"
+    );
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    anyhow::ensure!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("refusing to post")),
+        "missing expected head must fail closed: {post_error:#?}"
+    );
+    anyhow::ensure!(
+        !out.join("github-review-pending-payload.json").exists()
+            || !out.join("pending-review-stdout.json").exists(),
+        "missing expected head must not create a pending review"
+    );
+    Ok(())
+}
+
+#[test]
+fn post_claim_graph_head_fallback_survives_invalid_event_path() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let claim_graph = temp.path().join("claim_graph.json");
+    let invalid_event_path = temp.path().join("invalid-event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- Claim-graph head fallback remains current.",
+            "comments": []
+        }))?,
+    )?;
+    fs::write(
+        &claim_graph,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": "test-head-sha"
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 5)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&invalid_event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 5,
+        "claim graph fallback should complete the transactional post: {requests:#?}"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    anyhow::ensure!(
+        head_check["status"] == "matched" && head_check["expected_head_sha"] == "test-head-sha",
+        "claim graph fallback must retain the verified head receipt: {head_check:#?}"
+    );
+    let post_result: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-result.json"))?)?;
+    assert_eq!(post_result["head_sha"], "test-head-sha");
+    Ok(())
+}
+
+#[test]
+fn post_reply_candidates_posts_direct_reply_with_receipt() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let reply_candidates = temp.path().join("reply-candidates.json");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    let token = "test-token-redacted";
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "",
+            "comments": []
+        }))?,
+    )?;
+    fs::write(
+        &reply_candidates,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.github_review_reply_candidates.v1",
+            "head_sha": "test-head-sha",
+            "replies": [{
+                "claim_id": "claim-parser-postfix",
+                "head_sha": "test-head-sha",
+                "comment_id": 456,
+                "body": "[tests-oracle] Confirmed by focused execution: the new subscript case fails before the patch and passes on this head."
+            }]
+        }))?,
+    )?;
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_expected_requests(vec![], 2)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            token,
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 2
+            && requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1")
+            && requests[1].starts_with(
+                "POST /repos/EffortlessMetrics/ub-review/pulls/123/comments/456/replies HTTP/1.1"
+            ),
+        "reply delivery must use the direct GitHub reply endpoint: {requests:#?}"
+    );
+    let result: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-result.json"))?)?;
+    anyhow::ensure!(
+        result["status"] == "ok"
+            && result["reply_count"] == 1
+            && result["reply_delivery_status"] == "posted"
+            && result["comments"] == 0
+            && result["head_sha"] == "test-head-sha",
+        "reply result must be receipted without a duplicate inline comment: {result:#?}"
+    );
+    let delivery: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("reply-delivery.json"))?)?;
+    anyhow::ensure!(
+        delivery["status"] == "posted" && delivery["posted_reply_ids"] == serde_json::json!([987]),
+        "reply delivery receipt must record the posted comment id: {delivery:#?}"
+    );
+    let receipt: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("reply-456-receipt.json"))?)?;
+    anyhow::ensure!(
+        receipt["claim_id"] == "claim-parser-postfix"
+            && receipt["source_comment_id"] == 456
+            && receipt["reply_comment_id"] == 987,
+        "per-reply receipt must preserve claim and GitHub ids: {receipt:#?}"
+    );
+    anyhow::ensure!(
+        !out.join("github-review-pending-payload.json").exists(),
+        "reply-only delivery must not create a grouped review"
+    );
+    for path in [
+        out.join("reply-456-payload.json"),
+        out.join("reply-456-stdout.json"),
+        out.join("reply-456-stderr.txt"),
+        out.join("reply-456-receipt.json"),
+        out.join("reply-delivery.json"),
+    ] {
+        let text = fs::read_to_string(path)?;
+        anyhow::ensure!(!text.contains(token), "reply artifact leaked token");
+        anyhow::ensure!(
+            !text.contains("Authorization"),
+            "reply artifact leaked auth header"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn post_comment_receipt_mismatch_deletes_pending_review() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let diff_patch = temp.path().join("diff.patch");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
+    fs::write(
+        &diff_patch,
+        "diff --git a/src/lib.rs b/src/lib.rs\nindex 1111111..2222222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let header = unsafe { ptr.cast::<Header>().read() };\n     len\n}\n",
+    )?;
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Verification questions\n\n- Confirm the focused proof.",
+            "comments": [{
+                "path": "src/lib.rs",
+                "line": 1,
+                "side": "RIGHT",
+                "body": "[tests] focused proof receipt is missing."
+            }]
+        }))?,
+    )?;
+    let (github_api_url, handle) =
+        spawn_fake_github_review_api_with_expected_requests(Vec::new(), 4)?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--diff-patch",
+            path_str(&diff_patch)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    assert_eq!(requests.len(), 4);
+    assert!(
+        requests[3].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+    );
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    assert_eq!(post_error["status"], "failed");
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("cleanup=true"))
+    );
+    let deletion: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("pending-review-delete.json"))?)?;
+    assert_eq!(deletion["review_id"], 987);
+    assert_eq!(deletion["deleted"], true);
+    Ok(())
+}
+
+#[test]
+fn post_head_change_after_pending_comments_cleans_up_without_submit() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let diff_patch = temp.path().join("diff.patch");
+    let event_path = temp.path().join("event.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
+    fs::write(
+        &diff_patch,
+        "diff --git a/src/lib.rs b/src/lib.rs\nindex 1111111..2222222 100644\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub fn active_len(len: usize) -> usize {\n+    let header = unsafe { ptr.cast::<Header>().read() };\n     len\n}\n",
+    )?;
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Verification questions\n\n- Confirm the focused proof.",
+            "comments": [{
+                "path": "src/lib.rs",
+                "line": 1,
+                "side": "RIGHT",
+                "body": "[tests] focused proof receipt is missing."
+            }]
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_review_api_with_head_sequence(
+        vec![
+            "test-head-sha".to_owned(),
+            "test-head-sha".to_owned(),
+            "test-head-sha".to_owned(),
+            "advanced-head-sha".to_owned(),
+        ],
+        vec![654],
+        5,
+    )?;
+
+    run_with_env(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--diff-patch",
+            path_str(&diff_patch)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+        ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
+    )?;
+
+    let requests = join_fake_provider(handle)?;
+    anyhow::ensure!(
+        requests.len() == 5
+            && requests[3].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 HTTP/1.1")
+            && requests[4].starts_with(
+                "DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987 HTTP/1.1"
+            ),
+        "head change after pending comments must clean up without submit: {requests:#?}"
+    );
+    let head_check: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-head-check.json"))?)?;
+    assert_eq!(head_check["status"], "mismatch");
+    let post_error: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("post-error.json"))?)?;
+    assert!(
+        post_error["reason"]
+            .as_str()
+            .is_some_and(|reason| reason.contains("cleanup=true"))
+    );
+    Ok(())
+}
+
+#[test]
 fn post_payload_renders_suggestion_blocks_for_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
     let diff_patch = temp.path().join("diff.patch");
+    let event_path = temp.path().join("event.json");
     let out = temp.path().join("post");
     let token = "test-token-redacted";
+    fs::write(
+        &event_path,
+        serde_json::to_vec(&serde_json::json!({
+            "pull_request": {"head": {"sha": "test-head-sha"}}
+        }))?,
+    )?;
     fs::write(
         &diff_patch,
         "\
@@ -6192,9 +6910,10 @@ index 1111111..2222222 100644
         }))?,
     )
     .with_context(|| format!("write {}", review_json.display()))?;
-    let (github_api_url, handle) = spawn_fake_github_api()?;
+    let (github_api_url, handle) =
+        spawn_fake_github_review_api_with_expected_requests(vec![654], 5)?;
 
-    run(
+    run_with_env(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -6214,15 +6933,24 @@ index 1111111..2222222 100644
             "--github-api-url",
             &github_api_url,
         ],
+        &[("GITHUB_EVENT_PATH", path_str(&event_path)?)],
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 1);
-    let request_text = &requests[0];
+    assert_eq!(requests.len(), 5);
+    let request_text = &requests[1];
     assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
     assert!(
         !request_text.contains("\"suggestion\""),
         "GitHub API payload must not contain internal suggestion field: {request_text}"
+    );
+    assert!(
+        requests[2]
+            .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
+    );
+    assert!(
+        requests[4]
+            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
 
     let post_payload_text = fs::read_to_string(out.join("github-review-post-payload.json"))?;
@@ -6237,6 +6965,20 @@ index 1111111..2222222 100644
         serde_json::from_str(&fs::read_to_string(out.join("post-result.json"))?)?;
     assert_eq!(post_result["status"], "ok");
     assert_eq!(post_result["comments"], 1);
+    let inline_delivery: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(out.join("inline-delivery.json"))?)?;
+    assert_eq!(inline_delivery.as_array().map(Vec::len), Some(1));
+    assert_eq!(inline_delivery[0]["head_sha"], "test-head-sha");
+    assert_eq!(inline_delivery[0]["path"], "src/lib.rs");
+    assert_eq!(inline_delivery[0]["line"], 2);
+    assert_eq!(inline_delivery[0]["review_id"], 987);
+    assert_eq!(inline_delivery[0]["comment_id"], 654);
+    assert_eq!(inline_delivery[0]["status"], "posted");
+    assert!(
+        inline_delivery[0]["claim_id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("claim-"))
+    );
     Ok(())
 }
 

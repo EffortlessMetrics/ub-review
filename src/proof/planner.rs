@@ -55,13 +55,43 @@ pub(crate) fn build_proof_planner_input<'a>(
     proof_requests: &'a [ProofRequest],
     impact_candidates: Vec<ImpactCandidateSummary>,
 ) -> Result<ProofPlannerInput<'a>> {
+    build_proof_planner_input_with_intents(
+        diff,
+        profile,
+        box_state,
+        pr_thread_context,
+        proof_requests,
+        impact_candidates,
+        &[],
+    )
+}
+
+pub(crate) fn build_proof_planner_input_with_intents<'a>(
+    diff: &'a DiffContext,
+    profile: &Profile,
+    box_state: &'a BoxState,
+    pr_thread_context: &'a PrThreadContext,
+    proof_requests: &'a [ProofRequest],
+    impact_candidates: Vec<ImpactCandidateSummary>,
+    additional_intents: &[ProofIntent],
+) -> Result<ProofPlannerInput<'a>> {
     let budget = proof_budget(profile)?;
+    let mut proof_intents = proof_intents_from_requests(proof_requests);
+    for intent in additional_intents {
+        if !proof_intents
+            .iter()
+            .any(|existing| existing.id == intent.id)
+        {
+            proof_intents.push(intent.clone());
+        }
+    }
     Ok(ProofPlannerInput {
         schema: PROOF_PLANNER_INPUT_SCHEMA,
         diff_class: diff.diff_class.key(),
         changed_files: &diff.changed_files,
         pr_thread_context_status: &pr_thread_context.status,
         proof_requests,
+        proof_intents,
         runtime_budget: ProofPlannerRuntimeBudget {
             target_timeout_sec: profile.budgets.default_timeout_sec,
             hard_timeout_sec: profile.budgets.hard_timeout_sec,
@@ -72,6 +102,50 @@ pub(crate) fn build_proof_planner_input<'a>(
         box_shape: box_state,
         impact_candidates,
     })
+}
+
+pub(crate) fn proof_intents_from_requests(requests: &[ProofRequest]) -> Vec<ProofIntent> {
+    requests.iter().map(proof_intent_from_request).collect()
+}
+
+pub(crate) fn proof_intent_from_request(request: &ProofRequest) -> ProofIntent {
+    let proof_kind = classify_proof_kind(&request.cost, &request.command);
+    let digest =
+        sha256_hex(format!("{}\n{}\n{}", request.id, request.lane, request.reason).as_bytes());
+    let claim_id = format!("claim-proof-{}", &digest[..16]);
+    let question = if request.reason.trim().is_empty() {
+        format!("What does approved proof `{}` establish?", request.id)
+    } else {
+        request.reason.trim().to_owned()
+    };
+    let expected_answer_shape = match proof_kind {
+        ProofKind::FocusedTest | ProofKind::BasePlusTests => {
+            "terminal receipt distinguishes the changed head from the requested baseline"
+        }
+        ProofKind::FocusedBuild => "terminal receipt records whether the changed package builds",
+        _ => "bounded terminal receipt answers the proof question or records why it could not run",
+    };
+    let estimated_value = if request.required {
+        "high"
+    } else if matches!(
+        proof_kind,
+        ProofKind::FocusedTest | ProofKind::BasePlusTests
+    ) {
+        "medium-high"
+    } else {
+        "medium"
+    };
+    ProofIntent {
+        id: format!("intent-{}", &digest[..16]),
+        claim_id,
+        question,
+        expected_answer_shape: expected_answer_shape.to_owned(),
+        proof_kind,
+        target: request.command.clone(),
+        estimated_value: estimated_value.to_owned(),
+        requested_by: request.requested_by.clone(),
+        status: request.status.clone(),
+    }
 }
 
 pub(crate) fn build_proof_planner_output(
@@ -101,24 +175,40 @@ pub(crate) fn build_proof_planner_output(
     })
 }
 
+pub(crate) struct ProofPlannerArtifactContext<'a> {
+    pub(crate) out: &'a Path,
+    pub(crate) diff: &'a DiffContext,
+    pub(crate) plan: &'a Plan,
+    pub(crate) profile: &'a Profile,
+    pub(crate) box_state: &'a BoxState,
+    pub(crate) pr_thread_context: &'a PrThreadContext,
+    pub(crate) proof_requests: &'a [ProofRequest],
+    pub(crate) additional_intents: &'a [ProofIntent],
+}
+
 pub(crate) fn write_proof_planner_artifacts(
-    out: &Path,
-    diff: &DiffContext,
-    plan: &Plan,
-    profile: &Profile,
-    box_state: &BoxState,
-    pr_thread_context: &PrThreadContext,
-    proof_requests: &[ProofRequest],
+    context: ProofPlannerArtifactContext<'_>,
 ) -> Result<()> {
+    let ProofPlannerArtifactContext {
+        out,
+        diff,
+        plan,
+        profile,
+        box_state,
+        pr_thread_context,
+        proof_requests,
+        additional_intents,
+    } = context;
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
-    let input = build_proof_planner_input(
+    let input = build_proof_planner_input_with_intents(
         diff,
         profile,
         box_state,
         pr_thread_context,
         proof_requests,
         Vec::new(),
+        additional_intents,
     )?;
     let output = build_proof_planner_output(diff, profile, proof_requests)?;
     fs::write(
@@ -128,6 +218,10 @@ pub(crate) fn write_proof_planner_artifacts(
     fs::write(
         review_dir.join("proof_planner_output.json"),
         serde_json::to_vec_pretty(&output)?,
+    )?;
+    fs::write(
+        review_dir.join("proof_intents.json"),
+        serde_json::to_vec_pretty(&input.proof_intents)?,
     )?;
     let mut ndjson = String::new();
     for task in &output.proof_tasks {
@@ -179,6 +273,7 @@ pub(crate) fn write_proof_request_artifacts(
     profile: &Profile,
     proof_requests: &[ProofRequest],
     proof_receipts: &[ProofReceipt],
+    resource_leases: &[ResourceLease],
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
@@ -316,6 +411,49 @@ pub(crate) fn write_proof_request_artifacts(
         }
     }
     fs::write(review_dir.join("proof_plan.md"), plan)?;
+
+    let portfolio_path = review_dir.join("proof_portfolio.json");
+    if !portfolio_path.exists() {
+        let total_budget = proof_budget(profile)?;
+        let remaining_budget = remaining_focused_proof_budget(total_budget, resource_leases);
+        let test_candidates = focused_test_candidates_from_diff(diff, proof_requests);
+        let build_candidates = focused_build_candidates_from_requests(proof_requests);
+        let portfolio = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: &test_candidates,
+            build_tasks: &build_candidates,
+            proof_requests,
+            proof_receipts,
+            budget: remaining_budget,
+            runtime: ProofPortfolioRuntime::from_box_state(
+                &BoxState::detect()?,
+                remaining_budget
+                    .max_total_seconds
+                    .min(profile.budgets.hard_timeout_sec),
+                proof_lease_budget(profile)?,
+            ),
+        });
+        let selected_task_ids = portfolio
+            .test_tasks
+            .iter()
+            .map(|task| task.id.clone())
+            .chain(portfolio.build_tasks.iter().map(|task| task.id.clone()))
+            .collect::<Vec<_>>();
+        let portfolio_artifact = ProofPortfolioArtifact {
+            schema: PROOF_PORTFOLIO_SCHEMA,
+            phase: "final",
+            head: diff.head.clone(),
+            budget_seconds: total_budget.max_total_seconds,
+            remaining_seconds: portfolio.remaining_seconds,
+            candidate_count: test_candidates.len() + build_candidates.len(),
+            selected_task_ids,
+            runtime: portfolio.runtime,
+            decisions: portfolio.decisions,
+        };
+        fs::write(
+            portfolio_path,
+            serde_json::to_vec_pretty(&portfolio_artifact)?,
+        )?;
+    }
     Ok(())
 }
 
@@ -700,10 +838,37 @@ pub(crate) fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Result;
+    use anyhow::{Result, ensure};
 
     use crate::tests::test_diff;
     use crate::*;
+
+    #[test]
+    fn proof_intent_preserves_answer_shape_and_stable_claim_identity() -> Result<()> {
+        let request = ProofRequest {
+            schema: "ub-review.proof_request.v1".to_owned(),
+            id: "proof-parser-001".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned(), "opposition".to_owned()],
+            command: "cargo test --locked --package parser --test parser_regression".to_owned(),
+            reason: "Does the focused parser regression distinguish the changed declaration path?"
+                .to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 120,
+            required: true,
+            status: "requested".to_owned(),
+        };
+        let intent = proof_intent_from_request(&request);
+        ensure!(intent.id.starts_with("intent-"));
+        ensure!(intent.claim_id.starts_with("claim-proof-"));
+        ensure!(intent.question.contains("distinguish"));
+        ensure!(intent.expected_answer_shape.contains("terminal receipt"));
+        ensure!(intent.proof_kind == ProofKind::FocusedTest);
+        ensure!(intent.estimated_value == "high");
+        ensure!(intent.requested_by == request.requested_by);
+        ensure!(intent.status == "requested");
+        Ok(())
+    }
 
     #[test]
     fn proof_request_artifacts_group_duplicate_commands_once() -> Result<()> {
@@ -741,6 +906,7 @@ mod tests {
             &Profile::default(),
             &proof_requests,
             &[] as &[ProofReceipt],
+            &[] as &[ResourceLease],
         )?;
 
         let proof_json: Vec<super::ProofRequest> =
@@ -750,6 +916,8 @@ mod tests {
         )?)?;
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
         let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
+        let proof_portfolio: serde_json::Value =
+            serde_json::from_slice(&fs::read(temp.path().join("review/proof_portfolio.json"))?)?;
 
         assert_eq!(proof_json.len(), 2);
         assert_eq!(proof_ndjson.lines().count(), 2);
@@ -777,6 +945,12 @@ mod tests {
         assert_eq!(group.status, "deferred");
         assert!(proof_plan.contains("Grouped proof broker tasks: 1 unique from 2 request(s)."));
         assert!(proof_plan.contains("merged_requests=2"));
+        ensure!(proof_portfolio["schema"] == PROOF_PORTFOLIO_SCHEMA);
+        ensure!(proof_portfolio["decisions"].is_array());
+        ensure!(proof_portfolio["remaining_seconds"].is_number());
+        ensure!(proof_portfolio["runtime"]["cpus"].is_number());
+        ensure!(proof_portfolio["runtime"]["deadline_remaining_seconds"].is_number());
+        ensure!(proof_portfolio["runtime"]["lease"]["cpu"].is_number());
         Ok(())
     }
 
@@ -1565,6 +1739,7 @@ index 1111111..2222222 100644
             &Profile::default(),
             &proof_requests,
             &[] as &[ProofReceipt],
+            &[] as &[ResourceLease],
         )?;
 
         let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;

@@ -173,6 +173,7 @@ pub(crate) fn degraded_lane_model_output(
         )],
         failed_objections: Vec::new(),
         proof_requests: Vec::new(),
+        proof_intents: Vec::new(),
         issue_candidates: Vec::new(),
         degraded: true,
     }

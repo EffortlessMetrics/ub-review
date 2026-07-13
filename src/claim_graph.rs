@@ -1,11 +1,10 @@
 //! Claim graph v1: structured claims with typed evidence references, causal
 //! relevance paths, conflict records, and claim states.
 //!
-//! **Shadow mode**: this module builds and emits the claim graph artifact
-//! but does NOT change the review compiler's behavior. The compiler still
-//! consumes raw observations and candidates. The shadow artifact lets us
-//! compare what the claim graph WOULD say against what the current review
-//! surface produces.
+//! The legacy shadow builder remains available for early-failure artifacts.
+//! Production runs overwrite the same artifact at the final compiler boundary
+//! with current-head `ReviewTopic` records that carry thread, proof, and
+//! delivery links.
 //!
 //! Order 3 of the evidence-control-plane epic (#655).
 
@@ -15,12 +14,18 @@ use std::path::Path;
 use crate::artifacts::CLAIM_GRAPH_SCHEMA;
 
 /// The complete claim graph for a single run. Written to
-/// `review/claim_graph.json` as a shadow artifact.
+/// `review/claim_graph.json`; `mode` distinguishes early shadow output from
+/// the active final graph.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ClaimGraph {
     pub(crate) schema: &'static str,
+    /// Exact PR head this graph certifies. Empty only for the legacy shadow
+    /// graph emitted before final evidence exists.
+    pub(crate) head_sha: String,
     /// All claims in the graph.
     pub(crate) claims: Vec<ClaimNode>,
+    /// Current-head review topics compiled from claims, threads, and receipts.
+    pub(crate) topics: Vec<crate::ReviewTopic>,
     /// Detected conflicts between claims.
     pub(crate) conflicts: Vec<ConflictRecord>,
     /// Evidence gaps: claims that need evidence but don't have it.
@@ -285,6 +290,10 @@ impl RelevanceKind {
 pub(crate) struct ConflictRecord {
     /// IDs of the conflicting claims.
     pub(crate) claim_ids: Vec<String>,
+    /// Claim selected by evidence precedence, when the conflict resolved.
+    pub(crate) winner: Option<String>,
+    /// Claim defeated by evidence precedence, when the conflict resolved.
+    pub(crate) loser: Option<String>,
     /// The nature of the conflict.
     pub(crate) description: String,
     /// Whether the conflict has been resolved (and how).
@@ -358,7 +367,9 @@ pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
 
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
+        head_sha: String::new(),
         claims: Vec::new(),
+        topics: Vec::new(),
         conflicts: Vec::new(),
         evidence_gaps: Vec::new(),
         mode: "shadow",
@@ -442,6 +453,8 @@ pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph
             if a.source_lane != b.source_lane && subjects_overlap(&a.subject, &b.subject) {
                 conflicts.push(ConflictRecord {
                     claim_ids: vec![a.id.clone(), b.id.clone()],
+                    winner: None,
+                    loser: None,
                     description: format!(
                         "Lanes `{}` and `{}` disagree on overlapping subject",
                         a.source_lane, b.source_lane
@@ -454,7 +467,9 @@ pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph
 
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
+        head_sha: String::new(),
         claims: nodes,
+        topics: Vec::new(),
         conflicts,
         evidence_gaps,
         mode: "shadow",
@@ -473,7 +488,6 @@ fn subjects_overlap(a: &str, b: &str) -> bool {
 
 /// Result of adjudicating a conflict between two claims.
 /// (Order 4 of epic #655.)
-#[cfg(test)]
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct AdjudicationResult {
     /// The winning claim ID (if any).
@@ -504,7 +518,6 @@ pub(crate) struct AdjudicationResult {
 /// - If neither side has any evidence, both become Inconclusive.
 /// - A ProofReceipt always wins (ResolvedByProof); other wins are
 ///   ResolvedByPrecedence.
-#[cfg(test)]
 pub(crate) fn adjudicate_conflict(claim_a: &ClaimNode, claim_b: &ClaimNode) -> AdjudicationResult {
     let best_a = best_evidence_class(&claim_a.supporting_evidence);
     let best_b = best_evidence_class(&claim_b.supporting_evidence);
@@ -600,7 +613,6 @@ pub(crate) fn adjudicate_conflict(claim_a: &ClaimNode, claim_b: &ClaimNode) -> A
 }
 
 /// Get the highest-precedence (lowest ordinal) evidence class from a list.
-#[cfg(test)]
 fn best_evidence_class(evidence: &[EvidenceRef]) -> Option<EvidenceClass> {
     evidence
         .iter()
@@ -609,11 +621,91 @@ fn best_evidence_class(evidence: &[EvidenceRef]) -> Option<EvidenceClass> {
 }
 
 /// Determine the ConflictResolution based on the winning evidence class.
-#[cfg(test)]
 fn resolution_for_class(class: &EvidenceClass) -> ConflictResolution {
     match class {
         EvidenceClass::ProofReceipt => ConflictResolution::ResolvedByProof,
         _ => ConflictResolution::ResolvedByPrecedence,
+    }
+}
+
+/// Apply evidence precedence to explicit conflict pairs in a production claim
+/// graph. Conflict pairs are supplied by a surface-aware detector; this
+/// function intentionally does not infer conflicts from loose text overlap,
+/// because distinct claims may share vocabulary without contradicting one
+/// another.
+pub(crate) fn adjudicate_claim_graph_conflicts(
+    graph: &mut ClaimGraph,
+    conflict_pairs: &[(String, String)],
+) {
+    for (left_id, right_id) in conflict_pairs {
+        let Some(left) = graph
+            .claims
+            .iter()
+            .find(|claim| claim.id == *left_id)
+            .cloned()
+        else {
+            continue;
+        };
+        let Some(right) = graph
+            .claims
+            .iter()
+            .find(|claim| claim.id == *right_id)
+            .cloned()
+        else {
+            continue;
+        };
+        if left.id == right.id
+            || graph.conflicts.iter().any(|conflict| {
+                conflict.claim_ids.len() == 2
+                    && conflict.claim_ids.contains(&left.id)
+                    && conflict.claim_ids.contains(&right.id)
+            })
+        {
+            continue;
+        }
+
+        let result = adjudicate_conflict(&left, &right);
+        graph.conflicts.push(ConflictRecord {
+            claim_ids: vec![left.id.clone(), right.id.clone()],
+            winner: result.winner.clone(),
+            loser: result.loser.clone(),
+            description: format!(
+                "Explicit cross-lane conflict between `{}` and `{}`",
+                left.source_lane, right.source_lane
+            ),
+            resolution: result.resolution.clone(),
+        });
+
+        for claim in &mut graph.claims {
+            if claim.id == left.id {
+                claim.state = if result.winner.as_deref() == Some(left.id.as_str()) {
+                    result.winner_state.clone()
+                } else if result.loser.as_deref() == Some(left.id.as_str()) {
+                    result.loser_state.clone()
+                } else {
+                    result.winner_state.clone()
+                };
+            } else if claim.id == right.id {
+                claim.state = if result.winner.as_deref() == Some(right.id.as_str()) {
+                    result.winner_state.clone()
+                } else {
+                    result.loser_state.clone()
+                };
+            }
+        }
+    }
+
+    for topic in &mut graph.topics {
+        if let Some(claim) = graph.claims.iter().find(|claim| claim.id == topic.claim_id) {
+            topic.status = claim.state.key().to_owned();
+        }
+        if graph
+            .conflicts
+            .iter()
+            .any(|conflict| conflict.loser.as_deref() == Some(topic.claim_id.as_str()))
+        {
+            topic.delivery = "no-human-surface".to_owned();
+        }
     }
 }
 
@@ -683,7 +775,7 @@ pub(crate) fn check_causal_relevance(relevance: &RelevancePath) -> RelevanceChec
     }
 }
 
-/// Write the claim graph as a shadow artifact.
+/// Write the claim graph artifact.
 pub(crate) fn write_claim_graph(out: &Path, graph: &ClaimGraph) -> anyhow::Result<()> {
     let path = out.join("review").join("claim_graph.json");
     if let Some(dir) = path.parent() {

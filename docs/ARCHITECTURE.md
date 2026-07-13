@@ -47,9 +47,13 @@ serial` restores single-phase execution.
 ## Posting model
 
 `ub-review run` writes review artifacts. `ub-review post` submits
-`review/github-review.json` as one Pull Request Review. Sensors and individual
-lanes do not post comments directly, and the runner does not create issue
-comments or status-comment chatter.
+`review/github-review.json` as one Pull Request Review and, when the
+current-head claim graph produces `review/reply-candidates.json`, delivers
+those receipt-backed targets through GitHub's review-comment reply endpoint.
+Sensors and individual lanes do not post comments directly, and the runner
+does not create issue comments or status-comment chatter. New grouped comments
+and replies each receive delivery receipts; an unconfirmed delivery remains
+an artifact-level failure rather than disappearing from the review record.
 
 
 ## Standard Rust evidence stack

@@ -74,6 +74,29 @@ names, and direct manifest dependency names. Before it can determine required
 execution it needs package-ID/resolve-graph edges, bounded approved command
 templates, and receipt-backed broker execution.
 
+The planner emits `review/proof_intents.json` with an answer-shaped question,
+expected-result, proof-kind, value, and stable claim identity for each legacy
+request. The deterministic broker now ranks executable candidates by required
+floor, discriminating-test value, shared request coverage, and estimated cost;
+it reruns that selection after test receipts before considering builds. The
+final `review/proof_portfolio.json` records selected, receipt-satisfied,
+superseded, declined, and safe-wind-down dispositions without exposing the
+request queue to the reviewer.
+
+The portfolio selector now consumes the observed box capacity, profile lease,
+remaining hard-deadline window, existing leases, and terminal receipts. Its
+portfolio artifact records those inputs and distinguishes box-capacity
+declines from safe deadline wind-down.
+
+Model lanes may now submit answer-shaped intents without a command field; Rust
+validates their claim, question, expected answer, typed proof kind, and safe
+repository target before routing them into the planner artifacts. Legacy
+command-shaped requests remain accepted for compatibility.
+
+**Gap:** The executor still consumes the legacy request/task adapters for
+execution. A future seam must resolve typed intent targets to approved task
+templates before model-native intents can select execution directly.
+
 ### PR 3 — Base+tests red/green — DONE
 
 All six states handled: `discriminating`, `non_discriminating`,
@@ -100,13 +123,21 @@ Per-comment and same-claim dedupe is implemented.
 **Status:** Cross-lane contradiction detection and suppression are DONE
 (issue-ledger #147 closed by PRs #459/#460: surface-aware lane gating +
 explicit cross-lane conflict receipts). Conflicted findings are suppressed
-and replaced with a verification question. Deeper evidence-precedence
-adjudication (resolving which side wins using proof receipts) is the open
-next step (tracked in epic #655, milestone 4). Diff-irrelevance is
+and replaced with a verification question. Evidence-precedence adjudication
+is now active in the final claim graph for those explicit conflict pairs:
+proof receipts outrank validated facts, citations, and model interpretations;
+equal-precedence conflicts remain explicitly conflicted. Diff-irrelevance is
 guidance text, not enforced routing. Cross-section body dedupe is doctrine
 and structural cross-section claim identity is now implemented (PRs #749/#750).
-Transactional inline delivery remains in draft PR #748 pending the upstream
-RIPR CLI-subprocess analyzer contract.
+Transactional inline delivery remains in draft PR #748. The upstream RIPR
+CLI-subprocess analyzer contract is now merged in RIPR #1455, with the
+structured warning consumer and 0.10.1 release-prep work merged in #1457 and
+#1456.
+Its posting path verifies the current pull-request head before creating a
+pending review and immediately before submitting it; if the head advances
+after comments are created, the pending review is deleted and no stale review
+is submitted. Posting fails closed when neither the PR event nor the claim
+graph supplies an expected head SHA.
 
 ### Proof request execution and terminalization — PARTIAL
 
@@ -119,12 +150,52 @@ the upstream RIPR semantic-probe boundary. The preserved watchdog branch also
 has local receipt provenance hardening (`8391ed0`), but it is not published
 while the same RIPR blocker remains unresolved.
 
+The current-head topic slice is now active at the final compiler boundary:
+`review/claim_graph.json` carries structural topics, exact head identity,
+current versus stale thread references, proof request/receipt links, and
+delivery state. Each topic also records the current thread disposition
+(`novel`, `already_covered`, `corroborated_with_new_evidence`,
+`refuted_by_new_evidence`, `accepted_tradeoff`, or
+`fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
+candidates already covered by an anchored
+thread are withheld from a second comment; stale threads do not suppress new
+delivery. Transactional replies and confirmed GitHub delivery receipts remain
+the separate #748 seam. That PR already carries the pending-review ->
+comment-list -> submit lifecycle, cleanup receipts, and focused mismatch
+coverage; its hosted gate still awaits a published RIPR 0.10.1 artifact, so
+this branch does not duplicate that posting implementation. Explicit
+evidence-precedence conflicts now carry winner/loser claim IDs, and final
+surface reconciliation suppresses only the adjudicated loser while retaining
+it in the claim graph artifact.
+
+Late proof now has a lane-reconsideration boundary as well: follow-up receipts
+are routed to the message bus, receipt-linked lanes receive a bounded
+evidence-reconsideration turn before final claim compilation, and exact request
+IDs are required before an answer can change an observation disposition. The
+turns, `review/receipt_reconsiderations.json`, and `TopicUpdate` messages are
+auditable; unrelated claims owned by the same lane remain unchanged. Model
+budget exhaustion or a failed reconsideration is recorded as an internal
+terminal/deferred result and does not become maintainer homework.
+
 ### PR 6 — Pure-signal compiler enforcement — DONE
 
 `has_forbidden_pr_review_boilerplate` rejects lane rosters, tool tables,
 provider status, command logs, generic caveats, successful-tool
 announcements, approval filler, and machine-state summaries. Body byte
-and bullet caps enforced. Refuted-only and summary-only posts governed.
+and bullet caps enforced. Refuted-only and summary-only posts governed. Body
+quality is separate from finding quality: when noisy PR prose is suppressed,
+independently validated inline findings remain eligible for concise inline-only
+delivery. Successful lane/provider/sensor tables and execution summaries are
+also suppressed as review-quality defects rather than becoming code-gate
+failures.
+
+Run metrics now keep reviewer-value signals separate from GitHub delivery:
+`prepared_inline_comments` and `prepared_review_body` describe the payload
+compiled by `run`; proof request status counts and terminal rate show whether
+the request queue closed; and receipt counters distinguish current-head,
+stale-head, and request-linked evidence, including proof-driven conclusion
+changes. `post_status` remains `not_attempted_by_run` until the post stage
+writes its receipt, so prepared output is never reported as delivered.
 
 ### PR 7 — Provider and cache reliability — DONE
 
@@ -175,11 +246,38 @@ the cached source-build fallback.
 **Remaining action:** cut the actual v0.1.0 tag with maintainer authorization
 and execute the release smoke plan recorded in issue #716.
 
-### PR 12 — Fleet rollout — NOT STARTED
+### PR 12 — Fleet rollout — IN PROGRESS (external adoption blocked)
 
 No fleet or swarm orchestration code in ub-review. The `*-swarm`
 references in `.ripr/suppressions.toml` point to upstream tooling issue
 trackers, not ub-review rollout infrastructure.
+
+The single-gate adoption surface is now executable but has not been applied to
+an external repository. A read-only release workflow dispatch on 2026-07-12
+completed the build, checksum, and archive-upload stages on `main` (run
+29182345044); no tag or release was created, and the Linux asset was not
+executed on Windows. The actual v0.1.0 tag remains an explicitly authorized
+release action. Current release-installed pilot drafts are Bun #34046 and
+perl-lsp-swarm #4015; both remain unable to prove the release path until
+ub-review publishes v0.1.0.
+
+Read-only GitHub inspection found the current adoption blockers:
+
+- `EffortlessSteven/bun` has a successful packet-only UB Review workflow, but
+  it is advisory and the default branch is not protected.
+- `EffortlessMetrics/perl-lsp` has a successful advisory workflow with
+  `continue-on-error`, and the default branch is not protected.
+- `audit-ci` plus `setup-ci --print-pr` produced fail-closed migration plans
+  for both repositories. The Perl-lsp retry included seven days of GitHub
+  history; Bun remained inventory-only. Every inspected job is
+  `flag-for-human`; no job was eligible for automatic acceptance, so no
+  migration plan invented a proof command or old-check removal list.
+
+External adoption therefore requires, in order: an authorized stable release
+pin, a reviewed migration PR in each selected repository, a green current-head
+gate run, and repository-owner action to require only `ub-review/gate`. Until
+those receipts exist, ub-review is a proven self-gate and an advisory external
+consumer, not a fleet-wide sole gate.
 
 ## Modularization status (June 2026)
 
