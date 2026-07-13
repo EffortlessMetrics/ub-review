@@ -6999,6 +6999,7 @@ diff_classes = ["docs-only"]
             "name: Validate immutable release candidate receipt",
             "$(jq -r '.head_sha' \"$manifest\")\" = \"$GITHUB_SHA\"",
             "$(jq -r '.archive_sha256' \"$manifest\")\" = \"$archive_sha256\"",
+            "$(jq -r '.toolchain' \"$manifest\")\" = \"1.95.0\"",
         ] {
             assert!(
                 workflow.contains(required),

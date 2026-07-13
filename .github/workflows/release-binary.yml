@@ -124,6 +124,7 @@ jobs:
           test "$(jq -r '.head_sha' "$manifest")" = "$GITHUB_SHA"
           test "$(jq -r '.ref' "$manifest")" = "refs/tags/$TAG"
           test "$(jq -r '.tag' "$manifest")" = "$TAG"
+          test "$(jq -r '.toolchain' "$manifest")" = "1.95.0"
           test "$(jq -r '.asset' "$manifest")" = "$ASSET_NAME"
           test "$(jq -r '.checksum_asset' "$manifest")" = "$ASSET_NAME.sha256"
           archive_sha256="$(awk 'NF >= 1 {print $1; exit}' "dist/$ASSET_NAME.sha256")"
