@@ -51,6 +51,27 @@ jobs:
           tar -tzf "dist/$ASSET_NAME" | grep -Fx ub-review
           test -s "dist/$ASSET_NAME.sha256"
 
+      - name: Write immutable release candidate receipt
+        shell: bash
+        env:
+          TOOLCHAIN: 1.95.0
+        run: |
+          set -euo pipefail
+          candidate_sha="$(git rev-parse HEAD)"
+          archive_sha256="$(awk 'NF >= 1 {print $1; exit}' "dist/$ASSET_NAME.sha256")"
+          jq -n \
+            --arg schema "ub-review.release_candidate.v1" \
+            --arg head_sha "$candidate_sha" \
+            --arg ref "$GITHUB_REF" \
+            --arg tag "${GITHUB_REF_NAME:-}" \
+            --arg toolchain "$TOOLCHAIN" \
+            --arg asset "$ASSET_NAME" \
+            --arg checksum_asset "$ASSET_NAME.sha256" \
+            --arg archive_sha256 "$archive_sha256" \
+            '{schema:$schema,head_sha:$head_sha,ref:$ref,tag:$tag,toolchain:$toolchain,asset:$asset,checksum_asset:$checksum_asset,archive_sha256:$archive_sha256}' \
+            > dist/release-candidate.json
+          test "$(jq -r '.head_sha' dist/release-candidate.json)" = "$candidate_sha"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
@@ -58,6 +79,7 @@ jobs:
           path: |
             dist/${{ env.ASSET_NAME }}
             dist/${{ env.ASSET_NAME }}.sha256
+            dist/release-candidate.json
           if-no-files-found: error
           retention-days: 14
 
@@ -89,6 +111,24 @@ jobs:
         with:
           name: ub-review-linux-x64-release
           path: dist
+
+      - name: Validate immutable release candidate receipt
+        shell: bash
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          manifest="dist/release-candidate.json"
+          test -s "$manifest"
+          test "$(jq -r '.schema' "$manifest")" = "ub-review.release_candidate.v1"
+          test "$(jq -r '.head_sha' "$manifest")" = "$GITHUB_SHA"
+          test "$(jq -r '.ref' "$manifest")" = "refs/tags/$TAG"
+          test "$(jq -r '.tag' "$manifest")" = "$TAG"
+          test "$(jq -r '.asset' "$manifest")" = "$ASSET_NAME"
+          test "$(jq -r '.checksum_asset' "$manifest")" = "$ASSET_NAME.sha256"
+          archive_sha256="$(awk 'NF >= 1 {print $1; exit}' "dist/$ASSET_NAME.sha256")"
+          test "$(jq -r '.archive_sha256' "$manifest")" = "$archive_sha256"
+          sha256sum -c "dist/$ASSET_NAME.sha256"
 
       - name: Publish GitHub release asset
         shell: bash
