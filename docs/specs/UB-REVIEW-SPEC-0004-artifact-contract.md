@@ -127,11 +127,11 @@ metrics.json                   integer schema_version 1; run/streams/
                                additive reviewer-value fields distinguish
                                prepared output, terminal proof dispositions,
                                current/stale proof receipts, and post-stage
-                               delivery state; 
+                               delivery state;
                                `github_review_reply_candidates` counts
                                prepared direct replies separately from
                                grouped inline comments
-                               
+
 ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
                                cost basis, token/cache counters, and
                                explicit missing[] entries for unavailable
