@@ -246,7 +246,9 @@ proof_intents.json             answer-shaped proof intent records; each links
 proof_portfolio.json           ub-review.proof_portfolio.v1; deterministic
                                value-ranked selection and receipt dispositions;
                                includes the observed runner lease, box
-                               capacity, and remaining hard-deadline window
+                               capacity, and remaining hard-deadline window;
+                               each decision records estimated value, cost,
+                               served request IDs, and its terminal reason
 proof_receipts.json            ub-review.proof_receipt.v1 records; receipts
                                may link to current claims only when `head`
                                matches the current review head

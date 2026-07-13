@@ -74,6 +74,8 @@ pub(crate) struct ProofPortfolioDecision {
     pub(crate) kind: String,
     pub(crate) status: String,
     pub(crate) reason: String,
+    /// Deterministic value estimate used when ranking this candidate.
+    pub(crate) estimated_value: String,
     pub(crate) required: bool,
     pub(crate) estimated_cost_sec: u64,
     pub(crate) request_ids: Vec<String>,
