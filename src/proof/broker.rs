@@ -637,7 +637,11 @@ where
     let v2_requests: Vec<ProofRequestV2> = proof_requests.iter().map(proof_request_to_v2).collect();
     let total_budget = proof_budget(profile)?;
     let budget = remaining_focused_proof_budget(total_budget, existing_leases);
-    let test_candidates = focused_test_candidates_from_v2(&v2_requests);
+    let mut test_candidates = focused_test_candidates_from_diff(diff, &[]);
+    merge_focused_test_candidates(
+        &mut test_candidates,
+        focused_test_candidates_from_v2(&v2_requests),
+    );
     let build_candidates = focused_build_candidates_from_v2(&v2_requests);
     let selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
@@ -732,7 +736,11 @@ pub(crate) fn run_follow_up_proof_broker_v0(
 ) -> Result<ProofBrokerResult> {
     let total_budget = proof_budget(profile)?;
     let budget = remaining_focused_proof_budget(total_budget, existing_leases);
-    let test_candidates = focused_test_candidates_from_requests(proof_requests);
+    let mut test_candidates = focused_test_candidates_from_diff(diff, &[]);
+    merge_focused_test_candidates(
+        &mut test_candidates,
+        focused_test_candidates_from_requests(proof_requests),
+    );
     let build_candidates = focused_build_candidates_from_requests(proof_requests);
     let selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
@@ -840,6 +848,32 @@ fn write_proof_portfolio_selection_artifact(
         serde_json::to_vec_pretty(&artifact)?,
     )?;
     Ok(())
+}
+
+fn merge_focused_test_candidates(
+    candidates: &mut Vec<FocusedTestTask>,
+    additional: Vec<FocusedTestTask>,
+) {
+    for mut task in additional {
+        if let Some(existing) = candidates.iter_mut().find(|candidate| {
+            candidate.id == task.id
+                || (candidate.file == task.file
+                    && candidate.test_name == task.test_name
+                    && candidate.mode == task.mode)
+        }) {
+            if existing.timeout_sec < task.timeout_sec {
+                existing.timeout_sec = task.timeout_sec;
+            }
+            for lane in task.requested_by.drain(..) {
+                push_unique(&mut existing.requested_by, &lane);
+            }
+            for request_id in task.request_ids.drain(..) {
+                push_unique(&mut existing.request_ids, &request_id);
+            }
+        } else {
+            candidates.push(task);
+        }
+    }
 }
 
 #[expect(
@@ -1645,6 +1679,93 @@ mod tests {
             artifact["decisions"]
         );
         ensure!(decision["receipt_ids"][0] == receipt.id);
+        Ok(())
+    }
+
+    #[test]
+    fn request_replan_retains_initial_diff_candidate_in_final_portfolio() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut diff = test_diff();
+        diff.changed_files = vec!["test/js/bun/md/md-edge-cases.test.ts".to_owned()];
+        diff.patch = "+test('parser regression', () => {});".to_owned();
+        let initial_task = focused_test_candidates_from_diff(&diff, &[])
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("changed test did not produce an initial task"))?;
+        let initial_receipt = ProofReceipt {
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: initial_task.id.clone(),
+            kind: "focused-red-green".to_owned(),
+            base: diff.base.clone(),
+            head: diff.head.clone(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: initial_task.requested_by.clone(),
+            request_ids: Vec::new(),
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "initial diff proof receipt".to_owned(),
+        };
+        let build_request = ProofRequest {
+            schema: PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "later-build".to_owned(),
+            lane: "architecture".to_owned(),
+            requested_by: vec!["architecture".to_owned()],
+            command: "cargo check --workspace --all-targets --locked".to_owned(),
+            reason: "later request exercises the final portfolio merge".to_owned(),
+            cost: "focused-build".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let mut profile = Profile::default();
+        profile.limits.builds = 0;
+        let args = test_run_args(out.clone());
+        let box_state = BoxState {
+            cpus: 4,
+            free_mem_mb: Some(8_192),
+            free_disk_mb: Some(20_000),
+            load_1m: Some(0.25),
+            github_actions: false,
+        };
+        run_request_proof_broker_v0_with_runners(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            std::slice::from_ref(&build_request),
+            std::slice::from_ref(&initial_receipt),
+            &[],
+            &args,
+            &box_state,
+            &Instant::now(),
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                Err(anyhow::anyhow!(
+                    "initial receipt must prevent rerunning the changed test"
+                ))
+            },
+            |_root, _out, _diff| {
+                Err(anyhow::anyhow!(
+                    "initial receipt must prevent worktree preparation"
+                ))
+            },
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                Err(anyhow::anyhow!("build profile is disabled in this fixture"))
+            },
+        )?;
+
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+        let decision = artifact["decisions"]
+            .as_array()
+            .and_then(|decisions| {
+                decisions
+                    .iter()
+                    .find(|decision| decision["task_id"].as_str() == Some(initial_task.id.as_str()))
+            })
+            .ok_or_else(|| anyhow::anyhow!("initial diff task disappeared from final portfolio"))?;
+        ensure!(decision["status"] == "answered_by_existing_receipt");
+        ensure!(decision["receipt_ids"][0] == initial_receipt.id);
         Ok(())
     }
 
