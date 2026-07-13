@@ -28,6 +28,8 @@ mod builtin;
 use builtin::*;
 mod gate;
 use gate::*;
+mod gate_watchdog;
+use gate_watchdog::*;
 mod artifacts;
 use artifacts::*;
 mod proof;
@@ -179,6 +181,7 @@ fn main() -> Result<()> {
         Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
         Command::QualityGithubCollect(args) => cmd_quality_github_collect(args),
         Command::GateCheck(args) => cmd_gate_check(args),
+        Command::GateWatchdog(args) => cmd_gate_watchdog(args),
         Command::Worker(args) => cmd_worker(args),
     }
 }
@@ -14477,6 +14480,18 @@ required_proof_unprooven = true
             message
                 .as_deref()
                 .is_some_and(|message| message.contains("review/gate_outcome.json"))
+        );
+
+        let inconclusive = RunCompletion {
+            gate_conclusion: "inconclusive".to_owned(),
+            fail_on_gate: true,
+            run_dir: Path::new("target/ub-review").to_path_buf(),
+        };
+        let message = run_gate_failure_message(&inconclusive);
+        assert!(
+            message
+                .as_deref()
+                .is_some_and(|message| message.contains("`inconclusive`"))
         );
 
         let tolerated = RunCompletion {

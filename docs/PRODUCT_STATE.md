@@ -23,6 +23,19 @@ gate_outcome decides pass/fail/inconclusive
 
 Models do not prove correctness. No model finding is proof.
 
+## Trusted sole-gate hardening
+
+The deterministic gate already emits and enforces `pass`, `fail`, or
+`inconclusive`; model/provider outages remain advisory. The self-gate still
+runs candidate code via `uses: ./`, so a released stable coordinator and
+candidate shadow remain required before the sole gate is fully trusted.
+
+The additive `gate-watchdog` classifier consumes frozen current-head
+observations and writes `review/gate_watchdog.json`. It detects stale success,
+missing/cancelled runs, missing artifacts, coordinator crashes, and orphaned
+proof without publishing checks. Independent observation collection and
+terminal check publication remain future stable-coordinator work.
+
 ## What is already done
 
 Do not reopen these without a concrete failing receipt.

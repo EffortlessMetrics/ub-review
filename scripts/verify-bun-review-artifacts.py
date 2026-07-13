@@ -1998,6 +1998,7 @@ def require_metrics(root: pathlib.Path, review: dict) -> dict:
     require_resolved_candidate_artifacts(root, follow_up_results, follow_up_outputs)
     require_final_compiler_input(root, review, follow_up_evidence)
     require_gate_outcome(root)
+    require_gate_watchdog(root)
     require_issue_capture_artifacts(root)
     require_witness_artifacts(root, follow_up_evidence)
     require_follow_up_result_metrics(metrics, follow_up_results)
@@ -5577,9 +5578,54 @@ GATE_OUTCOME_REASON_KINDS = {
     "tool-gate",
     "required-sensor",
     "required-tool-timeout",
+    "sensor-finding",
     "blocking-finding",
+    "reporter-verdict",
     "policy",
     "internal",
+}
+
+GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS = {
+    "required-sensor",
+    "required-tool-timeout",
+}
+
+GATE_WATCHDOG_REASON_KINDS = {
+    "awaiting-run",
+    "missing-run",
+    "stale-success",
+    "run-in-progress",
+    "run-deadline-exceeded",
+    "cancelled-without-replacement",
+    "run-conclusion-missing",
+    "coordinator-marker-missing",
+    "coordinator-run-mismatch",
+    "coordinator-crash",
+    "required-proof-run-mismatch",
+    "missing-required-proof",
+    "required-proof-orphaned",
+    "missing-artifact",
+    "artifact-run-mismatch",
+    "artifact-sha-mismatch",
+    "artifact-schema-mismatch",
+    "artifact-conclusion-invalid",
+    "run-artifact-disagreement",
+}
+
+GATE_WATCHDOG_PENDING_REASON_KINDS = {
+    "awaiting-run",
+    "stale-success",
+    "run-in-progress",
+    "cancelled-without-replacement",
+    "run-conclusion-missing",
+    "coordinator-marker-missing",
+    "missing-required-proof",
+    "missing-artifact",
+}
+
+GATE_WATCHDOG_INCONCLUSIVE_REASON_KINDS = GATE_WATCHDOG_REASON_KINDS - {
+    "awaiting-run",
+    "run-in-progress",
 }
 
 REQUIRED_TOOL_TIMEOUT_DETAIL_PATTERN = re.compile(r"timeout_sec \d+")
@@ -5799,7 +5845,7 @@ def ndjson_parity(root: pathlib.Path, name: str, expected: list) -> None:
 
 
 def require_gate_outcome(root: pathlib.Path) -> None:
-    """The verdict artifact decides pass/fail; the verifier audits it
+    """The verdict artifact decides pass/fail/inconclusive; the verifier audits it
     (release lane step 3 / decision D5): schema, reason shapes, receipt
     pointers that resolve, count coherence, and conclusion-iff-reasons."""
     outcome = load_json(root / "review/gate_outcome.json")
@@ -5808,8 +5854,11 @@ def require_gate_outcome(root: pathlib.Path) -> None:
     if outcome.get("schema") != "ub-review.gate_outcome.v1":
         fail(f"gate outcome has wrong schema: {outcome.get('schema')!r}")
     conclusion = outcome.get("conclusion")
-    if conclusion not in {"pass", "fail"}:
-        fail(f"gate outcome conclusion must be pass or fail: {conclusion!r}")
+    if conclusion not in {"pass", "fail", "inconclusive"}:
+        fail(
+            "gate outcome conclusion must be pass, fail, or inconclusive: "
+            f"{conclusion!r}"
+        )
     terminal = load_json(root / "review/terminal_state.json")
     if isinstance(terminal, dict) and outcome.get("terminal_status") != terminal.get(
         "status"
@@ -5820,10 +5869,10 @@ def require_gate_outcome(root: pathlib.Path) -> None:
     reasons = outcome.get("reasons")
     if not isinstance(reasons, list):
         fail("gate outcome reasons is not an array")
-    if (conclusion == "fail") != bool(reasons):
+    if conclusion == "pass" and reasons:
         fail(
-            "gate outcome conclusion must be fail exactly when blocking "
-            f"reasons exist: conclusion={conclusion!r} reasons={len(reasons)}"
+            "gate outcome pass conclusion cannot carry reasons: "
+            f"reasons={len(reasons)}"
         )
     for index, reason in enumerate(reasons):
         if not isinstance(reason, dict):
@@ -5853,10 +5902,11 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                     "detail does not name the expired lease as "
                     f"`timeout_sec <seconds>`: {reason['detail']!r}"
                 )
+        if kind in GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS:
             next_action = reason.get("next_action")
             if not isinstance(next_action, str) or not next_action:
                 fail(
-                    f"gate outcome reason {index + 1} (required-tool-timeout) "
+                    f"gate outcome reason {index + 1} ({kind}) "
                     "next_action is not a non-empty string: "
                     f"{next_action!r}"
                 )
@@ -5868,6 +5918,20 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                     "next_action is not a non-empty string: "
                     f"{next_action!r}"
                 )
+    reason_kinds = {reason.get("kind") for reason in reasons if isinstance(reason, dict)}
+    evidence_unavailable_only = bool(reasons) and reason_kinds.issubset(
+        GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS
+    )
+    if conclusion == "inconclusive" and not evidence_unavailable_only:
+        fail(
+            "gate outcome inconclusive conclusion requires one or more "
+            "evidence-unavailable reasons"
+        )
+    if conclusion == "fail" and (not reasons or evidence_unavailable_only):
+        fail(
+            "gate outcome fail conclusion requires at least one demonstrated "
+            "blocking reason"
+        )
     required_proof = outcome.get("required_proof")
     if not isinstance(required_proof, dict):
         fail("gate outcome required_proof is not an object")
@@ -5895,15 +5959,27 @@ def require_gate_outcome(root: pathlib.Path) -> None:
             fail(f"gate outcome {field} is invalid: {value!r}")
     if conclusion == "pass" and outcome.get("evidence_gaps_blocking", 0) > 0:
         fail("gate outcome passed with blocking evidence gaps recorded")
+    unavailable_reason_count = sum(
+        1
+        for reason in reasons
+        if isinstance(reason, dict)
+        and reason.get("kind") in GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS
+    )
+    if outcome.get("evidence_gaps_blocking") != unavailable_reason_count:
+        fail(
+            "gate outcome evidence_gaps_blocking must equal "
+            f"its unavailable reason count: gaps={outcome.get('evidence_gaps_blocking')!r} "
+            f"unavailable_reasons={unavailable_reason_count}"
+        )
     skip_path = root / "review/github-review-skip.json"
-    if conclusion == "fail" and skip_path.is_file():
+    if conclusion in {"fail", "inconclusive"} and skip_path.is_file():
         skip = load_json(skip_path)
         if (
             isinstance(skip, dict)
             and skip.get("review_payload_status") == "skipped_empty_smoke"
         ):
             fail(
-                "gate concluded fail but github-review-skip.json claims "
+                "gate concluded non-pass but github-review-skip.json claims "
                 "skipped_empty_smoke; a blocked artifact-only run must report "
                 "skipped_gate_failure_artifact_only"
             )
@@ -5916,7 +5992,7 @@ def require_gate_outcome(root: pathlib.Path) -> None:
         ):
             fail(
                 "gate concluded pass but github-review-skip.json claims "
-                "skipped_gate_failure_artifact_only; only failed artifact-only "
+                "skipped_gate_failure_artifact_only; only non-pass artifact-only "
                 "gates may use that status"
             )
     # Cross-check: every failed tool-gate outcome must carry a matching
@@ -5946,6 +6022,166 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                     f"tool-gate outcomes: reasons={sorted(reason_tools)!r} "
                     f"failed={sorted(failed_tools)!r}"
                 )
+
+
+def require_gate_watchdog(root: pathlib.Path) -> None:
+    path = root / "review/gate_watchdog.json"
+    if not path.is_file():
+        return
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail("review/gate_watchdog.json is not an object")
+    if artifact.get("schema") != "ub-review.gate_watchdog.v1":
+        fail(f"gate watchdog has wrong schema: {artifact.get('schema')!r}")
+    head_sha = artifact.get("expected_head_sha")
+    if not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-fA-F]{40}", head_sha):
+        fail(f"gate watchdog expected_head_sha is invalid: {head_sha!r}")
+    state = artifact.get("state")
+    if state not in {"terminal", "pending", "inconclusive"}:
+        fail(f"gate watchdog state is invalid: {state!r}")
+    conclusion = artifact.get("conclusion")
+    reasons = artifact.get("reasons")
+    if not isinstance(reasons, list):
+        fail("gate watchdog reasons is not an array")
+    if state == "terminal":
+        if conclusion not in {"pass", "fail", "inconclusive"} or reasons:
+            fail("terminal gate watchdog must preserve one conclusion and have no reasons")
+        gate_outcome = load_json(root / "review/gate_outcome.json")
+        if (
+            not isinstance(gate_outcome, dict)
+            or gate_outcome.get("conclusion") != conclusion
+        ):
+            fail(
+                "terminal gate watchdog conclusion does not match "
+                "review/gate_outcome.json"
+            )
+    elif state == "pending":
+        if conclusion is not None or len(reasons) != 1:
+            fail("pending gate watchdog must have null conclusion and one reason")
+    elif conclusion != "inconclusive" or not reasons:
+        fail("inconclusive gate watchdog must carry conclusion and reasons")
+    observed = artifact.get("observed_run_ids")
+    if (
+        not isinstance(observed, list)
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in observed
+        )
+        or observed != sorted(set(observed))
+    ):
+        fail(f"gate watchdog observed_run_ids are invalid: {observed!r}")
+    selected_run = artifact.get("selected_run_id")
+    selected_attempt = artifact.get("selected_attempt")
+    selected_check_run = artifact.get("selected_check_run_id")
+    required_check_name = artifact.get("required_check_name")
+    required_check_app_id = artifact.get("required_check_app_id")
+    if not isinstance(required_check_name, str) or not required_check_name:
+        fail("gate watchdog required_check_name is invalid")
+    if (
+        not isinstance(required_check_app_id, int)
+        or isinstance(required_check_app_id, bool)
+        or required_check_app_id <= 0
+    ):
+        fail("gate watchdog required_check_app_id is invalid")
+    observed_check_runs = artifact.get("observed_check_run_ids")
+    if (
+        not isinstance(observed_check_runs, list)
+        or any(
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+            for value in observed_check_runs
+        )
+        or observed_check_runs != sorted(set(observed_check_runs))
+    ):
+        fail(
+            "gate watchdog observed_check_run_ids are invalid: "
+            f"{observed_check_runs!r}"
+        )
+    if (selected_run is None) != (selected_attempt is None):
+        fail("gate watchdog selected run id/attempt must both be null or both be set")
+    if (selected_run is None) != (selected_check_run is None):
+        fail("gate watchdog selected run/check identities must both be null or both be set")
+    for label, value in (
+        ("selected_run_id", selected_run),
+        ("selected_attempt", selected_attempt),
+        ("selected_check_run_id", selected_check_run),
+    ):
+        if value is not None and (
+            not isinstance(value, int) or isinstance(value, bool) or value <= 0
+        ):
+            fail(f"gate watchdog {label} is invalid: {value!r}")
+    if state == "terminal" and selected_run is None:
+        fail("terminal gate watchdog is missing selected run identity")
+    if selected_run is not None and selected_run not in observed:
+        fail("gate watchdog selected_run_id is absent from observed_run_ids")
+    if selected_check_run is not None and selected_check_run not in observed_check_runs:
+        fail(
+            "gate watchdog selected_check_run_id is absent from "
+            "observed_check_run_ids"
+        )
+    source_artifacts = artifact.get("source_artifacts")
+    if (
+        not isinstance(source_artifacts, list)
+        or not source_artifacts
+        or any(
+            not isinstance(value, str) or not value for value in source_artifacts
+        )
+        or source_artifacts != sorted(set(source_artifacts))
+    ):
+        fail("gate watchdog source_artifacts must be a sorted unique non-empty array")
+    for receipt in source_artifacts:
+        require_watchdog_receipt(root, receipt, "source_artifacts")
+    for index, reason in enumerate(reasons):
+        if not isinstance(reason, dict):
+            fail(f"gate watchdog reason {index + 1} is not an object")
+        if reason.get("kind") not in GATE_WATCHDOG_REASON_KINDS:
+            fail(
+                f"gate watchdog reason {index + 1} has unknown kind: "
+                f"{reason.get('kind')!r}"
+            )
+        allowed_kinds = (
+            GATE_WATCHDOG_PENDING_REASON_KINDS
+            if state == "pending"
+            else GATE_WATCHDOG_INCONCLUSIVE_REASON_KINDS
+        )
+        if state != "terminal" and reason.get("kind") not in allowed_kinds:
+            fail(
+                f"gate watchdog reason {index + 1} kind {reason.get('kind')!r} "
+                f"is invalid for state {state!r}"
+            )
+        for field in ("detail", "receipt", "retry_action"):
+            value = reason.get(field)
+            if not isinstance(value, str) or not value:
+                fail(
+                    f"gate watchdog reason {index + 1} {field} is not a "
+                    "non-empty string"
+                )
+        require_watchdog_receipt(root, reason["receipt"], f"reason {index + 1}")
+        if reason["receipt"] not in source_artifacts:
+            fail(
+                f"gate watchdog reason {index + 1} receipt is absent from "
+                "source_artifacts"
+            )
+    if state == "terminal" and not any(
+        receipt.split("#", 1)[0] == "review/gate_outcome.json"
+        for receipt in source_artifacts
+    ):
+        fail("terminal gate watchdog has no gate outcome source artifact")
+
+
+def require_watchdog_receipt(root: pathlib.Path, receipt: object, label: str) -> None:
+    if (
+        not isinstance(receipt, str)
+        or not receipt
+        or "\\" in receipt
+        or ":" in receipt.split("#", 1)[0]
+    ):
+        fail(f"gate watchdog {label} receipt is invalid: {receipt!r}")
+    receipt_file = receipt.split("#", 1)[0]
+    receipt_path = pathlib.PurePosixPath(receipt_file)
+    if receipt_path.is_absolute() or ".." in receipt_path.parts:
+        fail(f"gate watchdog {label} receipt is not packet-relative: {receipt!r}")
+    if not (root / receipt_path).is_file():
+        fail(f"gate watchdog {label} receipt does not resolve: {receipt!r}")
 
 
 def require_witness_artifacts(root: pathlib.Path, follow_up_evidence: dict) -> list[dict]:
@@ -9959,7 +10195,7 @@ def self_test_setup_ci_terminal_receipt_contract() -> None:
 def self_test_ci_audit_runner_cancellations_contract() -> None:
     import tempfile
 
-    def write_root(artifact: dict) -> pathlib.Path:
+    def write_root(artifact: dict, gate_conclusion: str | None = None) -> pathlib.Path:
         root = pathlib.Path(tempfile.mkdtemp())
         audit_dir = root / "ci-audit"
         audit_dir.mkdir()
@@ -10096,13 +10332,36 @@ def self_test_gate_outcome_contract() -> None:
             "fail without reasons",
             outcome(reasons=[], required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0}),
             True,
-            "conclusion must be fail exactly when",
+            "requires at least one demonstrated",
         ),
         (
             "pass with reasons",
             outcome(conclusion="pass"),
             True,
-            "conclusion must be fail exactly when",
+            "pass conclusion cannot carry reasons",
+        ),
+        (
+            "inconclusive with demonstrated defect",
+            outcome(conclusion="inconclusive"),
+            True,
+            "requires one or more evidence-unavailable",
+        ),
+        (
+            "fail with unavailable-only reason",
+            outcome(
+                reasons=[
+                    {
+                        "kind": "required-sensor",
+                        "id": "cargo-check",
+                        "detail": "required sensor evidence unavailable",
+                        "receipt": "review/proof_receipts.json#cargo-check",
+                        "next_action": "rerun required sensor `cargo-check` or repair its evidence receipt",
+                    }
+                ],
+                required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+            ),
+            True,
+            "requires at least one demonstrated",
         ),
         (
             "unknown reason kind",
@@ -10142,6 +10401,25 @@ def self_test_gate_outcome_contract() -> None:
             True,
             "passed with blocking evidence gaps",
         ),
+        (
+            "inconclusive gap count mismatch",
+            outcome(
+                conclusion="inconclusive",
+                reasons=[
+                    {
+                        "kind": "required-sensor",
+                        "id": "cargo-check",
+                        "detail": "required sensor evidence unavailable",
+                        "receipt": "review/proof_receipts.json#cargo-check",
+                        "next_action": "rerun required sensor `cargo-check` or repair its evidence receipt",
+                    }
+                ],
+                required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+                evidence_gaps_blocking=0,
+            ),
+            True,
+            "must equal its unavailable reason count",
+        ),
     ]
     for label, fixture, with_receipt, expected in cases:
         root = write_root(fixture, with_receipt_file=with_receipt)
@@ -10165,7 +10443,14 @@ def self_test_gate_outcome_contract() -> None:
         return base
 
     def write_timeout_root(reason: dict) -> "pathlib.Path":
-        root = write_root(outcome(reasons=[reason]))
+        root = write_root(
+            outcome(
+                conclusion="inconclusive",
+                reasons=[reason],
+                required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+                evidence_gaps_blocking=1,
+            )
+        )
         sensor_dir = root / "sensors/ripr"
         sensor_dir.mkdir(parents=True)
         (sensor_dir / "ub-review-sensor-status.json").write_text(
@@ -10191,7 +10476,14 @@ def self_test_gate_outcome_contract() -> None:
     expect_self_test_failure(
         "gate-outcome timeout reason with dangling sensor receipt",
         "receipt does not resolve",
-        lambda root=write_root(outcome(reasons=[timeout_reason()])): require_gate_outcome(root),
+        lambda root=write_root(
+            outcome(
+                conclusion="inconclusive",
+                reasons=[timeout_reason()],
+                required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0},
+                evidence_gaps_blocking=1,
+            )
+        ): require_gate_outcome(root),
     )
 
     def tool_gate_reason(**overrides) -> dict:
@@ -10271,7 +10563,7 @@ def self_test_gate_outcome_contract() -> None:
     )
     expect_self_test_failure(
         "gate-outcome passing gate with gate-failure skip receipt",
-        "only failed artifact-only gates may use that status",
+        "only non-pass artifact-only gates may use that status",
         lambda root=write_skip_root(
             "skipped_gate_failure_artifact_only", passing_outcome
         ): require_gate_outcome(root),
@@ -10295,6 +10587,161 @@ def self_test_gate_outcome_contract() -> None:
         "gate-outcome failed tool gate without reason",
         "do not match failed",
         lambda root=root: require_gate_outcome(root),
+    )
+    expect_self_test_failure(
+        "gate-outcome fail with incoherent blocking evidence-gap count",
+        "must equal its unavailable reason count",
+        lambda: require_gate_outcome(
+            write_root(outcome(evidence_gaps_blocking=1))
+        ),
+    )
+
+
+def self_test_gate_watchdog_contract() -> None:
+    import tempfile
+
+    def write_root(
+        artifact: dict, gate_conclusion: str | None = None
+    ) -> pathlib.Path:
+        root = pathlib.Path(tempfile.mkdtemp())
+        for relative in [
+            "input/gate-watchdog-observations.json",
+            "github/workflow-runs.json",
+            "review/gate_outcome.json",
+        ]:
+            receipt = root / relative
+            receipt.parent.mkdir(parents=True, exist_ok=True)
+            payload = (
+                {"conclusion": gate_conclusion or artifact.get("conclusion")}
+                if relative == "review/gate_outcome.json"
+                else {}
+            )
+            receipt.write_text(json.dumps(payload), encoding="utf-8")
+        (root / "review/gate_watchdog.json").write_text(
+            json.dumps(artifact), encoding="utf-8"
+        )
+        return root
+
+    head = "a" * 40
+    terminal = {
+        "schema": "ub-review.gate_watchdog.v1",
+        "expected_head_sha": head,
+        "required_check_name": "ub-review/gate",
+        "required_check_app_id": 15368,
+        "state": "terminal",
+        "conclusion": "pass",
+        "selected_run_id": 101,
+        "selected_attempt": 1,
+        "selected_check_run_id": 1001,
+        "observed_run_ids": [101],
+        "observed_check_run_ids": [1001],
+        "reasons": [],
+        "source_artifacts": [
+            "github/workflow-runs.json#101",
+            "input/gate-watchdog-observations.json",
+            "review/gate_outcome.json",
+        ],
+    }
+    require_gate_watchdog(write_root(terminal))
+    expect_self_test_failure(
+        "watchdog terminal conclusion disagreement",
+        "conclusion does not match",
+        lambda: require_gate_watchdog(write_root(terminal, gate_conclusion="fail")),
+    )
+    inconclusive = {
+        **terminal,
+        "state": "inconclusive",
+        "conclusion": "inconclusive",
+        "selected_run_id": None,
+        "selected_attempt": None,
+        "selected_check_run_id": None,
+        "observed_run_ids": [],
+        "observed_check_run_ids": [],
+        "reasons": [
+            {
+                "kind": "missing-run",
+                "detail": "no current-head run before deadline",
+                "receipt": "input/gate-watchdog-observations.json",
+                "retry_action": "retry workflow creation",
+            }
+        ],
+        "source_artifacts": ["input/gate-watchdog-observations.json"],
+    }
+    require_gate_watchdog(write_root(inconclusive))
+    pending = {
+        **inconclusive,
+        "state": "pending",
+        "conclusion": None,
+        "reasons": [
+            {
+                "kind": "awaiting-run",
+                "detail": "waiting for current-head run",
+                "receipt": "input/gate-watchdog-observations.json",
+                "retry_action": "retry after the observation deadline",
+            }
+        ],
+    }
+    require_gate_watchdog(write_root(pending))
+    expect_self_test_failure(
+        "watchdog pending with terminal-only reason",
+        "is invalid for state",
+        lambda: require_gate_watchdog(
+            write_root(
+                {
+                    **pending,
+                    "reasons": [
+                        {
+                            **pending["reasons"][0],
+                            "kind": "coordinator-crash",
+                        }
+                    ],
+                }
+            )
+        ),
+    )
+    expect_self_test_failure(
+        "watchdog inconclusive with pending-only reason",
+        "is invalid for state",
+        lambda: require_gate_watchdog(
+            write_root(
+                {
+                    **inconclusive,
+                    "reasons": [
+                        {
+                            **inconclusive["reasons"][0],
+                            "kind": "awaiting-run",
+                        }
+                    ],
+                }
+            )
+        ),
+    )
+    expect_self_test_failure(
+        "watchdog selected run absent from observations",
+        "selected_run_id is absent",
+        lambda: require_gate_watchdog(
+            write_root({**terminal, "selected_run_id": 999})
+        ),
+    )
+    expect_self_test_failure(
+        "watchdog inconclusive claiming pass",
+        "must carry conclusion and reasons",
+        lambda: require_gate_watchdog(write_root({**inconclusive, "conclusion": "pass"})),
+    )
+    missing_retry = json.loads(json.dumps(inconclusive))
+    del missing_retry["reasons"][0]["retry_action"]
+    expect_self_test_failure(
+        "watchdog reason without retry",
+        "retry_action is not a non-empty string",
+        lambda: require_gate_watchdog(write_root(missing_retry)),
+    )
+    dangling = json.loads(json.dumps(inconclusive))
+    dangling["reasons"][0]["receipt"] = "input/missing.json"
+    dangling["source_artifacts"] = ["input/missing.json"]
+    expect_self_test_failure(
+        "watchdog dangling receipt",
+        "receipt does not resolve",
+        lambda: require_gate_watchdog(write_root(dangling)),
     )
 
 
@@ -11469,6 +11916,7 @@ def run_self_tests() -> None:
     self_test_proof_command_stream_bound_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_gate_watchdog_contract()
     self_test_ci_audit_core_artifact_contract()
     self_test_setup_ci_terminal_receipt_contract()
     self_test_ci_audit_runner_cancellations_contract()
