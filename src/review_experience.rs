@@ -219,13 +219,14 @@ mod tests {
                 .iter()
                 .map(|thread| ReviewThreadRecord {
                     id: thread.id.clone(),
-                    kind: "review-comment".to_owned(),
+                    kind: "review-comments".to_owned(),
                     author: thread.author.clone(),
                     body: thread.body.clone(),
                     path: (!thread.path.is_empty()).then(|| thread.path.clone()),
                     line: thread.anchor,
                     commit_id: Some(thread_commit.to_owned()),
                     state: Some(thread.status.clone()),
+                    in_reply_to: None,
                 })
                 .collect(),
         }
@@ -521,6 +522,49 @@ mod tests {
         require(
             reconcile_inline_comments(&current_graph, std::slice::from_ref(&candidate)).is_empty(),
             "production reconciliation did not suppress a current-thread duplicate",
+        )?;
+        let reply_receipt = ProofReceipt {
+            schema: "ub-review.proof_receipt.v1".to_owned(),
+            id: "proof:red-green:perl-lsp-3627".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: fixture.base_sha.clone(),
+            head: fixture.buggy_head_sha.clone(),
+            test_patch_mode: "red-green".to_owned(),
+            requested_by: vec!["fixture".to_owned()],
+            request_ids: vec!["parser:later-variable-subscript".to_owned()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "focused fixture proof".to_owned(),
+        };
+        let reply_candidates = build_reply_candidates(
+            &fixture.buggy_head_sha,
+            std::slice::from_ref(&candidate),
+            std::slice::from_ref(&reply_receipt),
+            &[ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "parser:later-variable-subscript".to_owned(),
+                lane: "fixture".to_owned(),
+                requested_by: vec!["fixture".to_owned()],
+                command: "cargo test --locked parser subscripts".to_owned(),
+                reason: "Confirm subscripts on later variables remain indexed".to_owned(),
+                cost: "focused-test".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "executed".to_owned(),
+            }],
+            &production_thread_context(&fixture, &fixture.buggy_head_sha),
+        );
+        require(
+            reply_candidates.len() == 1
+                && reply_candidates[0].comment_id == 3_558_771_748
+                && reply_candidates[0].head_sha == fixture.buggy_head_sha
+                && reply_candidates[0]
+                    .body
+                    .contains("Confirmed by focused execution")
+                && reply_candidates[0]
+                    .body
+                    .contains("proof:red-green:perl-lsp-3627"),
+            "production graph did not turn new proof into one current-head reply candidate",
         )?;
 
         let stale_graph = build_active_claim_graph(

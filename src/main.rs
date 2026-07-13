@@ -1075,6 +1075,7 @@ struct ReviewMetrics {
     github_review_comments: usize,
     prepared_inline_comments: usize,
     prepared_review_body: bool,
+    github_review_reply_candidates: usize,
     summary_only_findings: usize,
     observations: usize,
     follow_up_results: FollowUpResultMetrics,
@@ -2357,6 +2358,22 @@ struct GitHubReviewComment {
     /// (advisory comment without a one-click edit).
     #[serde(skip_serializing_if = "Option::is_none")]
     suggestion: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct GitHubReviewReply {
+    claim_id: String,
+    head_sha: String,
+    comment_id: u64,
+    receipt_id: String,
+    body: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct GitHubReviewReplyCandidates {
+    schema: String,
+    head_sha: String,
+    replies: Vec<GitHubReviewReply>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -4435,6 +4452,12 @@ fn write_review_artifacts(
     // are available for routing to lanes in the multi-turn continuation.
     // Previously this ran after the reporter, meaning continuation prompts
     // never saw proof evidence. (Order 9c fix of #678.)
+    let intent_requests = resolve_proof_intents_to_requests(
+        diff,
+        &mut proof_intents,
+        profile.budgets.default_timeout_sec,
+    );
+    append_resolved_intent_requests(&mut proof_requests, &mut proof_intents, intent_requests);
     attach_request_metadata_to_focused_receipts(
         diff,
         &proof_requests,
@@ -4526,19 +4549,20 @@ fn write_review_artifacts(
     )?;
     // Impact plan built earlier (before the model wave) so its candidate
     // tasks are available to the proof-planner model lane. See line ~3955.
-    // Shadow-mode v2 typed proof requests (Order 2 of epic #655). Converts
-    // existing v1 requests to typed intents. Emitted but not consumed for
-    // execution — the broker still uses v1 command-string requests.
+    // Legacy v2 shadow artifact (Order 2 of epic #655). Converts existing v1
+    // requests to typed intents for downstream inspection. Model-emitted
+    // ProofIntent values are resolved through the approved executor adapter
+    // this legacy artifact remains compatibility telemetry only.
     let v2_shadow_requests = build_v2_shadow_requests(&proof_requests);
     if !v2_shadow_requests.is_empty() {
         let v2_path = out.join("review").join("proof_requests_v2.json");
         std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
     }
-    // Legacy shadow-mode claim graph (Order 3 of epic #655). It is overwritten
-    // It is overwritten before the final compiler consumes the review surface
-    // with claims, evidence, conflicts, and current-head delivery state.
-    let shadow_claim_graph = build_shadow_claim_graph();
-    write_claim_graph(out, &shadow_claim_graph)?;
+    // Emit an initial empty graph for artifact completeness. It is overwritten
+    // before the final compiler consumes the review surface with claims,
+    // evidence, conflicts, and current-head delivery state.
+    let initial_claim_graph = build_shadow_claim_graph();
+    write_claim_graph(out, &initial_claim_graph)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
     let compiler_loop = start_run_loop(
@@ -4813,6 +4837,13 @@ fn write_review_artifacts(
         &review.proof_receipts,
         &review.pr_thread_context,
     );
+    let reply_candidates = build_reply_candidates(
+        &diff.head,
+        &compiler_inline_comments,
+        &review.proof_receipts,
+        &review.proof_requests,
+        &review.pr_thread_context,
+    );
     compiler_inline_comments =
         reconcile_inline_comments(&pre_compile_claim_graph, &compiler_inline_comments);
     compiler_summary_only_findings =
@@ -4871,7 +4902,7 @@ fn write_review_artifacts(
         reporter_distillation: reporter_distillation.as_deref(),
     })?;
     let mut review_payload_status = final_surface.review_payload_status;
-    let should_prepare_github_review = final_surface.should_prepare_github_review;
+    let mut should_prepare_github_review = final_surface.should_prepare_github_review;
     let summary_only_policy_posted = final_surface.summary_only_policy_posted;
     let github_review = final_surface.github_review;
     let artifact_body = final_surface.artifact_body;
@@ -4881,6 +4912,12 @@ fn write_review_artifacts(
     let terminal_state = final_surface.terminal_state;
     review.terminal_state = terminal_state.clone();
     review.body = artifact_body.clone();
+    if !reply_candidates.is_empty() {
+        should_prepare_github_review = true;
+        review_payload_status = "prepared";
+        review.terminal_state.reviewer_value_present = true;
+        review.terminal_state.review_payload_status = "prepared".to_owned();
+    }
     let mut witnesses = build_witness_records(
         &review.inline_comments,
         &review.summary_only_findings,
@@ -4897,6 +4934,7 @@ fn write_review_artifacts(
     write_resource_lease_artifacts(out, &review.resource_leases)?;
     review.proof_requests =
         terminalize_proof_requests(&review.proof_requests, &review.proof_receipts);
+    write_terminal_proof_intents(out, &review.proof_requests, &review.proof_intents)?;
     let mut active_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,
@@ -4913,6 +4951,7 @@ fn write_review_artifacts(
         &review.pr_thread_context,
     );
     write_claim_graph(out, &active_claim_graph)?;
+    write_reply_candidates_artifact(&review_dir, &diff.head, &reply_candidates)?;
     write_proof_request_artifacts(
         out,
         diff,
@@ -5175,18 +5214,61 @@ fn write_github_review_payload(
     review_body_policy: &ReviewBodyPolicy,
     waive_suppressible_body_policy: bool,
 ) -> Result<()> {
-    validate_github_review_payload_for_right_lines(
-        github_review,
-        right_lines,
-        "generated diff context",
-        review_body_policy,
-        waive_suppressible_body_policy,
-    )?;
+    if review_dir.join("reply-candidates.json").exists() {
+        if github_review.event != "COMMENT" {
+            bail!("github review event must be COMMENT");
+        }
+        validate_pr_review_body_policy_with_waiver(
+            &github_review.body,
+            review_body_policy,
+            waive_suppressible_body_policy,
+        )?;
+    } else {
+        validate_github_review_payload_for_right_lines(
+            github_review,
+            right_lines,
+            "generated diff context",
+            review_body_policy,
+            waive_suppressible_body_policy,
+        )?;
+    }
     fs::write(
         review_dir.join("github-review.json"),
         serde_json::to_vec_pretty(github_review)?,
     )?;
     Ok(())
+}
+
+fn write_reply_candidates_artifact(
+    review_dir: &Path,
+    head_sha: &str,
+    replies: &[GitHubReviewReply],
+) -> Result<()> {
+    let path = review_dir.join("reply-candidates.json");
+    if replies.is_empty() {
+        match fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+        return Ok(());
+    }
+    fs::write(
+        path,
+        serde_json::to_vec_pretty(&GitHubReviewReplyCandidates {
+            schema: "ub-review.github_review_reply_candidates.v1".to_owned(),
+            head_sha: head_sha.to_owned(),
+            replies: replies.to_owned(),
+        })?,
+    )?;
+    Ok(())
+}
+
+fn reply_candidate_count(out: &Path) -> usize {
+    fs::read(out.join("review/reply-candidates.json"))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<GitHubReviewReplyCandidates>(&bytes).ok())
+        .map_or(0, |artifact| artifact.replies.len())
 }
 
 struct ReviewMetricsInput<'a> {
@@ -5329,6 +5411,7 @@ fn build_review_metrics(input: ReviewMetricsInput<'_>) -> ReviewMetrics {
         github_review_comments: github_review.map_or(0, |review| review.comments.len()),
         prepared_inline_comments: github_review.map_or(0, |review| review.comments.len()),
         prepared_review_body: github_review.is_some_and(|review| !review.body.trim().is_empty()),
+        github_review_reply_candidates: reply_candidate_count(out),
         summary_only_findings: review.summary_only_findings.len(),
         observations: observations_count,
         follow_up_results: FollowUpResultMetrics {
@@ -5654,33 +5737,34 @@ mod tests {
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
         FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
-        GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
-        LaneModelOutput, LanePlan, LanguageMix, Limits, MinimaxPromptCache, ModelAssignment,
-        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
-        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
-        ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
-        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
-        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
-        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
-        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
-        candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
-        classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
+        GitHubReviewComment, GitHubReviewReply, GitHubReviewReplyCandidates, IssueBrokerPlanEntry,
+        IssueCandidate, IssueCandidateEvidence, LaneModelOutput, LanePlan, LanguageMix, Limits,
+        MinimaxPromptCache, ModelAssignment, ModelCacheUsage, ModelCallOutcome,
+        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt, ModelLaneTaskResult, ModelMode,
+        ModelOutputSinks, ModelProvider, ModelProviderPolicy, ModelRunContext, NO_LGTM_POSTURE,
+        Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs, PostingMode,
+        PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget, ProofCommandReceipt,
+        ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup, ProviderConcurrencyLimits,
+        ProviderKindArg, RefuterDecision, RefuterOutput, RefuterRunContext,
+        ResolvedCandidateRecord, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
+        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_plan_selectors, apply_refuter_output, apply_runtime_profile_limits,
+        build_candidate_records, build_cost_receipt, build_final_orchestrator_plan,
+        build_issue_broker_plan, build_orchestrator_plan, build_review_metrics,
+        build_review_terminal_state, build_witness_records, builtin_profiles,
+        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
+        cap_review_body_bullets, classify_diff, classify_diff_class, classify_issue_candidates,
+        classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
+        collect_sensor_evidence_issues, combined_observations, command_display,
+        compile_review_surface, dedupe_inline_comments, deep_minimax_lanes, default_lanes,
+        direct_minimax_spec, execute_issue_broker, extract_model_content,
         fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
@@ -5692,13 +5776,13 @@ mod tests {
         provider_concurrency_limits, provider_spec_for_lane_with_key_state,
         read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
         render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
-        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, selected_provider_spec, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
-        validate_failed_objection, validate_github_review_payload,
+        render_summary, reply_candidate_count, resolved_candidate_records,
+        resolved_minimax_prompt_cache, resolved_provider_policy, review_lanes_for_args,
+        right_side_diff_lines, run_available_model_lanes, run_available_model_lanes_with_runner,
+        run_gate_failure_message, run_refuter_pass, runtime_fallback_retry_spec,
+        runtime_profile_from_toml, runtime_profile_override, selected_provider_spec,
+        sensor_job_count, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_failed_objection, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_inline_candidate,
         validate_model_observation, validate_pr_review_body_policy, validate_run_args,
         validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
@@ -5706,8 +5790,9 @@ mod tests {
         write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
         write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
         write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
-        write_sensor_status, write_witness_artifacts,
+        write_reply_candidates_artifact, write_resolved_candidate_artifacts,
+        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
+        write_witness_artifacts,
     };
 
     #[test]
@@ -5984,7 +6069,7 @@ mod tests {
     }
 
     #[test]
-    fn lane_prompt_routes_execution_through_typed_or_legacy_requests() {
+    fn lane_prompt_keeps_execution_in_broker_requests() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let spec = direct_minimax_spec(&args);
         let lane = lane_plan("tests-red-green");
@@ -5992,9 +6077,7 @@ mod tests {
         let prompt = render_lane_model_prompt(&lane, &spec, "shared context");
 
         assert!(prompt.contains("Do not post, mutate files, or run shell commands"));
-        assert!(
-            prompt.contains("Request executable proof through `proof_requests` or `proof_intents`")
-        );
+        assert!(prompt.contains("through typed `proof_intents` or legacy `proof_requests`"));
         assert!(prompt.contains("at most 3 observations, 2 candidate_findings"));
         assert!(prompt.contains("2 proof_intents"));
         assert!(prompt.contains("focused command requested from central proof broker"));
@@ -11916,6 +11999,36 @@ index 1111111..2222222 100644
 
         assert!(inline_comments.is_empty());
         assert!(summary_only_findings.is_empty());
+    }
+
+    #[test]
+    fn reply_candidates_artifact_is_head_bound_and_removable() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let review_dir = temp.path().join("review");
+        fs::create_dir_all(&review_dir)?;
+        let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let reply = GitHubReviewReply {
+            claim_id: "claim-parser-postfix".to_owned(),
+            head_sha: head.to_owned(),
+            comment_id: 456,
+            receipt_id: "proof:red-green:123".to_owned(),
+            body: "[ub-review] Confirmed by focused execution. Receipt: `proof:red-green:123`."
+                .to_owned(),
+        };
+        write_reply_candidates_artifact(&review_dir, head, std::slice::from_ref(&reply))?;
+        let artifact: GitHubReviewReplyCandidates =
+            serde_json::from_slice(&fs::read(review_dir.join("reply-candidates.json"))?)?;
+        assert_eq!(
+            artifact.schema,
+            "ub-review.github_review_reply_candidates.v1"
+        );
+        assert_eq!(artifact.head_sha, head);
+        assert_eq!(artifact.replies[0].comment_id, 456);
+        assert_eq!(reply_candidate_count(temp.path()), 1);
+        write_reply_candidates_artifact(&review_dir, head, &[])?;
+        assert!(!review_dir.join("reply-candidates.json").exists());
+        assert_eq!(reply_candidate_count(temp.path()), 0);
+        Ok(())
     }
 
     #[test]

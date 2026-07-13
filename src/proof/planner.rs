@@ -145,7 +145,69 @@ pub(crate) fn proof_intent_from_request(request: &ProofRequest) -> ProofIntent {
         estimated_value: estimated_value.to_owned(),
         requested_by: request.requested_by.clone(),
         status: request.status.clone(),
+        resolved_request_id: Some(request.id.clone()),
     }
+}
+
+/// Reconcile the planner's answer-shaped intents with the terminal request
+/// dispositions emitted after proof execution. The planner artifact is
+/// written before the broker runs, so it must be refreshed at the final
+/// boundary or it can preserve `requested`/`resolved_to_approved_task` after
+/// the corresponding request has already been answered.
+pub(crate) fn terminalize_proof_intents(
+    proof_requests: &[ProofRequest],
+    additional_intents: &[ProofIntent],
+) -> Vec<ProofIntent> {
+    let mut intents = proof_intents_from_requests(proof_requests);
+    for intent in additional_intents {
+        if !intents.iter().any(|existing| existing.id == intent.id) {
+            intents.push(intent.clone());
+        }
+    }
+    for intent in &mut intents {
+        if matches!(intent.status.as_str(), "unsupported" | "deduplicated") {
+            continue;
+        }
+        let Some(request_id) = intent.resolved_request_id.as_deref() else {
+            intent.status = "deferred".to_owned();
+            continue;
+        };
+        intent.status = proof_requests
+            .iter()
+            .find(|request| request.id == request_id)
+            .map(|request| request.status.clone())
+            .unwrap_or_else(|| "deferred".to_owned());
+    }
+    intents
+}
+
+pub(crate) fn ensure_terminal_proof_intents(intents: &[ProofIntent]) -> Result<()> {
+    if let Some(intent) = intents.iter().find(|intent| {
+        matches!(
+            intent.status.as_str(),
+            "requested" | "resolved_to_approved_task"
+        )
+    }) {
+        bail!(
+            "proof intent `{}` remained non-terminal at the final artifact boundary",
+            intent.id
+        );
+    }
+    Ok(())
+}
+
+pub(crate) fn write_terminal_proof_intents(
+    out: &Path,
+    proof_requests: &[ProofRequest],
+    additional_intents: &[ProofIntent],
+) -> Result<()> {
+    let intents = terminalize_proof_intents(proof_requests, additional_intents);
+    ensure_terminal_proof_intents(&intents)?;
+    fs::write(
+        out.join("review/proof_intents.json"),
+        serde_json::to_vec_pretty(&intents)?,
+    )?;
+    Ok(())
 }
 
 pub(crate) fn build_proof_planner_output(

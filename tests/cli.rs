@@ -5256,6 +5256,153 @@ fn duplicate_model_proof_requests_execute_once_with_all_request_ids() -> Result<
 }
 
 #[test]
+fn model_typed_proof_intent_resolves_and_executes_once() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+
+    let typed_intent_content = serde_json::json!({
+        "summary": "typed proof request",
+        "inline_comments": [],
+        "observations": [],
+        "candidate_findings": [],
+        "summary_only_findings": [],
+        "failed_objections": [],
+        "issue_candidates": [],
+        "proof_intents": [
+            {
+                "claim_id": "workspace-build",
+                "question": "Does the changed workspace still compile?",
+                "expected_answer_shape": "cargo check exits successfully",
+                "proof_kind": "focused-build",
+                "target": "workspace",
+                "estimated_value": "high"
+            }
+        ]
+    })
+    .to_string();
+    let dummy_key = "dummy-minimax-key-for-typed-proof-intent";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_contents(vec![
+        typed_intent_content.clone(),
+        typed_intent_content.clone(),
+        typed_intent_content.clone(),
+        typed_intent_content,
+    ])?;
+    let fake_bin = temp.path().join("fake-bin");
+    write_fake_cargo(&fake_bin)?;
+    let path = prepend_to_path(&fake_bin)?;
+    let fake_cargo_log = temp.path().join("fake-cargo.log");
+    let fake_cargo_log_str = path_str(&fake_cargo_log)?.to_owned();
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--runtime-profile",
+            "gh-runner-full",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "tests-red-green,opposition",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "3",
+            "--model-timeout-sec",
+            "10",
+            "--tools",
+            "cargo-allow",
+        ],
+        &[
+            ("PATH", path.as_str()),
+            ("UB_REVIEW_MINIMAX_API_KEY", dummy_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+            ("FAKE_CARGO_LOG", fake_cargo_log_str.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    anyhow::ensure!(
+        provider_requests.len() == 4,
+        "typed-intent fixture should consume all model responses"
+    );
+
+    let intents: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_intents.json"))?)?;
+    anyhow::ensure!(
+        intents.iter().any(|intent| {
+            intent["target"] == "workspace"
+                && matches!(
+                    intent["status"].as_str(),
+                    Some("resolved_to_approved_task") | Some("deduplicated")
+                )
+                && intent["resolved_request_id"].as_str().is_some()
+        }),
+        "typed intent must resolve to an approved request"
+    );
+
+    let requests: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_requests.json"))?)?;
+    let workspace_requests = requests
+        .iter()
+        .filter(|request| request["command"] == "cargo check --locked --workspace")
+        .collect::<Vec<_>>();
+    anyhow::ensure!(
+        workspace_requests.len() == 1,
+        "duplicate typed intents must produce one workspace request"
+    );
+    anyhow::ensure!(
+        matches!(
+            workspace_requests[0]["status"].as_str(),
+            Some("executed") | Some("satisfied") | Some("failed")
+        ),
+        "typed workspace request must have a terminal execution disposition"
+    );
+
+    let receipts: Vec<serde_json::Value> =
+        serde_json::from_slice(&fs::read(out.join("review/proof_receipts.json"))?)?;
+    let request_id = json_str_field(workspace_requests[0], "id")?;
+    anyhow::ensure!(
+        receipts.iter().any(|receipt| {
+            receipt["request_ids"]
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(request_id)))
+        }),
+        "typed workspace request must have a receipt"
+    );
+
+    let log = fs::read_to_string(fake_cargo_log)?;
+    anyhow::ensure!(
+        log.lines()
+            .filter(|line| line.contains("cargo check --locked --workspace"))
+            .count()
+            == 1,
+        "typed workspace proof must execute once:\n{log}"
+    );
+    Ok(())
+}
+
+#[test]
 fn model_suggested_manual_cost_proof_request_is_rejected_before_execution() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

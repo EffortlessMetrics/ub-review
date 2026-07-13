@@ -206,6 +206,7 @@ All schema constants in `src/artifacts.rs:48-68`. Written by
 | Proof receipt | `ub-review.proof_receipt.v1` | `review/proof_receipts.json` (+ `.ndjson`) | `id, kind, base, head, test_patch_mode, requested_by[], request_ids[], commands[], result, reason` |
 | Proof request | `ub-review.proof_request.v1` | `review/proof_requests.json` + `proof_requests/<id>.json` | `id, lane, requested_by[], command, reason, cost, timeout_sec, required, status` |
 | Proof request group | `ub-review.proof_request_group.v1` | `review/proof_request_groups.json` | `id, command, cost, timeout_sec, required, status, requested_by[], request_ids[], duplicate_count` |
+| Proof portfolio decision | `ub-review.proof_portfolio.v1` | `review/proof_portfolio.json` | `task_id, kind, status, reason, estimated_value, estimated_cost_sec, request_ids[], receipt_ids[]` |
 | Receipt route | `ub-review.receipt_route.v1` | `review/receipt_routes.json` (+ `.ndjson`) | `id, receipt_id, phase ∈ {initial-diff-receipt, model-request-receipt, follow-up-receipt}, receipt_kind, result, status, consumers[], lease_ids[], source_artifacts[]` |
 
 Receipt-route phases pin which broker pass produced each receipt

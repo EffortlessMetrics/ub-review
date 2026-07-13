@@ -88,14 +88,21 @@ remaining hard-deadline window, existing leases, and terminal receipts. Its
 portfolio artifact records those inputs and distinguishes box-capacity
 declines from safe deadline wind-down.
 
-Model lanes may now submit answer-shaped intents without a command field; Rust
+Model lanes may now submit answer-shaped intents without a command field. Rust
 validates their claim, question, expected answer, typed proof kind, and safe
-repository target before routing them into the planner artifacts. Legacy
-command-shaped requests remain accepted for compatibility.
+repository target, then resolves focused-test and focused-build intents to
+approved task templates before the existing broker executes them. Focused tests
+use exact changed candidates or `cargo-test:<name>`; package labels are reserved
+for focused builds. Duplicate intents and equivalent legacy requests share one
+request; unsupported kinds and targets terminalize as
+`unsupported` rather than entering the runnable queue. Legacy command-shaped
+requests remain accepted for compatibility. The final artifact boundary
+rewrites `review/proof_intents.json` after receipts so no `requested` or
+`resolved_to_approved_task` intent remains exposed.
 
-**Gap:** The executor still consumes the legacy request/task adapters for
-execution. A future seam must resolve typed intent targets to approved task
-templates before model-native intents can select execution directly.
+**Gap:** Native sanitizer, mutation, Miri, source-route, and external-check
+executor routes still require their own approved task adapters; they remain
+explicitly unsupported for model-native execution until those routes exist.
 
 ### PR 3 — Base+tests red/green — DONE
 
@@ -154,14 +161,17 @@ delivery state. Each topic also records the current thread disposition
 `fixed_on_current_head`, or `superseded_by_head_change`). Current-head inline
 candidates already covered by an anchored
 thread are withheld from a second comment; stale threads do not suppress new
-delivery. Transactional replies and confirmed GitHub delivery receipts remain
-the separate #748 seam. That PR already carries the pending-review ->
-comment-list -> submit lifecycle, cleanup receipts, and focused mismatch
-coverage; its hosted gate still awaits a published RIPR 0.10.1 artifact, so
-this branch does not duplicate that posting implementation. Explicit
-evidence-precedence conflicts now carry winner/loser claim IDs, and final
-surface reconciliation suppresses only the adjudicated loser while retaining
-it in the claim graph artifact.
+delivery. Proof request and receipt links are claim-specific: sharing a lane
+does not attach unrelated proof to every topic. When new receipt-backed evidence reaches an existing top-level
+thread, this branch emits `review/reply-candidates.json` with the exact head,
+claim, and GitHub comment target; without new evidence it remains silent.
+Draft PR #748 consumes that artifact through GitHub's direct reply endpoint
+and records per-reply delivery receipts. The upstream RIPR CLI-subprocess
+analyzer contract is merged in #1455, but the hosted gate still awaits a
+published RIPR 0.10.1 artifact; this branch does not duplicate that posting
+implementation. Explicit evidence-precedence conflicts now carry winner/loser
+claim IDs, and final surface reconciliation suppresses only the adjudicated
+loser while retaining it in the claim graph artifact.
 
 Late proof now has a lane-reconsideration boundary as well: follow-up receipts
 are routed to the message bus, receipt-linked lanes receive a bounded
@@ -250,9 +260,10 @@ trackers, not ub-review rollout infrastructure.
 The single-gate adoption surface is now executable but has not been applied to
 an external repository. A read-only release workflow dispatch on 2026-07-12
 completed the build, checksum, and archive-upload stages on `main` (run
-29182345044); no tag or release was created, and the Linux asset was not
-executed on Windows. The actual v0.1.0 tag remains an explicitly authorized
-release action. Current release-installed pilot drafts are Bun #34046 and
+29182345044); no `v0.1.0` tag or GitHub Release was created, and the Linux
+asset was not executed on Windows. The legacy `v0.1` pin tag exists without
+release assets; the actual v0.1.0 tag remains an explicitly authorized release
+action. Current release-installed pilot drafts are Bun #34046 and
 perl-lsp-swarm #4015; both remain unable to prove the release path until
 ub-review publishes v0.1.0.
 
@@ -310,7 +321,7 @@ extracting when next touched:
   green functional proof but remain unpublished or unmergeable while RIPR
   reports unresolved CLI/subprocess or semantic-probe exposure gaps. No
   aliases or threshold relaxation are permitted; current upstream tracking is
-  ripr-swarm#1528 and the related semantic-probe fixes.
+  EffortlessMetrics/ripr#1454 and the related semantic-probe fixes.
 - **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
   and suppression shipped; deeper evidence-precedence adjudication is the open
   next step (epic #655 milestone 4).

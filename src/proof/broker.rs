@@ -233,7 +233,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         .min(input.runtime.deadline_remaining_seconds);
 
     for candidate in candidates {
-        let (task_id, kind, request_ids, required, estimated_cost_sec) =
+        let (task_id, kind, request_ids, estimated_value, required, estimated_cost_sec) =
             portfolio_metadata(&candidate, &input, &request_by_id);
         let exact_receipts = input
             .proof_receipts
@@ -269,6 +269,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                         .join(", ")
                 ),
                 PortfolioDecisionMetadata {
+                    estimated_value: estimated_value.clone(),
                     required,
                     estimated_cost_sec,
                     request_ids,
@@ -294,6 +295,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                         .join(", ")
                 ),
                 PortfolioDecisionMetadata {
+                    estimated_value: estimated_value.clone(),
                     required,
                     estimated_cost_sec,
                     request_ids,
@@ -312,6 +314,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                 "superseded",
                 "all associated requests are already terminal or unavailable".to_owned(),
                 PortfolioDecisionMetadata {
+                    estimated_value: estimated_value.clone(),
                     required,
                     estimated_cost_sec,
                     request_ids,
@@ -349,6 +352,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                     request_ids.len()
                 ),
                 PortfolioDecisionMetadata {
+                    estimated_value,
                     required,
                     estimated_cost_sec,
                     request_ids,
@@ -385,6 +389,7 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
                 status,
                 reason.to_owned(),
                 PortfolioDecisionMetadata {
+                    estimated_value,
                     required,
                     estimated_cost_sec,
                     request_ids,
@@ -480,13 +485,26 @@ fn portfolio_metadata(
     candidate: &PortfolioCandidate,
     input: &ProofPortfolioInput<'_>,
     request_by_id: &BTreeMap<&str, &ProofRequest>,
-) -> (String, String, Vec<String>, bool, u64) {
+) -> (String, String, Vec<String>, String, bool, u64) {
     let request_ids = portfolio_request_ids(candidate, input);
     let required = request_ids.iter().any(|id| {
         request_by_id
             .get(id.as_str())
             .is_some_and(|request| request.required)
     });
+    let estimated_value = if required {
+        "high"
+    } else if request_ids.len() >= 2 {
+        "medium-high"
+    } else {
+        match candidate {
+            PortfolioCandidate::Test(index) => match input.test_tasks[*index].mode {
+                FocusedProofMode::RedGreen => "medium-high",
+                FocusedProofMode::HeadOnly => "medium",
+            },
+            PortfolioCandidate::Build(_) => "low",
+        }
+    };
     let kind = match candidate {
         PortfolioCandidate::Test(index) => match input.test_tasks[*index].mode {
             FocusedProofMode::HeadOnly => "focused-head",
@@ -498,6 +516,7 @@ fn portfolio_metadata(
         portfolio_id(candidate, input).to_owned(),
         kind.to_owned(),
         request_ids,
+        estimated_value.to_owned(),
         required,
         portfolio_cost(candidate, input),
     )
@@ -531,6 +550,7 @@ fn receipt_can_answer_shared_request(receipt: &ProofReceipt) -> bool {
 }
 
 struct PortfolioDecisionMetadata {
+    estimated_value: String,
     required: bool,
     estimated_cost_sec: u64,
     request_ids: Vec<String>,
@@ -549,6 +569,7 @@ fn portfolio_decision(
         kind,
         status: status.to_owned(),
         reason,
+        estimated_value: metadata.estimated_value,
         required: metadata.required,
         estimated_cost_sec: metadata.estimated_cost_sec,
         request_ids: metadata.request_ids,
@@ -1415,6 +1436,8 @@ mod tests {
             .iter()
             .find(|decision| decision.task_id == "parser")
             .ok_or_else(|| anyhow::anyhow!("missing test portfolio decision"))?;
+        ensure!(test_decision.estimated_value == "high");
+        ensure!(test_decision.estimated_cost_sec == 60);
         ensure!(test_decision.request_ids.len() == 2);
         Ok(())
     }

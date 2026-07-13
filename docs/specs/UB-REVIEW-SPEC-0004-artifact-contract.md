@@ -127,7 +127,11 @@ metrics.json                   integer schema_version 1; run/streams/
                                additive reviewer-value fields distinguish
                                prepared output, terminal proof dispositions,
                                current/stale proof receipts, and post-stage
-                               delivery state
+                               delivery state;
+                               `github_review_reply_candidates` counts
+                               prepared direct replies separately from
+                               grouped inline comments
+
 ub-review-cost.json            ub-review.cost_receipt.v1; runner-minute
                                cost basis, token/cache counters, and
                                explicit missing[] entries for unavailable
@@ -237,11 +241,14 @@ proof_planner_input.json       ub-review.proof_planner_input.v1
 proof_planner_output.json      ub-review.proof_planner_output.v1; tasks are
                                ub-review.proof_task.v1
 proof_intents.json             answer-shaped proof intent records; each links
-                               a stable claim identity to expected evidence
+                               a stable claim identity to expected evidence,
+                               terminal status, and any resolved request id
 proof_portfolio.json           ub-review.proof_portfolio.v1; deterministic
                                value-ranked selection and receipt dispositions;
                                includes the observed runner lease, box
-                               capacity, and remaining hard-deadline window
+                               capacity, and remaining hard-deadline window;
+                               each decision records estimated value, cost,
+                               served request IDs, and its terminal reason
 proof_receipts.json            ub-review.proof_receipt.v1 records; receipts
                                may link to current claims only when `head`
                                matches the current review head
@@ -429,6 +436,7 @@ metrics.proof_receipts          == len(review/proof_receipts.json)
 metrics.resource_leases         == len(review/resource_leases.json)
 metrics.inline_comments         == len(review.json.inline_comments)
 metrics.summary_only_findings   == len(review.json.summary_only_findings)
+metrics.github_review_reply_candidates == len(review/reply-candidates.json.replies)
 metrics.lane_packets            == len(effective_model_lanes)
 metrics.final_follow_up_tasks   == len(final_orchestrator_plan
                                        .follow_up_tasks)
@@ -629,6 +637,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | root NDJSON streams (candidates, resolved_candidates, model_stages, witnesses, proof_requests, proof_tasks, proof_receipts, receipt_routes, tool_gate_outcomes, resource_leases, follow_up_results, follow_up_outputs, follow_up_questions) | stable | per-stream vN lines | downstream automation | required (per-stream require_* functions, line parity with review/ arrays) |
 | review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
+| review/reply-candidates.json | conditional | github_review_reply_candidates.v1; exact current head, claim/comment ids, and receipt_id for every reply | `ub-review post`; reviewer-action telemetry | required when direct replies are prepared |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
 | review/floor-trend.json | stable | floor_trend.v1; window_scope single_run_v1 | downstream automation (floor-time telemetry seed) | required (require_floor_trend, #338) |
 | review/fill-ledger.json | stable | fill_ledger.v1; catalog_scope executed_work_queue_v1; every entry carries a cost class; selected focused proof-request entries cite matching resource lease anchors | downstream automation (optional-fill usefulness telemetry) | required (require_fill_ledger, #337) |

@@ -151,12 +151,7 @@ pub(crate) fn build_active_claim_graph(
         }
 
         for request in proof_requests {
-            if request
-                .requested_by
-                .iter()
-                .any(|lane| lane == &topic.source_lane)
-                || request.id.contains(&topic.claim_id)
-            {
+            if proof_request_supports_topic(request, topic) {
                 push_unique(&mut topic.proof_requests, request.id.clone());
             }
         }
@@ -164,15 +159,7 @@ pub(crate) fn build_active_claim_graph(
             if !receipt.head.eq_ignore_ascii_case(head_sha) {
                 continue;
             }
-            if receipt
-                .requested_by
-                .iter()
-                .any(|lane| lane == &topic.source_lane)
-                || receipt
-                    .request_ids
-                    .iter()
-                    .any(|id| id.contains(&topic.claim_id))
-            {
+            if receipt_supports_topic(receipt, topic, proof_requests) {
                 push_unique(&mut topic.proof_receipts, receipt.id.clone());
                 topic.evidence.push(EvidenceRef {
                     class: EvidenceClass::ProofReceipt,
@@ -182,6 +169,13 @@ pub(crate) fn build_active_claim_graph(
             }
         }
         topic.thread_disposition = thread_disposition(topic, &matching_threads);
+        if !topic.existing_threads.is_empty() {
+            topic.delivery = if topic.proof_receipts.is_empty() {
+                "already-covered".to_owned()
+            } else {
+                "reply-to-thread".to_owned()
+            };
+        }
     }
 
     let mut claims = Vec::with_capacity(topics.len());
@@ -383,6 +377,137 @@ pub(crate) fn topic_claim_id_for_inline(comment: &ReviewInlineComment) -> String
     )
 }
 
+/// Convert a current-head candidate with new proof into a direct reply target.
+/// A current top-level review comment without a new receipt remains covered
+/// and produces no public surface; stale comments are never reply targets.
+pub(crate) fn build_reply_candidates(
+    head_sha: &str,
+    comments: &[ReviewInlineComment],
+    proof_receipts: &[ProofReceipt],
+    proof_requests: &[ProofRequest],
+    thread_context: &PrThreadContext,
+) -> Vec<GitHubReviewReply> {
+    let mut seen_comment_ids = std::collections::BTreeSet::new();
+    comments
+        .iter()
+        .filter_map(|comment| {
+            let thread = thread_context.threads.iter().find(|thread| {
+                thread.kind == "review-comments"
+                    && thread.in_reply_to.is_none()
+                    && thread.commit_id.as_deref() == Some(head_sha)
+                    && thread.path.as_deref() == Some(comment.path.as_str())
+                    && thread.line == Some(comment.line)
+                    && inline_body_matches_thread(comment, thread)
+            })?;
+            let comment_id = thread.id.parse::<u64>().ok()?;
+            if comment_id == 0 {
+                return None;
+            }
+            if !seen_comment_ids.insert(comment_id) {
+                return None;
+            }
+            let receipt = proof_receipts.iter().find(|receipt| {
+                receipt_supports_inline_comment(receipt, head_sha, comment, proof_requests)
+            })?;
+            Some(GitHubReviewReply {
+                claim_id: topic_claim_id_for_inline(comment),
+                head_sha: head_sha.to_owned(),
+                comment_id,
+                receipt_id: receipt.id.clone(),
+                body: render_reply_body(receipt),
+            })
+        })
+        .collect()
+}
+
+fn receipt_supports_topic(
+    receipt: &ProofReceipt,
+    topic: &ReviewTopic,
+    proof_requests: &[ProofRequest],
+) -> bool {
+    receipt
+        .requested_by
+        .iter()
+        .any(|lane| lane == &topic.source_lane)
+        && receipt.request_ids.iter().any(|request_id| {
+            proof_requests.iter().any(|request| {
+                request.id == *request_id && proof_request_supports_topic(request, topic)
+            })
+        })
+}
+
+fn proof_request_supports_topic(request: &ProofRequest, topic: &ReviewTopic) -> bool {
+    request
+        .requested_by
+        .iter()
+        .any(|lane| lane == &topic.source_lane)
+        && (request.id.contains(&topic.claim_id)
+            || claim_text_matches(
+                &format!("{} {}", topic.subject, topic.mechanism),
+                &format!("{} {}", request.reason, request.command),
+            ))
+}
+
+fn receipt_supports_inline_comment(
+    receipt: &ProofReceipt,
+    head_sha: &str,
+    comment: &ReviewInlineComment,
+    proof_requests: &[ProofRequest],
+) -> bool {
+    receipt.head.eq_ignore_ascii_case(head_sha)
+        && receipt
+            .requested_by
+            .iter()
+            .any(|lane| lane == &comment.lane)
+        && receipt.request_ids.iter().any(|request_id| {
+            proof_requests.iter().any(|request| {
+                request.id == *request_id
+                    && request
+                        .requested_by
+                        .iter()
+                        .any(|lane| lane == &comment.lane)
+                    && claim_text_matches(
+                        &format!("{} {}", comment.body, comment.evidence),
+                        &format!("{} {}", request.reason, request.command),
+                    )
+            })
+        })
+}
+
+fn claim_text_matches(left: &str, right: &str) -> bool {
+    let left = canonical_tokens(left);
+    let right = canonical_tokens(right);
+    left.iter().any(|token| {
+        token.len() >= 6
+            && !low_information_thread_token(token)
+            && right.iter().any(|candidate| candidate == token)
+    })
+}
+
+fn inline_body_matches_thread(comment: &ReviewInlineComment, thread: &ReviewThreadRecord) -> bool {
+    let comment_tokens = canonical_tokens(&comment.body);
+    let thread_tokens = canonical_tokens(&thread.body);
+    comment_tokens.iter().any(|token| {
+        token.len() >= 6
+            && !low_information_thread_token(token)
+            && thread_tokens.iter().any(|candidate| candidate == token)
+    })
+}
+
+fn render_reply_body(receipt: &ProofReceipt) -> String {
+    let statement = match receipt.result.as_str() {
+        "discriminating" => "Confirmed by focused execution: the proof discriminates the patch",
+        "non_discriminating" => {
+            "New focused execution did not discriminate the patch, so this finding remains unconfirmed"
+        }
+        "head_failed" => "Confirmed by focused execution: the current head still fails the proof",
+        "head_passed" => "Confirmed by focused execution: the current head passes the proof",
+        "refuted" => "New evidence refuted the prior finding",
+        _ => "New deterministic proof was recorded for this finding",
+    };
+    format!("[ub-review] {statement}. Receipt: `{}`.", receipt.id)
+}
+
 fn upsert_topic(topics: &mut BTreeMap<String, ReviewTopic>, head_sha: &str, seed: TopicSeed) {
     let claim_id = structural_claim_id(
         seed.path.as_deref(),
@@ -489,6 +614,7 @@ fn same_surface(topic: &ReviewTopic, thread: &ReviewThreadRecord) -> bool {
     topic.path.as_deref() == thread.path.as_deref()
         && topic.path.is_some()
         && topic.anchor.is_some()
+        && thread.in_reply_to.is_none()
         && topic.anchor == thread.line
         && thread_body_matches(topic, thread)
 }
@@ -694,6 +820,7 @@ mod tests {
                     line: Some(12),
                     commit_id: Some(head.to_owned()),
                     state: Some("open".to_owned()),
+                    in_reply_to: None,
                 },
                 ReviewThreadRecord {
                     id: "stale-thread".to_owned(),
@@ -704,6 +831,7 @@ mod tests {
                     line: Some(12),
                     commit_id: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned()),
                     state: Some("open".to_owned()),
+                    in_reply_to: None,
                 },
             ],
         }
@@ -743,6 +871,7 @@ mod tests {
         ensure!(graph.topics[0].existing_threads == ["current-thread"]);
         ensure!(graph.topics[0].stale_threads == ["stale-thread"]);
         ensure!(graph.topics[0].thread_disposition == "already_covered");
+        ensure!(graph.topics[0].delivery == "already-covered");
         ensure!(graph.claims[0].state == ClaimState::Confirmed);
         Ok(())
     }
@@ -791,13 +920,25 @@ mod tests {
             result: "head_failed".to_owned(),
             reason: "focused proof refutes the preservation claim".to_owned(),
         };
+        let request = ProofRequest {
+            schema: "proof-request".to_owned(),
+            id: "request-refutation-1".to_owned(),
+            lane: "lane-b".to_owned(),
+            requested_by: vec!["lane-b".to_owned()],
+            command: "cargo test --locked --test buffer_resize_view_length".to_owned(),
+            reason: "Buffer resize loses active view length".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "failed".to_owned(),
+        };
 
         let graph = build_active_claim_graph(
             head,
             std::slice::from_ref(&refutation),
             std::slice::from_ref(&candidate),
             &[],
-            &[],
+            std::slice::from_ref(&request),
             std::slice::from_ref(&receipt),
             &context(head),
         );
@@ -889,13 +1030,27 @@ mod tests {
             result: "discriminating".to_owned(),
             reason: "focused proof confirms the thread".to_owned(),
         };
+        let request = ProofRequest {
+            schema: "proof".to_owned(),
+            id: "request-disposition".to_owned(),
+            lane: "tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            command: "cargo test --locked parser subscript".to_owned(),
+            reason: "Confirm the later subscript behavior".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "executed".to_owned(),
+        };
+        let mut linked_receipt = receipt.clone();
+        linked_receipt.request_ids = vec![request.id.clone()];
         let corroborated = build_active_claim_graph(
             head,
             std::slice::from_ref(&observation),
             &[],
             &[],
-            &[],
-            std::slice::from_ref(&receipt),
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&linked_receipt),
             &context(head),
         );
         ensure!(corroborated.topics[0].thread_disposition == "corroborated_with_new_evidence");
@@ -1030,40 +1185,179 @@ mod tests {
         ensure!(graph.topics[0].thread_disposition == "fixed_on_current_head");
         ensure!(graph.topics[0].stale_threads == ["current-thread", "stale-thread"]);
         ensure!(graph.claims[0].state == ClaimState::Refuted);
+
+        Ok(())
+    }
+
+    #[test]
+    fn reply_candidates_require_current_top_level_thread_and_new_receipt() -> Result<()> {
+        let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let mut thread_context = context(head);
+        thread_context.threads[0].id = "456".to_owned();
+        let comments = vec![ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[tests-oracle] subscript finding remains actionable".to_owned(),
+            evidence: "focused execution".to_owned(),
+            suggestion: None,
+        }];
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "proof:red-green:123".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "base".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "red-green".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["request-1".to_owned()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "subscript focused proof".to_owned(),
+        };
+        let request = ProofRequest {
+            schema: "proof".to_owned(),
+            id: "request-1".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test --locked parser subscript".to_owned(),
+            reason: "Does the subscript remain indexed?".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "executed".to_owned(),
+        };
+        let replies = build_reply_candidates(
+            head,
+            &comments,
+            std::slice::from_ref(&receipt),
+            std::slice::from_ref(&request),
+            &thread_context,
+        );
+        ensure!(replies.len() == 1);
+        ensure!(replies[0].claim_id == topic_claim_id_for_inline(&comments[0]));
+        ensure!(replies[0].comment_id == 456);
+        ensure!(replies[0].head_sha == head);
+        ensure!(replies[0].receipt_id == "proof:red-green:123");
+        ensure!(replies[0].body.contains("Confirmed by focused execution"));
+        ensure!(replies[0].body.contains("proof:red-green:123"));
+
+        let mut unrelated_receipt = receipt.clone();
+        unrelated_receipt.id = "proof:allocator".to_owned();
+        unrelated_receipt.request_ids = vec!["request-2".to_owned()];
+        let mut unrelated_request = request.clone();
+        unrelated_request.id = "request-2".to_owned();
+        unrelated_request.reason = "Does the allocator lifetime remain bounded?".to_owned();
+        unrelated_request.command = "cargo test --locked allocator lifetime".to_owned();
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                std::slice::from_ref(&unrelated_receipt),
+                std::slice::from_ref(&unrelated_request),
+                &thread_context,
+            )
+            .is_empty(),
+            "same-lane proof for another claim must not reply to this thread"
+        );
+
+        let mut stale_receipt = receipt.clone();
+        stale_receipt.id = "proof:stale".to_owned();
+        stale_receipt.head = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned();
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                std::slice::from_ref(&stale_receipt),
+                std::slice::from_ref(&request),
+                &thread_context
+            )
+            .is_empty()
+        );
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                &[stale_receipt, receipt.clone()],
+                std::slice::from_ref(&request),
+                &thread_context
+            )
+            .len()
+                == 1
+        );
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                &[],
+                std::slice::from_ref(&request),
+                &thread_context
+            )
+            .is_empty()
+        );
+        thread_context.threads[0].in_reply_to = Some("111".to_owned());
+        ensure!(
+            build_reply_candidates(
+                head,
+                &comments,
+                std::slice::from_ref(&receipt),
+                std::slice::from_ref(&request),
+                &thread_context
+            )
+            .is_empty()
+        );
         Ok(())
     }
 
     #[test]
     fn active_graph_keeps_inline_delivery_and_proof_receipt_links() -> Result<()> {
         let head = "cccccccccccccccccccccccccccccccccccccccc";
+        let comments = vec![ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "subscript finding".to_owned(),
+            evidence: "receipt".to_owned(),
+            suggestion: None,
+        }];
+        let request = ProofRequest {
+            schema: "proof".to_owned(),
+            id: "proof-1".to_owned(),
+            lane: "tests".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            command: "cargo test --locked parser subscript".to_owned(),
+            reason: "answer the subscript claim".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: false,
+            status: "executed".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "receipt-1".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "base".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec![request.id.clone()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "subscript proof".to_owned(),
+        };
         let graph = build_active_claim_graph(
             head,
             &[],
-            &[ReviewInlineComment {
-                lane: "tests".to_owned(),
-                severity: "high".to_owned(),
-                confidence: "high".to_owned(),
-                path: "src/parser.rs".to_owned(),
-                line: 12,
-                side: "RIGHT".to_owned(),
-                body: "Finding".to_owned(),
-                evidence: "receipt".to_owned(),
-                suggestion: None,
-            }],
+            &comments,
             &[],
-            &[ProofRequest {
-                schema: "proof".to_owned(),
-                id: "proof-1".to_owned(),
-                lane: "tests".to_owned(),
-                requested_by: vec!["tests".to_owned()],
-                command: "cargo test --locked".to_owned(),
-                reason: "answer claim".to_owned(),
-                cost: "focused-test".to_owned(),
-                timeout_sec: 60,
-                required: false,
-                status: "executed".to_owned(),
-            }],
-            &[],
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&receipt),
             &PrThreadContext {
                 threads: Vec::new(),
                 ..context(head)
@@ -1072,6 +1366,29 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].delivery == "inline-candidate");
         ensure!(graph.topics[0].proof_requests == ["proof-1"]);
+        ensure!(graph.topics[0].proof_receipts == ["receipt-1"]);
+
+        let mut unrelated_request = request.clone();
+        unrelated_request.id = "proof-unrelated".to_owned();
+        unrelated_request.reason = "Confirm allocator lifetime".to_owned();
+        unrelated_request.command = "cargo test --locked allocator lifetime".to_owned();
+        let mut unrelated_receipt = receipt.clone();
+        unrelated_receipt.id = "receipt-unrelated".to_owned();
+        unrelated_receipt.request_ids = vec![unrelated_request.id.clone()];
+        let unrelated_graph = build_active_claim_graph(
+            head,
+            &[],
+            &comments,
+            &[],
+            std::slice::from_ref(&unrelated_request),
+            std::slice::from_ref(&unrelated_receipt),
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        ensure!(unrelated_graph.topics[0].proof_requests.is_empty());
+        ensure!(unrelated_graph.topics[0].proof_receipts.is_empty());
         Ok(())
     }
 
