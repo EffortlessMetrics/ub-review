@@ -4,6 +4,12 @@
 
 Accepted
 
+Implementation status (2026-07-10): the deterministic gate artifact and
+exit-code contract below are implemented, and the conclusion vocabulary is now
+`pass | fail | inconclusive`. A pure watchdog classifier exists for frozen
+current-head observations; independent GitHub observation and terminal-check
+publication still require the released stable coordinator tracked by #658.
+
 ## Context
 
 Historically, `ub-review` ran required proof in `intelligent-ci` mode and wrote
@@ -36,17 +42,20 @@ terminal state, required-proof receipts, and tool gate outcomes. No model output
 feeds the verdict directly; models influence the gate only through validated
 candidates and proof receipts that survive compilation.
 
-Conclusion mapping from `ub-review.terminal_state.v1`:
+Conclusion mapping combines `ub-review.terminal_state.v1` with deterministic
+gate reasons. Terminal status alone never decides the gate:
 
 ```text
-terminal status              gate conclusion
----------------------------  -------------------------------------------
-sufficient                   pass
-artifact-only                pass
-needs-reviewer-attention     pass        (review feedback, not a blocker)
-needs-reviewer-attention     fail        (only when a blocking condition below holds)
-failed-to-review             fail
+deterministic evidence                         gate conclusion
+---------------------------------------------  -----------------
+no blocking reason                             pass
+only unavailable required evidence             inconclusive
+one or more demonstrated blocking reasons      fail
 ```
+
+This keeps a model-only `failed-to-review` status advisory while making an
+unavailable required sensor explicit rather than treating missing evidence as
+either clean evidence or a demonstrated code defect.
 
 The gate goes red only for:
 
@@ -91,8 +100,8 @@ posting trouble is not gate trouble.
 }
 ```
 
-Every `fail` reason carries a receipt pointer. A red gate with no receipt is a
-bug in the gate, not a finding.
+Every `fail` or `inconclusive` reason carries a receipt pointer. A blocking gate
+with no receipt is a gate bug, not a finding.
 
 ### 2. CI audit wizard
 

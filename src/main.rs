@@ -28,6 +28,8 @@ mod builtin;
 use builtin::*;
 mod gate;
 use gate::*;
+mod gate_watchdog;
+use gate_watchdog::*;
 mod artifacts;
 use artifacts::*;
 mod proof;
@@ -179,6 +181,7 @@ fn main() -> Result<()> {
         Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
         Command::QualityGithubCollect(args) => cmd_quality_github_collect(args),
         Command::GateCheck(args) => cmd_gate_check(args),
+        Command::GateWatchdog(args) => cmd_gate_watchdog(args),
         Command::Worker(args) => cmd_worker(args),
     }
 }
@@ -14466,32 +14469,51 @@ required_proof_unprooven = true
     }
 
     #[test]
-    fn run_gate_failure_message_names_gate_outcome_artifact() {
+    fn run_gate_failure_message_enforces_every_non_pass_conclusion() -> Result<()> {
         let failing = RunCompletion {
             gate_conclusion: "fail".to_owned(),
             fail_on_gate: true,
             run_dir: Path::new("target/ub-review").to_path_buf(),
         };
-        let message = run_gate_failure_message(&failing);
-        assert!(
-            message
-                .as_deref()
-                .is_some_and(|message| message.contains("review/gate_outcome.json"))
-        );
+        let failure_message = run_gate_failure_message(&failing)
+            .ok_or_else(|| anyhow::anyhow!("fail conclusion was not enforced"))?;
+        anyhow::ensure!(failure_message.contains("blocking evidence"));
+        anyhow::ensure!(failure_message.contains("gate_outcome.json"));
+
+        let inconclusive = RunCompletion {
+            gate_conclusion: "inconclusive".to_owned(),
+            fail_on_gate: true,
+            run_dir: Path::new("target/ub-review").to_path_buf(),
+        };
+        let inconclusive_message = run_gate_failure_message(&inconclusive)
+            .ok_or_else(|| anyhow::anyhow!("inconclusive conclusion was not enforced"))?;
+        anyhow::ensure!(inconclusive_message.contains("required evidence is unavailable"));
+        anyhow::ensure!(inconclusive_message.contains("gate_outcome.json"));
+
+        let unknown = RunCompletion {
+            gate_conclusion: "future-state".to_owned(),
+            fail_on_gate: true,
+            run_dir: Path::new("target/ub-review").to_path_buf(),
+        };
+        let unknown_message = run_gate_failure_message(&unknown)
+            .ok_or_else(|| anyhow::anyhow!("unknown conclusion was not enforced"))?;
+        anyhow::ensure!(unknown_message.contains("unrecognized `future-state`"));
+        anyhow::ensure!(unknown_message.contains("failing closed"));
 
         let tolerated = RunCompletion {
             gate_conclusion: "fail".to_owned(),
             fail_on_gate: false,
             run_dir: Path::new("target/ub-review").to_path_buf(),
         };
-        assert!(run_gate_failure_message(&tolerated).is_none());
+        anyhow::ensure!(run_gate_failure_message(&tolerated).is_none());
 
         let passing = RunCompletion {
             gate_conclusion: "pass".to_owned(),
             fail_on_gate: true,
             run_dir: Path::new("target/ub-review").to_path_buf(),
         };
-        assert!(run_gate_failure_message(&passing).is_none());
+        anyhow::ensure!(run_gate_failure_message(&passing).is_none());
+        Ok(())
     }
 
     #[test]

@@ -206,7 +206,7 @@ inputs:
     default: 'false'
     required: false
   fail-on-gate:
-    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step runs `ub-review gate-check`, which exits non-zero when review/gate_outcome.json records a fail conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
+    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step runs `ub-review gate-check`, which exits non-zero when review/gate_outcome.json records fail or inconclusive and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
     default: auto
     required: false
   github-summary:
