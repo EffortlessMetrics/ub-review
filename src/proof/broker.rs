@@ -691,11 +691,16 @@ where
         existing_leases,
         &result.resource_leases,
     );
+    let final_receipts = existing_receipts
+        .iter()
+        .chain(result.proof_receipts.iter())
+        .cloned()
+        .collect::<Vec<_>>();
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
         proof_requests,
-        proof_receipts: &result.proof_receipts,
+        proof_receipts: &final_receipts,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -781,11 +786,16 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         existing_leases,
         &result.resource_leases,
     );
+    let final_receipts = existing_receipts
+        .iter()
+        .chain(result.proof_receipts.iter())
+        .cloned()
+        .collect::<Vec<_>>();
     let final_selection = select_proof_portfolio(ProofPortfolioInput {
         test_tasks: &test_candidates,
         build_tasks: &build_candidates,
         proof_requests,
-        proof_receipts: &result.proof_receipts,
+        proof_receipts: &final_receipts,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -1542,6 +1552,99 @@ mod tests {
             .find(|decision| decision["task_id"].as_str() == Some(build_candidates[0].id.as_str()))
             .ok_or_else(|| anyhow::anyhow!("missing final build decision"))?;
         ensure!(build_decision["status"] == "deferred_by_safe_wind_down");
+        Ok(())
+    }
+
+    #[test]
+    fn broker_satisfies_new_request_from_existing_receipt_without_execution() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let diff = test_diff();
+        let request = ProofRequest {
+            schema: PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "new-request".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test --locked --test config_tests".to_owned(),
+            reason: "Answer the newly arrived focused-test request.".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: true,
+            status: "requested".to_owned(),
+        };
+        let v2_request = proof_request_to_v2(&request);
+        let task = focused_test_candidates_from_v2(std::slice::from_ref(&v2_request))
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("request did not resolve to a focused test"))?;
+        let receipt = ProofReceipt {
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: task.id.clone(),
+            kind: "focused-red-green".to_owned(),
+            base: diff.base.clone(),
+            head: diff.head.clone(),
+            test_patch_mode: "base-plus-tests".to_owned(),
+            requested_by: task.requested_by.clone(),
+            request_ids: vec![request.id.clone()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "existing receipt answers the same focused proof".to_owned(),
+        };
+        let args = test_run_args(out.clone());
+        let box_state = BoxState {
+            cpus: 4,
+            free_mem_mb: Some(8_192),
+            free_disk_mb: Some(20_000),
+            load_1m: Some(0.25),
+            github_actions: false,
+        };
+        let result = run_request_proof_broker_v0_with_runners(
+            temp.path(),
+            &out,
+            &diff,
+            &Profile::default(),
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&receipt),
+            &[],
+            &args,
+            &box_state,
+            &Instant::now(),
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                Err(anyhow::anyhow!(
+                    "existing evidence must prevent test execution"
+                ))
+            },
+            |_root, _out, _diff| {
+                Err(anyhow::anyhow!(
+                    "existing evidence must prevent worktree preparation"
+                ))
+            },
+            |_root, _argv, _env, _timeout, _stdout, _stderr| {
+                Err(anyhow::anyhow!(
+                    "existing evidence must prevent build execution"
+                ))
+            },
+        )?;
+
+        ensure!(result.proof_receipts.is_empty());
+        let artifact: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/proof_portfolio.json"))?)?;
+        let decision = artifact["decisions"]
+            .as_array()
+            .and_then(|decisions| {
+                decisions
+                    .iter()
+                    .find(|decision| decision["task_id"].as_str() == Some(task.id.as_str()))
+            })
+            .ok_or_else(|| anyhow::anyhow!("missing existing-receipt portfolio decision"))?;
+        ensure!(
+            decision["status"] == "answered_by_existing_receipt",
+            "task={} receipt={} decisions={}",
+            task.id,
+            receipt.id,
+            artifact["decisions"]
+        );
+        ensure!(decision["receipt_ids"][0] == receipt.id);
         Ok(())
     }
 

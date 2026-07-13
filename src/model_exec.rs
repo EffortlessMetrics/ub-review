@@ -1757,6 +1757,8 @@ fn validate_proof_intent(
 
 #[cfg(test)]
 mod receipt_reconsideration_tests {
+    use anyhow::Result;
+
     use super::*;
 
     fn observation(id: &str) -> Observation {
@@ -1821,5 +1823,42 @@ mod receipt_reconsideration_tests {
         assert_eq!(observations[0].source, "proof-reconsideration");
         assert_eq!(observations[1].status, "confirmed");
         assert_eq!(observations[1].source, "model");
+    }
+
+    #[test]
+    fn one_receipt_changes_two_exact_lane_topic_dispositions() -> Result<()> {
+        let first = observation("claim-1");
+        let mut second = observation("claim-2");
+        second.lane = "opposition".to_owned();
+        let mut unrelated = observation("claim-3");
+        unrelated.lane = "opposition".to_owned();
+        let mut observations = vec![first.clone(), second.clone(), unrelated];
+        let updates = vec![
+            ReceiptReconsideration {
+                lane: first.lane.clone(),
+                receipt_ids: vec!["receipt-shared".to_owned()],
+                request_ids: vec![first.id.clone()],
+                conclusion: "the receipt confirms claim-1".to_owned(),
+                disposition: "confirm".to_owned(),
+                changed: true,
+            },
+            ReceiptReconsideration {
+                lane: second.lane.clone(),
+                receipt_ids: vec!["receipt-shared".to_owned()],
+                request_ids: vec![second.id.clone()],
+                conclusion: "the receipt refutes claim-2".to_owned(),
+                disposition: "refute".to_owned(),
+                changed: true,
+            },
+        ];
+
+        anyhow::ensure!(apply_receipt_reconsiderations(&mut observations, &updates) == 2);
+        anyhow::ensure!(observations[0].status == "confirmed");
+        anyhow::ensure!(observations[1].status == "refuted");
+        anyhow::ensure!(observations[2].status == "confirmed");
+        anyhow::ensure!(observations[0].source == "proof-reconsideration");
+        anyhow::ensure!(observations[1].source == "proof-reconsideration");
+        anyhow::ensure!(observations[2].source == "model");
+        Ok(())
     }
 }
