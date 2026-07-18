@@ -94,6 +94,19 @@ posting trouble is not gate trouble.
 Every `fail` reason carries a receipt pointer. A red gate with no receipt is a
 bug in the gate, not a finding.
 
+`gate_outcome.json` decides "is this compiled review a pass or fail?" A
+separate, inert substrate — the current-head watchdog
+(`review/gate_watchdog.json`, schema `ub-review.gate_watchdog.v1`, issue #745,
+child of #658) — decides "did the current head actually reach an honest
+terminal state, or is a green verdict stale, cancelled, or missing?" It is a
+pure classifier over frozen observations that never reads live provider state,
+publishes a check, or mutates branch protection (consistent with the invariant
+that the gate never depends on live CI state), and the same fail-closed rule
+holds: only a `terminal` state carries a conclusion, so missing or malformed
+head evidence can never serialize `pass`. The watchdog is substrate for the
+future stable coordinator, not enforcement, and stays dormant until that
+coordinator consumes it. See SPEC-0003 "Current-head watchdog (#745)."
+
 ### 2. CI audit wizard
 
 A new read-only subcommand, `ub-review audit-ci`, and a later PR-emitting

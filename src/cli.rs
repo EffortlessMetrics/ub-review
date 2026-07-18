@@ -50,6 +50,11 @@ pub(crate) enum Command {
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
     /// resolves on and review/gate_outcome.json records a `fail` conclusion.
     GateCheck(GateCheckArgs),
+    /// Classify the current PR head's terminal state from frozen
+    /// observations and write `review/gate_watchdog.json`. Pure and
+    /// deterministic; never queries GitHub, publishes a check, or mutates
+    /// branch protection. (Issue #745, child of #658.)
+    GateWatchdog(GateWatchdogArgs),
     /// Execute a single proof request and write its receipt. Designed for
     /// distributed execution: a `plan` job emits proof requests, `worker`
     /// jobs execute them (locally or remotely), and a `finalize` job
@@ -780,6 +785,19 @@ pub(crate) struct SelectorArgs {
 pub(crate) struct SummaryArgs {
     #[arg(long, default_value = "target/ub-review")]
     pub(crate) run_dir: PathBuf,
+}
+
+#[derive(Debug, Args)]
+pub(crate) struct GateWatchdogArgs {
+    /// Frozen observation bundle (JSON) describing the head SHA, run/proof
+    /// observations, the recorded gate artifact, and the coordinator marker.
+    /// Read-only input; no live GitHub access.
+    #[arg(long = "observations", env = "UB_REVIEW_WATCHDOG_OBSERVATIONS")]
+    pub(crate) observations: PathBuf,
+    /// Run directory root. The verdict is written to
+    /// `<out>/review/gate_watchdog.json`.
+    #[arg(long, default_value = "target/ub-review", env = "UB_REVIEW_RUN_DIR")]
+    pub(crate) out: PathBuf,
 }
 
 #[derive(Debug, Args)]

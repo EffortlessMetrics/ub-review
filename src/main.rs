@@ -143,6 +143,8 @@ mod plan_artifacts;
 pub(crate) use plan_artifacts::*;
 mod ci_audit;
 pub(crate) use ci_audit::*;
+mod gate_watchdog;
+pub(crate) use gate_watchdog::*;
 
 const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
@@ -179,6 +181,7 @@ fn main() -> Result<()> {
         Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
         Command::QualityGithubCollect(args) => cmd_quality_github_collect(args),
         Command::GateCheck(args) => cmd_gate_check(args),
+        Command::GateWatchdog(args) => cmd_gate_watchdog(args),
         Command::Worker(args) => cmd_worker(args),
     }
 }

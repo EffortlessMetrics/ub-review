@@ -37,6 +37,7 @@ pub(crate) const FOLLOW_UP_QUESTION_PACKET_SCHEMA: &str = "ub-review.follow_up_q
 pub(crate) const FOLLOW_UP_QUESTION_SCHEMA: &str = "ub-review.follow_up_question.v1";
 pub(crate) const FOLLOW_UP_RESULT_SCHEMA: &str = "ub-review.follow_up_result.v1";
 pub(crate) const GATE_OUTCOME_SCHEMA: &str = "ub-review.gate_outcome.v1";
+pub(crate) const GATE_WATCHDOG_SCHEMA: &str = "ub-review.gate_watchdog.v1";
 pub(crate) const ISSUE_ACTION_SCHEMA: &str = "ub-review.issue_action.v1";
 pub(crate) const ISSUE_BROKER_PLAN_SCHEMA: &str = "ub-review.issue_broker_plan.v1";
 pub(crate) const ISSUE_BROKER_RESULT_SCHEMA: &str = "ub-review.issue_broker_result.v1";
