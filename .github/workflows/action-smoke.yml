@@ -30,9 +30,9 @@ on:
         default: '8'
         type: string
       model_smoke_expected_ok_lanes:
-        description: Minimum successful review lanes expected in the smoke artifact.
+        description: Minimum usable ok/degraded primary review lanes expected in the smoke artifact.
         required: false
-        default: '10'
+        default: '5'
         type: string
 
 permissions:

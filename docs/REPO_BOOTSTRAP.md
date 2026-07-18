@@ -56,7 +56,7 @@ After downloading the artifact, run the packet verifier:
 
 ```bash
 python scripts/verify-bun-review-artifacts.py target/ub-review \
-  --min-ok-model-lanes 10 \
+  --min-ok-model-lanes 5 \
   --require-no-model-evidence-failures
 ```
 

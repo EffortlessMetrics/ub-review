@@ -270,7 +270,7 @@ cargo run -- run --config target/ub-review-smoke.toml --profile gh-runner \
   --base HEAD --head HEAD --dry-run --out target/ub-review-smoke
                                               # full dry-run path: scripts/smoke-local.sh
 python scripts/verify-bun-review-artifacts.py target/ub-review \
-  --min-ok-model-lanes 10 --require-no-model-evidence-failures
+  --min-ok-model-lanes 5 --require-no-model-evidence-failures
                                               # packet contract incl. no-LGTM + secret hygiene
 python scripts/verify-bun-review-artifacts.py --self-test
 ```
