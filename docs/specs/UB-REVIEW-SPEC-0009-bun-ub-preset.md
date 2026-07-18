@@ -298,10 +298,12 @@ packet (defaults already aimed at this preset:
   values are allowed (SECRET_VALUE_NAMES / SECRET_VALUE_PREFIXES and the
   self-test cases in scripts/verify-bun-review-artifacts.py).
 
-Pin-advance verification additionally requires `--min-ok-model-lanes 10`
+Pin-advance verification additionally requires `--min-ok-model-lanes 5`
 (default 0) and `--require-no-model-evidence-failures`
 (docs/GH_RUNNER_BUN.md). Note `--min-ok-model-lanes` counts lanes with status
-ok or degraded.
+ok or degraded. The threshold is five because the preset has five callable
+primary review lanes; the refuter is conditional and skipped when no inline
+candidate passes its guardrails.
 
 ## Advisory vs blocking behavior
 
@@ -398,7 +400,7 @@ artifact-only skip receipt, which is equally a success.
 ```bash
 python scripts/verify-bun-review-artifacts.py --self-test
 python scripts/verify-bun-review-artifacts.py target/ub-review \
-  --min-ok-model-lanes 10 \
+  --min-ok-model-lanes 5 \
   --require-no-model-evidence-failures
 ub-review doctor --require-core-tools     # standard image only
 cargo test --bin ub-review --locked       # lane routing, refuter, skip receipts

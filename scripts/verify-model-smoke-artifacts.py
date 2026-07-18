@@ -91,20 +91,24 @@ def require_single_ok_preflight(preflights) -> dict:
     return receipt
 
 
-def require_ok_lanes(lanes, min_ok_lanes: int) -> list[dict]:
-    ok_lanes = [
+def require_usable_lanes(lanes, min_usable_lanes: int) -> list[dict]:
+    usable_lanes = [
         lane
         for lane in lanes
-        if lane.get("status") == "ok" and lane.get("lane") != "refuter"
+        if lane.get("status") in {"ok", "degraded"}
+        and lane.get("lane") != "refuter"
     ]
-    if len(ok_lanes) < min_ok_lanes:
-        fail(f"expected at least {min_ok_lanes} ok model lane(s), got {len(ok_lanes)}")
-    for lane in ok_lanes:
-        require_ok_lane_receipt(lane)
-    return ok_lanes
+    if len(usable_lanes) < min_usable_lanes:
+        fail(
+            f"expected at least {min_usable_lanes} usable ok/degraded model lane(s), "
+            f"got {len(usable_lanes)}"
+        )
+    for lane in usable_lanes:
+        require_usable_lane_receipt(lane)
+    return usable_lanes
 
 
-def require_ok_lane_receipt(lane: dict) -> None:
+def require_usable_lane_receipt(lane: dict) -> None:
     expected = {
         "provider": "minimax",
         "model": "MiniMax-M3",
@@ -112,18 +116,18 @@ def require_ok_lane_receipt(lane: dict) -> None:
     }
     for key, value in expected.items():
         if lane.get(key) != value:
-            fail(f"ok model lane `{key}` expected {value!r}, got {lane.get(key)!r}")
+            fail(f"usable model lane `{key}` expected {value!r}, got {lane.get(key)!r}")
     endpoint_kind = lane.get("endpoint_kind")
     expectation = endpoint_expectation(endpoint_kind)
     if lane.get("response_shape") != expectation["response_shape"]:
         fail(
-            "ok model lane `response_shape` expected "
+            "usable model lane `response_shape` expected "
             f"{expectation['response_shape']!r}, got {lane.get('response_shape')!r}"
         )
     if lane.get("duration_ms", 0) <= 0:
-        fail("ok model lane duration_ms must be positive")
+        fail("usable model lane duration_ms must be positive")
     if lane.get("fallback_from") is not None:
-        fail("ok model lane unexpectedly used fallback_from")
+        fail("usable model lane unexpectedly used fallback_from")
 
 
 def require_metrics(metrics, min_ok_lanes: int) -> None:
@@ -345,10 +349,10 @@ def require_preflight_artifacts(root: pathlib.Path, receipt: dict) -> None:
         fail(f"provider preflight content expected {expected_content!r}, got {content!r}")
 
 
-def require_ok_lane_artifacts(root: pathlib.Path, lane: dict) -> None:
+def require_usable_lane_artifacts(root: pathlib.Path, lane: dict) -> None:
     lane_id = lane.get("lane")
     if not isinstance(lane_id, str) or not lane_id:
-        fail("ok model lane has no lane id")
+        fail("usable model lane has no lane id")
     require_model_call_artifacts(
         root / "review/model" / lane_id,
         f"model lane {lane_id}",
@@ -519,14 +523,14 @@ def main(argv: list[str]) -> int:
     metrics = load_json(root / "review/metrics.json")
 
     preflight = require_single_ok_preflight(preflights)
-    ok_lanes = require_ok_lanes(review.get("model_lanes", []), min_ok_lanes)
+    usable_lanes = require_usable_lanes(review.get("model_lanes", []), min_ok_lanes)
     require_run_pass_consistency(root, review, metrics)
     require_metrics(metrics, min_ok_lanes)
     require_scheduler_artifact(root, metrics)
     require_events(root)
     require_preflight_artifacts(root, preflight)
-    for lane in ok_lanes:
-        require_ok_lane_artifacts(root, lane)
+    for lane in usable_lanes:
+        require_usable_lane_artifacts(root, lane)
 
     post_result = root / "review/post-result.json"
     post_error = root / "review/post-error.json"
@@ -539,7 +543,7 @@ def main(argv: list[str]) -> int:
         "MiniMax smoke verified: "
         f"preflights={metrics['models']['provider_preflight_calls_attempted']} "
         f"lane_calls={metrics['models']['model_lane_calls_attempted']} "
-        f"ok_lanes={','.join(lane['lane'] for lane in ok_lanes)}"
+        f"usable_lanes={','.join(lane['lane'] for lane in usable_lanes)}"
     )
     return 0
 
