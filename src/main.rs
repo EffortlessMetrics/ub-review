@@ -18371,6 +18371,12 @@ index 1111111..2222222 100644
                         requests.push(request);
                         deadline_at = Instant::now() + deadline;
                     }
+                    // Recorded errors are advisory only: they surface in the
+                    // deadline bail below, but are discarded once
+                    // `expected_requests` is reached via later good connections.
+                    // This deliberately favors tolerating the transient
+                    // per-connection errors #760 targets over failing loud on a
+                    // handler error that the caller then retries past.
                     Err(err) => last_error = Some(err.to_string()),
                 },
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
