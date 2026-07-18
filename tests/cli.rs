@@ -7220,5 +7220,56 @@ fn main() {{
     Ok(())
 }
 
+/// Regression for #760: a transient per-connection handler error must not tear
+/// down the fake-server listener. When the client's first connection fails
+/// (here, closed before it sends any headers), the fixture must keep listening
+/// so a retried connection is served — instead of the client hitting
+/// `connection refused` on a listener that a `?`-propagated handler error had
+/// already dropped, which then masked the real handler error.
+#[test]
+fn fake_setup_ci_listener_survives_handler_error() -> Result<()> {
+    use std::io::{Read, Write};
+    use std::net::{Shutdown, TcpStream};
+
+    let (url, handle) = spawn_fake_setup_ci_api(1, false)?;
+    let addr = url
+        .strip_prefix("http://")
+        .context("fake setup-ci url should be http://host:port")?
+        .to_owned();
+
+    // First connection: close immediately so the handler bails before headers
+    // finish. Under the pre-#760 code this `?`-propagated out of the accept
+    // loop and dropped the listener.
+    {
+        let stream = TcpStream::connect(&addr)?;
+        stream.shutdown(Shutdown::Both)?;
+    }
+
+    // Second connection: a well-formed request the fixture must still serve.
+    let mut stream = TcpStream::connect(&addr)?;
+    stream.write_all(
+        b"GET /repos/acme/widgets HTTP/1.1\r\nHost: fixture\r\nContent-Length: 0\r\n\r\n",
+    )?;
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response)?;
+    assert!(
+        String::from_utf8_lossy(&response).contains("default_branch"),
+        "fixture should answer the retried request after an earlier handler error"
+    );
+
+    let requests = join_fake_provider(handle)?;
+    assert_eq!(
+        requests.len(),
+        1,
+        "only the well-formed request is recorded; the errored connection is not"
+    );
+    assert!(
+        requests[0].starts_with("GET /repos/acme/widgets "),
+        "recorded request: {}",
+        requests[0]
+    );
+    Ok(())
+}
+
 mod common;
 use common::*;

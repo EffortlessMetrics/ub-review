@@ -38,24 +38,80 @@ pub fn prepend_to_path(dir: &Path) -> Result<String> {
     Ok(std::env::join_paths(paths)?.to_string_lossy().into_owned())
 }
 
+/// Drives a fake HTTP fixture listener until `expected_requests` requests have
+/// been served (or the deadline expires), returning each request's captured
+/// text.
+///
+/// Reliability contract (issue #760): a per-connection handler error must **not**
+/// tear down the listener. Previously each fixture propagated `handler(stream)?`
+/// straight out of the accept loop, so a single transient connection error
+/// (e.g. a slow client that trips the read timeout under heavy parallelism)
+/// dropped the listener mid-run. The real client then hit `connection refused`
+/// on its next request, and that client-side failure masked the underlying
+/// handler error. Here a handler error is recorded and serving continues, so a
+/// retried client connection is answered instead of refused; the recorded error
+/// is surfaced in the deadline bail if the expected count is never reached. The
+/// deadline also resets on each served request so steady progress is never
+/// starved by the fixed budget.
+pub fn serve_fake_http(
+    listener: TcpListener,
+    expected_requests: usize,
+    label: &str,
+    deadline: Duration,
+    handler: impl Fn(usize, TcpStream) -> Result<String>,
+) -> Result<Vec<String>> {
+    let mut deadline_at = Instant::now() + deadline;
+    let mut requests = Vec::new();
+    let mut last_error: Option<String> = None;
+    while requests.len() < expected_requests {
+        match listener.accept() {
+            Ok((stream, _addr)) => match handler(requests.len(), stream) {
+                Ok(request) => {
+                    requests.push(request);
+                    deadline_at = Instant::now() + deadline;
+                }
+                // Recorded errors are advisory only: they surface in the
+                // deadline bail below, but are discarded once `expected_requests`
+                // is reached via later good connections. This deliberately favors
+                // tolerating the transient per-connection errors #760 targets over
+                // failing loud on a handler error that the caller then retries past.
+                Err(err) => last_error = Some(err.to_string()),
+            },
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                if Instant::now() >= deadline_at {
+                    if let Some(err) = &last_error {
+                        bail!(
+                            "fake {label} API received {} of {} requests; last handler error: {err}",
+                            requests.len(),
+                            expected_requests
+                        );
+                    }
+                    bail!(
+                        "fake {label} API received {} of {} requests",
+                        requests.len(),
+                        expected_requests
+                    );
+                }
+                thread::sleep(Duration::from_millis(10));
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+    Ok(requests)
+}
+
 pub fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
-    let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        loop {
-            match listener.accept() {
-                Ok((stream, _addr)) => return Ok(vec![handle_fake_github_request(stream)?]),
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!("fake GitHub API received no requests");
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
+    let handle = thread::spawn(move || {
+        serve_fake_http(
+            listener,
+            1,
+            "GitHub",
+            Duration::from_secs(20),
+            |_idx, stream| handle_fake_github_request(stream),
+        )
     });
     Ok((url, handle))
 }
@@ -67,28 +123,14 @@ pub fn spawn_fake_setup_ci_api(
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
-    let handle = thread::spawn(move || -> Result<Vec<String>> {
-        let deadline = Instant::now() + Duration::from_secs(20);
-        let mut requests = Vec::new();
-        while requests.len() < expected_requests {
-            match listener.accept() {
-                Ok((stream, _addr)) => {
-                    requests.push(handle_fake_setup_ci_request(stream, config_exists)?);
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!(
-                            "fake setup-ci API received {} of {} requests",
-                            requests.len(),
-                            expected_requests
-                        );
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Ok(requests)
+    let handle = thread::spawn(move || {
+        serve_fake_http(
+            listener,
+            expected_requests,
+            "setup-ci",
+            Duration::from_secs(20),
+            move |_idx, stream| handle_fake_setup_ci_request(stream, config_exists),
+        )
     });
     Ok((url, handle))
 }
@@ -247,33 +289,20 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}/v1/chat/completions", listener.local_addr()?);
-    let handle = thread::spawn(move || -> Result<Vec<String>> {
+    let handle = thread::spawn(move || {
         let expected_requests = contents.len();
-        let mut deadline = Instant::now() + Duration::from_secs(120);
-        let mut requests = Vec::new();
-        while requests.len() < expected_requests {
-            match listener.accept() {
-                Ok((stream, _addr)) => {
-                    let content = contents
-                        .get(requests.len())
-                        .ok_or_else(|| anyhow::anyhow!("fake provider response missing"))?;
-                    requests.push(handle_fake_openai_request(stream, content, response_delay)?);
-                    deadline = Instant::now() + Duration::from_secs(120);
-                }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    if Instant::now() >= deadline {
-                        bail!(
-                            "fake provider received {} of {} requests",
-                            requests.len(),
-                            expected_requests
-                        );
-                    }
-                    thread::sleep(Duration::from_millis(10));
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Ok(requests)
+        serve_fake_http(
+            listener,
+            expected_requests,
+            "provider",
+            Duration::from_secs(120),
+            move |idx, stream| {
+                let content = contents
+                    .get(idx)
+                    .ok_or_else(|| anyhow::anyhow!("fake provider response missing"))?;
+                handle_fake_openai_request(stream, content, response_delay)
+            },
+        )
     });
     Ok((url, handle))
 }
