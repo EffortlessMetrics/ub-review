@@ -49,6 +49,13 @@ Do not reopen these without a concrete failing receipt.
   and direct runs fail closed for every non-pass gate conclusion (PR #754).
   Both slices have successful artifact verification but remain unmergeable while
   the required gate reports the upstream RIPR exposure blocker.
+- The current-head watchdog classifier landed (#745, child of #658): a pure
+  `src/gate_watchdog.rs` classifier over frozen observations, the
+  `gate-watchdog` CLI, the `review/gate_watchdog.json` artifact
+  (`gate_watchdog.v1`), and verifier contract self-test coverage. It is
+  additive and inert — no GitHub queries, no check publication, no
+  branch-protection mutation — until a future stable coordinator consumes it.
+  Missing or malformed head evidence can never serialize `pass`.
 
 ## PR-by-PR status
 
@@ -212,12 +219,12 @@ extracting when next touched:
   must name the exact candidate SHA, pre-tag receipts, archive/checksum names,
   downstream smoke plan, and rollback before maintainer authorization.
 - **RIPR semantic-probe contract:** #748 (transactional inline delivery),
-  #681 (production sanitizer witness), #745 (terminal watchdog), and the
-  published follow-ups #753/#754 have
-  green functional proof but remain unpublished or unmergeable while RIPR
+  #681 (production sanitizer witness), and the published follow-ups #753/#754
+  have green functional proof but remain unpublished or unmergeable while RIPR
   reports unresolved CLI/subprocess or semantic-probe exposure gaps. No
   aliases or threshold relaxation are permitted; current upstream tracking is
-  ripr-swarm#1528 and the related semantic-probe fixes.
+  ripr-swarm#1528 and the related semantic-probe fixes. (#745, the terminal
+  watchdog classifier slice, landed separately — see "What is already done".)
 - **Issue-ledger #147:** closed (PRs #459/#460). Cross-lane conflict detection
   and suppression shipped; deeper evidence-precedence adjudication is the open
   next step (epic #655 milestone 4).

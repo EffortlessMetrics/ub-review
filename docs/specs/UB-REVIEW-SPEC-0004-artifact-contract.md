@@ -259,6 +259,16 @@ Per-record directories (existence tied to their array; see XOR rules):
 ```text
 box-state.json                          plan-phase diff boxing state; no
                                         schema pin, no verifier coverage
+review/gate_watchdog.json               current-head terminal-state classifier
+                                        receipt (#745); gate_watchdog.v1, spec
+                                        0003 owns fields; written only by the
+                                        `gate-watchdog` cmd over frozen
+                                        observations, not by `run`, so the
+                                        verifier covers it by contract self-test
+                                        (require_gate_watchdog +
+                                        self_test_gate_watchdog_contract), not
+                                        as a required run artifact. Inert until
+                                        a future stable coordinator consumes it.
 github-review-post-payload.json,        cmd_post working receipts; their
 post-result.json, post-error.json,      paths are exposed as action outputs
 post-stdout.json, post-stderr.txt       and they carry no schema string,
@@ -616,6 +626,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | sensors/<id>/ub-review-sensor-status.json (all six sensors) | stable | status enum + mandatory reason | downstream automation | required (require_common_tree, require_sensor_receipts) |
 | root NDJSON streams (candidates, resolved_candidates, model_stages, witnesses, proof_requests, proof_tasks, proof_receipts, receipt_routes, tool_gate_outcomes, resource_leases, follow_up_results, follow_up_outputs, follow_up_questions) | stable | per-stream vN lines | downstream automation | required (per-stream require_* functions, line parity with review/ arrays) |
 | review/gate_outcome.json | stable | gate_outcome.v1 (spec 0003 owns fields) | gate-check | required (require_gate_outcome, #340) + gate-check (cmd_gate_check) |
+| review/gate_watchdog.json | experimental | gate_watchdog.v1 (spec 0003 owns fields) | future stable coordinator (`gate-watchdog` cmd) | self-test (require_gate_watchdog + self_test_gate_watchdog_contract, #745); not emitted by `run`, so not in the required set |
 | review/metrics.json | stable | integer schema_version 1 | downstream automation; verifier count anchor | required (require_metrics) |
 | review/ub-review-cost.json | stable | cost_receipt.v1; no suggested_fill_seconds in v1 | downstream automation (cost/usefulness telemetry) | required (require_cost_receipt, #336) |
 | review/floor-trend.json | stable | floor_trend.v1; window_scope single_run_v1 | downstream automation (floor-time telemetry seed) | required (require_floor_trend, #338) |

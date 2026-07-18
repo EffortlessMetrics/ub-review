@@ -5582,6 +5582,24 @@ GATE_OUTCOME_REASON_KINDS = {
     "internal",
 }
 
+# gate_watchdog.json (#745): every reason maps to exactly one state, so a
+# reason/state mismatch is a classifier bug. A `terminal` state is the only one
+# allowed to carry a conclusion; missing or malformed evidence must classify
+# non-terminal and can therefore never serialize a `pass`.
+GATE_WATCHDOG_STATES = {"terminal", "pending", "inconclusive"}
+GATE_WATCHDOG_REASON_STATES = {
+    "exact-head-terminal": "terminal",
+    "in-progress-replacement": "pending",
+    "awaiting-run": "pending",
+    "coordinator-crash": "inconclusive",
+    "orphaned-proof": "inconclusive",
+    "cancelled-without-replacement": "inconclusive",
+    "missing-artifact": "inconclusive",
+    "stale-success": "inconclusive",
+    "missing-run": "inconclusive",
+}
+GATE_WATCHDOG_CONCLUSIONS = {"pass", "fail", "inconclusive"}
+
 REQUIRED_TOOL_TIMEOUT_DETAIL_PATTERN = re.compile(r"timeout_sec \d+")
 
 
@@ -10841,6 +10859,143 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
         fail("artifact name sanitizer changed safe replacement behavior")
 
 
+def require_gate_watchdog(root: pathlib.Path) -> None:
+    """The current-head watchdog receipt (#745): schema, a state/reason that
+    agree, and the fail-closed invariant that only a `terminal` state may carry
+    a conclusion (so missing/malformed evidence can never serialize `pass`).
+    Every non-terminal verdict must carry a receipt pointer and retry action."""
+    watchdog = load_json(root / "review/gate_watchdog.json")
+    if not isinstance(watchdog, dict):
+        fail("review/gate_watchdog.json is not an object")
+    if watchdog.get("schema") != "ub-review.gate_watchdog.v1":
+        fail(f"gate watchdog has wrong schema: {watchdog.get('schema')!r}")
+    expected_sha = watchdog.get("expected_sha")
+    if not isinstance(expected_sha, str) or not expected_sha:
+        fail(f"gate watchdog expected_sha is not a non-empty string: {expected_sha!r}")
+    state = watchdog.get("state")
+    if state not in GATE_WATCHDOG_STATES:
+        fail(f"gate watchdog has unknown state: {state!r}")
+    reason = watchdog.get("reason")
+    if reason not in GATE_WATCHDOG_REASON_STATES:
+        fail(f"gate watchdog has unknown reason: {reason!r}")
+    if GATE_WATCHDOG_REASON_STATES[reason] != state:
+        fail(
+            f"gate watchdog reason {reason!r} does not belong to state {state!r} "
+            f"(expected {GATE_WATCHDOG_REASON_STATES[reason]!r})"
+        )
+    detail = watchdog.get("detail")
+    if not isinstance(detail, str) or not detail:
+        fail(f"gate watchdog detail is not a non-empty string: {detail!r}")
+    conclusion = watchdog.get("conclusion")
+    if state == "terminal":
+        if conclusion not in GATE_WATCHDOG_CONCLUSIONS:
+            fail(
+                "gate watchdog terminal conclusion must be pass, fail, or "
+                f"inconclusive: {conclusion!r}"
+            )
+        if watchdog.get("retry_action") is not None:
+            fail("gate watchdog terminal state must not carry a retry_action")
+    else:
+        # Fail-closed: only a terminal state may carry a conclusion, so a
+        # pending/inconclusive head can never serialize a pass verdict.
+        if conclusion is not None:
+            fail(
+                "gate watchdog non-terminal state must not serialize a "
+                f"conclusion: {conclusion!r}"
+            )
+        retry_action = watchdog.get("retry_action")
+        if not isinstance(retry_action, str) or not retry_action:
+            fail(f"gate watchdog {state} state must carry a retry_action")
+    receipt_pointer = watchdog.get("receipt_pointer")
+    if not isinstance(receipt_pointer, str) or not receipt_pointer:
+        fail(f"gate watchdog receipt_pointer is not a non-empty string: {receipt_pointer!r}")
+
+
+def self_test_gate_watchdog_contract() -> None:
+    """#745: the watchdog receipt is audited, not just executed. A valid
+    terminal and a valid inconclusive pass; each violation class fails, above
+    all a non-terminal state that tries to serialize a conclusion."""
+    import tempfile
+
+    def write_root(watchdog: dict) -> "pathlib.Path":
+        tmp = pathlib.Path(tempfile.mkdtemp())
+        review_dir = tmp / "review"
+        review_dir.mkdir()
+        (review_dir / "gate_watchdog.json").write_text(
+            json.dumps(watchdog), encoding="utf-8"
+        )
+        return tmp
+
+    def terminal(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.gate_watchdog.v1",
+            "expected_sha": "abc123",
+            "state": "terminal",
+            "conclusion": "pass",
+            "reason": "exact-head-terminal",
+            "detail": "exact-head run 42 completed with gate conclusion pass",
+            "receipt_pointer": "review/gate_outcome.json@run=42",
+        }
+        base.update(overrides)
+        return base
+
+    def inconclusive(**overrides) -> dict:
+        base = {
+            "schema": "ub-review.gate_watchdog.v1",
+            "expected_sha": "abc123",
+            "state": "inconclusive",
+            "reason": "missing-run",
+            "detail": "no completed run was observed for head abc123 before the deadline",
+            "receipt_pointer": "sha:abc123",
+            "retry_action": "dispatch the gate workflow for the head",
+        }
+        base.update(overrides)
+        return base
+
+    require_gate_watchdog(write_root(terminal()))
+    require_gate_watchdog(write_root(inconclusive()))
+
+    cases = [
+        ("wrong schema", terminal(schema="ub-review.gate_watchdog.v2"), "wrong schema"),
+        ("empty expected_sha", terminal(expected_sha=""), "expected_sha is not a non-empty"),
+        ("unknown state", terminal(state="green"), "unknown state"),
+        ("unknown reason", terminal(reason="vibes"), "unknown reason"),
+        (
+            "reason/state mismatch",
+            terminal(reason="missing-run"),
+            "does not belong to state",
+        ),
+        (
+            "non-terminal serializes a pass",
+            inconclusive(conclusion="pass"),
+            "must not serialize a conclusion",
+        ),
+        (
+            "terminal carries retry_action",
+            terminal(retry_action="do a thing"),
+            "must not carry a retry_action",
+        ),
+        (
+            "inconclusive missing retry_action",
+            {k: v for k, v in inconclusive().items() if k != "retry_action"},
+            "must carry a retry_action",
+        ),
+        (
+            "terminal malformed conclusion",
+            terminal(conclusion="green"),
+            "must be pass, fail, or inconclusive",
+        ),
+        ("empty receipt pointer", terminal(receipt_pointer=""), "receipt_pointer is not"),
+    ]
+    for label, fixture, expected in cases:
+        root = write_root(fixture)
+        expect_self_test_failure(
+            f"gate-watchdog {label}",
+            expected,
+            lambda root=root: require_gate_watchdog(root),
+        )
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
@@ -11469,6 +11624,7 @@ def run_self_tests() -> None:
     self_test_proof_command_stream_bound_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_gate_outcome_contract()
+    self_test_gate_watchdog_contract()
     self_test_ci_audit_core_artifact_contract()
     self_test_setup_ci_terminal_receipt_contract()
     self_test_ci_audit_runner_cancellations_contract()
