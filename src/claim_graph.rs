@@ -19,6 +19,9 @@ use crate::artifacts::CLAIM_GRAPH_SCHEMA;
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ClaimGraph {
     pub(crate) schema: &'static str,
+    /// Exact commit this graph describes. State from another head cannot
+    /// suppress, certify, or inherit delivery for the current review.
+    pub(crate) head_sha: String,
     /// All claims in the graph.
     pub(crate) claims: Vec<ClaimNode>,
     /// Detected conflicts between claims.
@@ -318,7 +321,7 @@ pub(crate) struct ClaimEvidenceGap {
 /// what we know (no claims yet) and what we don't (everything). As Order 3
 /// PRs land, this gains claim extraction from candidates/observations,
 /// evidence attachment, conflict detection, and state assignment.
-pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
+pub(crate) fn build_shadow_claim_graph(head_sha: &str) -> ClaimGraph {
     // Reference each type variant so clippy doesn't flag them as dead code.
     let _e0 = EvidenceClass::ProofReceipt;
     let _e1 = EvidenceClass::ValidatedFact;
@@ -358,6 +361,7 @@ pub(crate) fn build_shadow_claim_graph() -> ClaimGraph {
 
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
+        head_sha: head_sha.to_owned(),
         claims: Vec::new(),
         conflicts: Vec::new(),
         evidence_gaps: Vec::new(),
@@ -383,7 +387,7 @@ pub(crate) struct ClaimInput {
 /// populated claim graph with initial states and evidence references.
 /// (Order 3 PR 2 of epic #655.)
 #[cfg(test)]
-pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph {
+pub(crate) fn build_claim_graph_from_inputs(head_sha: &str, claims: &[ClaimInput]) -> ClaimGraph {
     let mut evidence_gaps = Vec::new();
     let nodes: Vec<ClaimNode> = claims
         .iter()
@@ -454,6 +458,7 @@ pub(crate) fn build_claim_graph_from_inputs(claims: &[ClaimInput]) -> ClaimGraph
 
     ClaimGraph {
         schema: CLAIM_GRAPH_SCHEMA,
+        head_sha: head_sha.to_owned(),
         claims: nodes,
         conflicts,
         evidence_gaps,
@@ -699,8 +704,9 @@ mod tests {
 
     #[test]
     fn shadow_claim_graph_is_empty_by_default() {
-        let graph = build_shadow_claim_graph();
+        let graph = build_shadow_claim_graph("abc123");
         assert_eq!(graph.schema, "ub-review.claim_graph.v1");
+        assert_eq!(graph.head_sha, "abc123");
         assert!(graph.claims.is_empty());
         assert!(graph.conflicts.is_empty());
         assert!(graph.evidence_gaps.is_empty());
@@ -717,7 +723,7 @@ mod tests {
             evidence_text: "base+tests result was non_discriminating".to_owned(),
             path: Some("src/config.rs".to_owned()),
         }];
-        let graph = build_claim_graph_from_inputs(&inputs);
+        let graph = build_claim_graph_from_inputs("abc123", &inputs);
         assert_eq!(graph.claims.len(), 1);
         assert_eq!(graph.claims[0].state, ClaimState::NeedsEvidence);
         assert_eq!(graph.claims[0].supporting_evidence.len(), 1);
@@ -738,7 +744,7 @@ mod tests {
             evidence_text: String::new(),
             path: None,
         }];
-        let graph = build_claim_graph_from_inputs(&inputs);
+        let graph = build_claim_graph_from_inputs("abc123", &inputs);
         assert_eq!(graph.claims[0].state, ClaimState::Hypothesized);
         assert!(graph.claims[0].supporting_evidence.is_empty());
         assert!(!graph.evidence_gaps.is_empty());
@@ -765,7 +771,7 @@ mod tests {
                 path: Some("src/buffer.rs".to_owned()),
             },
         ];
-        let graph = build_claim_graph_from_inputs(&inputs);
+        let graph = build_claim_graph_from_inputs("abc123", &inputs);
         assert_eq!(graph.claims.len(), 2);
         assert!(!graph.conflicts.is_empty(), "should detect the conflict");
         assert_eq!(
