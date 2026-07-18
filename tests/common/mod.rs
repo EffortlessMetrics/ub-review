@@ -4,12 +4,17 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::process::Command;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
+
+#[path = "cli_run.rs"]
+mod cli_run;
+pub use cli_run::{
+    cli_subprocess_test_lock, init_minimal_repo, isolated_command, path_str, run,
+    run_expect_failure, write_file,
+};
 
 pub const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
      policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
@@ -307,17 +312,6 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
     Ok((url, handle))
 }
 
-pub fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
-    static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    // Recover a poisoned lock instead of erroring: one failing test must
-    // produce one failure receipt, not cascade into every later subprocess
-    // test in the suite.
-    Ok(CLI_SUBPROCESS_TEST_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner))
-}
-
 pub fn fake_openai_lane_content() -> String {
     serde_json::json!({
         "summary": "fake provider ok",
@@ -387,51 +381,6 @@ pub fn join_fake_provider(handle: thread::JoinHandle<Result<Vec<String>>>) -> Re
         .map_err(|_| anyhow::anyhow!("fake provider thread panicked"))?
 }
 
-/// Builds a child command with ambient ub-review/runtime profile state scrubbed.
-///
-/// When the dogfood gate runs this suite, the surrounding GitHub Actions step
-/// exports `UB_REVIEW_PROFILE`, `UB_REVIEW_RUNTIME_PROFILE`,
-/// `UB_REVIEW_TOOL_BUNDLE`, and friends. The spawned `ub-review` binary picks
-/// those up through clap `env = "UB_REVIEW_..."` fallbacks, so nested test
-/// runs silently resolve a gh-runner profile and assertions about default
-/// profile output fail only inside the gate. Scrubbing the prefix first keeps
-/// tests hermetic.
-///
-/// Hosted runner identity is also scrubbed: many CLI fixture tests exercise
-/// specific planner branches, and inheriting `GITHUB_ACTIONS=true` can make an
-/// unrelated box guard run before the branch under test. Explicit per-test envs
-/// are applied afterwards and still win.
-pub fn isolated_command(program: &str, cwd: &Path) -> Command {
-    let mut command = Command::new(program);
-    command.current_dir(cwd);
-    for (name, _) in std::env::vars_os() {
-        let name_string = name.to_string_lossy();
-        if name_string.starts_with("UB_REVIEW_")
-            || matches!(
-                name_string.as_ref(),
-                "GITHUB_ACTIONS" | "RUNNER_ENVIRONMENT" | "RUNNER_NAME"
-            )
-        {
-            command.env_remove(&name);
-        }
-    }
-    command
-}
-
-pub fn run(cwd: &Path, program: &str, args: &[&str]) -> Result<()> {
-    let output = isolated_command(program, cwd).args(args).output()?;
-    if output.status.success() {
-        return Ok(());
-    }
-    bail!(
-        "{} {:?} failed\nstdout:\n{}\nstderr:\n{}",
-        program,
-        args,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
-}
-
 pub fn run_with_env(cwd: &Path, program: &str, args: &[&str], envs: &[(&str, &str)]) -> Result<()> {
     let mut command = isolated_command(program, cwd);
     command.args(args);
@@ -474,18 +423,6 @@ pub fn run_capture_with_env(
     bail!("{program} {args:?} failed\n{combined}");
 }
 
-pub fn run_expect_failure(cwd: &Path, program: &str, args: &[&str]) -> Result<String> {
-    let output = isolated_command(program, cwd).args(args).output()?;
-    if !output.status.success() {
-        return Ok(format!(
-            "{}\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-    bail!("{program} {args:?} unexpectedly succeeded");
-}
-
 pub fn run_expect_failure_with_env(
     cwd: &Path,
     program: &str,
@@ -506,11 +443,6 @@ pub fn run_expect_failure_with_env(
         ));
     }
     bail!("{program} {args:?} unexpectedly succeeded");
-}
-
-pub fn path_str(path: &Path) -> Result<&str> {
-    path.to_str()
-        .ok_or_else(|| anyhow::anyhow!("path is not valid UTF-8: {}", path.display()))
 }
 
 pub fn json_array_field<'a>(
