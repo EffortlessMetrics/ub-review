@@ -94,6 +94,8 @@ jobs:
     env:
       ASSET_NAME: ub-review-x86_64-unknown-linux-gnu.tar.gz
     steps:
+      - uses: actions/checkout@v5
+
       - name: Validate release tag
         id: tag
         shell: bash

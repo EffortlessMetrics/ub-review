@@ -6989,6 +6989,18 @@ diff_classes = ["docs-only"]
                 && workflow.contains("name: Publish GitHub release asset"),
             "release write permission and GitHub release mutation must stay inside the tag-only publish job"
         );
+        let publish_section = workflow
+            .split_once("\n  publish:\n")
+            .map(|(_, section)| section)
+            .unwrap_or_default();
+        let checkout_index = publish_section.find("uses: actions/checkout@v5");
+        let notes_index = publish_section.find("--notes-file .github/release-notes.md");
+        assert!(
+            checkout_index
+                .zip(notes_index)
+                .is_some_and(|(checkout, notes)| checkout < notes),
+            "the publish job must check out the tagged repository before reading release notes"
+        );
     }
 
     #[test]
