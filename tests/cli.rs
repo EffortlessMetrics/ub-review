@@ -6254,6 +6254,37 @@ post_review_on = ["opened", "reopened", "ready_for_review", "synchronize"]
     Ok(())
 }
 
+fn init_minimal_repo(repo: &Path) -> Result<()> {
+    write_file(
+        &repo.join("src/lib.rs"),
+        "pub fn answer() -> usize {\n    41\n}\n",
+    )?;
+    run(repo, "git", &["init"])?;
+    run(
+        repo,
+        "git",
+        &["config", "user.email", "ub-review@example.invalid"],
+    )?;
+    run(repo, "git", &["config", "user.name", "UB Review Test"])?;
+    run(repo, "git", &["add", "."])?;
+    run(repo, "git", &["commit", "-m", "baseline"])?;
+    write_file(
+        &repo.join("src/lib.rs"),
+        "pub fn answer() -> usize {\n    42\n}\n",
+    )?;
+    run(repo, "git", &["add", "."])?;
+    run(repo, "git", &["commit", "-m", "change"])?;
+    Ok(())
+}
+
+fn write_file(path: &Path, text: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, text)?;
+    Ok(())
+}
+
 fn collect_relative_file_paths(root: &Path) -> Result<Vec<String>> {
     fn visit(base: &Path, dir: &Path, files: &mut Vec<String>) -> Result<()> {
         for entry in fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {

@@ -1,20 +1,12 @@
 use std::fs;
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use anyhow::{Result, bail};
 
-pub fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
-    static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    // Recover a poisoned lock instead of erroring: one failing test must
-    // produce one failure receipt, not cascade into every later subprocess
-    // test in the suite.
-    Ok(CLI_SUBPROCESS_TEST_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner))
-}
+#[path = "cli_lock.rs"]
+mod cli_lock;
+pub use cli_lock::cli_subprocess_test_lock;
 
 /// Builds a child command with ambient ub-review/runtime profile state scrubbed.
 pub fn isolated_command(program: &str, cwd: &Path) -> Command {
