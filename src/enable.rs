@@ -995,6 +995,21 @@ mod tests {
         assert!(config.tools["cargo-allow"].enabled);
         assert!(config.tools["actionlint"].enabled);
         assert!(config.tools["unsafe-review"].enabled);
+        let source_lane = config
+            .lanes
+            .iter()
+            .find(|lane| lane.id == "source-route")
+            .ok_or_else(|| anyhow::anyhow!("inspected Rust config should include source-route"))?;
+        assert_eq!(source_lane.role, "Changed source route review");
+        assert_eq!(
+            source_lane.focus,
+            "Trace changed public routes, callers, sibling paths, and the smallest complete fix; cite the changed surface and keep diff-irrelevant concerns artifact-only."
+        );
+        assert_eq!(source_lane.receives, vec!["tokmd", "ast-grep", "ripr"]);
+        assert_eq!(
+            source_lane.diff_classes,
+            vec!["source-general", "source-ub", "tests-only"]
+        );
         for lane in [
             "source-route",
             "tests-red-green",
@@ -1006,6 +1021,41 @@ mod tests {
                 "inspected Rust config should include `{lane}` lane: {toml}"
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn inspected_enable_config_classifies_mixed_and_generic_repositories() -> Result<()> {
+        let mixed = tempfile::tempdir()?;
+        fs::write(
+            mixed.path().join("Cargo.toml"),
+            "[package]\nname = \"mixed\"\nversion = \"0.1.0\"\nedition = \"2021\"\n",
+        )?;
+        fs::write(mixed.path().join("package.json"), "{\"name\":\"mixed\"}")?;
+        let mixed_inspection = inspect_init_guide_repo(mixed.path())?;
+        let mixed_config = Config::from_toml_with_policy_receipts(
+            &render_enable_config_for_inspection(&mixed_inspection),
+        )?;
+        assert_eq!(mixed_config.repo.kind, "mixed");
+
+        let generic = tempfile::tempdir()?;
+        let generic_inspection = inspect_init_guide_repo(generic.path())?;
+        let generic_config = Config::from_toml_with_policy_receipts(
+            &render_enable_config_for_inspection(&generic_inspection),
+        )?;
+        assert_eq!(generic_config.repo.kind, "generic");
+        assert!(
+            !generic_config
+                .lanes
+                .iter()
+                .any(|lane| lane.id == "source-route")
+        );
+        assert!(
+            !generic_config
+                .lanes
+                .iter()
+                .any(|lane| lane.id == "tests-red-green")
+        );
         Ok(())
     }
 
@@ -1052,6 +1102,7 @@ mod tests {
                 .to_string()
                 .contains("--inspect requires a repository root")
         );
+        assert!(error.to_string().contains("not a directory"));
         Ok(())
     }
 
