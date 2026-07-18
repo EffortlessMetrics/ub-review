@@ -506,6 +506,9 @@ pub(crate) struct EnableArgs {
     /// Repository root to write into.
     #[arg(long, default_value = ".", env = "UB_REVIEW_ROOT")]
     pub(crate) root: PathBuf,
+    /// Inspect the repository before writing a relevance-tuned config.
+    #[arg(long)]
+    pub(crate) inspect: bool,
     /// Overwrite an existing `.ub-review.toml` or ub-review workflow.
     #[arg(long)]
     pub(crate) force: bool,
