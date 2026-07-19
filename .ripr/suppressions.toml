@@ -23,6 +23,54 @@ schema_version = 1
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:error_path:1e7f4b0d"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on the inspected-root error helper: enable_inspect_requires_a_repository_root asserts the exact missing-root error, while the successful enable tests exercise the Ok path. The helper is intentionally kept small and fallible; re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:return_value:42a62938"
+owner = "ub-review/core"
+reason = "Twin of the inspected-root helper false-negative above: the helper's Ok(()) return is exercised by the successful enable command tests, and its failing branch is asserted by enable_inspect_requires_a_repository_root. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:8b4c3b2c"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind: inspected_repo_kind_covers_all_repository_surfaces asserts the mixed, Rust, JavaScript/TypeScript, and generic outputs directly. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:8abb2d30"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's mixed arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(true, true) = mixed. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:40779b25"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's Rust arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(true, false) = rust. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:bb889171"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's JavaScript/TypeScript arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(false, true) = javascript-typescript. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:2460d14f"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's generic arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(false, false) = generic. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:9a42382d"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on append_enable_lane's id field: inspected_enable_config_selects_relevant_rust_surfaces asserts the source-route lane identity and its role, focus, receives, and diff_classes fields. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_config.rs:946:side_effect"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative (ripr-swarm#1054, second family): side_effect probe on the errors.push(PolicyError) in sanitize_providers_section stays weakly_exposed although the same-file test providers_section_parses_policy_and_receipts_invalid_values pins the push with an exact oracle (errors.len()==1, exact section, detail starts_with + value + vocabulary). Line-keyed id; re-verify the target after any edit to config.rs."

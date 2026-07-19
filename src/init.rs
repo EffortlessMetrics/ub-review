@@ -187,7 +187,7 @@ pub(crate) fn render_init_guide(args: &InitArgs, config: &Config) -> Result<Stri
             "- `cargo-allow`: candidate policy ledger at `{path}`; verify dialect before making it required.\n"
         )),
         None => text.push_str(
-            "- `cargo-allow`: no `policy/allow.toml` ledger detected; add only with an owned policy receipt.\n",
+            "- `cargo-allow`: no native `policy/cargo-allow.toml` ledger detected; add only with an owned policy receipt.\n",
         ),
     }
 
@@ -513,9 +513,9 @@ pub(crate) fn inspect_init_guide_repo(root: &Path) -> Result<InitGuideInspection
     }
     let cargo_allow_path = root
         .join("policy")
-        .join("allow.toml")
+        .join("cargo-allow.toml")
         .is_file()
-        .then(|| "policy/allow.toml".to_owned());
+        .then(|| "policy/cargo-allow.toml".to_owned());
     Ok(InitGuideInspection {
         root,
         build_systems,

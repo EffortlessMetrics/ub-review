@@ -276,6 +276,12 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
         "init help must not advertise unsupported onboarding mode flags:\n{init_help}"
     );
 
+    let enable_help = run_capture_with_env(temp.path(), bin, &["enable", "--help"], &[])?;
+    assert!(
+        enable_help.contains("--inspect"),
+        "enable help should advertise relevance-tuned onboarding:\n{enable_help}"
+    );
+
     let setup_ci_help = run_capture_with_env(temp.path(), bin, &["setup-ci", "--help"], &[])?;
     assert!(
         setup_ci_help.contains("--print-pr"),
