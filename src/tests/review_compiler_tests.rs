@@ -2,6 +2,7 @@
 // Resolves shared fixtures through `super::*` and production symbols through `crate::*`.
 use super::has_standalone_approval_line;
 use super::*;
+use crate::diff_posture::default_lanes_for_diff_context;
 use crate::*;
 
 #[test]
@@ -777,7 +778,7 @@ fn workflow_pr_body_uses_workflow_route_language() {
     let mut plan = test_plan(Vec::new());
     plan.diff_class = DiffClass::WorkflowTooling;
     plan.lanes =
-        crate::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
+        default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
     let diff = DiffContext {
         base: "origin/main".to_owned(),
         head: "HEAD".to_owned(),
@@ -821,7 +822,7 @@ fn verifier_script_scope_noise_stays_artifact_only() -> Result<()> {
     let mut plan = test_plan(Vec::new());
     plan.diff_class = DiffClass::WorkflowTooling;
     plan.lanes =
-        crate::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
+        default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
     let diff = DiffContext {
         base: "origin/main".to_owned(),
         head: "HEAD".to_owned(),
