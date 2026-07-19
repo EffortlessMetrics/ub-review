@@ -100,7 +100,7 @@ pub(crate) use review_compiler::*;
 mod cost_artifact;
 pub(crate) use cost_artifact::*;
 mod quality_artifact;
-pub(crate) use quality_artifact::*;
+use quality_artifact::{write_quality_receipt_artifact, write_quality_trend_artifact};
 mod quality_github;
 pub(crate) use quality_github::*;
 mod artifact_writers;
@@ -5474,6 +5474,7 @@ mod tests {
     use anyhow::{Context as _, Result, bail};
 
     use super::diff_posture::{NO_LGTM_POSTURE, default_lanes_for_diff_context};
+    use super::quality_artifact::{build_quality_receipt, build_quality_trend_artifact};
     use super::test_parse::command_display;
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
@@ -16188,7 +16189,7 @@ index 1111111..2222222 100644
             ],
         };
 
-        let receipt = super::build_quality_receipt(&metrics, &review, &fill_ledger);
+        let receipt = build_quality_receipt(&metrics, &review, &fill_ledger);
 
         assert_eq!(receipt.schema, super::QUALITY_RECEIPT_SCHEMA);
         assert_eq!(receipt.run_id, fill_ledger.run_id);
@@ -16386,7 +16387,7 @@ index 1111111..2222222 100644
             missing: Vec::new(),
         };
 
-        let trend = super::build_quality_trend_artifact(&receipt);
+        let trend = build_quality_trend_artifact(&receipt);
         let missing_fields = trend
             .missing
             .iter()
