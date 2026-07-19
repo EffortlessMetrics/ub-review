@@ -109,9 +109,8 @@ mod witness;
 pub(crate) use witness::*;
 mod work_queue;
 pub(crate) use work_queue::*;
-mod test_parse;
-pub(crate) use test_parse::*;
 mod observation_merge;
+mod test_parse;
 pub(crate) use observation_merge::*;
 mod shared_context_render;
 pub(crate) use shared_context_render::*;
@@ -5472,6 +5471,7 @@ mod tests {
 
     use anyhow::{Context as _, Result, bail};
 
+    use super::test_parse::command_display;
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
@@ -5499,9 +5499,9 @@ mod tests {
         candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
         cap_review_body_bullets, classify_diff, classify_diff_class, classify_issue_candidates,
         classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
-        combined_observations, command_display, compile_review_surface, dedupe_inline_comments,
-        deep_minimax_lanes, default_lanes, direct_minimax_spec, execute_issue_broker,
-        extract_model_content, fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        combined_observations, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
+        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
+        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
         follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
         follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
         github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
@@ -7454,7 +7454,7 @@ max_new_unsuppressed_findings = 0
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 assert_eq!(timeout, 180);
@@ -7572,7 +7572,7 @@ max_new_unsuppressed_findings = 0
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
                 assert_eq!(timeout, 300);
