@@ -136,7 +136,6 @@ use system_detect::{
     doctor_binary_install_status, git_tree_sha, profile_config_hash,
 };
 mod diff_posture;
-pub(crate) use diff_posture::*;
 mod run_args;
 pub(crate) use run_args::*;
 mod post_command;
@@ -5474,6 +5473,7 @@ mod tests {
 
     use anyhow::{Context as _, Result, bail};
 
+    use super::diff_posture::{NO_LGTM_POSTURE, default_lanes_for_diff_context};
     use super::test_parse::command_display;
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
@@ -5483,44 +5483,44 @@ mod tests {
         LaneModelOutput, LanePlan, LanguageMix, Limits, MinimaxPromptCache, ModelAssignment,
         ModelCacheUsage, ModelCallOutcome, ModelEvidenceIssue, ModelLaneReceipt,
         ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_refuter_output,
-        apply_runtime_profile_limits, build_candidate_records, build_cost_receipt,
-        build_final_orchestrator_plan, build_issue_broker_plan, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_witness_records, builtin_profiles,
-        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
-        cap_review_body_bullets, classify_diff, classify_diff_class, classify_issue_candidates,
-        classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
-        combined_observations, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
-        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
-        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
-        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
-        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
-        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, selected_provider_spec, sha256_hex, split_curl_http_status,
-        standard_minimax_lanes, terminalize_proof_requests, validate_github_review_payload,
+        ModelRunContext, Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs,
+        PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget,
+        ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
+        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
+        classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
+        cmd_post, collect_pr_thread_context, combined_observations, compile_review_surface,
+        dedupe_inline_comments, deep_minimax_lanes, default_lanes, direct_minimax_spec,
+        execute_issue_broker, extract_model_content, fallback_provider_spec_for_lane,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, follow_up_provider_assignment_with_key_state,
+        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        proof_planner_assignment_with_key_state, provider_concurrency_limits,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
         wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
@@ -5696,8 +5696,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -5729,8 +5728,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -14117,10 +14115,8 @@ required_proof_unprooven = true
     fn workflow_pr_body_uses_workflow_route_language() {
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_context(
-            DiffClass::WorkflowTooling,
-            &LanguageMix::default(),
-        );
+        plan.lanes =
+            default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -14163,10 +14159,8 @@ required_proof_unprooven = true
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_context(
-            DiffClass::WorkflowTooling,
-            &LanguageMix::default(),
-        );
+        plan.lanes =
+            default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
