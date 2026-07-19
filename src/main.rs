@@ -100,7 +100,7 @@ pub(crate) use review_compiler::*;
 mod cost_artifact;
 pub(crate) use cost_artifact::*;
 mod quality_artifact;
-pub(crate) use quality_artifact::*;
+use quality_artifact::{write_quality_receipt_artifact, write_quality_trend_artifact};
 mod quality_github;
 pub(crate) use quality_github::*;
 mod artifact_writers;
@@ -109,9 +109,8 @@ mod witness;
 pub(crate) use witness::*;
 mod work_queue;
 pub(crate) use work_queue::*;
-mod test_parse;
-pub(crate) use test_parse::*;
 mod observation_merge;
+mod test_parse;
 pub(crate) use observation_merge::*;
 mod shared_context_render;
 pub(crate) use shared_context_render::*;
@@ -132,9 +131,11 @@ pub(crate) use summary_render::*;
 mod post_run_utils;
 pub(crate) use post_run_utils::*;
 mod system_detect;
-pub(crate) use system_detect::*;
+use system_detect::{
+    command_path, command_version, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
+    doctor_binary_install_status, git_tree_sha, profile_config_hash,
+};
 mod diff_posture;
-pub(crate) use diff_posture::*;
 mod run_args;
 pub(crate) use run_args::*;
 mod post_command;
@@ -5472,6 +5473,9 @@ mod tests {
 
     use anyhow::{Context as _, Result, bail};
 
+    use super::diff_posture::{NO_LGTM_POSTURE, default_lanes_for_diff_context};
+    use super::quality_artifact::{build_quality_receipt, build_quality_trend_artifact};
+    use super::test_parse::command_display;
     use super::{
         BoxState, CandidateRecord, CommandStatus, Config, DEFAULT_REVIEW_PROFILE, DiffClass,
         DiffContext, DiffFlags, EventLog, FailOnGate, FollowUpOutputRecord, FollowUpQuestionTask,
@@ -5479,44 +5483,44 @@ mod tests {
         IssueCandidateEvidence, LaneModelOutput, LanePlan, Limits, MinimaxPromptCache,
         ModelAssignment, ModelCacheUsage, ModelCallOutcome, ModelEvidenceIssue, ModelLaneReceipt,
         ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_refuter_output,
-        apply_runtime_profile_limits, build_candidate_records, build_cost_receipt,
-        build_final_orchestrator_plan, build_issue_broker_plan, build_orchestrator_plan,
-        build_review_metrics, build_review_terminal_state, build_witness_records, builtin_profiles,
-        candidate_matches_inline_comment, candidate_matches_summary_finding, cap_review_body,
-        cap_review_body_bullets, classify_diff, classify_diff_class, classify_issue_candidates,
-        classify_proof_cost, cmd_gate_check, cmd_post, collect_pr_thread_context,
-        combined_observations, command_display, compile_review_surface, dedupe_inline_comments,
-        deep_minimax_lanes, default_lanes, direct_minimax_spec, execute_issue_broker,
-        extract_model_content, fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
-        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
-        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
-        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
-        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, selected_provider_spec, sha256_hex, split_curl_http_status,
-        standard_minimax_lanes, terminalize_proof_requests, validate_github_review_payload,
+        ModelRunContext, Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs,
+        PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget,
+        ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
+        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
+        apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
+        build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
+        build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
+        build_witness_records, builtin_profiles, candidate_matches_inline_comment,
+        candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
+        classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
+        cmd_post, collect_pr_thread_context, combined_observations, compile_review_surface,
+        dedupe_inline_comments, deep_minimax_lanes, default_lanes, direct_minimax_spec,
+        execute_issue_broker, extract_model_content, fallback_provider_spec_for_lane,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, follow_up_provider_assignment_with_key_state,
+        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        proof_planner_assignment_with_key_state, provider_concurrency_limits,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_github_review_payload,
         validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
         wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
@@ -5580,17 +5584,20 @@ mod tests {
     #[test]
     fn doctor_binary_install_status_reports_path_state_and_fix() {
         let current = PathBuf::from("/opt/ub-review/bin/ub-review");
-        let on_path =
-            super::doctor_binary_install_status_from_paths(Some(&current), Some(&current));
+        let on_path = super::system_detect::doctor_binary_install_status_from_paths(
+            Some(&current),
+            Some(&current),
+        );
         assert_eq!(on_path, "on PATH as /opt/ub-review/bin/ub-review");
 
-        let missing_path = super::doctor_binary_install_status_from_paths(Some(&current), None);
+        let missing_path =
+            super::system_detect::doctor_binary_install_status_from_paths(Some(&current), None);
         assert!(missing_path.contains("not on PATH"));
         assert!(missing_path.contains("add /opt/ub-review/bin to PATH"));
         assert!(missing_path.contains("install-mode=path"));
         assert!(missing_path.contains("binary-path=/opt/ub-review/bin/ub-review"));
 
-        let shadowed = super::doctor_binary_install_status_from_paths(
+        let shadowed = super::system_detect::doctor_binary_install_status_from_paths(
             Some(&current),
             Some(Path::new("/usr/local/bin/ub-review")),
         );
@@ -5689,8 +5696,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -5722,8 +5728,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -7453,7 +7458,7 @@ max_new_unsuppressed_findings = 0
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 assert_eq!(timeout, 180);
@@ -7571,7 +7576,7 @@ max_new_unsuppressed_findings = 0
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
                 assert_eq!(timeout, 300);
@@ -14031,7 +14036,7 @@ required_proof_unprooven = true
             ],
         };
 
-        let receipt = super::build_quality_receipt(&metrics, &review, &fill_ledger);
+        let receipt = build_quality_receipt(&metrics, &review, &fill_ledger);
 
         assert_eq!(receipt.schema, super::QUALITY_RECEIPT_SCHEMA);
         assert_eq!(receipt.run_id, fill_ledger.run_id);
@@ -14229,7 +14234,7 @@ required_proof_unprooven = true
             missing: Vec::new(),
         };
 
-        let trend = super::build_quality_trend_artifact(&receipt);
+        let trend = build_quality_trend_artifact(&receipt);
         let missing_fields = trend
             .missing
             .iter()

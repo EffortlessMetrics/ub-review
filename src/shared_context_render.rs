@@ -1,6 +1,7 @@
 //! Shared context rendering, GitHub review skip receipts, and shared
 //! context cache artifacts (cleanup train step 46, pure code motion).
 
+use crate::diff_posture::{diff_class_posture_heading, review_posture_for_diff_class};
 use crate::*;
 
 pub(crate) fn write_github_review_skip_receipt(

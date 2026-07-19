@@ -1,6 +1,7 @@
 //! Plan construction: resolved plan/selector artifacts and plan
 //! building from config + args (cleanup train step 32, pure code motion).
 
+use crate::diff_posture::default_lanes_for_diff_context;
 use crate::*;
 
 pub(crate) fn resolved_plan_artifact(

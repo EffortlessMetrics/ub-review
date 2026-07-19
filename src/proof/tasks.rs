@@ -4,6 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
+use crate::test_parse::{
+    command_display, command_display_with_env, focused_test_names_for_file, push_unique,
+};
 use crate::*;
 
 #[derive(Clone, Debug)]

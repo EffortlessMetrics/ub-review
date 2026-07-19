@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use crate::test_parse::command_display_with_env;
 use crate::*;
 
 struct ProofCommandPaths {
