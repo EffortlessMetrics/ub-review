@@ -12349,6 +12349,124 @@ finding_id = "probe:src_main.rs:return_value:d3368aab"
 owner = "ub-review/core"
 reason = "Twin of the return_value probe above on the same overlap_ms formula: run_loop_overlap_ms_does_not_double_count_self_overlapping_side pins the exact result of this saturating_sub through the same pairwise-distinct union values; RIPR 0.10.0 cannot associate the oracle through the metrics() -> overlap_ms() indirection (#737). Re-verify after semantic edits or RIPR upgrades."
 
+# PR #783: extracting the validation test cluster shifts the unchanged tail of
+# unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap to one new
+# source line. These exact probes are line-movement false positives; the
+# unchanged test remains covered by the full 647-test binary suite.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged fallible setup at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged fallible setup at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3020bcba"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged error propagation at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3020bcba.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged error propagation at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.4"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.5"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.4"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.5"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.6"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.7"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.8"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.9"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.10"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
 # PR #782: the run/proof integration tests now have their own target and share
 # one subprocess lock/support seam. These exact findings are either line-move
 # false positives in the unchanged cli suite or helper-only probes whose
