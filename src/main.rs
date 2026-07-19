@@ -131,7 +131,10 @@ pub(crate) use summary_render::*;
 mod post_run_utils;
 pub(crate) use post_run_utils::*;
 mod system_detect;
-pub(crate) use system_detect::*;
+use system_detect::{
+    command_path, command_version, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
+    doctor_binary_install_status, git_tree_sha, profile_config_hash,
+};
 mod diff_posture;
 pub(crate) use diff_posture::*;
 mod run_args;
@@ -5581,17 +5584,20 @@ mod tests {
     #[test]
     fn doctor_binary_install_status_reports_path_state_and_fix() {
         let current = PathBuf::from("/opt/ub-review/bin/ub-review");
-        let on_path =
-            super::doctor_binary_install_status_from_paths(Some(&current), Some(&current));
+        let on_path = super::system_detect::doctor_binary_install_status_from_paths(
+            Some(&current),
+            Some(&current),
+        );
         assert_eq!(on_path, "on PATH as /opt/ub-review/bin/ub-review");
 
-        let missing_path = super::doctor_binary_install_status_from_paths(Some(&current), None);
+        let missing_path =
+            super::system_detect::doctor_binary_install_status_from_paths(Some(&current), None);
         assert!(missing_path.contains("not on PATH"));
         assert!(missing_path.contains("add /opt/ub-review/bin to PATH"));
         assert!(missing_path.contains("install-mode=path"));
         assert!(missing_path.contains("binary-path=/opt/ub-review/bin/ub-review"));
 
-        let shadowed = super::doctor_binary_install_status_from_paths(
+        let shadowed = super::system_detect::doctor_binary_install_status_from_paths(
             Some(&current),
             Some(Path::new("/usr/local/bin/ub-review")),
         );
