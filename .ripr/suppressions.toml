@@ -12349,6 +12349,154 @@ finding_id = "probe:src_main.rs:return_value:d3368aab"
 owner = "ub-review/core"
 reason = "Twin of the return_value probe above on the same overlap_ms formula: run_loop_overlap_ms_does_not_double_count_self_overlapping_side pins the exact result of this saturating_sub through the same pairwise-distinct union values; RIPR 0.10.0 cannot associate the oracle through the metrics() -> overlap_ms() indirection (#737). Re-verify after semantic edits or RIPR upgrades."
 
+# PR #784: these 24 new IDs are unchanged neighboring test expressions whose
+# line/duplicate ordinal moved when the sensor cluster was extracted. The 13
+# prior PR #783 receipts remain the baseline; the full 647-test binary suite
+# and focused 14-test sensor suite cover the moved code.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:eca10a0d"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile test return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:92e01722"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible fixture expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:59b2539d"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:57458b0b"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:9361da75"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:702147cf"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:72a75872"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:97bb28af"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:c92346b0"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.4"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.5"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.6"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.7"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.8"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.9"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.10"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:d086b402"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor artifact-directory setup shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.11"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.11"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged test return path shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.12"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged test return path shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.12"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-job test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.13"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-job test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.13"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-job test return path shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
 # PR #783: extracting the validation test cluster shifts the unchanged tail of
 # unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap to one new
 # source line. These exact probes are line-movement false positives; the
