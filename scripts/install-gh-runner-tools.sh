@@ -93,7 +93,7 @@ case "$bundle" in
     # Pinned so doctor --require-core-tools can detect image/local drift;
     # versions move together with STANDARD_IMAGE_*_VERSION in src/post_run_utils.rs
     # (#316 - unpinned installs let the gate-receipt subcommand drift apart).
-    install_cargo_bin ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.10.0}"
+    install_cargo_bin ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.10.1}"
     install_cargo_bin unsafe-review unsafe-review "${UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4}"
     install_npm_bin ast-grep @ast-grep/cli
     install_go_bin actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"

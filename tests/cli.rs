@@ -31,11 +31,11 @@ fn review_image_tool_installer_uses_tool_dir_as_install_prefix() -> Result<()> {
     )?;
     assert!(script.contains("UB_REVIEW_TOKMD_VERSION:-1.12.0"));
     assert!(script.contains("UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8"));
-    assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.10.0"));
+    assert!(script.contains("UB_REVIEW_RIPR_VERSION:-0.10.1"));
     let github_runner_script = std::fs::read_to_string("scripts/install-gh-runner-tools.sh")?;
     let doctor_source = std::fs::read_to_string("src/post_run_utils.rs")?;
-    assert!(github_runner_script.contains("UB_REVIEW_RIPR_VERSION:-0.10.0"));
-    assert!(doctor_source.contains("STANDARD_IMAGE_RIPR_VERSION: &str = \"0.10.0\""));
+    assert!(github_runner_script.contains("UB_REVIEW_RIPR_VERSION:-0.10.1"));
+    assert!(doctor_source.contains("STANDARD_IMAGE_RIPR_VERSION: &str = \"0.10.1\""));
     assert!(script.contains("UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4"));
     assert!(script.contains(
         "install_tool cargo-allow cargo-allow \"${UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8}\""
@@ -3266,10 +3266,10 @@ fn doctor_reports_advisory_stale_tool_fix_without_requiring_core_tools() -> Resu
         .find(|line| line.trim_start().starts_with("ripr "))
         .context("doctor output missing ripr tool row")?;
     assert!(ripr_row.contains("version=ripr 0.7.9"), "{ripr_row}");
-    assert!(ripr_row.contains("expected=0.10.0"), "{ripr_row}");
+    assert!(ripr_row.contains("expected=0.10.1"), "{ripr_row}");
     assert!(output.contains("Fixes:"), "{output}");
     assert!(
-        output.contains("ripr version drift: cargo install ripr --locked --version 0.10.0 --force"),
+        output.contains("ripr version drift: cargo install ripr --locked --version 0.10.1 --force"),
         "{output}"
     );
     assert!(!output.contains("required core review tool versions drifted"));
@@ -3350,7 +3350,7 @@ fn doctor_require_core_tools_fails_stale_cargo_allow_version() -> Result<()> {
         &[
             ("tokmd", "1.12.0"),
             ("cargo-allow", "0.1.7"),
-            ("ripr", "0.10.0"),
+            ("ripr", "0.10.1"),
             ("unsafe-review", "0.3.4"),
             ("ast-grep", "0.0.0"),
             ("actionlint", "1.7.12"),
@@ -3398,7 +3398,7 @@ fn doctor_require_core_tools_fails_stale_actionlint_version() -> Result<()> {
         &[
             ("tokmd", "1.12.0"),
             ("cargo-allow", "0.1.8"),
-            ("ripr", "0.10.0"),
+            ("ripr", "0.10.1"),
             ("unsafe-review", "0.3.4"),
             ("ast-grep", "0.0.0"),
             ("actionlint", "1.7.0"),
@@ -6582,7 +6582,7 @@ fn write_fake_core_review_tools(dir: &Path, tokmd_version: &str) -> Result<()> {
         &[
             ("tokmd", tokmd_version),
             ("cargo-allow", "0.1.8"),
-            ("ripr", "0.10.0"),
+            ("ripr", "0.10.1"),
             ("unsafe-review", "0.3.4"),
             ("ast-grep", "0.0.0"),
             ("actionlint", "1.7.12"),

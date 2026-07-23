@@ -36,7 +36,7 @@ mkdir -p "$prefix/bin"
 # src/post_run_utils.rs and scripts/install-gh-runner-tools.sh (#610).
 install_tool tokmd tokmd "${UB_REVIEW_TOKMD_VERSION:-1.12.0}"
 install_tool cargo-allow cargo-allow "${UB_REVIEW_CARGO_ALLOW_VERSION:-0.1.8}"
-install_tool ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.10.0}"
+install_tool ripr ripr "${UB_REVIEW_RIPR_VERSION:-0.10.1}"
 install_tool unsafe-review unsafe-review "${UB_REVIEW_UNSAFE_REVIEW_VERSION:-0.3.4}"
 install_tool ast-grep ast-grep
 install_go_tool actionlint github.com/rhysd/actionlint/cmd/actionlint "${UB_REVIEW_ACTIONLINT_VERSION:-v1.7.12}"
