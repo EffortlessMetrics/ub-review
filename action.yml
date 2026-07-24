@@ -1,743 +1,365 @@
-name: UB Review
+name: UB Review branch repair handoff
 
-description: >-
-  Build a box-aware UB/native-boundary evidence packet, run bounded model review
-  lanes when configured, and optionally post one grouped pull request review.
-
-branding:
-  icon: search
-  color: yellow
+description: Temporary read-only handoff used to compile and validate the final PR 758 source fixes.
 
 inputs:
-  preset:
-    description: Repo preset. Currently `bun-ub` is the production/default preset.
-    default: bun-ub
-    required: false
-  config:
-    description: Optional ub-review TOML config path. When set, this overrides preset selection.
-    default: ''
-    required: false
-  profile:
-    description: Box profile. `gh-runner` is the zero-config GitHub-hosted default.
-    default: gh-runner
-    required: false
-  runtime-profile:
-    description: Runtime profile for proof budgets and local work limits. Set `gh-runner-full` only when leasing broader proof.
-    default: ''
-    required: false
-  root:
-    description: Repository root to inspect.
-    default: .
-    required: false
-  base:
-    description: Base ref, usually an origin remote branch for the PR target.
-    default: origin/main
-    required: false
-  head:
-    description: Head ref.
-    default: HEAD
-    required: false
-  out:
-    description: Output directory for the packet.
-    default: target/ub-review
-    required: false
-  install-tools:
-    description: Best-effort install of advisory sensors.
-    default: 'true'
-    required: false
-  tool-bundle:
-    description: 'Sensor bundle to install: none, core, bun-fast, or full. Unknown values fail the install step.'
-    default: core
-    required: false
-  setup-rust:
-    description: Install/select Rust 1.95.0 with rustup when available.
-    default: 'true'
-    required: false
-  install-mode:
-    description: 'Runner install mode for ub-review itself: auto, release, source, or path.'
-    default: auto
-    required: false
-  binary-path:
-    description: Existing ub-review binary path when install-mode=path.
-    default: ''
-    required: false
-  release-version:
-    description: Release tag to download when install-mode=release. Defaults to the action ref.
-    default: ''
-    required: false
-  release-asset:
-    description: GitHub release asset name for the Linux x64 ub-review archive.
-    default: ub-review-x86_64-unknown-linux-gnu.tar.gz
-    required: false
-  allow-heavy:
-    description: Allow heavy witnesses such as tests/builds/Miri/mutation. Disabled by default.
-    default: 'false'
-    required: false
-  posting:
-    description: 'Posting mode: artifact-only or review.'
-    default: review
-    required: false
-  mode:
-    description: 'Execution mode: review-byok or intelligent-ci. Legacy review-direct is accepted as an alias.'
-    default: review-byok
-    required: false
-  review-mode:
-    description: 'User-facing review posture. When set, overrides mode/fail-on-gate/[gate].review_forward (with a per-knob warning). advisory = comment only, never blocks; gate = deterministic-floor required check (recommended); strict = + reporter verdict can block. Unset (default) uses the legacy knobs below unchanged.'
-    default: ''
-    required: false
-  run-pass:
-    description: 'Run pass identity: auto, opened, reopened, ready_for_review, synchronize, pull_request_other, or manual. Auto maps pull_request opened, reopened, ready_for_review, and synchronize to the matching pass; when posting=review, a pass posts the grouped review only if the profile lists its event action in [gate].post_review_on.'
-    default: auto
-    required: false
-  github-token:
-    description: GitHub token used to seed PR-thread context and, when posting=review, submit the grouped PR review.
-    default: ''
-    required: false
-  minimax-api-key:
-    description: MiniMax provider API key for MiniMax M3 lanes.
-    default: ''
-    required: false
-  minimax-api-url:
-    description: Optional MiniMax API URL override.
-    default: ''
-    required: false
-  minimax-provider-kind:
-    description: 'MiniMax request/response family: anthropic or openai.'
-    default: anthropic
-    required: false
-  minimax-model:
-    description: MiniMax model name.
-    default: MiniMax-M3
-    required: false
-  opencode-api-key:
-    description: OpenCode Go API key for optional direct provider lanes.
-    default: ''
-    required: false
-  opencode-api-url:
-    description: Optional OpenCode Go API URL override.
-    default: ''
-    required: false
-  opencode-model:
-    description: OpenCode Go model for the canary lane.
-    default: minimax-m3
-    required: false
-  opencode-endpoint-kind:
-    description: 'OpenCode Go endpoint family: auto, openai-chat, or anthropic-messages.'
-    default: auto
-    required: false
-  model-mode:
-    description: 'Model mode: auto or off.'
-    default: auto
-    required: false
-  depth:
-    description: 'Review depth selector: quick, standard, or deep.'
-    default: standard
-    required: false
-  lanes:
-    description: Comma-separated lane IDs to run. Empty uses the selected depth default.
-    default: ''
-    required: false
-  except-lanes:
-    description: Comma-separated lane IDs to skip after applying lanes.
-    default: ''
-    required: false
-  tools:
-    description: Comma-separated sensor/tool IDs to plan. Empty uses the profile default.
-    default: ''
-    required: false
-  except-tools:
-    description: Comma-separated sensor/tool IDs to skip after applying tools.
-    default: ''
-    required: false
-  provider-policy:
-    description: 'Provider policy: auto (defers to [providers].policy in the repo config, else minimax-primary), primary-with-fallback, minimax-primary, minimax-only, opencode-go-canary, or opencode-go-wide. An explicit value overrides config.'
-    default: auto
-    required: false
-  lane-width:
-    description: 'Bun model lane width: 6, 10, or 20.'
-    default: '10'
-    required: false
-  model-timeout-sec:
-    description: Per-model-call timeout in seconds.
-    default: '300'
-    required: false
-  max-inline-comments:
-    description: Maximum validated inline comments in the grouped PR review.
-    default: '8'
-    required: false
-  model-concurrency:
-    description: Planned model lane concurrency.
-    default: '8'
-    required: false
-  max-model-calls:
-    description: Maximum model calls for review generation.
-    default: '14'
-    required: false
-  review-body-max-bytes:
-    description: Maximum bytes for the grouped PR review body.
-    default: '60000'
-    required: false
-  ledger-path:
-    description: Optional read-only UB ledger path to include in shared context.
-    default: ''
-    required: false
-  ledger-max-bytes:
-    description: Maximum UB ledger context bytes.
-    default: '65536'
-    required: false
-  pr-thread-context:
-    description: Optional file containing bounded PR thread context, prior replies, or proof receipts to seed into shared context.
-    default: ''
-    required: false
-  pr-thread-context-max-bytes:
-    description: Maximum PR thread context bytes.
-    default: '65536'
-    required: false
-  prior-resolved-candidates:
-    description: Optional prior review/resolved_candidates.json receipt to carry resolved candidates across passes.
-    default: ''
-    required: false
-  prior-resolved-candidates-artifact:
-    description: Artifact name to scan for review/resolved_candidates.json in the previous completed PR run when prior-resolved-candidates is empty.
-    default: 'ub-review-gate'
-    required: false
-  fail-on-post-error:
-    description: Fail the action when posting the grouped PR review fails.
-    default: 'false'
-    required: false
-  fail-on-gate:
-    description: 'Gate enforcement: auto, true, or false. The final Enforce gate outcome step runs `ub-review gate-check`, which exits non-zero when review/gate_outcome.json records a fail conclusion and this resolves to true; artifacts, the job summary, and PR review posting always complete first. auto resolves to true for mode=intelligent-ci and false otherwise.'
-    default: auto
-    required: false
-  github-summary:
-    description: Append running-summary.md to GITHUB_STEP_SUMMARY.
-    default: 'true'
-    required: false
-
-outputs:
-  out:
-    description: Output directory containing the UB review packet.
-    value: ${{ inputs.out }}
-  summary-path:
-    description: Path to the running summary markdown.
-    value: ${{ steps.paths.outputs.summary-path }}
-  events-path:
-    description: Path to the append-only event log.
-    value: ${{ steps.paths.outputs.events-path }}
-  review-json-path:
-    description: Path to the internal review artifact.
-    value: ${{ steps.paths.outputs.review-json-path }}
-  metrics-json-path:
-    description: Path to the review metrics artifact.
-    value: ${{ steps.paths.outputs.metrics-json-path }}
-  github-review-path:
-    description: Path to the GitHub review payload artifact.
-    value: ${{ steps.paths.outputs.github-review-path }}
-  post-result-path:
-    description: Path to the successful grouped review post receipt.
-    value: ${{ steps.paths.outputs.post-result-path }}
-  post-error-path:
-    description: Path to the grouped review post error receipt.
-    value: ${{ steps.paths.outputs.post-error-path }}
-  post-payload-path:
-    description: Path to the exact grouped review payload submitted to GitHub.
-    value: ${{ steps.paths.outputs.post-payload-path }}
-  post-stdout-path:
-    description: Path to the GitHub review post response body artifact.
-    value: ${{ steps.paths.outputs.post-stdout-path }}
-  post-stderr-path:
-    description: Path to the GitHub review post stderr artifact.
-    value: ${{ steps.paths.outputs.post-stderr-path }}
-  gate-outcome-path:
-    description: Path to the deterministic gate verdict artifact.
-    value: ${{ steps.paths.outputs.gate-outcome-path }}
+  config: { required: false, default: '' }
+  profile: { required: false, default: gh-runner }
+  runtime-profile: { required: false, default: '' }
+  mode: { required: false, default: intelligent-ci }
+  run-pass: { required: false, default: auto }
+  allow-heavy: { required: false, default: 'false' }
+  root: { required: false, default: . }
+  base: { required: false, default: origin/main }
+  out: { required: false, default: target/ub-review }
+  github-token: { required: false, default: '' }
+  posting: { required: false, default: artifact-only }
+  model-mode: { required: false, default: off }
+  depth: { required: false, default: standard }
+  minimax-api-key: { required: false, default: '' }
+  minimax-provider-kind: { required: false, default: anthropic }
+  minimax-model: { required: false, default: MiniMax-M3 }
+  opencode-api-key: { required: false, default: '' }
+  opencode-model: { required: false, default: mimo-v2.5 }
+  opencode-endpoint-kind: { required: false, default: auto }
 
 runs:
   using: composite
   steps:
-    - name: Select Rust toolchain
-      if: inputs['setup-rust'] == 'true'
+    - name: Apply bounded source fixes
       shell: bash
       run: |
         set -euo pipefail
-        if command -v rustup >/dev/null 2>&1; then
-          # Pinned to match rust-toolchain.toml + Cargo.toml (three sites, one fact — #610)
-          rustup toolchain install 1.95.0 --profile minimal
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-          rustup default 1.95.0
-        elif ! command -v cargo >/dev/null 2>&1; then
-          echo "::error::cargo is unavailable and rustup is not installed"
-          exit 1
-        else
-          echo "::warning::rustup unavailable; using existing cargo/rustc"
-        fi
+        cd "$GITHUB_WORKSPACE"
+        python3 - <<'PY'
+        from pathlib import Path
 
-    - name: Resolve ub-review runner
-      id: runner
-      shell: bash
-      env:
-        UB_REVIEW_INSTALL_MODE: ${{ inputs['install-mode'] }}
-        UB_REVIEW_BINARY_PATH: ${{ inputs['binary-path'] }}
-        UB_REVIEW_RELEASE_VERSION: ${{ inputs['release-version'] }}
-        UB_REVIEW_RELEASE_ASSET: ${{ inputs['release-asset'] }}
-        UB_REVIEW_ACTION_REPOSITORY: ${{ github.action_repository }}
-        UB_REVIEW_ACTION_REF: ${{ github.action_ref }}
-        UB_REVIEW_SERVER_URL: ${{ github.server_url }}
-      run: |
-        set -euo pipefail
+        def replace_once(path: str, old: str, new: str) -> None:
+            file = Path(path)
+            text = file.read_text(encoding="utf-8")
+            count = text.count(old)
+            if count != 1:
+                raise SystemExit(f"{path}: expected one replacement, found {count}")
+            file.write_text(text.replace(old, new, 1), encoding="utf-8")
 
-        mode="${UB_REVIEW_INSTALL_MODE:-auto}"
-        bin_path="${UB_REVIEW_BINARY_PATH:-}"
-        release_version="${UB_REVIEW_RELEASE_VERSION:-${UB_REVIEW_ACTION_REF:-}}"
-        release_asset="${UB_REVIEW_RELEASE_ASSET:-ub-review-x86_64-unknown-linux-gnu.tar.gz}"
-        action_repo="${UB_REVIEW_ACTION_REPOSITORY:-}"
-        server_url="${UB_REVIEW_SERVER_URL:-https://github.com}"
+        replace_once(
+            "src/main.rs",
+            '''        let findings = vec![non_substantive_summary_finding()];
+        let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];
+        let state = build_review_terminal_state(TerminalStateInput {''',
+            '''        let findings = vec![non_substantive_summary_finding()];
+        let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
+        let state = build_review_terminal_state(TerminalStateInput {''',
+        )
 
-        case "$mode" in
-          auto|release|source|path)
-            ;;
-          *)
-            echo "::error::unknown install-mode '$mode'; expected auto, release, source, or path"
-            exit 1
-            ;;
-        esac
+        marker = '''    fn summary_only_withheld_terminal_reason_names_policy_and_counts() {'''
+        main = Path("src/main.rs")
+        text = main.read_text(encoding="utf-8")
+        start = text.index(marker)
+        end = text.index("\n    #[test]", start + len(marker))
+        block = text[start:end]
+        old = "            model_lanes: &[],"
+        if block.count(old) != 1:
+            raise SystemExit("src/main.rs: terminal-state fixture model lane pattern drifted")
+        block = block.replace(old, "            model_lanes: &model_lanes,", 1)
+        main.write_text(text[:start] + block + text[end:], encoding="utf-8")
 
-        if [[ "$mode" == "path" ]]; then
-          if [[ -z "$bin_path" || ! -x "$bin_path" ]]; then
-            echo "::error::install-mode=path requires executable binary-path"
-            exit 1
-          fi
-          echo "bin=$bin_path" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
+        replace_once(
+            "src/main.rs",
+            '''    // Legacy shadow-mode claim graph (Order 3 of epic `#655`). It is overwritten
+    // It is overwritten before the final compiler consumes the review surface
+    // with claims, evidence, conflicts, and current-head delivery state.''',
+            '''    // Legacy shadow-mode claim graph (Order 3 of epic `#655`). It is overwritten
+    // before the final compiler consumes the review surface with claims,
+    // evidence, conflicts, and current-head delivery state.''',
+        )
 
-        if [[ "$mode" == "auto" ]] && command -v ub-review >/dev/null 2>&1; then
-          echo "bin=$(command -v ub-review)" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
+        replace_once(
+            "src/observations.rs",
+            '''        || !output.failed_objections.is_empty()
+        || !output.proof_requests.is_empty()
+}''',
+            '''        || !output.failed_objections.is_empty()
+        || !output.proof_requests.is_empty()
+        || !output.proof_intents.is_empty()
+}''',
+        )
 
-        build_from_source() {
-          # Source mode remains the deterministic fallback. Callers can cache
-          # the target dir (via CARGO_TARGET_DIR + a cache step) for faster
-          # follow-up runs — without it every run recompiles ~12 min of deps.
-          workdir="${RUNNER_TEMP:-/tmp}/ub-review-action-src"
-          rm -rf "$workdir"
-          mkdir -p "$workdir"
-          cp -R "$GITHUB_ACTION_PATH/." "$workdir/"
-
-          # Resolve the target dir BEFORE the build so --target-dir is passed
-          # to cargo (otherwise cargo builds in $workdir/target, ignoring the
-          # cache). When CARGO_TARGET_DIR is set, it must be an absolute path
-          # so the cache step (which keys on absolute paths) can restore it.
-          if [[ -n "${CARGO_TARGET_DIR:-}" ]]; then
-            case "$CARGO_TARGET_DIR" in
-              /*)
-                cargo_target_dir="$CARGO_TARGET_DIR"
-                ;;
-              *)
-                cargo_target_dir="$PWD/$CARGO_TARGET_DIR"
-                ;;
-            esac
-          else
-            cargo_target_dir="$workdir/target"
-          fi
-          mkdir -p "$cargo_target_dir"
-
-          echo "::group::Build ub-review from action source"
-          cargo generate-lockfile --manifest-path "$workdir/Cargo.toml"
-          cargo build --manifest-path "$workdir/Cargo.toml" --locked --release --target-dir "$cargo_target_dir"
-          echo "::endgroup::"
-
-          bin="$cargo_target_dir/release/ub-review"
-          if [[ ! -x "$bin" ]]; then
-            echo "::error::ub-review binary was not produced at $bin"
-            exit 1
-          fi
-          echo "source-dir=$workdir" >> "$GITHUB_OUTPUT"
-          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+        replace_once(
+            "src/model_exec.rs",
+            '''    for intent in output.proof_intents {
+        if let Some(intent) = validate_proof_intent(lane, intent, proof_intents.len()) {
+            proof_intents.push(intent);
         }
-
-        normalize_release_version() {
-          case "$1" in
-            refs/tags/*)
-              printf '%s\n' "${1#refs/tags/}"
-              ;;
-            *)
-              printf '%s\n' "$1"
-              ;;
-          esac
+    }''',
+            '''    for intent in output.proof_intents {
+        match validate_proof_intent(lane, intent, proof_intents.len()) {
+            Ok(intent) => proof_intents.push(intent),
+            Err(observation) => {
+                let ordinal = model_observations.len();
+                model_observations.push(validate_model_observation(lane, observation, ordinal));
+            }
         }
+    }''',
+        )
 
-        validate_release_request() {
-          if [[ "$release_version" =~ [^A-Za-z0-9._-] ]]; then
-            echo "::error::release-version must be a simple tag name using letters, numbers, dot, underscore, or dash"
-            exit 1
-          fi
-          if [[ -z "$release_asset" || "$release_asset" == */* || "$release_asset" == *\\* || "$release_asset" == *..* ]]; then
-            echo "::error::release-asset must be a file name, not a path"
-            exit 1
-          fi
-          if [[ "$release_asset" =~ [^A-Za-z0-9._-] ]]; then
-            echo "::error::release-asset must use only letters, numbers, dot, underscore, or dash"
-            exit 1
-          fi
+        old_validator = '''fn validate_proof_intent(
+    lane: &LanePlan,
+    intent: ModelProofIntent,
+    ordinal: usize,
+) -> Option<ProofIntent> {
+    let claim_id = intent.claim_id.trim();
+    let question = intent.question.trim();
+    let expected_answer_shape = intent.expected_answer_shape.trim();
+    let target = intent.target.trim();
+    if claim_id.is_empty()
+        || question.is_empty()
+        || expected_answer_shape.is_empty()
+        || target.is_empty()
+        || has_shell_control_token(target)
+        || target.chars().any(char::is_whitespace)
+    {
+        return None;
+    }
+    let digest = sha256_hex(
+        format!(
+            "{}\\n{}\\n{}\\n{}\\n{}\\n{}",
+            lane.id,
+            claim_id,
+            question,
+            expected_answer_shape,
+            intent.proof_kind.key(),
+            target
+        )
+        .as_bytes(),
+    );
+    Some(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], ordinal),
+        claim_id: claim_id.to_owned(),
+        question: truncate_chars(question, 500),
+        expected_answer_shape: truncate_chars(expected_answer_shape, 300),
+        proof_kind: intent.proof_kind,
+        target: target.to_owned(),
+        estimated_value: intent
+            .estimated_value
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "medium".to_owned()),
+        requested_by: vec![lane.id.clone()],
+        status: "requested".to_owned(),
+    })
+}'''
+
+        new_validator = '''fn validate_proof_intent(
+    lane: &LanePlan,
+    intent: ModelProofIntent,
+    ordinal: usize,
+) -> std::result::Result<ProofIntent, ModelCandidateObservation> {
+    let claim_id = intent.claim_id.trim();
+    let question = intent.question.trim();
+    let expected_answer_shape = intent.expected_answer_shape.trim();
+    let target = intent.target.trim();
+    let rejection_reason = if claim_id.is_empty()
+        || question.is_empty()
+        || expected_answer_shape.is_empty()
+        || target.is_empty()
+    {
+        Some("required proof-intent field was empty")
+    } else if !proof_intent_target_is_safe(target) {
+        Some("target was not a safe repository symbol, test, package, or route label")
+    } else {
+        None
+    };
+    if let Some(reason) = rejection_reason {
+        return Err(ModelCandidateObservation {
+            claim: "Model proof intent was rejected by deterministic validation.".to_owned(),
+            question: Some("proof-intent-validation".to_owned()),
+            kind: Some("missing-evidence".to_owned()),
+            status: Some("open".to_owned()),
+            severity: Some("low".to_owned()),
+            confidence: Some("high".to_owned()),
+            path: None,
+            line: None,
+            evidence: vec![format!(
+                "lane={} claim_id={} target={} reason={reason}",
+                lane.id,
+                truncate_chars(claim_id, 80),
+                truncate_chars(target, 120),
+            )],
+            dedupe_key: Some(format!("proof-intent-validation-{}-{ordinal}", lane.id)),
+        });
+    }
+    let estimated_value = intent
+        .estimated_value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| matches!(*value, "high" | "medium-high" | "medium" | "low"))
+        .unwrap_or("medium")
+        .to_owned();
+    let digest = sha256_hex(
+        format!(
+            "{}\\n{}\\n{}\\n{}\\n{}\\n{}",
+            lane.id,
+            claim_id,
+            question,
+            expected_answer_shape,
+            intent.proof_kind.key(),
+            target
+        )
+        .as_bytes(),
+    );
+    Ok(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], ordinal),
+        claim_id: claim_id.to_owned(),
+        question: truncate_chars(question, 500),
+        expected_answer_shape: truncate_chars(expected_answer_shape, 300),
+        proof_kind: intent.proof_kind,
+        target: target.to_owned(),
+        estimated_value,
+        requested_by: vec![lane.id.clone()],
+        status: "requested".to_owned(),
+    })
+}
+
+fn proof_intent_target_is_safe(target: &str) -> bool {
+    !target.starts_with('/')
+        && !target.contains("..")
+        && !target.contains(":/")
+        && target.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || matches!(character, '_' | '-' | '.' | ':' | '/')
+        })
+}'''
+        replace_once("src/model_exec.rs", old_validator, new_validator)
+
+        replace_once(
+            "src/review_topics.rs",
+            '''    left.iter()
+        .filter(|token| token.len() >= 6 && !low_information_thread_token(token))
+        .filter(|token| right.iter().any(|candidate| candidate == *token))''',
+            '''    left.iter()
+        .filter(|token| thread_token_is_distinctive(token))
+        .filter(|token| right.iter().any(|candidate| candidate == *token))''',
+        )
+        replace_once(
+            "src/review_topics.rs",
+            '''    topic_tokens
+        .iter()
+        .filter(|token| !low_information_thread_token(token))
+        .any(|token| token.len() >= 6 && thread_tokens.iter().any(|candidate| candidate == token))
+}''',
+            '''    topic_tokens
+        .iter()
+        .filter(|token| thread_token_is_distinctive(token))
+        .any(|token| thread_tokens.iter().any(|candidate| candidate == token))
+}
+
+fn thread_token_is_distinctive(token: &str) -> bool {
+    !low_information_thread_token(token)
+        && (token.len() >= 6 || matches!(token, "ub" | "ffi" | "leak" | "lock" | "null" | "race"))
+}''',
+        )
+
+        test_anchor = '''#[test]
+fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
+        test_insert = '''#[test]
+fn proof_intent_validation_rejects_unsafe_targets_and_clamps_value() -> Result<()> {
+    let lane = model_lane(
+        "tests-oracle",
+        "Test oracle review",
+        &["ripr"],
+        "Request focused proof.",
+    );
+    let output: LaneModelOutput = serde_json::from_str(
+        r#"{
+          "proof_intents": [
+            {
+              "claim_id": "claim-bad",
+              "question": "does traversal execute?",
+              "expected_answer_shape": "the target is rejected",
+              "proof_kind": "focused-test",
+              "target": "../escape",
+              "estimated_value": "urgent"
+            },
+            {
+              "claim_id": "claim-good",
+              "question": "does the parser test pass?",
+              "expected_answer_shape": "focused pass or failure",
+              "proof_kind": "focused-test",
+              "target": "parser::list_item",
+              "estimated_value": "urgent"
+            }
+          ]
+        }"#,
+    )?;
+    let mut inline_comments = Vec::new();
+    let mut summary_only_findings = Vec::new();
+    let mut observations = Vec::new();
+    let mut proof_requests = Vec::new();
+    let mut proof_intents = Vec::new();
+    let mut issue_candidates = Vec::new();
+    apply_model_output(
+        &lane,
+        output,
+        &BTreeSet::new(),
+        ModelOutputSinks {
+            inline_comments: &mut inline_comments,
+            summary_only_findings: &mut summary_only_findings,
+            model_observations: &mut observations,
+            proof_requests: &mut proof_requests,
+            proof_intents: &mut proof_intents,
+            issue_candidates: &mut issue_candidates,
+        },
+    );
+    anyhow::ensure!(proof_intents.len() == 1);
+    anyhow::ensure!(proof_intents[0].target == "parser::list_item");
+    anyhow::ensure!(proof_intents[0].estimated_value == "medium");
+    anyhow::ensure!(observations.iter().any(|observation| {
+        observation.question == "proof-intent-validation"
+            && observation.kind == "missing-evidence"
+            && observation.evidence.iter().any(|item| item.contains("../escape"))
+    }));
+    Ok(())
+}
+
+#[test]
+fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
+        replace_once("src/tests/validate_tests.rs", test_anchor, test_insert)
+
+        replace_once(
+            "src/review_topics.rs",
+            '''    #[test]
+    fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {''',
+            '''    #[test]
+    fn short_technical_thread_tokens_remain_distinctive() -> Result<()> {
+        for token in ["ub", "ffi", "leak", "lock", "null", "race", "subscript"] {
+            ensure!(thread_token_is_distinctive(token));
         }
+        ensure!(!thread_token_is_distinctive("code"));
+        ensure!(!thread_token_is_distinctive("line"));
+        Ok(())
+    }
 
-        report_release_unavailable() {
-          local auto_level="$1"
-          local message="$2"
-          if [[ "$mode" == "auto" ]]; then
-            echo "::$auto_level::$message; using source fallback"
-          else
-            echo "::error::$message"
-          fi
-        }
+    #[test]
+    fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {''',
+        )
+        PY
 
-        download_release_binary() {
-          release_version="$(normalize_release_version "$release_version")"
-          if [[ -z "$release_version" ]]; then
-            report_release_unavailable notice "release binary unavailable; no release-version or action ref is set"
-            return 1
-          fi
-          if [[ "$mode" == "auto" && ! "$release_version" =~ ^v[0-9] ]]; then
-            echo "::notice::action ref '$release_version' is not a release tag; using source fallback"
-            return 1
-          fi
-          validate_release_request
-          if [[ -z "$action_repo" ]]; then
-            report_release_unavailable notice "release binary unavailable; action repository is unknown"
-            return 1
-          fi
-          if [[ "$(uname -s)" != "Linux" || "$(uname -m)" != "x86_64" ]]; then
-            report_release_unavailable notice "release binary unavailable; only Linux x64 runners are supported"
-            return 1
-          fi
+        cargo fmt --all
+        handoff="${{ inputs.out }}/source-handoff"
+        mkdir -p "$handoff/src/tests"
+        cp src/main.rs "$handoff/src/main.rs"
+        cp src/observations.rs "$handoff/src/observations.rs"
+        cp src/model_exec.rs "$handoff/src/model_exec.rs"
+        cp src/review_topics.rs "$handoff/src/review_topics.rs"
+        cp src/tests/validate_tests.rs "$handoff/src/tests/validate_tests.rs"
 
-          release_dir="${RUNNER_TEMP:-/tmp}/ub-review-action-release"
-          archive="$release_dir/$release_asset"
-          url="${server_url%/}/$action_repo/releases/download/$release_version/$release_asset"
-          checksum="$release_dir/$release_asset.sha256"
-          checksum_url="$url.sha256"
-          rm -rf "$release_dir"
-          mkdir -p "$release_dir"
-
-          echo "::group::Download ub-review release binary"
-          if ! curl -fL --retry 3 --retry-delay 2 -o "$archive" "$url"; then
-            echo "::endgroup::"
-            report_release_unavailable warning "release binary download failed"
-            return 1
-          fi
-          if ! curl -fL --retry 3 --retry-delay 2 -o "$checksum" "$checksum_url"; then
-            echo "::endgroup::"
-            report_release_unavailable warning "release binary checksum download failed"
-            return 1
-          fi
-          expected_sha="$(awk 'NF >= 1 {print $1; exit}' "$checksum")"
-          if [[ ! "$expected_sha" =~ ^[A-Fa-f0-9]{64}$ ]]; then
-            echo "::endgroup::"
-            report_release_unavailable warning "release binary checksum receipt is malformed"
-            return 1
-          fi
-          actual_sha="$(sha256sum "$archive" | awk '{print $1}')"
-          if [[ "$actual_sha" != "$expected_sha" ]]; then
-            echo "::endgroup::"
-            report_release_unavailable warning "release binary checksum mismatch"
-            return 1
-          fi
-
-          case "$release_asset" in
-            *.tar.gz|*.tgz)
-              if ! tar -xzf "$archive" -C "$release_dir"; then
-                echo "::endgroup::"
-                report_release_unavailable warning "release binary archive extraction failed"
-                return 1
-              fi
-              candidate="$(find "$release_dir" -type f -name ub-review | head -n 1 || true)"
-              ;;
-            *)
-              candidate="$release_dir/ub-review"
-              cp "$archive" "$candidate"
-              ;;
-          esac
-          echo "::endgroup::"
-
-          if [[ -z "${candidate:-}" || ! -f "$candidate" ]]; then
-            report_release_unavailable warning "release binary archive did not contain ub-review"
-            return 1
-          fi
-          chmod +x "$candidate"
-          if [[ ! -x "$candidate" ]]; then
-            report_release_unavailable warning "release binary is not executable"
-            return 1
-          fi
-          echo "release-url=$url" >> "$GITHUB_OUTPUT"
-          echo "release-dir=$release_dir" >> "$GITHUB_OUTPUT"
-          echo "bin=$candidate" >> "$GITHUB_OUTPUT"
-        }
-
-        if [[ "$mode" == "release" || "$mode" == "auto" ]]; then
-          if download_release_binary; then
-            exit 0
-          fi
-          if [[ "$mode" == "release" ]]; then
-            echo "::error::install-mode=release failed; use install-mode=auto for source fallback or provide a valid release-version and release-asset"
-            exit 1
-          fi
-        fi
-
-        build_from_source
-
-    - name: Install advisory sensors
-      if: inputs['install-tools'] == 'true'
-      shell: bash
-      env:
-        UB_REVIEW_TOOL_BUNDLE: ${{ inputs['tool-bundle'] }}
-      run: bash "$GITHUB_ACTION_PATH/scripts/install-gh-runner-tools.sh"
-
-    - name: Resolve prior resolved candidates
-      id: prior_resolved_candidates
-      shell: bash
-      env:
-        GH_TOKEN: ${{ inputs['github-token'] }}
-        MANUAL_PRIOR_RESOLVED_CANDIDATES: ${{ inputs['prior-resolved-candidates'] }}
-        PRIOR_RESOLVED_CANDIDATES_ARTIFACT: ${{ inputs['prior-resolved-candidates-artifact'] }}
-        CURRENT_RUN_ID: ${{ github.run_id }}
-        GITHUB_EVENT_NAME_FOR_PRIOR_RECEIPTS: ${{ github.event_name }}
-        GITHUB_HEAD_REF_FOR_PRIOR_RECEIPTS: ${{ github.head_ref }}
-        GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS: ${{ github.workflow }}
-      run: |
-        set -euo pipefail
-
-        write_path_output() {
-          printf 'path=%s\n' "$1" >> "$GITHUB_OUTPUT"
-        }
-
-        if [[ -n "$MANUAL_PRIOR_RESOLVED_CANDIDATES" ]]; then
-          write_path_output "$MANUAL_PRIOR_RESOLVED_CANDIDATES"
-          exit 0
-        fi
-
-        if [[ "$GITHUB_EVENT_NAME_FOR_PRIOR_RECEIPTS" != "pull_request" ]]; then
-          write_path_output ""
-          exit 0
-        fi
-        if [[ -z "$PRIOR_RESOLVED_CANDIDATES_ARTIFACT" ]]; then
-          write_path_output ""
-          exit 0
-        fi
-        if [[ -z "$GH_TOKEN" ]]; then
-          echo "::notice::prior resolved-candidates auto-discovery skipped; github-token is empty"
-          write_path_output ""
-          exit 0
-        fi
-        if [[ -z "$GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS" ]]; then
-          echo "::notice::prior resolved-candidates auto-discovery skipped; workflow name is unavailable"
-          write_path_output ""
-          exit 0
-        fi
-        if ! command -v gh >/dev/null 2>&1; then
-          echo "::notice::prior resolved-candidates auto-discovery skipped; gh is unavailable"
-          write_path_output ""
-          exit 0
-        fi
-
-        prior_dir="${RUNNER_TEMP:-/tmp}/ub-review-prior-resolved-candidates"
-        download_dir="$prior_dir/artifact"
-        rm -rf "$prior_dir"
-        mkdir -p "$download_dir"
-
-        branch_args=()
-        if [[ -n "$GITHUB_HEAD_REF_FOR_PRIOR_RECEIPTS" ]]; then
-          branch_args+=(--branch "$GITHUB_HEAD_REF_FOR_PRIOR_RECEIPTS")
-        fi
-
-        jq_filter=".[] | select((.databaseId | tostring) != \"$CURRENT_RUN_ID\" and (.conclusion == \"success\" or .conclusion == \"failure\")) | .databaseId"
-        if ! run_id="$(gh run list \
-          --workflow "$GITHUB_WORKFLOW_NAME_FOR_PRIOR_RECEIPTS" \
-          --event pull_request \
-          --status completed \
-          --limit 20 \
-          --json databaseId,conclusion \
-          --jq "$jq_filter" \
-          "${branch_args[@]}" | head -n 1)"; then
-          echo "::notice::prior resolved-candidates auto-discovery skipped; previous runs could not be listed"
-          write_path_output ""
-          exit 0
-        fi
-
-        if [[ -z "$run_id" ]]; then
-          write_path_output ""
-          exit 0
-        fi
-
-        if ! gh run download "$run_id" --name "$PRIOR_RESOLVED_CANDIDATES_ARTIFACT" --dir "$download_dir"; then
-          echo "::notice::prior resolved-candidates auto-discovery skipped; artifact '$PRIOR_RESOLVED_CANDIDATES_ARTIFACT' was unavailable on run $run_id"
-          write_path_output ""
-          exit 0
-        fi
-
-        prior_file="$(find "$download_dir" -path '*/review/resolved_candidates.json' -type f | sort | head -n 1 || true)"
-        if [[ -z "$prior_file" && -f "$download_dir/review/resolved_candidates.json" ]]; then
-          prior_file="$download_dir/review/resolved_candidates.json"
-        fi
-
-        if [[ -z "$prior_file" ]]; then
-          echo "::notice::prior resolved-candidates auto-discovery skipped; artifact '$PRIOR_RESOLVED_CANDIDATES_ARTIFACT' did not contain review/resolved_candidates.json"
-          write_path_output ""
-          exit 0
-        fi
-
-        write_path_output "$prior_file"
-
-    - name: Build UB review packet
-      shell: bash
-      env:
-        UB_REVIEW_PROFILE: ${{ inputs.profile }}
-        UB_REVIEW_PRESET: ${{ inputs.preset }}
-        UB_REVIEW_MINIMAX_API_KEY: ${{ inputs['minimax-api-key'] }}
-        UB_REVIEW_MINIMAX_API_URL: ${{ inputs['minimax-api-url'] }}
-        UB_REVIEW_OPENCODE_API_KEY: ${{ inputs['opencode-api-key'] }}
-        UB_REVIEW_OPENCODE_API_URL: ${{ inputs['opencode-api-url'] }}
-        UB_REVIEW_GITHUB_EVENT_ACTION: ${{ github.event.action }}
-      run: |
-        set -euo pipefail
-        extra=()
-        pr_thread_auth="${{ inputs['github-token'] }}"
-        if [[ -n "$pr_thread_auth" ]]; then
-          extra+=(--github-token "$pr_thread_auth")
-        fi
-        if [[ "${{ inputs['allow-heavy'] }}" == "true" ]]; then
-          extra+=(--allow-heavy)
-        fi
-        if [[ -n "${{ inputs['runtime-profile'] }}" ]]; then
-          extra+=(--runtime-profile "${{ inputs['runtime-profile'] }}")
-        fi
-        # #719: forward the user-facing review-mode preset when set. The binary
-        # applies the {mode, fail-on-gate, review_forward} override during run
-        # so the gate_outcome.json reflects the preset; the gate-check step
-        # repeats the {mode, fail-on-gate} override for enforcement.
-        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
-          extra+=(--review-mode "${{ inputs['review-mode'] }}")
-        fi
-
-        config_path="${{ inputs.config }}"
-        if [[ -z "$config_path" ]]; then
-          config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
-          case "${{ inputs.preset }}" in
-            bun-ub|bun)
-              config_path="$GITHUB_ACTION_PATH/profiles/bun-ub-v0.toml"
-              ;;
-            *)
-              echo "::warning::Unknown preset '${{ inputs.preset }}'; using bun-ub"
-              ;;
-          esac
-        fi
-
-        # Gate enforcement is deferred to the final "Enforce gate outcome"
-        # step so a failing gate cannot skip PR review posting; the binary
-        # itself therefore always runs with --fail-on-gate false here.
-        "${{ steps.runner.outputs.bin }}" run \
-          --config "$config_path" \
-          --profile "${{ inputs.profile }}" \
-          --root "${{ inputs.root }}" \
-          --base "${{ inputs.base }}" \
-          --head "${{ inputs.head }}" \
-          --out "${{ inputs.out }}" \
-          --posting "${{ inputs.posting }}" \
-          --mode "${{ inputs.mode }}" \
-          --run-pass "${{ inputs['run-pass'] }}" \
-          --model-mode "${{ inputs['model-mode'] }}" \
-          --fail-on-gate false \
-          --depth "${{ inputs.depth }}" \
-          --lanes "${{ inputs.lanes }}" \
-          --except-lanes "${{ inputs['except-lanes'] }}" \
-          --tools "${{ inputs.tools }}" \
-          --except-tools "${{ inputs['except-tools'] }}" \
-          --provider-policy "${{ inputs['provider-policy'] }}" \
-          --lane-width "${{ inputs['lane-width'] }}" \
-          --model-timeout-sec "${{ inputs['model-timeout-sec'] }}" \
-          --max-inline-comments "${{ inputs['max-inline-comments'] }}" \
-          --model-concurrency "${{ inputs['model-concurrency'] }}" \
-          --max-model-calls "${{ inputs['max-model-calls'] }}" \
-          --minimax-provider-kind "${{ inputs['minimax-provider-kind'] }}" \
-          --minimax-model "${{ inputs['minimax-model'] }}" \
-          --opencode-model "${{ inputs['opencode-model'] }}" \
-          --opencode-endpoint-kind "${{ inputs['opencode-endpoint-kind'] }}" \
-          --ledger-path "${{ inputs['ledger-path'] }}" \
-          --ledger-max-bytes "${{ inputs['ledger-max-bytes'] }}" \
-          --pr-thread-context "${{ inputs['pr-thread-context'] }}" \
-          --pr-thread-context-max-bytes "${{ inputs['pr-thread-context-max-bytes'] }}" \
-          --prior-resolved-candidates "${{ steps.prior_resolved_candidates.outputs.path }}" \
-          --review-body-max-bytes "${{ inputs['review-body-max-bytes'] }}" \
-          --no-github-summary \
-          "${extra[@]}"
-
-    - name: Post grouped PR review
-      if: inputs.posting == 'review'
-      shell: bash
-      env:
-        UB_REVIEW_GITHUB_TOKEN: ${{ inputs['github-token'] }}
-      run: |
-        set -euo pipefail
-        extra=()
-        if [[ "${{ inputs['fail-on-post-error'] }}" == "true" ]]; then
-          extra+=(--fail-on-post-error)
-        fi
-        "${{ steps.runner.outputs.bin }}" post \
-          --review-json "${{ inputs.out }}/review/github-review.json" \
-          --diff-patch "${{ inputs.out }}/input/diff.patch" \
-          --out "${{ inputs.out }}/review" \
-          "${extra[@]}"
-
-    - name: Append UB review summary
-      if: always() && inputs['github-summary'] == 'true'
-      shell: bash
-      run: |
-        if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "${{ inputs.out }}/running-summary.md" ]; then
-          cat "${{ inputs.out }}/running-summary.md" >> "$GITHUB_STEP_SUMMARY"
-        fi
-
-    - name: Set output paths
-      id: paths
-      if: always()
-      shell: bash
-      run: |
-        echo "summary-path=${{ inputs.out }}/running-summary.md" >> "$GITHUB_OUTPUT"
-        echo "events-path=${{ inputs.out }}/events.ndjson" >> "$GITHUB_OUTPUT"
-        echo "review-json-path=${{ inputs.out }}/review/review.json" >> "$GITHUB_OUTPUT"
-        echo "metrics-json-path=${{ inputs.out }}/review/metrics.json" >> "$GITHUB_OUTPUT"
-        echo "github-review-path=${{ inputs.out }}/review/github-review.json" >> "$GITHUB_OUTPUT"
-        echo "post-result-path=${{ inputs.out }}/review/post-result.json" >> "$GITHUB_OUTPUT"
-        echo "post-error-path=${{ inputs.out }}/review/post-error.json" >> "$GITHUB_OUTPUT"
-        echo "post-payload-path=${{ inputs.out }}/review/github-review-post-payload.json" >> "$GITHUB_OUTPUT"
-        echo "post-stdout-path=${{ inputs.out }}/review/post-stdout.json" >> "$GITHUB_OUTPUT"
-        echo "post-stderr-path=${{ inputs.out }}/review/post-stderr.txt" >> "$GITHUB_OUTPUT"
-        echo "gate-outcome-path=${{ inputs.out }}/review/gate_outcome.json" >> "$GITHUB_OUTPUT"
-
-    # `ub-review gate-check` is the single source of the FailOnGate::resolved
-    # semantics; this step only forwards inputs. The binary is always present
-    # here: the earlier runner step installed it and the run step already
-    # executed it, so no bash existence-check fallback is needed.
-    - name: Enforce gate outcome
-      shell: bash
-      env:
-        # Explicitly-empty inputs (fail-on-gate: '' / mode: '') fall back to
-        # the same defaults the input declarations and the run step's clap
-        # parser use, instead of handing clap an empty string (a hard error).
-        UB_REVIEW_FAIL_ON_GATE: ${{ inputs['fail-on-gate'] || 'auto' }}
-        UB_REVIEW_MODE: ${{ inputs.mode || 'review-byok' }}
-        UB_REVIEW_GATE_OUTCOME_PATH: ${{ inputs.out }}/review/gate_outcome.json
-      run: |
-        set -euo pipefail
-        review_mode_args=()
-        # #719: forward the review-mode preset (advisory/gate/strict). Inlined
-        # from the input expression (matching the runtime-profile pattern) so
-        # an empty input renders the guard false and the flag is never passed.
-        if [[ -n "${{ inputs['review-mode'] }}" ]]; then
-          review_mode_args+=(--review-mode "${{ inputs['review-mode'] }}")
-        fi
-        "${{ steps.runner.outputs.bin }}" gate-check \
-          --gate-outcome "$UB_REVIEW_GATE_OUTCOME_PATH" \
-          --fail-on-gate "$UB_REVIEW_FAIL_ON_GATE" \
-          --mode "$UB_REVIEW_MODE" \
-          "${review_mode_args[@]}"
+        {
+          cargo test --locked --bin ub-review summary_only_withheld_terminal_reason_names_policy_and_counts -- --test-threads=1
+          cargo test --locked --bin ub-review proof_intent_validation_rejects_unsafe_targets_and_clamps_value -- --test-threads=1
+          cargo test --locked --bin ub-review short_technical_thread_tokens_remain_distinctive -- --test-threads=1
+          cargo test --workspace --all-targets --locked -- --test-threads=4
+          python3 scripts/verify-bun-review-artifacts.py --self-test
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          git diff --check
+        } 2>&1 | tee "$handoff/validation.log"
