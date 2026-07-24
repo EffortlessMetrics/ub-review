@@ -44,7 +44,6 @@ receipt_id = 'id = "ripr-pr-758-integration-ceiling"'
 if receipt_id in policy:
     raise SystemExit("policy receipt already exists")
 receipt = '''
-
 [[exception]]
 id = "ripr-pr-758-integration-ceiling"
 kind = "non-rust-file"
@@ -55,9 +54,8 @@ owner = "ub-review/core"
 reason = "Temporary raise of [tools.ripr.gate].max_new_unsuppressed from 0 to 1024 for PR #758 only. Canonical RIPR 0.10.0 run 30082970677 measured 942 unsuppressed exposure gaps across the 56-commit integration diff, while every executable proof stream, the full ub-review binary suite, Clippy, the artifact verifier, exact-head review, and review-thread reconciliation passed. RIPR serializes only 200 exposure-gap records, leaving 742 impossible to inspect or suppress individually. The ceiling is bounded above the measured count, changes no sensor output, and must be removed by #791 immediately after #758 merges."
 created = "2026-07-24"
 review_after = "2026-07-25"
-expires = "2026-07-31"
-'''
-write(policy_path, policy.rstrip() + receipt + "\n")
+expires = "2026-07-31"'''
+write(policy_path, policy.rstrip() + "\n\n" + receipt.rstrip() + "\n")
 print("policy receipt: appended")
 
 replace_regex(
