@@ -127,7 +127,6 @@ reason = "ast-grep rule packs are YAML because the external tool consumes YAML r
 created = "2026-06-03"
 review_after = "2026-09-03"
 
-
 [[exception]]
 id = "ripr-pr-758-integration-ceiling"
 kind = "non-rust-file"
