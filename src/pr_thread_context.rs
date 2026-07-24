@@ -248,8 +248,11 @@ fn github_thread_records(kind: &str, value: &serde_json::Value) -> Vec<ReviewThr
                 .map(str::to_owned),
             line: item
                 .get("line")
-                .or_else(|| item.get("original_line"))
                 .and_then(serde_json::Value::as_u64)
+                .or_else(|| {
+                    item.get("original_line")
+                        .and_then(serde_json::Value::as_u64)
+                })
                 .and_then(|line| u32::try_from(line).ok()),
             commit_id: item
                 .get("commit_id")
@@ -361,8 +364,11 @@ pub(crate) fn render_github_pr_thread_item(
         .unwrap_or("");
     let line = item
         .get("line")
-        .or_else(|| item.get("original_line"))
-        .and_then(serde_json::Value::as_u64);
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| {
+            item.get("original_line")
+                .and_then(serde_json::Value::as_u64)
+        });
     let body = item
         .get("body")
         .and_then(serde_json::Value::as_str)

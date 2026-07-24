@@ -320,6 +320,59 @@ stripped per-key with `PolicyError` receipts, and those receipts become
 silently replaced by defaults (src/config.rs `sanitize_policy_sections`;
 roadmap item 24 acceptance).
 
+## Current-head watchdog (#745)
+
+`gate_outcome.json` answers "is this compiled review a pass or fail?" It does
+not answer "did the current PR head actually reach an honest terminal state, or
+is a green verdict stale, cancelled, or missing?" The current-head watchdog
+(`src/gate_watchdog.rs`, `ub-review gate-watchdog`) closes that gap. It is a
+**pure classifier over frozen observations** — expected head SHA + deadline,
+check/workflow run observations (SHA, status, conclusion, run id, attempt), the
+recorded gate artifact observation, the coordinator terminal marker, and
+required-proof terminal markers — and writes one versioned
+`review/gate_watchdog.json` (schema `ub-review.gate_watchdog.v1`). It never
+queries GitHub, publishes a check, or mutates branch protection, and is inert
+until a future stable coordinator consumes it (non-goal of this slice).
+
+The verdict `state` is one of `terminal` / `pending` / `inconclusive`, and the
+fail-closed invariant of the gate extends to the head: **only a `terminal`
+state carries a `conclusion`, and only an exact-head completed run whose
+matching `gate_outcome.json` is present can produce one — so missing or
+malformed evidence can never serialize `pass`.**
+
+```text
+state         reason                          when
+terminal      exact-head-terminal             exact-head run completed and its
+                                              matching gate_outcome.json is
+                                              present (conclusion preserved:
+                                              pass / fail / inconclusive)
+pending       in-progress-replacement         a newer run is still in progress
+                                              before the deadline
+pending       awaiting-run                    no run observed yet, within the
+                                              deadline
+inconclusive  missing-run                     no completed run for the head
+                                              after the deadline
+inconclusive  cancelled-without-replacement   newest exact-head run was
+                                              cancelled with nothing replacing it
+inconclusive  stale-success                   only an older-SHA success exists;
+                                              it cannot satisfy the current head
+inconclusive  missing-artifact                exact-head run completed but no
+                                              matching / well-formed
+                                              gate_outcome.json was recorded
+inconclusive  orphaned-proof                  a required proof is bound to the
+                                              wrong head or never went terminal
+inconclusive  coordinator-crash               the coordinator crashed or its
+                                              marker is bound to a different head
+```
+
+Precedence is documented in the classifier: a still-running head within the
+deadline stays `pending` first (a transient state never prematurely reds a head
+that may still complete); a crashed/stale coordinator and an orphaned proof
+then win over any surviving artifact (the verdict substrate is untrustworthy);
+only after those do the exact-head run and staleness checks run. Every
+non-terminal verdict carries a `receipt_pointer` and a `retry_action` so an
+operator (or the future coordinator) knows what to re-dispatch.
+
 ## Trust boundary / non-claims
 
 ```text

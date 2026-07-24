@@ -48,6 +48,15 @@ Run all five before pushing the tag. Each is a gate the release rests on.
 Once the checklist passes, the tag push triggers `release-binary.yml`
 automatically. There is no manual build step.
 
+The packaging job emits `release-candidate.json` with schema
+`ub-review.release_candidate.v1`. It binds the archive and checksum to the
+exact checked-out commit SHA, ref, tag, toolchain, asset names, and archive
+digest. The tag-only publish job validates that receipt against `GITHUB_SHA`
+before creating or uploading a release. Treat that manifest as the immutable
+candidate boundary: documentation-only changes after the candidate run do not
+invalidate it; changes to the shipped binary, action, packaging, or release
+contract require a new candidate run.
+
 ```bash
 # 1. Confirm you're on the verified commit.
 git checkout main

@@ -12,6 +12,7 @@ use std::time::Instant;
 
 use anyhow::Result;
 
+use crate::test_parse::push_unique;
 use crate::*;
 
 fn current_portfolio_runtime(
@@ -466,13 +467,13 @@ fn portfolio_file<'a>(candidate: &PortfolioCandidate, input: &ProofPortfolioInpu
     }
 }
 
-fn portfolio_request_ids(
+fn portfolio_request_ids<'a>(
     candidate: &PortfolioCandidate,
-    input: &ProofPortfolioInput<'_>,
-) -> Vec<String> {
+    input: &ProofPortfolioInput<'a>,
+) -> &'a [String] {
     match candidate {
-        PortfolioCandidate::Test(index) => input.test_tasks[*index].request_ids.clone(),
-        PortfolioCandidate::Build(index) => input.build_tasks[*index].request_ids.clone(),
+        PortfolioCandidate::Test(index) => &input.test_tasks[*index].request_ids,
+        PortfolioCandidate::Build(index) => &input.build_tasks[*index].request_ids,
     }
 }
 
@@ -497,7 +498,7 @@ fn portfolio_metadata(
     (
         portfolio_id(candidate, input).to_owned(),
         kind.to_owned(),
-        request_ids,
+        request_ids.to_vec(),
         required,
         portfolio_cost(candidate, input),
     )
@@ -1204,6 +1205,7 @@ mod tests {
     use anyhow::{Result, ensure};
 
     use super::*;
+    use crate::test_parse::command_display_with_env;
     use crate::tests::test_run_args;
     use crate::{CommandStatus, DiffContext, DiffFlags};
 

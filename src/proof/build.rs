@@ -184,6 +184,7 @@ mod tests {
 
     use anyhow::Result;
 
+    use crate::test_parse::command_display_with_env;
     use crate::tests::{test_diff, test_run_args};
     use crate::*;
 

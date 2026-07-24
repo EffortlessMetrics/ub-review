@@ -23,6 +23,54 @@ schema_version = 1
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:error_path:1e7f4b0d"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on the inspected-root error helper: enable_inspect_requires_a_repository_root asserts the exact missing-root error, while the successful enable tests exercise the Ok path. The helper is intentionally kept small and fallible; re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:return_value:42a62938"
+owner = "ub-review/core"
+reason = "Twin of the inspected-root helper false-negative above: the helper's Ok(()) return is exercised by the successful enable command tests, and its failing branch is asserted by enable_inspect_requires_a_repository_root. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:8b4c3b2c"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind: inspected_repo_kind_covers_all_repository_surfaces asserts the mixed, Rust, JavaScript/TypeScript, and generic outputs directly. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:8abb2d30"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's mixed arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(true, true) = mixed. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:40779b25"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's Rust arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(true, false) = rust. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:bb889171"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's JavaScript/TypeScript arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(false, true) = javascript-typescript. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:match_arm:2460d14f"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on inspected_repo_kind's generic arm: inspected_repo_kind_covers_all_repository_surfaces asserts inspected_repo_kind(false, false) = generic. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_enable.rs:field_construction:9a42382d"
+owner = "ub-review/core"
+reason = "RIPR discriminate false-negative on append_enable_lane's id field: inspected_enable_config_selects_relevant_rust_surfaces asserts the source-route lane identity and its role, focus, receives, and diff_classes fields. Re-verify after any edit to src/enable.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_config.rs:946:side_effect"
 owner = "ub-review/core"
 reason = "RIPR discriminate false-negative (ripr-swarm#1054, second family): side_effect probe on the errors.push(PolicyError) in sanitize_providers_section stays weakly_exposed although the same-file test providers_section_parses_policy_and_receipts_invalid_values pins the push with an exact oracle (errors.len()==1, exact section, detail starts_with + value + vocabulary). Line-keyed id; re-verify the target after any edit to config.rs."
@@ -12300,3 +12348,507 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:return_value:d3368aab"
 owner = "ub-review/core"
 reason = "Twin of the return_value probe above on the same overlap_ms formula: run_loop_overlap_ms_does_not_double_count_self_overlapping_side pins the exact result of this saturating_sub through the same pairwise-distinct union values; RIPR 0.10.0 cannot associate the oracle through the metrics() -> overlap_ms() indirection (#737). Re-verify after semantic edits or RIPR upgrades."
+
+# PR #784: these 24 new IDs are unchanged neighboring test expressions whose
+# line/duplicate ordinal moved when the sensor cluster was extracted. The 13
+# prior PR #783 receipts remain the baseline; the full 647-test binary suite
+# and focused 14-test sensor suite cover the moved code.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:eca10a0d"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile test return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:92e01722"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible fixture expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:59b2539d"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:57458b0b"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:9361da75"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:702147cf"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture field shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:72a75872"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:97bb28af"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:c92346b0"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-profile fixture return expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.4"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.5"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.6"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.7"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.8"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.9"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.10"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:d086b402"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor artifact-directory setup shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.11"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-evidence test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.11"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged test return path shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.12"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged test return path shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.12"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-job test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.13"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged fallible sensor-job test expression shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.13"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #784: unchanged sensor-job test return path shifted after the sensor test cluster extraction; focused sensor tests and the full ub-review binary suite pass. Re-verify after editing the surrounding tests or upgrading RIPR."
+
+# PR #783: extracting the validation test cluster shifts the unchanged tail of
+# unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap to one new
+# source line. These exact probes are line-movement false positives; the
+# unchanged test remains covered by the full 647-test binary suite.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged fallible setup at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:7d0476a7.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged fallible setup at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3020bcba"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged error propagation at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:3020bcba.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged error propagation at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.4"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:ba1d93e3.5"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged ModelOutputSinks construction in unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.2"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.3"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.4"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.5"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.6"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.7"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.8"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.9"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:return_value:f24843de.10"
+owner = "ub-review/core"
+reason = "Line-movement false positive from PR #783: unchanged successful return at the tail of unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap moved to line 7793 when the validation tests were extracted; the full ub-review binary suite and focused validation suite pass. Re-verify after editing this test or upgrading RIPR."
+
+# PR #782: the run/proof integration tests now have their own target and share
+# one subprocess lock/support seam. These exact findings are either line-move
+# false positives in the unchanged cli suite or helper-only probes whose
+# callers are covered by the focused cli_run suite and the full cli suite.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:45387bed"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged subprocess lock acquisition in tests/cli.rs is covered by the full cli integration suite; the run/proof tests moved to cli_run.rs. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:45387bed.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged subprocess lock acquisition in tests/cli.rs is covered by the full cli integration suite; the run/proof tests moved to cli_run.rs. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:45387bed.3"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged subprocess lock acquisition in tests/cli.rs is covered by the full cli integration suite; the run/proof tests moved to cli_run.rs. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.3"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.4"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.5"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.6"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.7"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.8"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.9"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.10"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.11"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.12"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.13"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.14"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.15"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.16"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:3099e9d8.17"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: unchanged fallible fixture setup in tests/cli.rs remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:5449cc79"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged fixture raw text remains exercised by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:d4489e7e"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged focused-proof fixture is still executed and asserted by cli_run tests after relocation from cli.rs. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:d4489e7e.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged focused-proof fixture is still executed and asserted by cli_run tests after relocation from cli.rs. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:5697a9de"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged focused-proof fixture is still executed and asserted by cli_run tests after relocation from cli.rs. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:5697a9de.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged focused-proof fixture is still executed and asserted by cli_run tests after relocation from cli.rs. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:df7bb3d2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged test return path is covered by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:df7bb3d2.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged test return path is covered by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:df7bb3d2.3"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: the unchanged test return path is covered by the full cli integration suite after run/proof tests were removed. Re-verify after editing the surrounding cli tests or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_lock.rs:error_path:2e035f1b"
+owner = "ub-review/core"
+reason = "Shared test-support seam introduced by PR #782: one lock definition is re-exported by cli.rs and cli_run.rs, and all subprocess tests execute under it; the full cli and focused cli_run suites pass. Re-verify after changing the lock helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_lock.rs:return_value:d83aa6de"
+owner = "ub-review/core"
+reason = "Shared test-support seam introduced by PR #782: one lock definition is re-exported by cli.rs and cli_run.rs, and all subprocess tests execute under it; the full cli and focused cli_run suites pass. Re-verify after changing the lock helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_lock.rs:error_path:bc684484"
+owner = "ub-review/core"
+reason = "Shared test-support seam introduced by PR #782: the OnceLock initialization is exercised through the single re-exported subprocess lock by both integration targets; the full cli and focused cli_run suites pass. Re-verify after changing the lock helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_lock.rs:return_value:5f0e80de"
+owner = "ub-review/core"
+reason = "Shared test-support seam introduced by PR #782: the OnceLock initialization is exercised through the single re-exported subprocess lock by both integration targets; the full cli and focused cli_run suites pass. Re-verify after changing the lock helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_run.rs:return_value:a6afab25"
+owner = "ub-review/core"
+reason = "Test-support helper introduced by PR #782: run_expect_failure's diagnostic return is asserted by the three moved run/proof tests and the full cli suite; RIPR does not associate the helper return through those callers. Re-verify after changing cli_run support or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_run.rs:return_value:75081365"
+owner = "ub-review/core"
+reason = "Test-support helper introduced by PR #782: write_file's successful return is exercised by all three moved run/proof tests; RIPR does not associate this fallible helper through the fixture callers. Re-verify after changing cli_run support or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_run.rs:error_path:704649ce"
+owner = "ub-review/core"
+reason = "Test-support helper introduced by PR #782: init_minimal_repo's fallible git setup is exercised by the moved run/proof tests and their assertions; RIPR reports the helper's ordinary setup propagation as unrevealed despite the focused suite passing. Re-verify after changing cli_run support or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_run.rs:error_path:704649ce.2"
+owner = "ub-review/core"
+reason = "Test-support helper introduced by PR #782: init_minimal_repo's fallible git setup is exercised by the moved run/proof tests and their assertions; RIPR reports the helper's ordinary setup propagation as unrevealed despite the focused suite passing. Re-verify after changing cli_run support or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_run.rs:error_path:704649ce.3"
+owner = "ub-review/core"
+reason = "Test-support helper introduced by PR #782: init_minimal_repo's fallible git setup is exercised by the moved run/proof tests and their assertions; RIPR reports the helper's ordinary setup propagation as unrevealed despite the focused suite passing. Re-verify after changing cli_run support or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_cli_run.rs:return_value:d1c6a9f6"
+owner = "ub-review/core"
+reason = "Test-support helper introduced by PR #782: init_minimal_repo's successful return is exercised by the moved run/proof tests and their assertions; RIPR does not associate this fixture helper through the callers. Re-verify after changing cli_run support or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:a59d7443"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #782: extracting the shared lock moved the adjacent fake_openai_lane_content return without changing it; the existing cli suite covers the helper's consumers. Re-verify after editing tests/common/mod.rs or upgrading RIPR."

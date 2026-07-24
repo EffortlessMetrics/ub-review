@@ -31,13 +31,13 @@ pub(crate) struct LaneThreadTurn {
     /// Execution stage: "primary" for the first wave, "follow-up" for
     /// subsequent turns (Order 9 reporter-driven continuation).
     pub(crate) stage: String,
-    /// Path to the lane's prompt packet (lanes/<lane>.md).
+    /// Path to the lane's prompt packet (`lanes/<lane>.md`).
     pub(crate) prompt_packet_path: String,
     /// Short summary of the model's response for this turn (truncated).
     pub(crate) response_summary: String,
     /// References to evidence routed into this turn (sensor/lane ids).
     pub(crate) routed_evidence_refs: Vec<String>,
-    /// Reference to the ModelLaneReceipt for this turn (review/model/<lane>/...).
+    /// Reference to the `ModelLaneReceipt` for this turn (`review/model/<lane>/...`).
     pub(crate) receipt_ref: String,
 }
 
@@ -120,7 +120,7 @@ pub(crate) fn write_lane_thread_turn(
 
 /// Build a turn from a lane's first-wave execution. `response_summary` is
 /// truncated to keep the artifact small (full content lives in
-/// review/model/<lane>/content.json).
+/// `review/model/<lane>/content.json`).
 pub(crate) fn primary_turn(
     thread_id: &str,
     lane: &str,

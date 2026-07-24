@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifacts::CALIBRATION_SCHEMA;
 
-/// Read review/messages.ndjson into a Vec<CrossLaneMessage>.
+/// Read `review/messages.ndjson` into a `Vec<CrossLaneMessage>`.
 pub(crate) fn read_messages_ndjson(review_dir: &Path) -> Vec<crate::CrossLaneMessage> {
     let path = review_dir.join("messages.ndjson");
     let text = match std::fs::read_to_string(&path) {

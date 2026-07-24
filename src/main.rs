@@ -104,7 +104,7 @@ mod cost_artifact;
 mod review_experience;
 pub(crate) use cost_artifact::*;
 mod quality_artifact;
-pub(crate) use quality_artifact::*;
+use quality_artifact::{write_quality_receipt_artifact, write_quality_trend_artifact};
 mod quality_github;
 pub(crate) use quality_github::*;
 mod artifact_writers;
@@ -113,9 +113,8 @@ mod witness;
 pub(crate) use witness::*;
 mod work_queue;
 pub(crate) use work_queue::*;
-mod test_parse;
-pub(crate) use test_parse::*;
 mod observation_merge;
+mod test_parse;
 pub(crate) use observation_merge::*;
 mod shared_context_render;
 pub(crate) use shared_context_render::*;
@@ -136,9 +135,11 @@ pub(crate) use summary_render::*;
 mod post_run_utils;
 pub(crate) use post_run_utils::*;
 mod system_detect;
-pub(crate) use system_detect::*;
+use system_detect::{
+    command_path, command_version, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
+    doctor_binary_install_status, git_tree_sha, profile_config_hash,
+};
 mod diff_posture;
-pub(crate) use diff_posture::*;
 mod run_args;
 pub(crate) use run_args::*;
 mod post_command;
@@ -147,6 +148,8 @@ mod plan_artifacts;
 pub(crate) use plan_artifacts::*;
 mod ci_audit;
 pub(crate) use ci_audit::*;
+mod gate_watchdog;
+pub(crate) use gate_watchdog::*;
 
 const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
@@ -183,6 +186,7 @@ fn main() -> Result<()> {
         Command::QualityGithubOutcomes(args) => cmd_quality_github_outcomes(args),
         Command::QualityGithubCollect(args) => cmd_quality_github_collect(args),
         Command::GateCheck(args) => cmd_gate_check(args),
+        Command::GateWatchdog(args) => cmd_gate_watchdog(args),
         Command::Worker(args) => cmd_worker(args),
     }
 }
@@ -5069,14 +5073,25 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
         .count();
     let evidence_gaps = input.missing_or_failed_sensor_evidence.len()
         + input.missing_or_failed_model_evidence.len();
-    let reviewer_value_present = input.should_prepare_github_review
-        || has_reviewer_value(input.inline_comments, input.pr_body)
+    let reviewer_content_present = input.should_prepare_github_review
+        || has_reviewer_value(input.inline_comments, input.pr_body);
+    let reviewer_value_present = reviewer_content_present
         || input
             .proof_receipts
             .iter()
             .any(proof_receipt_is_test_proof_result);
 
-    let (status, reason) = if reviewer_value_present {
+    let (status, reason) = if usable_model_lanes == 0
+        && !input.args.dry_run
+        && !matches!(input.args.model_mode, ModelMode::Off)
+        && input.plan.diff_class != DiffClass::ArtifactOnlySmoke
+        && !reviewer_content_present
+    {
+        (
+            "failed-to-review",
+            "No usable model lane or proof receipt was available, so the run did not reach a sufficient review state.".to_owned(),
+        )
+    } else if reviewer_value_present {
         let reason = if input.should_prepare_github_review {
             "Reviewer-value content survived compilation; a grouped PR review was prepared."
                 .to_owned()
@@ -5117,11 +5132,6 @@ fn build_review_terminal_state(input: TerminalStateInput<'_>) -> ReviewTerminalS
         (
             "artifact-only",
             "Artifact-only smoke diff; diagnostics remain in artifacts and no PR review was prepared.".to_owned(),
-        )
-    } else if usable_model_lanes == 0 && input.proof_receipts.is_empty() {
-        (
-            "failed-to-review",
-            "No usable model lane or proof receipt was available, so the run did not reach a sufficient review state.".to_owned(),
         )
     } else {
         (
@@ -5650,64 +5660,68 @@ mod tests {
 
     use anyhow::{Context as _, Result, bail};
 
+    use super::diff_posture::{NO_LGTM_POSTURE, default_lanes_for_diff_context};
+    use super::quality_artifact::{build_quality_receipt, build_quality_trend_artifact};
+    use super::test_parse::command_display;
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
         FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
         GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
         LaneModelOutput, LanePlan, LanguageMix, Limits, MinimaxPromptCache, ModelAssignment,
-        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
-        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
+        ModelCacheUsage, ModelCallOutcome, ModelEvidenceIssue, ModelLaneReceipt,
         ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        ModelRunContext, Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs,
+        PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget,
+        ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
+        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
         build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
         build_witness_records, builtin_profiles, candidate_matches_inline_comment,
         candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
         classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
-        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
-        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
-        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
-        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
-        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, selected_provider_spec, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
-        validate_failed_objection, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
-        write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
-        write_sensor_status, write_witness_artifacts,
+        cmd_post, collect_pr_thread_context, combined_observations, compile_review_surface,
+        dedupe_inline_comments, deep_minimax_lanes, default_lanes, direct_minimax_spec,
+        execute_issue_broker, extract_model_content, fallback_provider_spec_for_lane,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, follow_up_provider_assignment_with_key_state,
+        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        proof_planner_assignment_with_key_state, provider_concurrency_limits,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
+        wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
+        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
+        write_proof_request_artifacts, write_resolved_candidate_artifacts,
+        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
+        write_witness_artifacts,
+    };
+    use crate::{
+        ModelCandidateComment, ModelCandidateFinding, ModelCandidateObservation,
+        ModelFailedObjection, collect_sensor_evidence_issues, validate_failed_objection,
+        validate_inline_candidate, validate_model_observation, validate_summary_only_candidate,
     };
 
     #[test]
@@ -5763,17 +5777,20 @@ mod tests {
     #[test]
     fn doctor_binary_install_status_reports_path_state_and_fix() {
         let current = PathBuf::from("/opt/ub-review/bin/ub-review");
-        let on_path =
-            super::doctor_binary_install_status_from_paths(Some(&current), Some(&current));
+        let on_path = super::system_detect::doctor_binary_install_status_from_paths(
+            Some(&current),
+            Some(&current),
+        );
         assert_eq!(on_path, "on PATH as /opt/ub-review/bin/ub-review");
 
-        let missing_path = super::doctor_binary_install_status_from_paths(Some(&current), None);
+        let missing_path =
+            super::system_detect::doctor_binary_install_status_from_paths(Some(&current), None);
         assert!(missing_path.contains("not on PATH"));
         assert!(missing_path.contains("add /opt/ub-review/bin to PATH"));
         assert!(missing_path.contains("install-mode=path"));
         assert!(missing_path.contains("binary-path=/opt/ub-review/bin/ub-review"));
 
-        let shadowed = super::doctor_binary_install_status_from_paths(
+        let shadowed = super::system_detect::doctor_binary_install_status_from_paths(
             Some(&current),
             Some(Path::new("/usr/local/bin/ub-review")),
         );
@@ -5789,17 +5806,6 @@ mod tests {
         assert_eq!(
             classify_diff_class(&["docs/readme.md".to_owned()], &flags),
             DiffClass::DocsOnly
-        );
-    }
-
-    #[test]
-    fn unsafe_tokens_trigger_native_risk() {
-        let flags = classify_diff(&["src/lib.rs".to_owned()], "+ let p = bytes.as_ptr();");
-        assert!(flags.rust_changed);
-        assert!(flags.unsafe_or_native_risk);
-        assert_eq!(
-            classify_diff_class(&["src/lib.rs".to_owned()], &flags),
-            DiffClass::SourceUb
         );
     }
 
@@ -5883,8 +5889,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -5916,8 +5921,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -6144,53 +6148,6 @@ mod tests {
                 profile.name
             );
         }
-    }
-
-    #[test]
-    fn gh_runner_profiles_carry_ripr_lease_override_quick_boxes_do_not() -> Result<()> {
-        let profiles = builtin_profiles();
-        for name in ["gh-runner", "gh-runner-standard", "gh-runner-full"] {
-            let profile = profiles
-                .iter()
-                .find(|profile| profile.name == name)
-                .ok_or_else(|| anyhow::anyhow!("missing builtin profile {name}"))?;
-            assert_eq!(
-                profile.tool_timeouts.get("ripr"),
-                Some(&720),
-                "{name} must carry the ripr lease override"
-            );
-        }
-        for name in ["cx23", "cx33", "cx43"] {
-            let profile = profiles
-                .iter()
-                .find(|profile| profile.name == name)
-                .ok_or_else(|| anyhow::anyhow!("missing builtin profile {name}"))?;
-            assert!(
-                profile.tool_timeouts.is_empty(),
-                "{name} keeps one-size sensor leases"
-            );
-        }
-
-        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
-        config.merge_defaults();
-        let profile = config.selected_profile()?;
-        assert_eq!(profile.tool_timeouts.get("ripr"), Some(&720));
-        let ripr = config
-            .tools
-            .get("ripr")
-            .ok_or_else(|| anyhow::anyhow!("ripr tool missing from repo config"))?;
-        assert!(
-            ripr.provided.timeout_sec,
-            "this repo pins ripr's lease explicitly in .ub-review.toml"
-        );
-        let resolved = super::resolve_sensor_timeout_sec(ripr, profile);
-        assert_eq!(
-            resolved,
-            ripr.timeout_sec.min(profile.budgets.default_timeout_sec),
-            "repo-pinned lease wins over the profile override"
-        );
-        assert_ne!(resolved, 720, "profile table must not shadow repo config");
-        Ok(())
     }
 
     #[test]
@@ -6444,132 +6401,6 @@ mod tests {
             None,
         );
         assert_eq!(resolved_plan["gate"], resolved_profile["gate"]);
-        Ok(())
-    }
-
-    #[test]
-    fn unsafe_review_swarm_recommended_config_loads_advisory_floor() -> Result<()> {
-        let mut config = Config::from_toml_with_policy_receipts(include_str!(
-            "../configs/unsafe-review-swarm.ub-review.toml"
-        ))?;
-        config.merge_defaults();
-
-        assert!(
-            config.policy_errors.is_empty(),
-            "recommended config should not rely on stripped or deprecated keys: {:?}",
-            config.policy_errors
-        );
-        assert_eq!(config.review_profile, "bun-ub-v0");
-        assert_eq!(config.profile, "gh-runner-full");
-        assert_eq!(config.repo.kind, "rust");
-        assert_eq!(config.repo.ledger, "docs/dogfood");
-        assert_eq!(
-            config.review_body.summary_only_body,
-            SummaryOnlyBodyPolicy::PostSubstantive
-        );
-        assert_eq!(config.gate.required_check, "ub-review/gate");
-        assert_eq!(
-            config.gate.post_review_on,
-            vec!["opened".to_owned(), "ready_for_review".to_owned()]
-        );
-        assert!(config.gate.blocking.required_proof_unproven);
-        assert!(!config.gate.blocking.tool_gate_missing_evidence);
-        assert_eq!(config.providers.policy, "primary-with-fallback");
-
-        let expected_proofs = [(
-            "check-pr",
-            "cargo run --locked -p xtask -- check-pr",
-            "focused-build",
-            300_u64,
-        )];
-        assert_eq!(config.proof.required.len(), expected_proofs.len());
-        for (id, command, cost, timeout_sec) in expected_proofs {
-            let policy = config
-                .proof
-                .required
-                .iter()
-                .find(|policy| policy.id == id)
-                .ok_or_else(|| anyhow::anyhow!("missing required proof {id}"))?;
-            assert!(policy.enabled);
-            assert!(policy.required);
-            assert_eq!(policy.command, command);
-            assert_eq!(policy.cost.as_deref(), Some(cost));
-            assert_eq!(policy.timeout_sec, timeout_sec);
-            assert_eq!(
-                super::proof_request_status(&policy.command, cost),
-                "requested",
-                "unsafe-review-swarm required proof {id} must be brokerable"
-            );
-        }
-
-        for id in ["cargo-fmt", "cargo-check", "cargo-test", "cargo-clippy"] {
-            let tool = config
-                .tools
-                .get(id)
-                .ok_or_else(|| anyhow::anyhow!("missing required cargo tool {id}"))?;
-            assert!(tool.enabled, "{id} should be enabled");
-            assert!(tool.required, "{id} should be required");
-            assert_eq!(tool.default, super::Trigger::Always);
-        }
-        let unsafe_review = config
-            .tools
-            .get("unsafe-review")
-            .ok_or_else(|| anyhow::anyhow!("missing unsafe-review tool"))?;
-        assert!(unsafe_review.enabled);
-        assert!(unsafe_review.required);
-        let ripr = config
-            .tools
-            .get("ripr")
-            .ok_or_else(|| anyhow::anyhow!("missing ripr tool"))?;
-        assert!(ripr.enabled);
-        assert!(!ripr.required);
-        let cargo_allow = config
-            .tools
-            .get("cargo-allow")
-            .ok_or_else(|| anyhow::anyhow!("missing cargo-allow tool"))?;
-        assert!(cargo_allow.enabled);
-        assert!(!cargo_allow.required);
-
-        let plan = super::build_plan(
-            &config,
-            config.selected_profile()?,
-            &BoxState {
-                cpus: 4,
-                free_mem_mb: Some(8_000),
-                free_disk_mb: Some(20_000),
-                load_1m: Some(0.5),
-                github_actions: true,
-            },
-            &test_diff(),
-            Path::new("."),
-            false,
-        );
-        let unsafe_review_sensor = plan
-            .sensors
-            .iter()
-            .find(|sensor| sensor.id == "unsafe-review")
-            .ok_or_else(|| anyhow::anyhow!("missing planned unsafe-review sensor"))?;
-        assert!(
-            unsafe_review_sensor.required,
-            "unsafe-review remains required when its trigger matches"
-        );
-        for id in ["cargo-fmt", "cargo-check", "cargo-test", "cargo-clippy"] {
-            let sensor = plan
-                .sensors
-                .iter()
-                .find(|sensor| sensor.id == id)
-                .ok_or_else(|| anyhow::anyhow!("missing planned cargo sensor {id}"))?;
-            assert!(sensor.run, "{id} should run in every advisory swarm pass");
-            assert!(sensor.required, "{id} should stay in the required floor");
-        }
-        let resolved_profile =
-            super::resolved_profile_artifact(&config, config.selected_profile()?);
-        assert_eq!(
-            resolved_profile["proof"]["required"]
-                .as_array()
-                .map(Vec::len),
-            Some(expected_proofs.len())
-        );
         Ok(())
     }
 
@@ -7171,6 +7002,38 @@ diff_classes = ["docs-only"]
                 && workflow.contains("name: Publish GitHub release asset"),
             "release write permission and GitHub release mutation must stay inside the tag-only publish job"
         );
+        let publish_section = workflow
+            .split_once("\n  publish:\n")
+            .map(|(_, section)| section)
+            .unwrap_or_default();
+        let checkout_index = publish_section.find("uses: actions/checkout@v5");
+        let notes_index = publish_section.find("--notes-file .github/release-notes.md");
+        assert!(
+            checkout_index
+                .zip(notes_index)
+                .is_some_and(|(checkout, notes)| checkout < notes),
+            "the publish job must check out the tagged repository before reading release notes"
+        );
+    }
+
+    #[test]
+    fn release_binary_workflow_records_and_validates_immutable_candidate() {
+        let workflow = include_str!("../.github/workflows/release-binary.yml");
+        for required in [
+            "name: Write immutable release candidate receipt",
+            "ub-review.release_candidate.v1",
+            "candidate_sha=\"$(git rev-parse HEAD)\"",
+            "dist/release-candidate.json",
+            "name: Validate immutable release candidate receipt",
+            "$(jq -r '.head_sha' \"$manifest\")\" = \"$GITHUB_SHA\"",
+            "$(jq -r '.archive_sha256' \"$manifest\")\" = \"$archive_sha256\"",
+            "$(jq -r '.toolchain' \"$manifest\")\" = \"1.95.0\"",
+        ] {
+            assert!(
+                workflow.contains(required),
+                "release candidate contract missing: {required}"
+            );
+        }
     }
 
     #[test]
@@ -7345,45 +7208,6 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
-    fn cargo_allow_foreign_dialect_reason_wins_before_box_guard() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let root = temp.path();
-        fs::create_dir_all(root.join("policy"))?;
-        fs::write(
-            root.join("policy/allow.toml"),
-            "schema_version = \"1\"\ntool = \"xtask-policy\"\n",
-        )?;
-        let config = Config::default();
-        let profile = config.selected_profile()?;
-        let cargo_allow = config
-            .tools
-            .get("cargo-allow")
-            .ok_or_else(|| anyhow::anyhow!("cargo-allow tool policy missing"))?;
-        let flags = DiffFlags {
-            source_changed: true,
-            ..DiffFlags::default()
-        };
-        let diff = DiffContext {
-            base: "HEAD~1".to_owned(),
-            head: "HEAD".to_owned(),
-            changed_files: vec!["src/lib.rs".to_owned()],
-            patch: "diff --git a/src/lib.rs b/src/lib.rs\n".to_owned(),
-            flags,
-            diff_class: DiffClass::SourceGeneral,
-        };
-
-        let plan = super::plan_tool(cargo_allow, profile, &diff, root, false, false);
-
-        assert!(!plan.run);
-        assert_eq!(
-            plan.reason,
-            "policy/allow.toml is not a cargo-allow-dialect ledger; add \
-             policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)"
-        );
-        Ok(())
-    }
-
-    #[test]
     fn partial_tool_config_inherits_builtin_routing_defaults() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut config: Config = toml::from_str(
@@ -7514,44 +7338,6 @@ enabled = false
     }
 
     #[test]
-    fn sensor_timeout_resolves_per_profile_with_repo_override_winning() -> Result<()> {
-        let tool = super::ToolPolicy {
-            id: "ripr".to_owned(),
-            command: "ripr".to_owned(),
-            default: super::Trigger::Always,
-            timeout_sec: 240,
-            ..super::ToolPolicy::default()
-        };
-        let diff = test_diff();
-        let temp = tempfile::tempdir()?;
-        let quick = Profile::default();
-        let mut hosted = Profile::default();
-        hosted.tool_timeouts.insert("ripr".to_owned(), 720);
-
-        let quick_plan = super::plan_tool(&tool, &quick, &diff, temp.path(), true, false);
-        let hosted_plan = super::plan_tool(&tool, &hosted, &diff, temp.path(), true, false);
-        assert!(quick_plan.run, "{}", quick_plan.reason);
-        assert!(hosted_plan.run, "{}", hosted_plan.reason);
-        assert_eq!(quick_plan.timeout_sec, 240, "no override: built-in lease");
-        assert_eq!(
-            hosted_plan.timeout_sec, 720,
-            "profile [tool_timeouts] applies"
-        );
-
-        let mut repo_tool = tool.clone();
-        repo_tool.timeout_sec = 600;
-        repo_tool.provided.timeout_sec = true;
-        let repo_plan = super::plan_tool(&repo_tool, &hosted, &diff, temp.path(), true, false);
-        assert_eq!(repo_plan.timeout_sec, 600, "explicit repo config wins");
-
-        let mut capped_profile = hosted.clone();
-        capped_profile.budgets.default_timeout_sec = 300;
-        let capped_plan = super::plan_tool(&tool, &capped_profile, &diff, temp.path(), true, false);
-        assert_eq!(capped_plan.timeout_sec, 300, "budget cap still bounds");
-        Ok(())
-    }
-
-    #[test]
     fn example_config_preserves_gate_policy() -> Result<()> {
         let mut config: Config = toml::from_str(include_str!("../configs/ub-review.example.toml"))?;
         config.merge_defaults();
@@ -7678,48 +7464,6 @@ max_new_unsuppressed_findings = 0
             "- unsafe-review not installed; unsafe/native reviewability packet unavailable."
         ));
         assert!(!summary.contains("No ripr findings"));
-        Ok(())
-    }
-
-    #[test]
-    fn running_summary_reports_planned_skipped_sensor_evidence() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let out = temp.path().join("out");
-        let planned_dry_run = sensor_plan("tokmd", "tokmd", true);
-        let trigger_skipped = sensor_plan("ripr", "ripr", false);
-        write_sensor_status(
-            &out,
-            &planned_dry_run,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["tokmd".to_owned()],
-                duration_ms: 0,
-                reason: "dry-run; sensor not executed",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        write_sensor_status(
-            &out,
-            &trigger_skipped,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["ripr".to_owned()],
-                duration_ms: 0,
-                reason: "trigger did not match this diff",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        let plan = test_plan(vec![planned_dry_run, trigger_skipped]);
-
-        let summary = render_summary(&out, &plan, &test_diff())?;
-        let missing = summary_section(&summary, "## Missing evidence", "## Lane packets")
-            .ok_or_else(|| anyhow::anyhow!("missing evidence section not found"))?;
-
-        assert!(missing.contains("tokmd skipped; deterministic repository/diff packet unavailable; reason: dry-run; sensor not executed."));
-        assert!(!missing.contains("ripr"));
-        assert!(!missing.contains("No planned sensor evidence is currently missing."));
         Ok(())
     }
 
@@ -8549,8 +8293,8 @@ index 1111111..2222222 100644
   ]
 }"#,
         )?;
-        assert!(output.proof_requests.is_empty());
-        assert_eq!(output.proof_intents.len(), 2);
+        anyhow::ensure!(output.proof_requests.is_empty());
+        anyhow::ensure!(output.proof_intents.len() == 2);
 
         let mut inline_comments = Vec::new();
         let mut summary_only_findings = Vec::new();
@@ -8572,13 +8316,13 @@ index 1111111..2222222 100644
             },
         );
 
-        assert!(proof_requests.is_empty());
-        assert_eq!(proof_intents.len(), 1);
-        assert_eq!(proof_intents[0].claim_id, "parser:list-item-postfix");
-        assert_eq!(proof_intents[0].target, "parser_list_item_postfix");
+        anyhow::ensure!(proof_requests.is_empty());
+        anyhow::ensure!(proof_intents.len() == 1);
+        anyhow::ensure!(proof_intents[0].claim_id == "parser:list-item-postfix");
+        anyhow::ensure!(proof_intents[0].target == "parser_list_item_postfix");
         let artifact = serde_json::to_value(&proof_intents[0])?;
-        assert!(artifact.get("command").is_none());
-        assert_eq!(artifact["proof_kind"], "focused-test");
+        anyhow::ensure!(artifact.get("command").is_none());
+        anyhow::ensure!(artifact["proof_kind"] == "focused-test");
         Ok(())
     }
 
@@ -8859,7 +8603,7 @@ index 1111111..2222222 100644
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 assert_eq!(timeout, 180);
@@ -8977,7 +8721,7 @@ index 1111111..2222222 100644
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
                 assert_eq!(timeout, 300);
@@ -12965,62 +12709,6 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn sensor_jobs_use_runtime_profile_limit() -> Result<()> {
-        let profiles = builtin_profiles();
-        let gh_runner = profiles
-            .iter()
-            .find(|profile| profile.name == "gh-runner")
-            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
-        let cx23 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx23")
-            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
-        let cx43 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx43")
-            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
-
-        assert_eq!(sensor_job_count(gh_runner, 10)?, 4);
-        assert_eq!(sensor_job_count(cx23, 10)?, 2);
-        assert_eq!(sensor_job_count(cx43, 10)?, 6);
-        Ok(())
-    }
-
-    #[test]
-    fn sensor_jobs_cap_to_runnable_sensors() -> Result<()> {
-        let profiles = builtin_profiles();
-        let gh_runner = profiles
-            .iter()
-            .find(|profile| profile.name == "gh-runner")
-            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
-
-        assert_eq!(sensor_job_count(gh_runner, 2)?, 2);
-        Ok(())
-    }
-
-    #[test]
-    fn zero_sensor_runtime_limit_is_rejected() -> Result<()> {
-        let profile = Profile {
-            name: "broken".to_owned(),
-            limits: Limits {
-                sensor_jobs: 0,
-                ..Limits::default()
-            },
-            ..Profile::default()
-        };
-
-        let err = sensor_job_count(&profile, 2)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("zero sensor limit unexpectedly passed"))?;
-
-        assert!(
-            err.to_string()
-                .contains("runtime profile broken has sensor_jobs=0")
-        );
-        Ok(())
-    }
-
-    #[test]
     fn nonstandard_depth_rejects_raw_budget_override() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.depth = ReviewDepth::Deep;
@@ -13078,36 +12766,6 @@ index 1111111..2222222 100644
             .unwrap_or_default();
 
         assert!(err.contains("unknown lane selector"));
-    }
-
-    #[test]
-    fn tool_selectors_filter_planned_sensors() -> Result<()> {
-        let mut plan = test_plan(vec![
-            sensor_plan("tokmd", "tokmd", true),
-            sensor_plan("ripr", "ripr", true),
-            sensor_plan("ast-grep", "ast-grep", true),
-        ]);
-        let selectors = SelectorArgs {
-            tools: "tokmd,ripr".to_owned(),
-            except_tools: "ripr".to_owned(),
-            ..SelectorArgs::default()
-        };
-
-        apply_plan_selectors(&mut plan, &selectors)?;
-
-        assert_eq!(
-            plan.sensors
-                .iter()
-                .map(|sensor| sensor.id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["tokmd"]
-        );
-        assert!(
-            plan.notes
-                .iter()
-                .any(|note| note.contains("tool selectors"))
-        );
-        Ok(())
     }
 
     #[test]
@@ -14103,7 +13761,7 @@ UB_REVIEW_HTTP_STATUS:429
             model_lanes: &[],
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &missing_model,
-            proof_receipts: &[],
+            proof_receipts: &[test_proof_receipt("discriminating", "ok")],
             final_follow_up_tasks: 0,
         });
 
@@ -14338,45 +13996,6 @@ max_new_unsuppressed = 0
         let proof_container = Config::from_toml_with_policy_receipts("proof = 5\n")?;
         assert_eq!(proof_container.policy_errors.len(), 1);
         assert_eq!(proof_container.policy_errors[0].section, "proof");
-        Ok(())
-    }
-
-    #[test]
-    fn tool_gate_scope_outside_allowlist_is_receipted_and_stripped() -> Result<()> {
-        let config = Config::from_toml_with_policy_receipts(
-            r#"
-[tools.ripr.gate]
-scope = "repo-wide"
-max_new_unsuppressed = 0
-"#,
-        )?;
-        assert_eq!(config.policy_errors.len(), 1);
-        assert_eq!(config.policy_errors[0].section, "tools.ripr.gate.scope");
-        assert!(
-            config.policy_errors[0].detail.contains("repo-wide"),
-            "detail must name the rejected scope: {}",
-            config.policy_errors[0].detail
-        );
-        // The threshold sibling survives with the unknown scope stripped, so
-        // the only semantics that exist (on-diff) still apply.
-        let gate = config
-            .tools
-            .get("ripr")
-            .and_then(|tool| tool.gate.as_ref())
-            .ok_or_else(|| anyhow::anyhow!("ripr gate policy missing"))?;
-        assert_eq!(gate.scope, None);
-        // The threshold survives from the test fixture (which uses 0); this
-        // test validates scope stripping, not the repo's epic ceiling.
-        assert_eq!(gate.max_new_unsuppressed, Some(0));
-
-        let valid = Config::from_toml_with_policy_receipts(
-            r#"
-[tools.ripr.gate]
-scope = "on-diff"
-max_new_unsuppressed = 0
-"#,
-        )?;
-        assert!(valid.policy_errors.is_empty());
         Ok(())
     }
 
@@ -15736,10 +15355,8 @@ required_proof_unprooven = true
     fn workflow_pr_body_uses_workflow_route_language() {
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_context(
-            DiffClass::WorkflowTooling,
-            &LanguageMix::default(),
-        );
+        plan.lanes =
+            default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -15782,10 +15399,8 @@ required_proof_unprooven = true
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_context(
-            DiffClass::WorkflowTooling,
-            &LanguageMix::default(),
-        );
+        plan.lanes =
+            default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -17923,7 +17538,7 @@ index 1111111..2222222 100644
             ],
         };
 
-        let receipt = super::build_quality_receipt(&metrics, &review, &fill_ledger);
+        let receipt = build_quality_receipt(&metrics, &review, &fill_ledger);
 
         assert_eq!(receipt.schema, super::QUALITY_RECEIPT_SCHEMA);
         assert_eq!(receipt.run_id, fill_ledger.run_id);
@@ -18121,7 +17736,7 @@ index 1111111..2222222 100644
             missing: Vec::new(),
         };
 
-        let trend = super::build_quality_trend_artifact(&receipt);
+        let trend = build_quality_trend_artifact(&receipt);
         let missing_fields = trend
             .missing
             .iter()
@@ -18788,34 +18403,75 @@ index 1111111..2222222 100644
         Ok(())
     }
 
+    /// Drives a fake HTTP fixture listener until `expected_requests` requests
+    /// have been served (or the deadline expires). See the reliability contract
+    /// on the integration-test twin in `tests/common/mod.rs::serve_fake_http`
+    /// (issue #760): a per-connection handler error is recorded and serving
+    /// continues rather than tearing down the listener, so a retried client
+    /// connection is answered instead of refused, and the recorded error is
+    /// surfaced on a deadline bail.
+    fn serve_fake_http(
+        listener: TcpListener,
+        expected_requests: usize,
+        label: &str,
+        deadline: Duration,
+        handler: impl Fn(usize, TcpStream) -> Result<String>,
+    ) -> Result<Vec<String>> {
+        let mut deadline_at = Instant::now() + deadline;
+        let mut requests = Vec::new();
+        let mut last_error: Option<String> = None;
+        while requests.len() < expected_requests {
+            match listener.accept() {
+                Ok((stream, _addr)) => match handler(requests.len(), stream) {
+                    Ok(request) => {
+                        requests.push(request);
+                        deadline_at = Instant::now() + deadline;
+                    }
+                    // Recorded errors are advisory only: they surface in the
+                    // deadline bail below, but are discarded once
+                    // `expected_requests` is reached via later good connections.
+                    // This deliberately favors tolerating the transient
+                    // per-connection errors #760 targets over failing loud on a
+                    // handler error that the caller then retries past.
+                    Err(err) => last_error = Some(err.to_string()),
+                },
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= deadline_at {
+                        if let Some(err) = &last_error {
+                            bail!(
+                                "fake {label} API received {} of {} requests; last handler error: {err}",
+                                requests.len(),
+                                expected_requests
+                            );
+                        }
+                        bail!(
+                            "fake {label} API received {} of {} requests",
+                            requests.len(),
+                            expected_requests
+                        );
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Ok(requests)
+    }
+
     fn spawn_fake_quality_github_graphql_api(
         expected_requests: usize,
     ) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let url = format!("http://{}/graphql", listener.local_addr()?);
-        let handle = thread::spawn(move || -> Result<Vec<String>> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let mut requests = Vec::new();
-            while requests.len() < expected_requests {
-                match listener.accept() {
-                    Ok((stream, _addr)) => {
-                        requests.push(handle_fake_quality_github_graphql_request(stream)?);
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            bail!(
-                                "fake GitHub GraphQL API received {} of {} requests",
-                                requests.len(),
-                                expected_requests
-                            );
-                        }
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Ok(requests)
+        let handle = thread::spawn(move || {
+            serve_fake_http(
+                listener,
+                expected_requests,
+                "GitHub GraphQL",
+                Duration::from_secs(20),
+                |_idx, stream| handle_fake_quality_github_graphql_request(stream),
+            )
         });
         Ok((url, handle))
     }
@@ -21098,28 +20754,14 @@ index 1111111..2222222 100644
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
-        let handle = thread::spawn(move || -> Result<Vec<String>> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let mut requests = Vec::new();
-            while requests.len() < expected_requests {
-                match listener.accept() {
-                    Ok((stream, _addr)) => {
-                        requests.push(handle_fake_issue_broker_request(stream)?);
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            bail!(
-                                "fake issue broker API received {} of {} requests",
-                                requests.len(),
-                                expected_requests
-                            );
-                        }
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Ok(requests)
+        let handle = thread::spawn(move || {
+            serve_fake_http(
+                listener,
+                expected_requests,
+                "issue broker",
+                Duration::from_secs(20),
+                |_idx, stream| handle_fake_issue_broker_request(stream),
+            )
         });
         Ok((url, handle))
     }
@@ -22673,28 +22315,14 @@ index 1111111..2222222 100644
         let listener = TcpListener::bind("127.0.0.1:0")?;
         listener.set_nonblocking(true)?;
         let url = format!("http://{}", listener.local_addr()?);
-        let handle = thread::spawn(move || -> Result<Vec<String>> {
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let mut requests = Vec::new();
-            while requests.len() < expected_requests {
-                match listener.accept() {
-                    Ok((stream, _addr)) => {
-                        requests.push(handle_fake_github_thread_request(stream)?);
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        if Instant::now() >= deadline {
-                            bail!(
-                                "fake GitHub thread API received {} of {} requests",
-                                requests.len(),
-                                expected_requests
-                            );
-                        }
-                        thread::sleep(Duration::from_millis(10));
-                    }
-                    Err(err) => return Err(err.into()),
-                }
-            }
-            Ok(requests)
+        let handle = thread::spawn(move || {
+            serve_fake_http(
+                listener,
+                expected_requests,
+                "GitHub thread",
+                Duration::from_secs(20),
+                |_idx, stream| handle_fake_github_thread_request(stream),
+            )
         });
         Ok((url, handle))
     }
@@ -22740,7 +22368,8 @@ index 1111111..2222222 100644
                     "created_at": "2026-06-03T10:10:00Z",
                     "user": {"login": "maintainer"},
                     "path": "src/lib.rs",
-                    "line": 12,
+                    "line": null,
+                    "original_line": 12,
                     "body": "Inline thread points at the route proof receipt."
                 }
             ]))?
@@ -22806,6 +22435,12 @@ index 1111111..2222222 100644
 
     // ----------------------------------------------------------------------
     // audit-ci (docs/CI_AUDIT_WIZARD.md): fixture-driven, no network.
+    #[path = "sensor_tests.rs"]
+    mod sensor_tests;
+
+    #[path = "validate_tests.rs"]
+    mod validate_tests;
+
     #[cfg(test)]
     #[path = "ci_audit_tests.rs"]
     mod ci_audit_tests;

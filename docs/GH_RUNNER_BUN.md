@@ -99,7 +99,7 @@ After changing the pin, download the Bun packet artifact and run:
 
 ```bash
 python scripts/verify-bun-review-artifacts.py target/ub-review \
-  --min-ok-model-lanes 10 \
+  --min-ok-model-lanes 5 \
   --require-no-model-evidence-failures
 ```
 

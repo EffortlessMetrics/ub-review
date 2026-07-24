@@ -1,6 +1,7 @@
 //! Shared context rendering, GitHub review skip receipts, and shared
 //! context cache artifacts (cleanup train step 46, pure code motion).
 
+use crate::diff_posture::{diff_class_posture_heading, review_posture_for_diff_class};
 use crate::*;
 
 pub(crate) fn write_github_review_skip_receipt(
@@ -390,10 +391,6 @@ fn shared_context_secret_value_needs_redaction(value: &str) -> bool {
         .filter(char::is_ascii_alphanumeric)
         .collect::<String>();
     compact.len() >= 16
-        && compact
-            .chars()
-            .any(|character| character.is_ascii_alphabetic())
-        && compact.chars().any(|character| character.is_ascii_digit())
 }
 
 /// Scan rendered shared-context Markdown for `## ` headers and produce
@@ -783,11 +780,15 @@ mod tests {
     fn shared_context_redacts_credential_like_assignments_but_keeps_placeholders() {
         let source = concat!(
             "OPENCODE=opencodeSecret123456\n",
+            "FACTORY_API_KEY=abcdefghijklmnop\n",
+            "github_token=1234567890123456\n",
             "UB_REVIEW_OPENCODE_API_KEY=${{ secrets.OPENCODE }}\n",
             "MINIMAX_API_KEY=present\n",
         );
         let redacted = redact_shared_context_secret_assignments(source);
         assert!(!redacted.contains("opencodeSecret123456"));
+        assert!(!redacted.contains("abcdefghijklmnop"));
+        assert!(!redacted.contains("1234567890123456"));
         assert!(redacted.contains("OPENCODE=[redacted]"));
         assert!(redacted.contains("${{ secrets.OPENCODE }}"));
         assert!(redacted.contains("MINIMAX_API_KEY=present"));

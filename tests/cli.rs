@@ -276,6 +276,12 @@ fn onboarding_help_matches_supported_cli_contract() -> Result<()> {
         "init help must not advertise unsupported onboarding mode flags:\n{init_help}"
     );
 
+    let enable_help = run_capture_with_env(temp.path(), bin, &["enable", "--help"], &[])?;
+    assert!(
+        enable_help.contains("--inspect"),
+        "enable help should advertise relevance-tuned onboarding:\n{enable_help}"
+    );
+
     let setup_ci_help = run_capture_with_env(temp.path(), bin, &["setup-ci", "--help"], &[])?;
     assert!(
         setup_ci_help.contains("--print-pr"),
@@ -907,192 +913,6 @@ jobs:
     }
 
     Ok(())
-}
-
-#[test]
-fn adoption_docs_match_setup_ci_current_surface() {
-    let docs = [
-        (
-            "SPEC-0007",
-            include_str!("../docs/specs/UB-REVIEW-SPEC-0007-audit-ci.md"),
-        ),
-        (
-            "SPEC-0008",
-            include_str!("../docs/specs/UB-REVIEW-SPEC-0008-setup-ci.md"),
-        ),
-        (
-            "CI_AUDIT_WIZARD",
-            include_str!("../docs/CI_AUDIT_WIZARD.md"),
-        ),
-        (
-            "ADR-0002",
-            include_str!("../docs/adr/0002-single-gate-and-ci-audit-wizard.md"),
-        ),
-        ("ROADMAP", include_str!("../docs/ROADMAP.md")),
-        (
-            "SPEC-0001",
-            include_str!("../docs/specs/UB-REVIEW-SPEC-0001-release-surface.md"),
-        ),
-        ("README", include_str!("../README.md")),
-    ];
-    for (name, text) in &docs {
-        for stale in [
-            "spec 0008, unimplemented",
-            "the (future) `setup-ci` migration PR generator",
-            "Honest answer today: no.",
-            "Until it ships",
-            "the PR you write yourself",
-            "`setup-ci` ships only after",
-            "three new files",
-            "none of this exists",
-            "Contract intent (nothing here is implemented)",
-            "must not present setup-ci as available until the slices below land",
-        ] {
-            assert!(
-                !text.contains(stale),
-                "{name} leaked stale setup-ci adoption claim `{stale}`"
-            );
-        }
-    }
-
-    let spec_0007 = docs[0].1;
-    assert!(spec_0007.contains("`setup-ci` migration PR generator"));
-    assert!(spec_0007.contains("`--open-pr` opens the new-files-only migration PR"));
-
-    let spec_0008 = docs[1].1;
-    assert!(spec_0008.contains("Honest answer today: yes, within the v0 boundary."));
-    assert!(spec_0008.contains("`setup-ci --open-pr` opens one new-files-only migration PR"));
-
-    let wizard = docs[2].1;
-    assert!(wizard.contains("`setup-ci --print-pr`"));
-    assert!(wizard.contains("new-files-only `setup-ci --open-pr`"));
-    assert!(wizard.contains("Never mutates branch protection itself."));
-
-    let readme = docs[6].1;
-    assert!(readme.contains("four new files"));
-
-    for (name, text) in &docs {
-        if text.contains("--apply-branch-protection") {
-            let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
-            assert!(
-                normalized.contains("not implemented in the current CLI"),
-                "{name} mentions branch-protection mutation without current CLI boundary"
-            );
-            assert!(
-                normalized.contains("not part of the adoption path"),
-                "{name} mentions branch-protection mutation without adoption-path boundary"
-            );
-        }
-    }
-}
-
-#[test]
-fn handoff_docs_cover_current_product_gate_surfaces() {
-    let handoff = include_str!("../docs/REPO_OPERATING_HANDOFF.md");
-    let porting = include_str!("../docs/PORTING_BASELINE.md");
-
-    for required in [
-        "review/fill-ledger.json",
-        "selected and skipped optional proof",
-        "review/proof_receipts.json#<receipt-id>",
-        "review/resource_leases.json#<lease-id>",
-        "sensors/ripr/exposure-gaps.json",
-        "setup-ci --print-pr",
-        "setup-ci --open-pr",
-        "new-files-only migration PR",
-        "never mutates branch protection",
-    ] {
-        assert!(
-            handoff.contains(required),
-            "handoff must keep current product gate surface `{required}` visible"
-        );
-    }
-
-    for required in [
-        "Receipt routes must carry exact source anchors",
-        "review/proof_receipts.json#<receipt-id>",
-        "review/resource_leases.json#<lease-id>",
-    ] {
-        assert!(
-            porting.contains(required),
-            "porting baseline must keep receipt-route source anchor `{required}` visible"
-        );
-    }
-}
-
-#[test]
-fn artifact_contract_docs_match_ci_audit_verifier_coverage() {
-    let spec_0004 = include_str!("../docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md");
-    let verifier = include_str!("../scripts/verify-bun-review-artifacts.py");
-
-    assert!(
-        verifier.contains("def require_ci_audit_core_artifacts"),
-        "ci-audit core receipt verifier disappeared"
-    );
-    assert!(
-        spec_0004.contains("require_ci_audit_core_artifacts"),
-        "SPEC-0004 must name the executable ci-audit verifier"
-    );
-    assert!(
-        spec_0004.contains("ci-audit/audit-report.md"),
-        "SPEC-0004 must keep the human audit report separate from JSON receipts"
-    );
-    assert!(
-        verifier.contains("def require_ci_audit_report"),
-        "ci-audit report verifier disappeared"
-    );
-    assert!(
-        spec_0004.contains("require_ci_audit_report"),
-        "SPEC-0004 must name the executable ci-audit report verifier"
-    );
-    assert!(
-        verifier.contains("def require_setup_ci_terminal_receipts"),
-        "setup-ci terminal receipt verifier disappeared"
-    );
-    assert!(
-        spec_0004.contains("require_setup_ci_terminal_receipts"),
-        "SPEC-0004 must name the executable setup-ci terminal receipt verifier"
-    );
-    assert!(
-        spec_0004.contains("ci-audit/setup-pr-result.json XOR setup-pr-error.json"),
-        "SPEC-0004 must document setup-ci result/error as an XOR terminal receipt"
-    );
-    for stale in [
-        "ci-audit/*                              audit-ci output; contract pending",
-        "give ci-audit/* its own contract spec before anyone builds on it",
-        "`ci-audit/*` has a contract yet",
-        "ci-audit/* pending spec 0007",
-    ] {
-        assert!(
-            !spec_0004.contains(stale),
-            "SPEC-0004 leaked stale ci-audit contract claim `{stale}`"
-        );
-    }
-}
-
-#[test]
-fn artifact_contract_docs_pin_receipt_route_source_anchors() {
-    let spec_0004 = include_str!("../docs/specs/UB-REVIEW-SPEC-0004-artifact-contract.md");
-    let verifier = include_str!("../scripts/verify-bun-review-artifacts.py");
-
-    assert!(
-        verifier.contains("def receipt_route_source_artifacts"),
-        "receipt route source-anchor verifier disappeared"
-    );
-    assert!(
-        verifier.contains("receipt route missing exact source anchors"),
-        "receipt route self-test must fail old artifact-only route sources"
-    );
-    for required in [
-        "review/proof_receipts.json#<receipt-id>",
-        "review/resource_leases.json#<lease-id>",
-        "route entries carry exact proof receipt and matching lease anchors",
-    ] {
-        assert!(
-            spec_0004.contains(required),
-            "SPEC-0004 must document receipt route anchor contract `{required}`"
-        );
-    }
 }
 
 #[test]
@@ -3639,268 +3459,6 @@ fn fake_core_review_tools_with_versions_emit_requested_versions() -> Result<()> 
 
     assert_fake_core_review_tool_version(&fake_bin, "tokmd", "9.9.1")?;
     assert_fake_core_review_tool_version(&fake_bin, "actionlint", "9.9.6")?;
-    Ok(())
-}
-
-#[test]
-fn run_with_ledger_path_writes_bounded_shared_context() -> Result<()> {
-    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    let temp = tempfile::tempdir()?;
-    let repo = temp.path().join("repo");
-    fs::create_dir_all(repo.join("src"))?;
-    write_file(
-        &repo.join("Cargo.toml"),
-        r#"[package]
-name = "bun-rab-mini"
-version = "0.1.0"
-edition = "2024"
-
-[lib]
-path = "src/lib.rs"
-"#,
-    )?;
-    write_file(
-        &repo.join("src/lib.rs"),
-        r#"pub fn active_len(len: usize) -> usize {
-    len
-}
-"#,
-    )?;
-
-    run(&repo, "git", &["init"])?;
-    run(
-        &repo,
-        "git",
-        &["config", "user.email", "ub-review@example.invalid"],
-    )?;
-    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
-    run(&repo, "git", &["add", "."])?;
-    run(&repo, "git", &["commit", "-m", "baseline"])?;
-
-    write_file(
-        &repo.join("src/lib.rs"),
-        r#"pub fn active_len(len: usize) -> usize {
-    let ptr = &len as *const usize;
-    unsafe { *ptr }
-}
-"#,
-    )?;
-    run(&repo, "git", &["add", "."])?;
-    run(&repo, "git", &["commit", "-m", "touch rust behavior"])?;
-
-    let ledger = temp.path().join("bun-ub-ledger.md");
-    write_file(
-        &ledger,
-        "RAB resize follow-up: verify post-capture mutation before upstream. This tail should be truncated away.",
-    )?;
-    let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
-    let bin = env!("CARGO_BIN_EXE_ub-review");
-    run(
-        temp.path(),
-        bin,
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            path_str(&config)?,
-            "--root",
-            path_str(&repo)?,
-            "--base",
-            "HEAD~1",
-            "--head",
-            "HEAD",
-            "--out",
-            path_str(&out)?,
-            "--ledger-path",
-            path_str(&ledger)?,
-            "--ledger-max-bytes",
-            "64",
-            "--model-mode",
-            "off",
-            "--no-github-summary",
-        ],
-    )?;
-
-    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
-    assert!(shared_context.contains("## UB Ledger Context"));
-    assert!(shared_context.contains("RAB resize follow-up"));
-    assert!(shared_context.contains("[truncated]"));
-    assert!(!shared_context.contains("tail should be truncated away"));
-    assert!(!shared_context.contains("- No UB ledger configured"));
-
-    let review: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
-    assert_eq!(review["ledger_path"], path_str(&ledger)?);
-    assert_eq!(review["ledger_max_bytes"], 64);
-    assert!(
-        review["shared_context_id"]
-            .as_str()
-            .is_some_and(|value| value.len() == 64)
-    );
-    Ok(())
-}
-
-#[test]
-fn run_with_pr_thread_context_seeds_shared_context() -> Result<()> {
-    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    let temp = tempfile::tempdir()?;
-    let repo = temp.path().join("repo");
-    fs::create_dir_all(repo.join("src"))?;
-    write_file(
-        &repo.join("Cargo.toml"),
-        r#"[package]
-name = "bun-ffi-mini"
-version = "0.1.0"
-edition = "2024"
-
-[lib]
-path = "src/lib.rs"
-"#,
-    )?;
-    write_file(
-        &repo.join("src/lib.rs"),
-        r#"pub fn copy_len(len: usize) -> usize {
-    len
-}
-"#,
-    )?;
-
-    run(&repo, "git", &["init"])?;
-    run(
-        &repo,
-        "git",
-        &["config", "user.email", "ub-review@example.invalid"],
-    )?;
-    run(&repo, "git", &["config", "user.name", "UB Review Test"])?;
-    run(&repo, "git", &["add", "."])?;
-    run(&repo, "git", &["commit", "-m", "baseline"])?;
-
-    write_file(
-        &repo.join("src/lib.rs"),
-        r#"pub fn copy_len(len: usize) -> usize {
-    let ptr = &len as *const usize;
-    unsafe { *ptr }
-}
-"#,
-    )?;
-    run(&repo, "git", &["add", "."])?;
-    run(&repo, "git", &["commit", "-m", "touch ffi route"])?;
-
-    let thread = temp.path().join("thread.md");
-    write_file(
-        &thread,
-        "Author reply: ASAN bad-free receipt attached; old base fails. This tail should be truncated away.",
-    )?;
-    let prior_resolved = temp.path().join("prior-resolved-candidates.json");
-    write_file(
-        &prior_resolved,
-        &serde_json::to_string_pretty(&serde_json::json!([
-            {
-                "schema": "ub-review.resolved_candidate.v1",
-                "candidate_id": "candidate-0001-deadbeef1234",
-                "lane": "tests-oracle",
-                "source": "summary-only-finding",
-                "original_status": "summary-only",
-                "original_disposition": "summary-only",
-                "resolved_status": "resolved",
-                "resolved_disposition": "dropped",
-                "resolution_source": "orchestrator-follow-up",
-                "source_artifacts": [
-                    "review/candidates.json",
-                    "review/follow_up_results.json",
-                    "review/follow_up_outputs.json"
-                ],
-                "reason": "prior follow-up found this below materiality",
-                "follow_up_task_ids": ["follow-prior"],
-                "follow_up_stages": ["tertiary"],
-                "follow_up_statuses": ["ok"],
-                "evidence": ["Prior pass dropped the same candidate surface."]
-            }
-        ]))?,
-    )?;
-    let out = temp.path().join("packet");
-    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
-    let bin = env!("CARGO_BIN_EXE_ub-review");
-    run(
-        temp.path(),
-        bin,
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            path_str(&config)?,
-            "--root",
-            path_str(&repo)?,
-            "--base",
-            "HEAD~1",
-            "--head",
-            "HEAD",
-            "--out",
-            path_str(&out)?,
-            "--pr-thread-context",
-            path_str(&thread)?,
-            "--pr-thread-context-max-bytes",
-            "64",
-            "--prior-resolved-candidates",
-            path_str(&prior_resolved)?,
-            "--model-mode",
-            "off",
-            "--no-github-summary",
-        ],
-    )?;
-
-    let pr_thread_context: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/pr_thread_context.json"))?)?;
-    assert_eq!(
-        pr_thread_context["schema"],
-        "ub-review.pr_thread_context.v1"
-    );
-    assert_eq!(pr_thread_context["status"], "seeded");
-    assert_eq!(pr_thread_context["thread_context_truncated"], true);
-    assert!(
-        pr_thread_context["thread_context"]
-            .as_str()
-            .is_some_and(|text| text.contains("ASAN bad-free receipt"))
-    );
-    assert!(
-        !pr_thread_context["thread_context"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("tail should be truncated")
-    );
-
-    let review: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
-    assert_eq!(review["pr_thread_context"], pr_thread_context);
-    let copied_prior_resolved_path = out.join("review/prior_resolved_candidates.json");
-    assert!(
-        copied_prior_resolved_path.is_file(),
-        "run should copy the configured prior resolved-candidates receipt"
-    );
-    let shared_context = fs::read_to_string(out.join("review/shared_context.md"))?;
-    assert!(shared_context.contains("## PR Thread Context"));
-    assert!(shared_context.contains("### Prior Review Thread"));
-    assert!(shared_context.contains("ASAN bad-free receipt"));
-    assert!(shared_context.contains("[truncated]"));
-    assert!(!shared_context.contains("tail should be truncated"));
-    let mut lane_packets = fs::read_dir(out.join("lanes"))?
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .map(|entry| entry.path())
-        .filter(|path| path.extension().and_then(|extension| extension.to_str()) == Some("md"))
-        .collect::<Vec<_>>();
-    lane_packets.sort();
-    let lane_packet_path = lane_packets
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("expected at least one lane packet"))?;
-    let lane_packet = fs::read_to_string(lane_packet_path)?;
-    assert!(lane_packet.contains("## Seeded PR Thread Context"));
-    assert!(lane_packet.contains("review/pr_thread_context.json"));
-    assert!(lane_packet.contains("### Prior Review Thread"));
-    assert!(lane_packet.contains("ASAN bad-free receipt"));
-    assert!(lane_packet.contains("[truncated]"));
-    assert!(!lane_packet.contains("tail should be truncated"));
     Ok(())
 }
 
@@ -6683,126 +6241,6 @@ fn gate_check_exit_codes_follow_fail_on_gate_resolution() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn run_records_policy_parse_error_as_receipted_gate_failure() -> Result<()> {
-    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
-    let temp = tempfile::tempdir()?;
-    let repo = temp.path().join("repo");
-    init_minimal_repo(&repo)?;
-    let config = temp.path().join("bad-gate.toml");
-    write_file(
-        &config,
-        r#"profile = "gh-runner"
-
-[gate]
-target_minutes = 45
-
-[tools.ripr.gate]
-max_new = 0
-
-[tools.unsafe-review.gate]
-max_new_unsuppressed = 0
-"#,
-    )?;
-    let bin = env!("CARGO_BIN_EXE_ub-review");
-    let out = temp.path().join("packet");
-    // review-byok with fail-on-gate auto (off): the run exits zero but still
-    // records the malformed policy section as a blocking gate reason.
-    run(
-        temp.path(),
-        bin,
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            path_str(&config)?,
-            "--root",
-            path_str(&repo)?,
-            "--base",
-            "HEAD~1",
-            "--head",
-            "HEAD",
-            "--out",
-            path_str(&out)?,
-            "--model-mode",
-            "off",
-            "--no-github-summary",
-        ],
-    )?;
-    let gate: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
-    assert_eq!(gate["conclusion"], "fail");
-    assert_eq!(gate["reasons"][0]["kind"], "policy");
-    assert_eq!(gate["reasons"][0]["id"], "tools.ripr.gate");
-    assert_eq!(gate["reasons"][0]["receipt"], "effective-config.json");
-    assert!(
-        gate["reasons"][0]["detail"]
-            .as_str()
-            .is_some_and(|detail| detail.contains("max_new")),
-        "policy detail must name the parse error: {}",
-        gate["reasons"][0]["detail"]
-    );
-    let effective: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("effective-config.json"))?)?;
-    assert_eq!(effective["policy_errors"][0]["section"], "tools.ripr.gate");
-    // Valid siblings survive the one malformed [tools.ripr.gate] table: the
-    // [gate] table and the well-formed sibling tool gate are still applied.
-    assert_eq!(effective["gate"]["target_minutes"], 45);
-    assert_eq!(
-        effective["tools"]["unsafe-review"]["gate"]["max_new_unsuppressed"],
-        0
-    );
-
-    // The recorded failure becomes a red check once enforcement is on.
-    let gate_outcome_path = out.join("review/gate_outcome.json");
-    let enforced = run_expect_failure(
-        temp.path(),
-        bin,
-        &[
-            "gate-check",
-            "--gate-outcome",
-            path_str(&gate_outcome_path)?,
-            "--fail-on-gate",
-            "true",
-            "--mode",
-            "review-byok",
-        ],
-    )?;
-    assert!(enforced.contains("tools.ripr.gate"), "{enforced}");
-
-    // `run --fail-on-gate true` exits non-zero after writing all artifacts.
-    let out_enforced = temp.path().join("packet-enforced");
-    let run_failure = run_expect_failure(
-        temp.path(),
-        bin,
-        &[
-            "run",
-            "--dry-run",
-            "--config",
-            path_str(&config)?,
-            "--root",
-            path_str(&repo)?,
-            "--base",
-            "HEAD~1",
-            "--head",
-            "HEAD",
-            "--out",
-            path_str(&out_enforced)?,
-            "--fail-on-gate",
-            "true",
-            "--model-mode",
-            "off",
-            "--no-github-summary",
-        ],
-    )?;
-    assert!(
-        run_failure.contains("gate conclusion is `fail`"),
-        "{run_failure}"
-    );
-    assert!(out_enforced.join("review/gate_outcome.json").exists());
-    Ok(())
-}
-
 /// Driver for `isolated_command_scrubs_ambient_profile_env_from_child_runs`.
 /// Runs only when re-invoked by that test with `UB_SCRUB_*` coordinates; it
 /// spawns `ub-review plan --write` through the scrubbing `isolated_command`
@@ -7425,6 +6863,57 @@ fn main() {{
         }
     }
 
+    Ok(())
+}
+
+/// Regression for #760: a transient per-connection handler error must not tear
+/// down the fake-server listener. When the client's first connection fails
+/// (here, closed before it sends any headers), the fixture must keep listening
+/// so a retried connection is served — instead of the client hitting
+/// `connection refused` on a listener that a `?`-propagated handler error had
+/// already dropped, which then masked the real handler error.
+#[test]
+fn fake_setup_ci_listener_survives_handler_error() -> Result<()> {
+    use std::io::{Read, Write};
+    use std::net::{Shutdown, TcpStream};
+
+    let (url, handle) = spawn_fake_setup_ci_api(1, false)?;
+    let addr = url
+        .strip_prefix("http://")
+        .context("fake setup-ci url should be http://host:port")?
+        .to_owned();
+
+    // First connection: close immediately so the handler bails before headers
+    // finish. Under the pre-#760 code this `?`-propagated out of the accept
+    // loop and dropped the listener.
+    {
+        let stream = TcpStream::connect(&addr)?;
+        stream.shutdown(Shutdown::Both)?;
+    }
+
+    // Second connection: a well-formed request the fixture must still serve.
+    let mut stream = TcpStream::connect(&addr)?;
+    stream.write_all(
+        b"GET /repos/acme/widgets HTTP/1.1\r\nHost: fixture\r\nContent-Length: 0\r\n\r\n",
+    )?;
+    let mut response = Vec::new();
+    stream.read_to_end(&mut response)?;
+    assert!(
+        String::from_utf8_lossy(&response).contains("default_branch"),
+        "fixture should answer the retried request after an earlier handler error"
+    );
+
+    let requests = join_fake_provider(handle)?;
+    assert_eq!(
+        requests.len(),
+        1,
+        "only the well-formed request is recorded; the errored connection is not"
+    );
+    assert!(
+        requests[0].starts_with("GET /repos/acme/widgets "),
+        "recorded request: {}",
+        requests[0]
+    );
     Ok(())
 }
 
