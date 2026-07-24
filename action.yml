@@ -83,10 +83,349 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Write handoff diagnostic
+    - name: Compile source handoff
       shell: bash
       run: |
-        set -euo pipefail
+        set -u
         cd "$GITHUB_WORKSPACE"
-        mkdir -p "${{ inputs.out }}/source-handoff"
-        printf '%s\n' 'branch action executed' > "${{ inputs.out }}/source-handoff/diagnostic.txt"
+        handoff="${{ inputs.out }}/source-handoff"
+        mkdir -p "$handoff/src/tests"
+        log="$handoff/validation.log"
+        : > "$log"
+
+        python3 - <<'PY' >> "$log" 2>&1
+        from pathlib import Path
+
+        def replace_once(path: str, old: str, new: str) -> None:
+            file = Path(path)
+            text = file.read_text(encoding="utf-8")
+            count = text.count(old)
+            print(f"replace {path}: matches={count}")
+            if count != 1:
+                raise RuntimeError(f"{path}: expected one replacement, found {count}")
+            file.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+        main = Path("src/main.rs")
+        text = main.read_text(encoding="utf-8")
+        marker = "    fn summary_only_withheld_terminal_reason_names_policy_and_counts() {"
+        start = text.index(marker)
+        end = text.index("\n    #[test]", start + len(marker))
+        block = text[start:end]
+        declaration = '        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];\n'
+        if declaration not in block:
+            needle = '        let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];\n'
+            if block.count(needle) != 1:
+                raise RuntimeError("terminal-state fixture proof receipt declaration drifted")
+            block = block.replace(needle, needle + declaration, 1)
+        if block.count("            model_lanes: &[],") != 1:
+            raise RuntimeError("terminal-state fixture model lane field drifted")
+        block = block.replace("            model_lanes: &[],", "            model_lanes: &model_lanes,", 1)
+        main.write_text(text[:start] + block + text[end:], encoding="utf-8")
+        print("patched src/main.rs terminal-state fixture")
+
+        main_text = main.read_text(encoding="utf-8")
+        duplicate = '''    // Legacy shadow-mode claim graph (Order 3 of epic `#655`). It is overwritten
+    // It is overwritten before the final compiler consumes the review surface
+    // with claims, evidence, conflicts, and current-head delivery state.'''
+        cleaned = '''    // Legacy shadow-mode claim graph (Order 3 of epic `#655`). It is overwritten
+    // before the final compiler consumes the review surface with claims,
+    // evidence, conflicts, and current-head delivery state.'''
+        if duplicate in main_text:
+            main.write_text(main_text.replace(duplicate, cleaned, 1), encoding="utf-8")
+            print("removed duplicated claim-graph comment")
+        else:
+            print("claim-graph comment already clean or moved")
+
+        replace_once(
+            "src/observations.rs",
+            '''        || !output.failed_objections.is_empty()
+        || !output.proof_requests.is_empty()
+}''',
+            '''        || !output.failed_objections.is_empty()
+        || !output.proof_requests.is_empty()
+        || !output.proof_intents.is_empty()
+}''',
+        )
+
+        replace_once(
+            "src/model_exec.rs",
+            '''    for intent in output.proof_intents {
+        if let Some(intent) = validate_proof_intent(lane, intent, proof_intents.len()) {
+            proof_intents.push(intent);
+        }
+    }''',
+            '''    for intent in output.proof_intents {
+        match validate_proof_intent(lane, intent, proof_intents.len()) {
+            Ok(intent) => proof_intents.push(intent),
+            Err(observation) => {
+                let ordinal = model_observations.len();
+                model_observations.push(validate_model_observation(lane, observation, ordinal));
+            }
+        }
+    }''',
+        )
+
+        old_validator = '''fn validate_proof_intent(
+    lane: &LanePlan,
+    intent: ModelProofIntent,
+    ordinal: usize,
+) -> Option<ProofIntent> {
+    let claim_id = intent.claim_id.trim();
+    let question = intent.question.trim();
+    let expected_answer_shape = intent.expected_answer_shape.trim();
+    let target = intent.target.trim();
+    if claim_id.is_empty()
+        || question.is_empty()
+        || expected_answer_shape.is_empty()
+        || target.is_empty()
+        || has_shell_control_token(target)
+        || target.chars().any(char::is_whitespace)
+    {
+        return None;
+    }
+    let digest = sha256_hex(
+        format!(
+            "{}\\n{}\\n{}\\n{}\\n{}\\n{}",
+            lane.id,
+            claim_id,
+            question,
+            expected_answer_shape,
+            intent.proof_kind.key(),
+            target
+        )
+        .as_bytes(),
+    );
+    Some(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], ordinal),
+        claim_id: claim_id.to_owned(),
+        question: truncate_chars(question, 500),
+        expected_answer_shape: truncate_chars(expected_answer_shape, 300),
+        proof_kind: intent.proof_kind,
+        target: target.to_owned(),
+        estimated_value: intent
+            .estimated_value
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "medium".to_owned()),
+        requested_by: vec![lane.id.clone()],
+        status: "requested".to_owned(),
+    })
+}'''
+        new_validator = '''fn validate_proof_intent(
+    lane: &LanePlan,
+    intent: ModelProofIntent,
+    ordinal: usize,
+) -> std::result::Result<ProofIntent, ModelCandidateObservation> {
+    let claim_id = intent.claim_id.trim();
+    let question = intent.question.trim();
+    let expected_answer_shape = intent.expected_answer_shape.trim();
+    let target = intent.target.trim();
+    let rejection_reason = if claim_id.is_empty()
+        || question.is_empty()
+        || expected_answer_shape.is_empty()
+        || target.is_empty()
+    {
+        Some("required proof-intent field was empty")
+    } else if !proof_intent_target_is_safe(target) {
+        Some("target was not a safe repository symbol, test, package, or route label")
+    } else {
+        None
+    };
+    if let Some(reason) = rejection_reason {
+        return Err(ModelCandidateObservation {
+            claim: "Model proof intent was rejected by deterministic validation.".to_owned(),
+            question: Some("proof-intent-validation".to_owned()),
+            kind: Some("missing-evidence".to_owned()),
+            status: Some("open".to_owned()),
+            severity: Some("low".to_owned()),
+            confidence: Some("high".to_owned()),
+            path: None,
+            line: None,
+            evidence: vec![format!(
+                "lane={} claim_id={} target={} reason={reason}",
+                lane.id,
+                truncate_chars(claim_id, 80),
+                truncate_chars(target, 120),
+            )],
+            dedupe_key: Some(format!("proof-intent-validation-{}-{ordinal}", lane.id)),
+        });
+    }
+    let estimated_value = intent
+        .estimated_value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| matches!(*value, "high" | "medium-high" | "medium" | "low"))
+        .unwrap_or("medium")
+        .to_owned();
+    let digest = sha256_hex(
+        format!(
+            "{}\\n{}\\n{}\\n{}\\n{}\\n{}",
+            lane.id,
+            claim_id,
+            question,
+            expected_answer_shape,
+            intent.proof_kind.key(),
+            target
+        )
+        .as_bytes(),
+    );
+    Ok(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], ordinal),
+        claim_id: claim_id.to_owned(),
+        question: truncate_chars(question, 500),
+        expected_answer_shape: truncate_chars(expected_answer_shape, 300),
+        proof_kind: intent.proof_kind,
+        target: target.to_owned(),
+        estimated_value,
+        requested_by: vec![lane.id.clone()],
+        status: "requested".to_owned(),
+    })
+}
+
+fn proof_intent_target_is_safe(target: &str) -> bool {
+    !target.starts_with('/')
+        && !target.contains("..")
+        && !target.contains(":/")
+        && target.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || matches!(character, '_' | '-' | '.' | ':' | '/')
+        })
+}'''
+        replace_once("src/model_exec.rs", old_validator, new_validator)
+
+        replace_once(
+            "src/review_topics.rs",
+            '''    left.iter()
+        .filter(|token| token.len() >= 6 && !low_information_thread_token(token))
+        .filter(|token| right.iter().any(|candidate| candidate == *token))''',
+            '''    left.iter()
+        .filter(|token| thread_token_is_distinctive(token))
+        .filter(|token| right.iter().any(|candidate| candidate == *token))''',
+        )
+        replace_once(
+            "src/review_topics.rs",
+            '''    topic_tokens
+        .iter()
+        .filter(|token| !low_information_thread_token(token))
+        .any(|token| token.len() >= 6 && thread_tokens.iter().any(|candidate| candidate == token))
+}''',
+            '''    topic_tokens
+        .iter()
+        .filter(|token| thread_token_is_distinctive(token))
+        .any(|token| thread_tokens.iter().any(|candidate| candidate == token))
+}
+
+fn thread_token_is_distinctive(token: &str) -> bool {
+    !low_information_thread_token(token)
+        && (token.len() >= 6 || matches!(token, "ub" | "ffi" | "leak" | "lock" | "null" | "race"))
+}''',
+        )
+
+        test_anchor = '''#[test]
+fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
+        test_insert = '''#[test]
+fn proof_intent_validation_rejects_unsafe_targets_and_clamps_value() -> Result<()> {
+    let lane = model_lane(
+        "tests-oracle",
+        "Test oracle review",
+        &["ripr"],
+        "Request focused proof.",
+    );
+    let output: LaneModelOutput = serde_json::from_str(
+        r#"{
+          "proof_intents": [
+            {
+              "claim_id": "claim-bad",
+              "question": "does traversal execute?",
+              "expected_answer_shape": "the target is rejected",
+              "proof_kind": "focused-test",
+              "target": "../escape",
+              "estimated_value": "urgent"
+            },
+            {
+              "claim_id": "claim-good",
+              "question": "does the parser test pass?",
+              "expected_answer_shape": "focused pass or failure",
+              "proof_kind": "focused-test",
+              "target": "parser::list_item",
+              "estimated_value": "urgent"
+            }
+          ]
+        }"#,
+    )?;
+    let mut inline_comments = Vec::new();
+    let mut summary_only_findings = Vec::new();
+    let mut observations = Vec::new();
+    let mut proof_requests = Vec::new();
+    let mut proof_intents = Vec::new();
+    let mut issue_candidates = Vec::new();
+    apply_model_output(
+        &lane,
+        output,
+        &BTreeSet::new(),
+        ModelOutputSinks {
+            inline_comments: &mut inline_comments,
+            summary_only_findings: &mut summary_only_findings,
+            model_observations: &mut observations,
+            proof_requests: &mut proof_requests,
+            proof_intents: &mut proof_intents,
+            issue_candidates: &mut issue_candidates,
+        },
+    );
+    anyhow::ensure!(proof_intents.len() == 1);
+    anyhow::ensure!(proof_intents[0].target == "parser::list_item");
+    anyhow::ensure!(proof_intents[0].estimated_value == "medium");
+    anyhow::ensure!(observations.iter().any(|observation| {
+        observation.question == "proof-intent-validation"
+            && observation.kind == "missing-evidence"
+            && observation.evidence.iter().any(|item| item.contains("../escape"))
+    }));
+    Ok(())
+}
+
+#[test]
+fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
+        replace_once("src/tests/validate_tests.rs", test_anchor, test_insert)
+
+        replace_once(
+            "src/review_topics.rs",
+            '''    #[test]
+    fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {''',
+            '''    #[test]
+    fn short_technical_thread_tokens_remain_distinctive() -> Result<()> {
+        for token in ["ub", "ffi", "leak", "lock", "null", "race", "subscript"] {
+            ensure!(thread_token_is_distinctive(token));
+        }
+        ensure!(!thread_token_is_distinctive("code"));
+        ensure!(!thread_token_is_distinctive("line"));
+        Ok(())
+    }
+
+    #[test]
+    fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {''',
+        )
+        PY
+        patch_status=$?
+        echo "patch_status=$patch_status" >> "$log"
+
+        cargo fmt --all >> "$log" 2>&1
+        fmt_status=$?
+        echo "fmt_status=$fmt_status" >> "$log"
+
+        cp src/main.rs "$handoff/src/main.rs"
+        cp src/observations.rs "$handoff/src/observations.rs"
+        cp src/model_exec.rs "$handoff/src/model_exec.rs"
+        cp src/review_topics.rs "$handoff/src/review_topics.rs"
+        cp src/tests/validate_tests.rs "$handoff/src/tests/validate_tests.rs"
+
+        cargo test --locked --bin ub-review summary_only_withheld_terminal_reason_names_policy_and_counts -- --test-threads=1 >> "$log" 2>&1
+        echo "terminal_test_status=$?" >> "$log"
+        cargo test --locked --bin ub-review proof_intent_validation_rejects_unsafe_targets_and_clamps_value -- --test-threads=1 >> "$log" 2>&1
+        echo "intent_test_status=$?" >> "$log"
+        cargo test --locked --bin ub-review short_technical_thread_tokens_remain_distinctive -- --test-threads=1 >> "$log" 2>&1
+        echo "thread_test_status=$?" >> "$log"
+        cargo test --locked --bin ub-review -- --test-threads=4 >> "$log" 2>&1
+        echo "binary_suite_status=$?" >> "$log"
+        cargo clippy --locked --bin ub-review --tests -- -D warnings >> "$log" 2>&1
+        echo "clippy_status=$?" >> "$log"
+        printf '{"schema":"ub-review.source_handoff.v1","patch_status":%s,"fmt_status":%s}\n' "$patch_status" "$fmt_status" > "$handoff/manifest.json"
+        exit 0
