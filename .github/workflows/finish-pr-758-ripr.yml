@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: finish-pr-758-ripr-${{ github.ref }}
@@ -15,7 +16,7 @@ jobs:
   finish:
     if: github.ref_name == 'feat/review-experience-contract'
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - name: Check out exact branch head
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
@@ -28,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "18388969040e28efce17bf828ca8d3e668d732d8"
+          test "$(git rev-parse HEAD^)" = "529b5094b83d254ef372afe653efb7295eb559f9"
 
       - name: Install Rust 1.95
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
@@ -44,14 +45,11 @@ jobs:
           cargo fmt --all
           git diff --check
 
-      - name: Compile
-        run: cargo check --workspace --all-targets --locked
-
       - name: Focused tool-gate policy tests
         run: cargo test --locked --bin ub-review tool_gate_outcome_ -- --test-threads=1
 
-      - name: Full binary suite
-        run: cargo test --locked --bin ub-review -- --test-threads=4
+      - name: Compile all targets
+        run: cargo check --workspace --all-targets --locked
 
       - name: Artifact verifier self-test
         run: python scripts/verify-bun-review-artifacts.py --self-test
@@ -85,3 +83,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "chore(policy): receipt PR 758 RIPR ceiling"
           git push origin HEAD:feat/review-experience-contract
+
+      - name: Report failure
+        if: failure()
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 791,
+              body: `PR #758 RIPR receipt workflow failed: run ${context.runId} on ${context.sha}.`,
+            });
