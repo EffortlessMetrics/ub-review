@@ -164,15 +164,21 @@ pub(crate) fn build_active_claim_graph(
             if !receipt.head.eq_ignore_ascii_case(head_sha) {
                 continue;
             }
-            if receipt
+            // Attach proof receipt to topic only if:
+            // 1. The receipt was requested by this topic's lane, OR
+            // 2. The receipt's request_ids exactly match (not substring) any of
+            //    this topic's linked proof_requests.
+            let receipt_matches = receipt
                 .requested_by
                 .iter()
                 .any(|lane| lane == &topic.source_lane)
-                || receipt
-                    .request_ids
-                    .iter()
-                    .any(|id| id.contains(&topic.claim_id))
-            {
+                || receipt.request_ids.iter().any(|receipt_request_id| {
+                    topic
+                        .proof_requests
+                        .iter()
+                        .any(|topic_request_id| receipt_request_id == topic_request_id)
+                });
+            if receipt_matches {
                 push_unique(&mut topic.proof_receipts, receipt.id.clone());
                 topic.evidence.push(EvidenceRef {
                     class: EvidenceClass::ProofReceipt,

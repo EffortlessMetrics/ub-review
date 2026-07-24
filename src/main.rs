@@ -4539,8 +4539,8 @@ fn write_review_artifacts(
         std::fs::write(&v2_path, serde_json::to_string_pretty(&v2_shadow_requests)?)?;
     }
     // Legacy shadow-mode claim graph (Order 3 of epic #655). It is overwritten
-    // It is overwritten before the final compiler consumes the review surface
-    // with claims, evidence, conflicts, and current-head delivery state.
+    // before the final compiler consumes the review surface with claims,
+    // evidence, conflicts, and current-head delivery state.
     let shadow_claim_graph = build_shadow_claim_graph();
     write_claim_graph(out, &shadow_claim_graph)?;
     let proof_receipts = proof_result.proof_receipts;

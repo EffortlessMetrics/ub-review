@@ -55,10 +55,11 @@ Everything else stays in artifacts:
 - generic residual risk.
 
 Missing-proof receipts are public only when their `head` matches the current
-review head and their `request_ids` contains the exact surviving observation
-identity (`id`, `dedupe_key`, or an observation id). A failed receipt from
-another lane, or a receipt for a question already answered by newer evidence,
-remains artifact-only.
+review head and the receipt is linked to a surviving claim via its `request_ids`
+field, which contains the proof-request IDs that the receipt answers. A receipt
+is linked to a claim when any of those request IDs matches the claim's linked
+proof-request identity. A failed receipt from another lane, or a receipt for a
+question already answered by newer evidence, remains artifact-only.
 
 ## Outcomes
 

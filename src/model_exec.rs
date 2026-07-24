@@ -885,6 +885,7 @@ pub(crate) fn run_receipt_reconsiderations(
             }),
         );
         if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id)
+            && reconsideration.changed
             && !reconsideration.conclusion.is_empty()
         {
             lane.reason = reconsideration.conclusion.clone();
@@ -1658,8 +1659,9 @@ pub(crate) fn apply_model_output(
         proof_requests.push(validate_proof_request(lane, request, proof_requests.len()));
     }
     for intent in output.proof_intents {
-        if let Some(intent) = validate_proof_intent(lane, intent, proof_intents.len()) {
-            proof_intents.push(intent);
+        match validate_proof_intent(lane, intent, proof_intents.len(), model_observations.len()) {
+            Ok(validated_intent) => proof_intents.push(validated_intent),
+            Err(observation) => model_observations.push(observation),
         }
     }
     for candidate in output
@@ -1712,21 +1714,73 @@ pub(crate) fn apply_model_output(
 fn validate_proof_intent(
     lane: &LanePlan,
     intent: ModelProofIntent,
-    ordinal: usize,
-) -> Option<ProofIntent> {
+    intent_ordinal: usize,
+    observation_ordinal: usize,
+) -> Result<ProofIntent, Observation> {
     let claim_id = intent.claim_id.trim();
     let question = intent.question.trim();
     let expected_answer_shape = intent.expected_answer_shape.trim();
     let target = intent.target.trim();
+
+    // Validate target using allowlist for safe repository symbols/paths/labels.
+    // Reject traversal sequences and shell metacharacters.
+    // Legitimate targets: test/package names (alphanumeric + hyphens/underscores),
+    // file paths (alphanumeric + slashes/dots/hyphens/underscores),
+    // Rust symbols (alphanumeric + colons/underscores).
+    let target_valid = !target.is_empty()
+        && !has_shell_control_token(target)
+        && !target.contains("..")
+        && !target.chars().any(char::is_whitespace)
+        && target
+            .chars()
+            .all(|ch| ch.is_alphanumeric() || matches!(ch, '/' | '.' | '-' | '_' | ':'));
+
+    let estimated_value_valid = matches!(
+        intent.estimated_value.as_deref(),
+        Some("high") | Some("medium-high") | Some("medium") | Some("low") | Some("") | None
+    );
+
     if claim_id.is_empty()
         || question.is_empty()
         || expected_answer_shape.is_empty()
-        || target.is_empty()
-        || has_shell_control_token(target)
-        || target.chars().any(char::is_whitespace)
+        || !target_valid
+        || !estimated_value_valid
     {
-        return None;
+        let reason = if claim_id.is_empty() {
+            "proof intent has empty claim_id"
+        } else if question.is_empty() {
+            "proof intent has empty question"
+        } else if expected_answer_shape.is_empty() {
+            "proof intent has empty expected_answer_shape"
+        } else if !target_valid {
+            "proof intent target contains invalid characters or traversal sequences"
+        } else {
+            "proof intent estimated_value is not in allowed set (high, medium-high, medium, low)"
+        };
+
+        return Err(Observation {
+            schema: "observation".to_owned(),
+            id: format!("malformed-intent-{}-{}", lane.id, observation_ordinal),
+            lane: lane.id.clone(),
+            question: format!("{} malformed-output", lane.id),
+            claim: format!("Lane {} emitted malformed proof intent", lane.id),
+            kind: "missing-evidence".to_owned(),
+            status: "open".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "high".to_owned(),
+            path: None,
+            line: None,
+            evidence: vec![format!(
+                "Rejected proof intent: {}. Target='{}', estimated_value='{}'",
+                reason,
+                target,
+                intent.estimated_value.as_deref().unwrap_or("")
+            )],
+            dedupe_key: format!("malformed-intent-{}", lane.id),
+            source: "proof-intent-validation".to_owned(),
+        });
     }
+
     let digest = sha256_hex(
         format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
@@ -1739,17 +1793,20 @@ fn validate_proof_intent(
         )
         .as_bytes(),
     );
-    Some(ProofIntent {
-        id: format!("intent-model-{}-{}", &digest[..16], ordinal),
+
+    let clamped_estimated_value = match intent.estimated_value.as_deref() {
+        Some(value @ ("high" | "medium-high" | "medium" | "low")) => value.to_owned(),
+        _ => "medium".to_owned(),
+    };
+
+    Ok(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], intent_ordinal),
         claim_id: claim_id.to_owned(),
         question: truncate_chars(question, 500),
         expected_answer_shape: truncate_chars(expected_answer_shape, 300),
         proof_kind: intent.proof_kind,
         target: target.to_owned(),
-        estimated_value: intent
-            .estimated_value
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| "medium".to_owned()),
+        estimated_value: clamped_estimated_value,
         requested_by: vec![lane.id.clone()],
         status: "requested".to_owned(),
     })

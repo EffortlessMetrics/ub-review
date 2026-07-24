@@ -100,7 +100,7 @@ validates their claim, question, expected answer, typed proof kind, and safe
 repository target before routing them into the planner artifacts. Legacy
 command-shaped requests remain accepted for compatibility.
 
-**Gap:** The executor still consumes the legacy request/task adapters for
+**Gap:** The executor still consumes the legacy request/task adaptors for
 execution. A future seam must resolve typed intent targets to approved task
 templates before model-native intents can select execution directly.
 
@@ -138,8 +138,8 @@ guidance text, not enforced routing. Cross-section body dedupe is doctrine
 and structural cross-section claim identity is now implemented (PRs #749/#750).
 Transactional inline delivery remains in draft PR #748. The upstream RIPR
 CLI-subprocess analyzer contract is now merged in RIPR #1455, with the
-structured warning consumer and 0.10.1 release-prep work merged in #1457 and
-#1456.
+structured warning consumer and 0.10.1 release-prep work merged in PR #1457
+and PR #1456.
 
 ### Proof request execution and terminalization — PARTIAL
 
