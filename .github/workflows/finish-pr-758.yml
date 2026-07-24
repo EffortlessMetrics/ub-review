@@ -1,0 +1,566 @@
+name: Finish PR 758 branch
+
+on:
+  push:
+    branches: [feat/review-experience-contract]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finish-pr-758-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  finish:
+    if: github.ref_name == 'feat/review-experience-contract'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: feat/review-experience-contract
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify expected parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "43262e2bba92e63022f3b05037efec7d5465b18c"
+
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Apply bounded review repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def read(path: str) -> str:
+              return Path(path).read_text(encoding="utf-8")
+
+          def write(path: str, text: str) -> None:
+              Path(path).write_text(text, encoding="utf-8")
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              text = read(path)
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one replacement, found {count}")
+              write(path, text.replace(old, new, 1))
+
+          main = read("src/main.rs")
+          marker = "    fn summary_only_withheld_terminal_reason_names_policy_and_counts() {"
+          start = main.index(marker)
+          end = main.index("\n    #[test]", start + len(marker))
+          block = main[start:end]
+          receipt_line = '        let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];\n'
+          lane_line = '        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];\n'
+          if lane_line not in block:
+              if block.count(receipt_line) != 1:
+                  raise SystemExit("src/main.rs: summary-policy receipt fixture drifted")
+              block = block.replace(receipt_line, receipt_line + lane_line, 1)
+          if block.count("            model_lanes: &[],") != 1:
+              raise SystemExit("src/main.rs: summary-policy model lane fixture drifted")
+          block = block.replace("            model_lanes: &[],", "            model_lanes: &model_lanes,", 1)
+          write("src/main.rs", main[:start] + block + main[end:])
+
+          replace_once(
+              "src/observations.rs",
+              """        || !output.failed_objections.is_empty()\n        || !output.proof_requests.is_empty()\n}""",
+              """        || !output.failed_objections.is_empty()\n        || !output.proof_requests.is_empty()\n        || !output.proof_intents.is_empty()\n}""",
+          )
+
+          model_exec = read("src/model_exec.rs")
+          old_call = """    for intent in output.proof_intents {\n        match validate_proof_intent(lane, intent, proof_intents.len(), model_observations.len()) {\n            Ok(validated_intent) => proof_intents.push(validated_intent),\n            Err(observation) => model_observations.push(observation),\n        }\n    }"""
+          new_call = """    for intent in output.proof_intents {\n        match validate_proof_intent(lane, intent, proof_intents.len(), model_observations.len()) {\n            Ok(validated_intent) => proof_intents.push(validated_intent),\n            Err(observation) => model_observations.push(*observation),\n        }\n    }"""
+          if model_exec.count(old_call) != 1:
+              raise SystemExit("src/model_exec.rs: proof-intent call site drifted")
+          model_exec = model_exec.replace(old_call, new_call, 1)
+          fn_start = model_exec.index("fn validate_proof_intent(")
+          fn_end = model_exec.index("\n#[cfg(test)]", fn_start)
+          validator = r'''fn validate_proof_intent(
+    lane: &LanePlan,
+    intent: ModelProofIntent,
+    intent_ordinal: usize,
+    observation_ordinal: usize,
+) -> std::result::Result<ProofIntent, Box<Observation>> {
+    let claim_id = intent.claim_id.trim();
+    let question = intent.question.trim();
+    let expected_answer_shape = intent.expected_answer_shape.trim();
+    let target = intent.target.trim();
+    let target_valid = !target.is_empty()
+        && !target.starts_with('/')
+        && !target.contains("..")
+        && !target.contains(":/")
+        && !has_shell_control_token(target)
+        && !target.chars().any(char::is_whitespace)
+        && target.chars().all(|character| {
+            character.is_ascii_alphanumeric()
+                || matches!(character, '_' | '-' | '.' | ':' | '/')
+        });
+
+    let rejection_reason = if claim_id.is_empty() {
+        Some("proof intent has empty claim_id")
+    } else if question.is_empty() {
+        Some("proof intent has empty question")
+    } else if expected_answer_shape.is_empty() {
+        Some("proof intent has empty expected_answer_shape")
+    } else if !target_valid {
+        Some("proof intent target is not a safe repository symbol, test, package, or route label")
+    } else {
+        None
+    };
+
+    if let Some(reason) = rejection_reason {
+        return Err(Box::new(Observation {
+            schema: "observation".to_owned(),
+            id: format!("proof-intent-validation-{}-{observation_ordinal}", lane.id),
+            lane: lane.id.clone(),
+            question: "proof-intent-validation".to_owned(),
+            claim: "Model proof intent was rejected by deterministic validation.".to_owned(),
+            kind: "missing-evidence".to_owned(),
+            status: "open".to_owned(),
+            severity: "low".to_owned(),
+            confidence: "high".to_owned(),
+            path: None,
+            line: None,
+            fingerprint: sha256_hex(
+                format!("{}\\n{}\\n{}\\n{reason}", lane.id, claim_id, target).as_bytes(),
+            ),
+            evidence: vec![format!(
+                "lane={} claim_id={} target={} reason={reason}",
+                lane.id,
+                truncate_chars(claim_id, 80),
+                truncate_chars(target, 120),
+            )],
+            dedupe_key: format!("proof-intent-validation-{}", lane.id),
+            source: "proof-intent-validation".to_owned(),
+        }));
+    }
+
+    let estimated_value = intent
+        .estimated_value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| matches!(*value, "high" | "medium-high" | "medium" | "low"))
+        .unwrap_or("medium")
+        .to_owned();
+    let digest = sha256_hex(
+        format!(
+            "{}\n{}\n{}\n{}\n{}\n{}",
+            lane.id,
+            claim_id,
+            question,
+            expected_answer_shape,
+            intent.proof_kind.key(),
+            target
+        )
+        .as_bytes(),
+    );
+
+    Ok(ProofIntent {
+        id: format!("intent-model-{}-{}", &digest[..16], intent_ordinal),
+        claim_id: claim_id.to_owned(),
+        question: truncate_chars(question, 500),
+        expected_answer_shape: truncate_chars(expected_answer_shape, 300),
+        proof_kind: intent.proof_kind,
+        target: target.to_owned(),
+        estimated_value,
+        requested_by: vec![lane.id.clone()],
+        status: "requested".to_owned(),
+    })
+}
+'''
+          model_exec = model_exec[:fn_start] + validator + model_exec[fn_end:]
+
+          old_update = """        if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id)\n            && reconsideration.changed\n            && !reconsideration.conclusion.is_empty()\n        {\n            lane.reason = reconsideration.conclusion.clone();\n            lane.turn = turn;\n        }"""
+          if model_exec.count(old_update) != 1:
+              raise SystemExit("src/model_exec.rs: reconsideration lane update drifted")
+          model_exec = model_exec.replace(
+              old_update,
+              "        apply_lane_reconsideration_update(model_lanes, &lane_id, &reconsideration, turn);",
+              1,
+          )
+          helper_anchor = "\n/// Apply only exact request-linked reconsiderations to observations."
+          helper = r'''
+fn apply_lane_reconsideration_update(
+    model_lanes: &mut [ModelLaneReceipt],
+    lane_id: &str,
+    reconsideration: &ReceiptReconsideration,
+    turn: u32,
+) {
+    if !reconsideration.changed || reconsideration.conclusion.is_empty() {
+        return;
+    }
+    if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id) {
+        lane.reason = reconsideration.conclusion.clone();
+        lane.turn = turn;
+    }
+}
+'''
+          if helper_anchor not in model_exec:
+              raise SystemExit("src/model_exec.rs: reconsideration helper anchor drifted")
+          model_exec = model_exec.replace(helper_anchor, helper + helper_anchor, 1)
+
+          test_anchor = "    #[test]\n    fn reconsideration_updates_only_exactly_linked_observations() {"
+          test_insert = r'''    fn lane_receipt(reason: &str, turn: u32) -> ModelLaneReceipt {
+        ModelLaneReceipt {
+            lane: "tests-oracle".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: reason.to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn,
+            cohort_broken: false,
+        }
+    }
+
+    #[test]
+    fn unchanged_reconsideration_preserves_lane_audit_state() -> Result<()> {
+        let mut lanes = vec![lane_receipt("prior conclusion", 2)];
+        let unchanged = ReceiptReconsideration {
+            lane: "tests-oracle".to_owned(),
+            receipt_ids: vec!["receipt-1".to_owned()],
+            request_ids: vec!["claim-1".to_owned()],
+            conclusion: "same conclusion, restated".to_owned(),
+            disposition: "unchanged".to_owned(),
+            changed: false,
+        };
+        apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &unchanged, 3);
+        anyhow::ensure!(lanes[0].reason == "prior conclusion");
+        anyhow::ensure!(lanes[0].turn == 2);
+
+        let mut changed = unchanged;
+        changed.changed = true;
+        changed.disposition = "confirm".to_owned();
+        changed.conclusion = "proof confirms the claim".to_owned();
+        apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &changed, 3);
+        anyhow::ensure!(lanes[0].reason == "proof confirms the claim");
+        anyhow::ensure!(lanes[0].turn == 3);
+        Ok(())
+    }
+
+    #[test]
+    fn reconsideration_updates_only_exactly_linked_observations() {'''
+          if model_exec.count(test_anchor) != 1:
+              raise SystemExit("src/model_exec.rs: reconsideration test anchor drifted")
+          model_exec = model_exec.replace(test_anchor, test_insert, 1)
+          write("src/model_exec.rs", model_exec)
+
+          validate_tests = read("src/tests/validate_tests.rs")
+          validate_anchor = "#[test]\nfn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {"
+          validate_insert = r'''#[test]
+fn proof_intent_validation_rejects_unsafe_targets_and_clamps_value() -> Result<()> {
+    let lane = model_lane(
+        "tests-oracle",
+        "Test oracle review",
+        &["ripr"],
+        "Request focused proof.",
+    );
+    let json = r#"{
+      "proof_intents": [
+        {
+          "claim_id": "claim-bad",
+          "question": "does traversal execute?",
+          "expected_answer_shape": "the target is rejected",
+          "proof_kind": "focused-test",
+          "target": "../escape",
+          "estimated_value": "urgent"
+        },
+        {
+          "claim_id": "claim-good",
+          "question": "does the parser test pass?",
+          "expected_answer_shape": "focused pass or failure",
+          "proof_kind": "focused-test",
+          "target": "parser::list_item",
+          "estimated_value": "urgent"
+        }
+      ]
+    }"#;
+    let parse_path = Path::new("target/ub-review/review/model/tests-oracle/content.json");
+    let (output, degraded) = crate::parse_lane_model_output_or_degrade(json, parse_path)?;
+    anyhow::ensure!(!degraded);
+
+    let mut inline_comments = Vec::new();
+    let mut summary_only_findings = Vec::new();
+    let mut observations = Vec::new();
+    let mut proof_requests = Vec::new();
+    let mut proof_intents = Vec::new();
+    let mut issue_candidates = Vec::new();
+    apply_model_output(
+        &lane,
+        output,
+        &BTreeSet::new(),
+        ModelOutputSinks {
+            inline_comments: &mut inline_comments,
+            summary_only_findings: &mut summary_only_findings,
+            model_observations: &mut observations,
+            proof_requests: &mut proof_requests,
+            proof_intents: &mut proof_intents,
+            issue_candidates: &mut issue_candidates,
+        },
+    );
+    anyhow::ensure!(proof_intents.len() == 1);
+    anyhow::ensure!(proof_intents[0].target == "parser::list_item");
+    anyhow::ensure!(proof_intents[0].estimated_value == "medium");
+    anyhow::ensure!(observations.iter().any(|observation| {
+        observation.question == "proof-intent-validation"
+            && observation.kind == "missing-evidence"
+            && observation.evidence.iter().any(|item| item.contains("../escape"))
+    }));
+    Ok(())
+}
+
+#[test]
+fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
+          if validate_tests.count(validate_anchor) != 1:
+              raise SystemExit("src/tests/validate_tests.rs: proof-intent test anchor drifted")
+          validate_tests = validate_tests.replace(validate_anchor, validate_insert, 1)
+          write("src/tests/validate_tests.rs", validate_tests)
+
+          topics = read("src/review_topics.rs")
+          loop_start = topics.index("        for request in proof_requests {")
+          loop_end = topics.index("        topic.thread_disposition =", loop_start)
+          exact_binding = r'''        let mut claim_bindings = vec![topic.claim_id.as_str()];
+        for observation in observations.iter().filter(|observation| {
+            observation.lane == topic.source_lane
+                && observation.path == topic.path
+                && observation.line == topic.anchor
+                && subject_tokens_overlap(&observation.claim, &topic.subject)
+        }) {
+            if !observation.id.is_empty() {
+                claim_bindings.push(observation.id.as_str());
+            }
+            if !observation.dedupe_key.is_empty() {
+                claim_bindings.push(observation.dedupe_key.as_str());
+            }
+        }
+        for request in proof_requests {
+            if claim_bindings.iter().any(|binding| request.id == *binding) {
+                push_unique(&mut topic.proof_requests, request.id.clone());
+            }
+        }
+        for receipt in proof_receipts {
+            if !receipt.head.eq_ignore_ascii_case(head_sha) {
+                continue;
+            }
+            let receipt_matches = receipt.request_ids.iter().any(|receipt_request_id| {
+                claim_bindings
+                    .iter()
+                    .any(|binding| receipt_request_id == *binding)
+                    || topic
+                        .proof_requests
+                        .iter()
+                        .any(|topic_request_id| receipt_request_id == topic_request_id)
+            });
+            if receipt_matches {
+                push_unique(&mut topic.proof_receipts, receipt.id.clone());
+                topic.evidence.push(EvidenceRef {
+                    class: EvidenceClass::ProofReceipt,
+                    reference: format!("review/proof_receipts.json#{}", receipt.id),
+                    detail: format!("{}: {}", receipt.result, receipt.reason),
+                });
+            }
+        }
+'''
+          topics = topics[:loop_start] + exact_binding + topics[loop_end:]
+
+          old_overlap = """    left.iter()\n        .filter(|token| token.len() >= 6 && !low_information_thread_token(token))\n        .filter(|token| right.iter().any(|candidate| candidate == *token))"""
+          new_overlap = """    left.iter()\n        .filter(|token| thread_token_is_distinctive(token))\n        .filter(|token| right.iter().any(|candidate| candidate == *token))"""
+          if topics.count(old_overlap) != 1:
+              raise SystemExit("src/review_topics.rs: subject overlap drifted")
+          topics = topics.replace(old_overlap, new_overlap, 1)
+          old_thread = """    topic_tokens\n        .iter()\n        .filter(|token| !low_information_thread_token(token))\n        .any(|token| token.len() >= 6 && thread_tokens.iter().any(|candidate| candidate == token))\n}"""
+          new_thread = """    topic_tokens\n        .iter()\n        .filter(|token| thread_token_is_distinctive(token))\n        .any(|token| thread_tokens.iter().any(|candidate| candidate == token))\n}\n\nfn thread_token_is_distinctive(token: &str) -> bool {\n    !low_information_thread_token(token)\n        && (token.len() >= 6 || matches!(token, \"ub\" | \"ffi\" | \"leak\" | \"lock\" | \"null\" | \"race\"))\n}"""
+          if topics.count(old_thread) != 1:
+              raise SystemExit("src/review_topics.rs: thread matcher drifted")
+          topics = topics.replace(old_thread, new_thread, 1)
+
+          if topics.count('            request_ids: vec!["request-refutation-1".to_owned()],') != 1:
+              raise SystemExit("src/review_topics.rs: conflict receipt fixture drifted")
+          topics = topics.replace(
+              '            request_ids: vec!["request-refutation-1".to_owned()],',
+              '            request_ids: vec![refutation.id.clone()],',
+              1,
+          )
+          old_disposition_receipt = '            request_ids: Vec::new(),\n            commands: Vec::new(),\n            result: "discriminating".to_owned(),\n            reason: "focused proof confirms the thread".to_owned(),'
+          if topics.count(old_disposition_receipt) != 1:
+              raise SystemExit("src/review_topics.rs: disposition receipt fixture drifted")
+          topics = topics.replace(
+              old_disposition_receipt,
+              '            request_ids: vec![observation.id.clone()],\n            commands: Vec::new(),\n            result: "discriminating".to_owned(),\n            reason: "focused proof confirms the thread".to_owned(),',
+              1,
+          )
+
+          old_link_test = """        let graph = build_active_claim_graph(\n            head,\n            &[],\n            &[ReviewInlineComment {\n                lane: \"tests\".to_owned(),\n                severity: \"high\".to_owned(),\n                confidence: \"high\".to_owned(),\n                path: \"src/parser.rs\".to_owned(),\n                line: 12,\n                side: \"RIGHT\".to_owned(),\n                body: \"Finding\".to_owned(),\n                evidence: \"receipt\".to_owned(),\n                suggestion: None,\n            }],"""
+          new_link_test = """        let observation = Observation {\n            schema: \"observation\".to_owned(),\n            id: \"proof-1\".to_owned(),\n            lane: \"tests\".to_owned(),\n            question: \"parser subscript behavior\".to_owned(),\n            claim: \"Parser subscript finding\".to_owned(),\n            kind: \"bug\".to_owned(),\n            status: \"confirmed\".to_owned(),\n            severity: \"high\".to_owned(),\n            confidence: \"high\".to_owned(),\n            path: Some(\"src/parser.rs\".to_owned()),\n            line: Some(12),\n            fingerprint: \"proof-link-fingerprint\".to_owned(),\n            evidence: vec![\"receipt\".to_owned()],\n            dedupe_key: \"parser-subscript\".to_owned(),\n            source: \"test\".to_owned(),\n        };\n        let graph = build_active_claim_graph(\n            head,\n            std::slice::from_ref(&observation),\n            &[ReviewInlineComment {\n                lane: \"tests\".to_owned(),\n                severity: \"high\".to_owned(),\n                confidence: \"high\".to_owned(),\n                path: \"src/parser.rs\".to_owned(),\n                line: 12,\n                side: \"RIGHT\".to_owned(),\n                body: \"Parser subscript finding\".to_owned(),\n                evidence: \"receipt\".to_owned(),\n                suggestion: None,\n            }],"""
+          if topics.count(old_link_test) != 1:
+              raise SystemExit("src/review_topics.rs: proof-link fixture drifted")
+          topics = topics.replace(old_link_test, new_link_test, 1)
+
+          tests_anchor = "    #[test]\n    fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {"
+          tests_insert = r'''    #[test]
+    fn short_technical_thread_tokens_remain_distinctive() -> Result<()> {
+        for token in ["ub", "ffi", "leak", "lock", "null", "race", "subscript"] {
+            ensure!(thread_token_is_distinctive(token));
+        }
+        ensure!(!thread_token_is_distinctive("code"));
+        ensure!(!thread_token_is_distinctive("line"));
+        Ok(())
+    }
+
+    #[test]
+    fn unrelated_same_lane_receipt_does_not_attach_or_suppress() -> Result<()> {
+        let head = "1212121212121212121212121212121212121212";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "claim-linked".to_owned(),
+            lane: "tests".to_owned(),
+            question: "parser subscript behavior".to_owned(),
+            claim: "Parser subscript finding".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "linked-fingerprint".to_owned(),
+            evidence: Vec::new(),
+            dedupe_key: "parser-subscript".to_owned(),
+            source: "model".to_owned(),
+        };
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "Parser subscript finding".to_owned(),
+            evidence: "changed-line evidence".to_owned(),
+            suggestion: None,
+        };
+        let unrelated = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "receipt-unrelated".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "3434343434343434343434343434343434343434".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec!["different-claim".to_owned()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "answers a different request".to_owned(),
+        };
+        let graph = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            std::slice::from_ref(&comment),
+            &[],
+            &[],
+            std::slice::from_ref(&unrelated),
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        ensure!(graph.topics.iter().all(|topic| topic.proof_receipts.is_empty()));
+        ensure!(graph.conflicts.is_empty());
+        ensure!(reconcile_inline_comments(&graph, std::slice::from_ref(&comment)).len() == 1);
+        Ok(())
+    }
+
+    #[test]
+    fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {'''
+          if topics.count(tests_anchor) != 1:
+              raise SystemExit("src/review_topics.rs: review topic test anchor drifted")
+          topics = topics.replace(tests_anchor, tests_insert, 1)
+          write("src/review_topics.rs", topics)
+
+          product = read("docs/PRODUCT_STATE.md")
+          product = product.replace("- Adaptor handoff reflects", "- Adapter handoff reflects")
+          product = product.replace("legacy request/task adaptors", "legacy request/task adapters")
+          if "\n#1456." in product:
+              raise SystemExit("docs/PRODUCT_STATE.md: line-leading PR reference remains")
+          write("docs/PRODUCT_STATE.md", product)
+
+          body_contract = read("docs/REVIEW_BODY_CONTRACT.md")
+          body_start = body_contract.index("Missing-proof receipts are public only when")
+          body_end = body_contract.index("\n\n## Outcomes", body_start)
+          linkage = """Missing-proof receipts are public only when their `head` matches the current\nreview head and at least one `request_ids` value exactly matches the topic's\nstructural claim ID, an exact observation ID or dedupe key compiled into that\ntopic, or an explicitly linked proof-request ID. Lane ownership alone is routing\nmetadata, not proof linkage. A failed receipt for another claim, or a receipt for\na question already answered by newer evidence, remains artifact-only."""
+          body_contract = body_contract[:body_start] + linkage + body_contract[body_end:]
+          write("docs/REVIEW_BODY_CONTRACT.md", body_contract)
+          PY
+
+          cargo fmt --all
+          git diff --check
+
+      - name: Compile after repairs
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Focused terminal-state regression
+        run: cargo test --locked --bin ub-review summary_only_withheld_terminal_reason_names_policy_and_counts -- --test-threads=1
+
+      - name: Focused proof-intent regressions
+        run: cargo test --locked --bin ub-review proof_intent_validation_rejects_unsafe_targets_and_clamps_value -- --test-threads=1
+
+      - name: Focused reconsideration regressions
+        run: cargo test --locked --bin ub-review receipt_reconsideration_tests -- --test-threads=1
+
+      - name: Focused current-head topic regressions
+        run: cargo test --locked --bin ub-review review_topics -- --test-threads=1
+
+      - name: Full binary suite
+        run: cargo test --locked --bin ub-review -- --test-threads=4
+
+      - name: Artifact verifier self-test
+        run: python scripts/verify-bun-review-artifacts.py --self-test
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Policy check
+        run: cargo xtask policy-check
+
+      - name: Formatting and diff hygiene
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
+
+      - name: Commit and push exact validated repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/finish-pr-758.yml
+          git add \
+            docs/PRODUCT_STATE.md \
+            docs/REVIEW_BODY_CONTRACT.md \
+            src/main.rs \
+            src/model_exec.rs \
+            src/observations.rs \
+            src/review_topics.rs \
+            src/tests/validate_tests.rs \
+            .github/workflows/finish-pr-758.yml
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "fix(review): close current-head review gaps"
+          git push origin HEAD:feat/review-experience-contract
