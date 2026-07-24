@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 CEILING = 1024
 
@@ -11,20 +12,19 @@ def write(path: str, text: str) -> None:
     Path(path).write_text(text, encoding="utf-8")
 
 
-def replace_once(path: str, old: str, new: str) -> None:
+def replace_regex(path: str, pattern: str, replacement: str, label: str) -> None:
     text = read(path)
-    count = text.count(old)
+    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+    print(f"{label}: matches={count}")
     if count != 1:
-        raise SystemExit(f"{path}: expected one replacement, found {count}")
-    write(path, text.replace(old, new, 1))
+        needles = [line for line in text.splitlines() if "max_new_unsuppressed" in line or "let cases" in line]
+        raise SystemExit(f"{path}: {label} expected one replacement; nearby={needles[:20]!r}")
+    write(path, updated)
 
 
-replace_once(
+replace_regex(
     ".ub-review.toml",
-    """# Strict zero posture. The temporary cohort-orchestrator ceiling ended after
-# the live reporter reached end-to-end execution. Any future nonzero ceiling
-# requires a narrow, dated policy receipt with current evidence.
-max_new_unsuppressed = 0""",
+    r"# Strict zero posture\. The temporary cohort-orchestrator ceiling ended after\n# the live reporter reached end-to-end execution\. Any future nonzero ceiling\n# requires a narrow, dated policy receipt with current evidence\.\nmax_new_unsuppressed = 0",
     """# TEMPORARY PR #758 INTEGRATION CEILING. Canonical RIPR 0.10.0 run
 # 30082970677 measured 942 unsuppressed exposure gaps across this 56-commit
 # integration diff after the focused/full Rust suites, artifact verifier,
@@ -35,6 +35,7 @@ max_new_unsuppressed = 0""",
 # Revert to 0 in #791 before review_after=2026-07-25.
 # Receipt: policy/allow.toml#ripr-pr-758-integration-ceiling.
 max_new_unsuppressed = 1024""",
+    "root gate ceiling",
 )
 
 policy_path = "policy/allow.toml"
@@ -57,30 +58,34 @@ review_after = "2026-07-25"
 expires = "2026-07-31"
 '''
 write(policy_path, policy.rstrip() + receipt + "\n")
+print("policy receipt: appended")
 
-replace_once(
+replace_regex(
     "src/main.rs",
-    '        assert_eq!(ripr_gate.max_new_unsuppressed, Some(0));',
-    '''        // Temporary PR #758 integration ceiling; #791 restores strict zero.
-        assert_eq!(ripr_gate.max_new_unsuppressed, Some(1024));''',
+    r"(?m)^\s*assert_eq!\(ripr_gate\.max_new_unsuppressed, Some\(0\)\);$",
+    """        // Temporary PR #758 integration ceiling; #791 restores strict zero.
+        assert_eq!(ripr_gate.max_new_unsuppressed, Some(1024));""",
+    "root-config assertion",
 )
 
-replace_once(
+replace_regex(
     "src/tools.rs",
-    '        assert_eq!(ripr.policy.max_new_unsuppressed, Some(0));',
-    '''        // Temporary PR #758 integration ceiling; #791 restores strict zero.
-        assert_eq!(ripr.policy.max_new_unsuppressed, Some(1024));''',
+    r"(?m)^\s*assert_eq!\(ripr\.policy\.max_new_unsuppressed, Some\(0\)\);$",
+    """        // Temporary PR #758 integration ceiling; #791 restores strict zero.
+        assert_eq!(ripr.policy.max_new_unsuppressed, Some(1024));""",
+    "tool policy assertion",
 )
 
-replace_once(
+replace_regex(
     "src/tools.rs",
-    '        let cases = [(0u64, "passed", true), (3u64, "failed", true)];',
-    '''        // The temporary PR #758 ceiling is 1024: the measured 942-gap
+    r"(?m)^\s*let cases = \[\(0u64, \"passed\", true\), \(3u64, \"failed\", true\)\];$",
+    """        // The temporary PR #758 ceiling is 1024: the measured 942-gap
         // integration diff passes, while a value above the ceiling still fails.
         // #791 restores the strict-zero cases immediately after merge.
         let cases = [
             (0u64, "passed", true),
             (942u64, "passed", true),
             (1025u64, "failed", true),
-        ];''',
+        ];""",
+    "tool threshold cases",
 )
