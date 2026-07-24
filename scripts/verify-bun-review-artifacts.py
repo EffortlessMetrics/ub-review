@@ -90,6 +90,16 @@ MAX_PR_REVIEW_BODY_BULLETS = 12
 GITHUB_SUGGESTION_MAX_CHARS = 800
 ARTIFACT_NAME_MAX_CHARS = 96
 ARTIFACT_NAME_HASH_CHARS = 16
+CLAIM_GRAPH_SCHEMA = "ub-review.claim_graph.v1"
+THREAD_DISPOSITIONS = {
+    "novel",
+    "already_covered",
+    "corroborated_with_new_evidence",
+    "refuted_by_new_evidence",
+    "accepted_tradeoff",
+    "fixed_on_current_head",
+    "superseded_by_head_change",
+}
 SECRET_VALUE_NAMES = [
     "FACTORY_API_KEY",
     "github_token",
@@ -1429,6 +1439,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/cache_manifest.json",
         "review/cache_events.ndjson",
         "review/pr_thread_context.json",
+        "review/claim_graph.json",
         "review/terminal_state.json",
         "review/resolved-tools.json",
         "review/tool-status.json",
@@ -1846,6 +1857,80 @@ def require_review(
         require_skipped_payload_contract(skip, root, github_skip_path)
 
     return review
+
+
+def require_claim_graph(root: pathlib.Path) -> None:
+    graph = load_json(root / "review/claim_graph.json")
+    if not isinstance(graph, dict):
+        fail("claim_graph.json is not an object")
+    if graph.get("schema") != CLAIM_GRAPH_SCHEMA:
+        fail(
+            f"claim_graph.json schema expected {CLAIM_GRAPH_SCHEMA}, "
+            f"got {graph.get('schema')!r}"
+        )
+    head_sha = graph.get("head_sha")
+    if not isinstance(head_sha, str) or not head_sha.strip():
+        fail("claim_graph.json head_sha is empty")
+    metrics = load_json(root / "review/metrics.json")
+    if not isinstance(metrics, dict) or metrics.get("head") != head_sha:
+        fail("claim_graph.json head_sha does not match metrics.json head")
+    proof_receipts = load_json(root / "review/proof_receipts.json")
+    if not isinstance(proof_receipts, list):
+        fail("proof_receipts.json is not an array")
+    for index, receipt in enumerate(proof_receipts):
+        if not isinstance(receipt, dict) or receipt.get("head") != head_sha:
+            fail(f"proof_receipts.json[{index}] head does not match claim graph head")
+    claims = graph.get("claims")
+    topics = graph.get("topics")
+    if not isinstance(claims, list) or not isinstance(topics, list):
+        fail("claim_graph.json claims/topics must be arrays")
+    for field in ("conflicts", "evidence_gaps"):
+        if not isinstance(graph.get(field), list):
+            fail(f"claim_graph.json {field} must be an array")
+    if graph.get("mode") not in {"active", "shadow"}:
+        fail(f"claim_graph.json mode is invalid: {graph.get('mode')!r}")
+    claim_ids = []
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, dict) or not isinstance(claim.get("id"), str):
+            fail(f"claim_graph.json claims[{index}] is missing id")
+        claim_ids.append(claim["id"])
+    topic_ids = []
+    for index, topic in enumerate(topics):
+        if not isinstance(topic, dict):
+            fail(f"claim_graph.json topics[{index}] is not an object")
+        topic_id = topic.get("claim_id")
+        if not isinstance(topic_id, str) or not topic_id:
+            fail(f"claim_graph.json topics[{index}] is missing claim_id")
+        if topic.get("head_sha") != head_sha:
+            fail(f"claim_graph.json topics[{index}] head_sha does not match graph head")
+        disposition = topic.get("thread_disposition")
+        if disposition not in THREAD_DISPOSITIONS:
+            fail(
+                f"claim_graph.json topics[{index}] thread_disposition invalid: "
+                f"{disposition!r}"
+            )
+        existing = topic.get("existing_threads")
+        stale = topic.get("stale_threads")
+        receipts = topic.get("proof_receipts")
+        if not all(isinstance(value, list) for value in (existing, stale, receipts)):
+            fail(f"claim_graph.json topics[{index}] thread/proof links must be arrays")
+        if disposition == "novel" and (existing or stale):
+            fail(f"claim_graph.json topics[{index}] novel claim has thread links")
+        if disposition == "already_covered" and not existing:
+            fail(f"claim_graph.json topics[{index}] covered claim has no current thread")
+        if disposition == "corroborated_with_new_evidence" and not (existing and receipts):
+            fail(
+                f"claim_graph.json topics[{index}] corroborated claim lacks current thread or receipt"
+            )
+        if disposition == "accepted_tradeoff" and not existing:
+            fail(f"claim_graph.json topics[{index}] accepted tradeoff has no current thread")
+        if disposition == "superseded_by_head_change" and not stale:
+            fail(f"claim_graph.json topics[{index}] superseded claim has no stale thread")
+        topic_ids.append(topic_id)
+    if len(set(claim_ids)) != len(claim_ids) or len(set(topic_ids)) != len(topic_ids):
+        fail("claim_graph.json claim/topic ids are not unique")
+    if set(claim_ids) != set(topic_ids):
+        fail("claim_graph.json claims and topics are not in parity")
 
 
 def require_skipped_payload_contract(receipt: dict, root: pathlib.Path, path: pathlib.Path) -> None:
@@ -4096,6 +4181,8 @@ def require_proof_request_ndjson(root: pathlib.Path, proof_requests: list[dict])
 def require_proof_planner_artifacts(root: pathlib.Path) -> None:
     planner_input = load_json(root / "review/proof_planner_input.json")
     planner_output = load_json(root / "review/proof_planner_output.json")
+    proof_intents = load_json(root / "review/proof_intents.json")
+    proof_portfolio = load_json(root / "review/proof_portfolio.json")
     if planner_input.get("schema") != "ub-review.proof_planner_input.v1":
         fail("review/proof_planner_input.json has wrong schema")
     if planner_output.get("schema") != "ub-review.proof_planner_output.v1":
@@ -4105,6 +4192,59 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
         fail("review/proof_planner_output.json proof_tasks is not an array")
     for task in proof_tasks:
         require_proof_task_schema(task)
+    if not isinstance(proof_intents, list):
+        fail("review/proof_intents.json is not an array")
+    for index, intent in enumerate(proof_intents):
+        if not isinstance(intent, dict):
+            fail(f"review/proof_intents.json entry {index} is not an object")
+        for field in [
+            "id",
+            "claim_id",
+            "question",
+            "expected_answer_shape",
+            "proof_kind",
+            "target",
+            "estimated_value",
+            "status",
+        ]:
+            if not isinstance(intent.get(field), str) or not intent[field]:
+                fail(
+                    f"review/proof_intents.json entry {index} missing string field {field}"
+                )
+        requested_by = intent.get("requested_by")
+        if not isinstance(requested_by, list) or not all(
+            isinstance(requester, str) and requester for requester in requested_by
+        ):
+            fail(
+                f"review/proof_intents.json entry {index} requested_by is not a string array"
+            )
+    if not isinstance(proof_portfolio, dict):
+        fail("review/proof_portfolio.json is not an object")
+    if proof_portfolio.get("schema") != "ub-review.proof_portfolio.v1":
+        fail("review/proof_portfolio.json has wrong schema")
+    for field in [
+        "budget_seconds",
+        "remaining_seconds",
+        "candidate_count",
+    ]:
+        value = proof_portfolio.get(field)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+            fail(f"review/proof_portfolio.json {field} is invalid")
+    if not isinstance(proof_portfolio.get("runtime"), dict):
+        fail("review/proof_portfolio.json runtime is not an object")
+    if not isinstance(proof_portfolio.get("selected_task_ids"), list):
+        fail("review/proof_portfolio.json selected_task_ids is not an array")
+    decisions = proof_portfolio.get("decisions")
+    if not isinstance(decisions, list):
+        fail("review/proof_portfolio.json decisions is not an array")
+    for index, decision in enumerate(decisions):
+        if not isinstance(decision, dict):
+            fail(f"review/proof_portfolio.json decision {index} is not an object")
+        for field in ["task_id", "kind", "status", "reason"]:
+            if not isinstance(decision.get(field), str) or not decision[field]:
+                fail(
+                    f"review/proof_portfolio.json decision {index} missing string field {field}"
+                )
     lines = [line for line in read_text(root / "proof_tasks.ndjson").splitlines() if line.strip()]
     if len(lines) != len(proof_tasks):
         fail("proof_tasks.ndjson line count does not match proof planner output")
@@ -10859,6 +10999,56 @@ def self_test_sanitize_artifact_name_bounds_long_values() -> None:
         fail("artifact name sanitizer changed safe replacement behavior")
 
 
+def self_test_claim_graph_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        graph = {
+            "schema": CLAIM_GRAPH_SCHEMA,
+            "head_sha": "HEAD",
+            "claims": [{"id": "claim-1"}],
+            "topics": [
+                {
+                    "claim_id": "claim-1",
+                    "head_sha": "HEAD",
+                    "thread_disposition": "novel",
+                    "existing_threads": [],
+                    "stale_threads": [],
+                    "proof_receipts": [],
+                }
+            ],
+            "conflicts": [],
+            "evidence_gaps": [],
+            "mode": "active",
+        }
+
+        def write_graph(overrides: dict | None = None) -> pathlib.Path:
+            candidate = dict(graph)
+            if overrides:
+                candidate.update(overrides)
+            write_self_test_json(root / "review/claim_graph.json", candidate)
+            return root
+
+        write_graph()
+        write_self_test_json(root / "review/metrics.json", {"head": "HEAD"})
+        write_self_test_json(root / "review/proof_receipts.json", [])
+        require_claim_graph(root)
+        expect_self_test_failure(
+            "claim graph invalid mode",
+            "mode is invalid",
+            lambda: require_claim_graph(write_graph({"mode": "unknown"})),
+        )
+        expect_self_test_failure(
+            "claim graph conflicts shape",
+            "conflicts must be an array",
+            lambda: require_claim_graph(write_graph({"conflicts": {}})),
+        )
+        expect_self_test_failure(
+            "claim graph evidence gaps shape",
+            "evidence_gaps must be an array",
+            lambda: require_claim_graph(write_graph({"evidence_gaps": {}})),
+        )
+
+
 def require_gate_watchdog(root: pathlib.Path) -> None:
     """The current-head watchdog receipt (#745): schema, a state/reason that
     agree, and the fail-closed invariant that only a `terminal` state may carry
@@ -10999,6 +11189,7 @@ def self_test_gate_watchdog_contract() -> None:
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
+    self_test_claim_graph_contract()
     if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
     if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
@@ -11883,6 +12074,7 @@ def main(argv: list[str]) -> int:
     review = require_review(
         root, args.max_inline_comments, args.expected_review_profile
     )
+    require_claim_graph(root)
     metrics = require_metrics(root, review)
     require_cost_receipt(root, metrics)
     require_floor_trend(root)

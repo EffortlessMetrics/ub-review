@@ -15,19 +15,13 @@ pub(crate) fn should_prepare_github_review_payload(
     args: &RunArgs,
     inline_comments: &[ReviewInlineComment],
     _summary_only_findings: &[SummaryOnlyFinding],
-    proof_receipts: &[ProofReceipt],
+    _proof_receipts: &[ProofReceipt],
     pr_body: &str,
 ) -> bool {
     if matches!(args.model_mode, ModelMode::Off) {
         return false;
     }
     if has_reviewer_value(inline_comments, pr_body) {
-        return true;
-    }
-    if proof_receipts
-        .iter()
-        .any(proof_receipt_changes_review_value)
-    {
         return true;
     }
     pr_body_has_reviewer_value(pr_body)
@@ -115,9 +109,9 @@ pub(crate) struct CompiledReviewSurface {
     pub(crate) artifact_body: String,
     pub(crate) github_review: GitHubReview,
     pub(crate) should_prepare_github_review: bool,
-    /// True when `[review_body].summary_only_body` posted a body the
-    /// suppressor classified as no-value boilerplate; the payload writer
-    /// waives the suppressible body-policy checks for exactly this case.
+    /// True when the PR body was suppressed as no-value or internal
+    /// machinery; independently validated inline findings may still be
+    /// posted when this is true.
     pub(crate) summary_only_policy_posted: bool,
     pub(crate) review_payload_status: &'static str,
     pub(crate) terminal_state: ReviewTerminalState,
@@ -264,11 +258,10 @@ pub(crate) fn compile_review_surface(
             suppressed_artifact_only_pr_body = true;
         }
     }
-    let pr_inline_comments: &[ReviewInlineComment] = if suppressed_artifact_only_pr_body {
-        &[]
-    } else {
-        &pr_inline_candidates
-    };
+    // Body quality is a separate boundary from inline finding quality. If
+    // prose is suppressed, retain validated inline findings as the concise
+    // reviewer surface rather than turning a formatting defect into silence.
+    let pr_inline_comments: &[ReviewInlineComment] = &pr_inline_candidates;
     let github_review = GitHubReview {
         event: "COMMENT".to_owned(),
         body: pr_body.clone(),
@@ -286,7 +279,6 @@ pub(crate) fn compile_review_surface(
     let pass_policy_permits_post =
         pass_policy_permits_review_post(input.args.posting, input.run_pass, input.post_review_on);
     let should_prepare_github_review = pass_policy_permits_post
-        && !suppressed_artifact_only_pr_body
         && (summary_only_policy_posted
             || should_prepare_github_review_payload(
                 input.args,
@@ -383,7 +375,17 @@ fn is_internal_review_machinery_error(error: &anyhow::Error) -> bool {
 }
 
 fn is_review_output_quality_error(error: &anyhow::Error) -> bool {
-    is_suppressible_pr_body_policy_error(error) || is_internal_review_machinery_error(error)
+    let text = error.to_string();
+    is_suppressible_pr_body_policy_error(error)
+        || is_internal_review_machinery_error(error)
+        || [
+            "successful lane table",
+            "provider status table",
+            "sensor status table",
+            "execution summary",
+        ]
+        .iter()
+        .any(|marker| text.contains(marker))
 }
 
 pub(crate) fn validate_pr_review_body_policy(body: &str, policy: &ReviewBodyPolicy) -> Result<()> {

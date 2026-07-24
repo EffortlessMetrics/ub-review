@@ -4166,6 +4166,214 @@ path = "src/lib.rs"
 }
 
 #[test]
+fn model_auto_run_retries_transient_primary_failure_on_provider_fallback() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    fs::create_dir_all(&repo)?;
+    init_minimal_repo(&repo)?;
+
+    let primary_key = "dummy-primary-key-for-fallback-test";
+    let fallback_key = "dummy-fallback-key-for-fallback-test";
+    let (primary_url, primary_provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
+    let (fallback_url, fallback_provider) = spawn_fake_openai_provider(2)?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "primary-with-fallback",
+            "--minimax-provider-kind",
+            "openai",
+            "--opencode-endpoint-kind",
+            "openai-chat",
+            "--lanes",
+            "correctness",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+            ("UB_REVIEW_MINIMAX_API_URL", primary_url.as_str()),
+            ("UB_REVIEW_OPENCODE_API_KEY", fallback_key),
+            ("UB_REVIEW_OPENCODE_API_URL", fallback_url.as_str()),
+        ],
+    )?;
+    let primary_requests = join_fake_provider(primary_provider)?;
+    let fallback_requests = join_fake_provider(fallback_provider)?;
+    assert_eq!(primary_requests.len(), 1);
+    assert_eq!(fallback_requests.len(), 2);
+
+    let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("review/provider-preflight-status.json"),
+    )?)?;
+    let primary_preflight = preflights
+        .as_array()
+        .and_then(|receipts| {
+            receipts
+                .iter()
+                .find(|receipt| receipt["provider"] == "minimax")
+        })
+        .ok_or_else(|| anyhow::anyhow!("primary preflight receipt missing"))?;
+    assert_eq!(primary_preflight["status"], "failed");
+    assert_eq!(primary_preflight["http_status"], 503);
+    let fallback_preflight = preflights
+        .as_array()
+        .and_then(|receipts| {
+            receipts
+                .iter()
+                .find(|receipt| receipt["provider"] == "opencode-go")
+        })
+        .ok_or_else(|| anyhow::anyhow!("fallback preflight receipt missing"))?;
+    assert_eq!(fallback_preflight["status"], "ok");
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    let correctness_lane = review["model_lanes"]
+        .as_array()
+        .and_then(|lanes| lanes.iter().find(|lane| lane["lane"] == "correctness"))
+        .ok_or_else(|| anyhow::anyhow!("correctness model lane missing"))?;
+    assert_eq!(correctness_lane["status"], "ok");
+    assert_eq!(correctness_lane["provider"], "opencode-go");
+    assert_eq!(
+        correctness_lane["fallback_from"],
+        "minimax:MiniMax-M3:openai-chat"
+    );
+    assert_eq!(correctness_lane["http_status"], 200);
+
+    let metrics: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/metrics.json"))?)?;
+    assert_eq!(metrics["models"]["model_fallbacks_used"], 1);
+    for relative in collect_relative_file_paths(&out)? {
+        if let Ok(text) = fs::read_to_string(out.join(&relative)) {
+            assert!(
+                !text.contains(primary_key),
+                "primary secret leaked in {relative}"
+            );
+            assert!(
+                !text.contains(fallback_key),
+                "fallback secret leaked in {relative}"
+            );
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn model_outage_degrades_review_without_reddening_enforced_gate() -> Result<()> {
+    let _cli_subprocess_guard = cli_subprocess_test_lock()?;
+    let temp = tempfile::tempdir()?;
+    let repo = temp.path().join("repo");
+    init_minimal_repo(&repo)?;
+
+    let primary_key = "dummy-primary-key-for-authority-test";
+    let (provider_url, provider) = spawn_fake_openai_provider_with_statuses(vec![503])?;
+    let out = temp.path().join("packet");
+    let config = Path::new(env!("CARGO_MANIFEST_DIR")).join("profiles/bun-ub-v0.toml");
+    let bin = env!("CARGO_BIN_EXE_ub-review");
+    run_with_env(
+        temp.path(),
+        bin,
+        &[
+            "run",
+            "--dry-run",
+            "--config",
+            path_str(&config)?,
+            "--root",
+            path_str(&repo)?,
+            "--base",
+            "HEAD~1",
+            "--head",
+            "HEAD",
+            "--out",
+            path_str(&out)?,
+            "--mode",
+            "intelligent-ci",
+            "--fail-on-gate",
+            "true",
+            "--no-github-summary",
+            "--model-mode",
+            "auto",
+            "--provider-policy",
+            "minimax-only",
+            "--minimax-provider-kind",
+            "openai",
+            "--lanes",
+            "correctness",
+            "--tools",
+            "cargo-allow",
+            "--model-concurrency",
+            "1",
+            "--max-model-calls",
+            "1",
+            "--model-timeout-sec",
+            "10",
+        ],
+        &[
+            ("UB_REVIEW_MINIMAX_API_KEY", primary_key),
+            ("UB_REVIEW_MINIMAX_API_URL", provider_url.as_str()),
+        ],
+    )?;
+    let provider_requests = join_fake_provider(provider)?;
+    assert_eq!(provider_requests.len(), 1);
+
+    let preflights: serde_json::Value = serde_json::from_slice(&fs::read(
+        out.join("review/provider-preflight-status.json"),
+    )?)?;
+    let preflight = preflights
+        .as_array()
+        .and_then(|receipts| receipts.first())
+        .ok_or_else(|| anyhow::anyhow!("missing provider outage receipt"))?;
+    assert_eq!(preflight["status"], "failed");
+    assert_eq!(preflight["http_status"], 503);
+
+    let review: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/review.json"))?)?;
+    assert!(review["model_lanes"].as_array().is_some_and(|lanes| {
+        lanes
+            .iter()
+            .any(|lane| lane["status"] == "preflight_failed")
+    }));
+
+    let terminal: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/terminal_state.json"))?)?;
+    assert!(matches!(
+        terminal["status"].as_str(),
+        Some("artifact-only") | Some("failed-to-review")
+    ));
+
+    let gate: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/gate_outcome.json"))?)?;
+    assert_eq!(gate["conclusion"], "pass");
+    assert_eq!(gate["evidence_gaps_blocking"], 0);
+    assert!(gate["evidence_gaps_advisory"].as_u64().unwrap_or_default() > 0);
+    assert!(gate["reasons"].as_array().is_some_and(Vec::is_empty));
+    Ok(())
+}
+
+#[test]
 fn intelligent_ci_runs_advisory_proof_planner_lane_before_request_broker() -> Result<()> {
     let _cli_subprocess_guard = cli_subprocess_test_lock()?;
     let temp = tempfile::tempdir()?;

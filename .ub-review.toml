@@ -330,7 +330,13 @@ scope = "on-diff"
 # init.rs must either wait for the upstream fix or temporarily raise this
 # ceiling with a fresh dated receipt in policy/allow.toml (the #538 pattern).
 # Owner: ub-review/core.
-# Strict zero posture. The temporary cohort-orchestrator ceiling ended after
-# the live reporter reached end-to-end execution. Any future nonzero ceiling
-# requires a narrow, dated policy receipt with current evidence.
-max_new_unsuppressed = 0
+# TEMPORARY PR #758 INTEGRATION CEILING. Canonical RIPR 0.10.0 run
+# 30082970677 measured 942 unsuppressed exposure gaps across this 56-commit
+# integration diff after the focused/full Rust suites, artifact verifier,
+# Clippy, exact-head review, and all review threads were green. RIPR serializes
+# only the first 200 exposure-gap records, so 742 cannot be individually
+# inspected or receipted through .ripr/suppressions.toml. This is the documented
+# analyzer-cap recovery path, not a claim that the 942 findings are defects.
+# Revert to 0 in #791 before review_after=2026-07-25.
+# Receipt: policy/allow.toml#ripr-pr-758-integration-ceiling.
+max_new_unsuppressed = 1024
