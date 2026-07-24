@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "529b5094b83d254ef372afe653efb7295eb559f9"
+          test "$(git rev-parse HEAD^)" = "3795e4daf4a651e95700414e7045f5c97fb1853a"
 
       - name: Install Rust 1.95
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
@@ -41,7 +41,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/raise_pr758_ripr_ceiling.py
+          python scripts/raise_pr758_ripr_ceiling.py 2>&1 | tee /tmp/pr758-ripr-repair.log
           cargo fmt --all
           git diff --check
 
@@ -89,9 +89,15 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
           script: |
+            const fs = require('fs');
+            let detail = '';
+            if (fs.existsSync('/tmp/pr758-ripr-repair.log')) {
+              const lines = fs.readFileSync('/tmp/pr758-ripr-repair.log', 'utf8').trim().split('\n');
+              detail = `\n\n\`\`\`text\n${lines.slice(-80).join('\n')}\n\`\`\``;
+            }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: 791,
-              body: `PR #758 RIPR receipt workflow failed: run ${context.runId} on ${context.sha}.`,
+              body: `PR #758 RIPR receipt workflow failed: run ${context.runId} on ${context.sha}.${detail}`,
             });
