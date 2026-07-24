@@ -884,16 +884,25 @@ pub(crate) fn run_receipt_reconsiderations(
                 "request_ids": request_ids,
             }),
         );
-        if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id)
-            && reconsideration.changed
-            && !reconsideration.conclusion.is_empty()
-        {
-            lane.reason = reconsideration.conclusion.clone();
-            lane.turn = turn;
-        }
+        apply_lane_reconsideration_update(model_lanes, &lane_id, &reconsideration, turn);
         result.reconsiderations.push(reconsideration);
     }
     Ok(result)
+}
+
+fn apply_lane_reconsideration_update(
+    model_lanes: &mut [ModelLaneReceipt],
+    lane_id: &str,
+    reconsideration: &ReceiptReconsideration,
+    turn: u32,
+) {
+    if !reconsideration.changed || reconsideration.conclusion.is_empty() {
+        return;
+    }
+    if let Some(lane) = model_lanes.iter_mut().find(|lane| lane.lane == lane_id) {
+        lane.reason = reconsideration.conclusion.clone();
+        lane.turn = turn;
+    }
 }
 
 /// Apply only exact request-linked reconsiderations to observations.  A lane
@@ -1661,7 +1670,7 @@ pub(crate) fn apply_model_output(
     for intent in output.proof_intents {
         match validate_proof_intent(lane, intent, proof_intents.len(), model_observations.len()) {
             Ok(validated_intent) => proof_intents.push(validated_intent),
-            Err(observation) => model_observations.push(observation),
+            Err(observation) => model_observations.push(*observation),
         }
     }
     for candidate in output
@@ -1716,71 +1725,67 @@ fn validate_proof_intent(
     intent: ModelProofIntent,
     intent_ordinal: usize,
     observation_ordinal: usize,
-) -> Result<ProofIntent, Observation> {
+) -> std::result::Result<ProofIntent, Box<Observation>> {
     let claim_id = intent.claim_id.trim();
     let question = intent.question.trim();
     let expected_answer_shape = intent.expected_answer_shape.trim();
     let target = intent.target.trim();
-
-    // Validate target using allowlist for safe repository symbols/paths/labels.
-    // Reject traversal sequences and shell metacharacters.
-    // Legitimate targets: test/package names (alphanumeric + hyphens/underscores),
-    // file paths (alphanumeric + slashes/dots/hyphens/underscores),
-    // Rust symbols (alphanumeric + colons/underscores).
     let target_valid = !target.is_empty()
-        && !has_shell_control_token(target)
+        && !target.starts_with('/')
         && !target.contains("..")
+        && !target.contains(":/")
+        && !has_shell_control_token(target)
         && !target.chars().any(char::is_whitespace)
-        && target
-            .chars()
-            .all(|ch| ch.is_alphanumeric() || matches!(ch, '/' | '.' | '-' | '_' | ':'));
+        && target.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | ':' | '/')
+        });
 
-    let estimated_value_valid = matches!(
-        intent.estimated_value.as_deref(),
-        Some("high") | Some("medium-high") | Some("medium") | Some("low") | Some("") | None
-    );
+    let rejection_reason = if claim_id.is_empty() {
+        Some("proof intent has empty claim_id")
+    } else if question.is_empty() {
+        Some("proof intent has empty question")
+    } else if expected_answer_shape.is_empty() {
+        Some("proof intent has empty expected_answer_shape")
+    } else if !target_valid {
+        Some("proof intent target is not a safe repository symbol, test, package, or route label")
+    } else {
+        None
+    };
 
-    if claim_id.is_empty()
-        || question.is_empty()
-        || expected_answer_shape.is_empty()
-        || !target_valid
-        || !estimated_value_valid
-    {
-        let reason = if claim_id.is_empty() {
-            "proof intent has empty claim_id"
-        } else if question.is_empty() {
-            "proof intent has empty question"
-        } else if expected_answer_shape.is_empty() {
-            "proof intent has empty expected_answer_shape"
-        } else if !target_valid {
-            "proof intent target contains invalid characters or traversal sequences"
-        } else {
-            "proof intent estimated_value is not in allowed set (high, medium-high, medium, low)"
-        };
-
-        return Err(Observation {
+    if let Some(reason) = rejection_reason {
+        return Err(Box::new(Observation {
             schema: "observation".to_owned(),
-            id: format!("malformed-intent-{}-{}", lane.id, observation_ordinal),
+            id: format!("proof-intent-validation-{}-{observation_ordinal}", lane.id),
             lane: lane.id.clone(),
-            question: format!("{} malformed-output", lane.id),
-            claim: format!("Lane {} emitted malformed proof intent", lane.id),
+            question: "proof-intent-validation".to_owned(),
+            claim: "Model proof intent was rejected by deterministic validation.".to_owned(),
             kind: "missing-evidence".to_owned(),
             status: "open".to_owned(),
             severity: "low".to_owned(),
             confidence: "high".to_owned(),
             path: None,
             line: None,
+            fingerprint: sha256_hex(
+                format!("{}\\n{}\\n{}\\n{reason}", lane.id, claim_id, target).as_bytes(),
+            ),
             evidence: vec![format!(
-                "Rejected proof intent: {}. Target='{}', estimated_value='{}'",
-                reason,
-                target,
-                intent.estimated_value.as_deref().unwrap_or("")
+                "lane={} claim_id={} target={} reason={reason}",
+                lane.id,
+                truncate_chars(claim_id, 80),
+                truncate_chars(target, 120),
             )],
-            dedupe_key: format!("malformed-intent-{}", lane.id),
+            dedupe_key: format!("proof-intent-validation-{}", lane.id),
             source: "proof-intent-validation".to_owned(),
-        });
+        }));
     }
 
+    let estimated_value = intent
+        .estimated_value
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| matches!(*value, "high" | "medium-high" | "medium" | "low"))
+        .unwrap_or("medium")
+        .to_owned();
     let digest = sha256_hex(
         format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
@@ -1794,11 +1799,6 @@ fn validate_proof_intent(
         .as_bytes(),
     );
 
-    let clamped_estimated_value = match intent.estimated_value.as_deref() {
-        Some(value @ ("high" | "medium-high" | "medium" | "low")) => value.to_owned(),
-        _ => "medium".to_owned(),
-    };
-
     Ok(ProofIntent {
         id: format!("intent-model-{}-{}", &digest[..16], intent_ordinal),
         claim_id: claim_id.to_owned(),
@@ -1806,7 +1806,7 @@ fn validate_proof_intent(
         expected_answer_shape: truncate_chars(expected_answer_shape, 300),
         proof_kind: intent.proof_kind,
         target: target.to_owned(),
-        estimated_value: clamped_estimated_value,
+        estimated_value,
         requested_by: vec![lane.id.clone()],
         status: "requested".to_owned(),
     })
@@ -1858,6 +1858,52 @@ mod receipt_reconsideration_tests {
         assert!(prompt.contains("receipt-1"));
         assert!(prompt.contains("claim-1"));
         assert!(prompt.contains("confirm|refute|narrow|park|withdraw|unchanged"));
+    }
+
+    fn lane_receipt(reason: &str, turn: u32) -> ModelLaneReceipt {
+        ModelLaneReceipt {
+            lane: "tests-oracle".to_owned(),
+            provider: "minimax".to_owned(),
+            model: "MiniMax-M3".to_owned(),
+            endpoint_kind: "anthropic-messages".to_owned(),
+            status: "ok".to_owned(),
+            reason: reason.to_owned(),
+            duration_ms: None,
+            http_status: None,
+            response_shape: None,
+            fallback_from: None,
+            cache_usage: ModelCacheUsage::default(),
+            cohort_id: String::new(),
+            shared_prefix_hash: String::new(),
+            thread_id: String::new(),
+            turn,
+            cohort_broken: false,
+        }
+    }
+
+    #[test]
+    fn unchanged_reconsideration_preserves_lane_audit_state() -> Result<()> {
+        let mut lanes = vec![lane_receipt("prior conclusion", 2)];
+        let unchanged = ReceiptReconsideration {
+            lane: "tests-oracle".to_owned(),
+            receipt_ids: vec!["receipt-1".to_owned()],
+            request_ids: vec!["claim-1".to_owned()],
+            conclusion: "same conclusion, restated".to_owned(),
+            disposition: "unchanged".to_owned(),
+            changed: false,
+        };
+        apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &unchanged, 3);
+        anyhow::ensure!(lanes[0].reason == "prior conclusion");
+        anyhow::ensure!(lanes[0].turn == 2);
+
+        let mut changed = unchanged;
+        changed.changed = true;
+        changed.disposition = "confirm".to_owned();
+        changed.conclusion = "proof confirms the claim".to_owned();
+        apply_lane_reconsideration_update(&mut lanes, "tests-oracle", &changed, 3);
+        anyhow::ensure!(lanes[0].reason == "proof confirms the claim");
+        anyhow::ensure!(lanes[0].turn == 3);
+        Ok(())
     }
 
     #[test]

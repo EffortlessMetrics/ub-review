@@ -150,13 +150,22 @@ pub(crate) fn build_active_claim_graph(
             }
         }
 
+        let mut claim_bindings = vec![topic.claim_id.as_str()];
+        for observation in observations.iter().filter(|observation| {
+            observation.lane == topic.source_lane
+                && observation.path == topic.path
+                && observation.line == topic.anchor
+                && subject_tokens_overlap(&observation.claim, &topic.subject)
+        }) {
+            if !observation.id.is_empty() {
+                claim_bindings.push(observation.id.as_str());
+            }
+            if !observation.dedupe_key.is_empty() {
+                claim_bindings.push(observation.dedupe_key.as_str());
+            }
+        }
         for request in proof_requests {
-            if request
-                .requested_by
-                .iter()
-                .any(|lane| lane == &topic.source_lane)
-                || request.id.contains(&topic.claim_id)
-            {
+            if claim_bindings.iter().any(|binding| request.id == *binding) {
                 push_unique(&mut topic.proof_requests, request.id.clone());
             }
         }
@@ -164,20 +173,15 @@ pub(crate) fn build_active_claim_graph(
             if !receipt.head.eq_ignore_ascii_case(head_sha) {
                 continue;
             }
-            // Attach proof receipt to topic only if:
-            // 1. The receipt was requested by this topic's lane, OR
-            // 2. The receipt's request_ids exactly match (not substring) any of
-            //    this topic's linked proof_requests.
-            let receipt_matches = receipt
-                .requested_by
-                .iter()
-                .any(|lane| lane == &topic.source_lane)
-                || receipt.request_ids.iter().any(|receipt_request_id| {
-                    topic
+            let receipt_matches = receipt.request_ids.iter().any(|receipt_request_id| {
+                claim_bindings
+                    .iter()
+                    .any(|binding| receipt_request_id == *binding)
+                    || topic
                         .proof_requests
                         .iter()
                         .any(|topic_request_id| receipt_request_id == topic_request_id)
-                });
+            });
             if receipt_matches {
                 push_unique(&mut topic.proof_receipts, receipt.id.clone());
                 topic.evidence.push(EvidenceRef {
@@ -485,7 +489,7 @@ fn subject_tokens_overlap(left: &str, right: &str) -> bool {
     let left = canonical_tokens(left);
     let right = canonical_tokens(right);
     left.iter()
-        .filter(|token| token.len() >= 6 && !low_information_thread_token(token))
+        .filter(|token| thread_token_is_distinctive(token))
         .filter(|token| right.iter().any(|candidate| candidate == *token))
         .count()
         >= 2
@@ -504,8 +508,13 @@ fn thread_body_matches(topic: &ReviewTopic, thread: &ReviewThreadRecord) -> bool
     let thread_tokens = canonical_tokens(&thread.body);
     topic_tokens
         .iter()
-        .filter(|token| !low_information_thread_token(token))
-        .any(|token| token.len() >= 6 && thread_tokens.iter().any(|candidate| candidate == token))
+        .filter(|token| thread_token_is_distinctive(token))
+        .any(|token| thread_tokens.iter().any(|candidate| candidate == token))
+}
+
+fn thread_token_is_distinctive(token: &str) -> bool {
+    !low_information_thread_token(token)
+        && (token.len() >= 6 || matches!(token, "ub" | "ffi" | "leak" | "lock" | "null" | "race"))
 }
 
 fn thread_disposition(topic: &ReviewTopic, matching_threads: &[&ReviewThreadRecord]) -> String {
@@ -716,6 +725,83 @@ mod tests {
     }
 
     #[test]
+    fn short_technical_thread_tokens_remain_distinctive() -> Result<()> {
+        for token in ["ub", "ffi", "leak", "lock", "null", "race", "subscript"] {
+            ensure!(thread_token_is_distinctive(token));
+        }
+        ensure!(!thread_token_is_distinctive("code"));
+        ensure!(!thread_token_is_distinctive("line"));
+        Ok(())
+    }
+
+    #[test]
+    fn unrelated_same_lane_receipt_does_not_attach_or_suppress() -> Result<()> {
+        let head = "1212121212121212121212121212121212121212";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "claim-linked".to_owned(),
+            lane: "tests".to_owned(),
+            question: "parser subscript behavior".to_owned(),
+            claim: "Parser subscript finding".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "linked-fingerprint".to_owned(),
+            evidence: Vec::new(),
+            dedupe_key: "parser-subscript".to_owned(),
+            source: "model".to_owned(),
+        };
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "Parser subscript finding".to_owned(),
+            evidence: "changed-line evidence".to_owned(),
+            suggestion: None,
+        };
+        let unrelated = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "receipt-unrelated".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "3434343434343434343434343434343434343434".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec!["different-claim".to_owned()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "answers a different request".to_owned(),
+        };
+        let graph = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            std::slice::from_ref(&comment),
+            &[],
+            &[],
+            std::slice::from_ref(&unrelated),
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        ensure!(
+            graph
+                .topics
+                .iter()
+                .all(|topic| topic.proof_receipts.is_empty())
+        );
+        ensure!(graph.conflicts.is_empty());
+        ensure!(reconcile_inline_comments(&graph, std::slice::from_ref(&comment)).len() == 1);
+        Ok(())
+    }
+
+    #[test]
     fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {
         let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         let graph = build_active_claim_graph(
@@ -792,7 +878,7 @@ mod tests {
             head: head.to_owned(),
             test_patch_mode: "head-only".to_owned(),
             requested_by: vec!["lane-b".to_owned()],
-            request_ids: vec!["request-refutation-1".to_owned()],
+            request_ids: vec![refutation.id.clone()],
             commands: Vec::new(),
             result: "head_failed".to_owned(),
             reason: "focused proof refutes the preservation claim".to_owned(),
@@ -890,7 +976,7 @@ mod tests {
             head: head.to_owned(),
             test_patch_mode: "head-only".to_owned(),
             requested_by: vec!["tests".to_owned()],
-            request_ids: Vec::new(),
+            request_ids: vec![observation.id.clone()],
             commands: Vec::new(),
             result: "discriminating".to_owned(),
             reason: "focused proof confirms the thread".to_owned(),
@@ -1042,9 +1128,26 @@ mod tests {
     #[test]
     fn active_graph_keeps_inline_delivery_and_proof_receipt_links() -> Result<()> {
         let head = "cccccccccccccccccccccccccccccccccccccccc";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "proof-1".to_owned(),
+            lane: "tests".to_owned(),
+            question: "parser subscript behavior".to_owned(),
+            claim: "Parser subscript finding".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "proof-link-fingerprint".to_owned(),
+            evidence: vec!["receipt".to_owned()],
+            dedupe_key: "parser-subscript".to_owned(),
+            source: "test".to_owned(),
+        };
         let graph = build_active_claim_graph(
             head,
-            &[],
+            std::slice::from_ref(&observation),
             &[ReviewInlineComment {
                 lane: "tests".to_owned(),
                 severity: "high".to_owned(),
@@ -1052,7 +1155,7 @@ mod tests {
                 path: "src/parser.rs".to_owned(),
                 line: 12,
                 side: "RIGHT".to_owned(),
-                body: "Finding".to_owned(),
+                body: "Parser subscript finding".to_owned(),
                 evidence: "receipt".to_owned(),
                 suggestion: None,
             }],

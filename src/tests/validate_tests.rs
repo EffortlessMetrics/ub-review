@@ -512,6 +512,71 @@ index 1111111..2222222 100644
 }
 
 #[test]
+fn proof_intent_validation_rejects_unsafe_targets_and_clamps_value() -> Result<()> {
+    let lane = model_lane(
+        "tests-oracle",
+        "Test oracle review",
+        &["ripr"],
+        "Request focused proof.",
+    );
+    let json = r#"{
+      "proof_intents": [
+        {
+          "claim_id": "claim-bad",
+          "question": "does traversal execute?",
+          "expected_answer_shape": "the target is rejected",
+          "proof_kind": "focused-test",
+          "target": "../escape",
+          "estimated_value": "urgent"
+        },
+        {
+          "claim_id": "claim-good",
+          "question": "does the parser test pass?",
+          "expected_answer_shape": "focused pass or failure",
+          "proof_kind": "focused-test",
+          "target": "parser::list_item",
+          "estimated_value": "urgent"
+        }
+      ]
+    }"#;
+    let parse_path = Path::new("target/ub-review/review/model/tests-oracle/content.json");
+    let (output, degraded) = crate::parse_lane_model_output_or_degrade(json, parse_path)?;
+    anyhow::ensure!(!degraded);
+
+    let mut inline_comments = Vec::new();
+    let mut summary_only_findings = Vec::new();
+    let mut observations = Vec::new();
+    let mut proof_requests = Vec::new();
+    let mut proof_intents = Vec::new();
+    let mut issue_candidates = Vec::new();
+    apply_model_output(
+        &lane,
+        output,
+        &BTreeSet::new(),
+        ModelOutputSinks {
+            inline_comments: &mut inline_comments,
+            summary_only_findings: &mut summary_only_findings,
+            model_observations: &mut observations,
+            proof_requests: &mut proof_requests,
+            proof_intents: &mut proof_intents,
+            issue_candidates: &mut issue_candidates,
+        },
+    );
+    anyhow::ensure!(proof_intents.len() == 1);
+    anyhow::ensure!(proof_intents[0].target == "parser::list_item");
+    anyhow::ensure!(proof_intents[0].estimated_value == "medium");
+    anyhow::ensure!(observations.iter().any(|observation| {
+        observation.question == "proof-intent-validation"
+            && observation.kind == "missing-evidence"
+            && observation
+                .evidence
+                .iter()
+                .any(|item| item.contains("../escape"))
+    }));
+    Ok(())
+}
+
+#[test]
 fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {
     let lane = model_lane(
         "source-route",

@@ -15003,6 +15003,7 @@ required_proof_unprooven = true
         let plan = test_plan(Vec::new());
         let findings = vec![non_substantive_summary_finding()];
         let proof_receipts = vec![test_proof_receipt("discriminating", "ok")];
+        let model_lanes = vec![model_lane_receipt("tests-oracle", "ok")];
         let state = build_review_terminal_state(TerminalStateInput {
             args: &args,
             run_pass: super::RunPass::Manual,
@@ -15013,7 +15014,7 @@ required_proof_unprooven = true
             inline_comments: &[],
             summary_only_findings: &findings,
             summary_only_body: SummaryOnlyBodyPolicy::PostSubstantive,
-            model_lanes: &[],
+            model_lanes: &model_lanes,
             missing_or_failed_sensor_evidence: &[],
             missing_or_failed_model_evidence: &[],
             proof_receipts: &proof_receipts,

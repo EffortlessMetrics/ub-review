@@ -35,7 +35,7 @@ Do not reopen these without a concrete failing receipt.
 - Focused-build fill-ledger entries carry matching proof and lease anchors.
 - Receipt routes use exact `proof_receipts.json#...` and
   `resource_leases.json#...` pointers.
-- Adaptor handoff reflects `fill-ledger`, `ripr` exposure gaps, and
+- Adapter handoff reflects `fill-ledger`, `ripr` exposure gaps, and
   current `audit-ci` / `setup-ci` boundaries.
 - Work queue and fill-ledger surfaces exist with verifier coverage.
 - Proof requests are terminalized before final artifacts; receipted requests
@@ -100,7 +100,7 @@ validates their claim, question, expected answer, typed proof kind, and safe
 repository target before routing them into the planner artifacts. Legacy
 command-shaped requests remain accepted for compatibility.
 
-**Gap:** The executor still consumes the legacy request/task adaptors for
+**Gap:** The executor still consumes the legacy request/task adapters for
 execution. A future seam must resolve typed intent targets to approved task
 templates before model-native intents can select execution directly.
 
