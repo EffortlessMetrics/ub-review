@@ -29,7 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "f52bb08ea034beb14ca764576243c3678767ee44"
+          test "$(git rev-parse HEAD^)" = "8c22640b030a2ea326ba2da22557b3f97a667ebd"
 
       - name: Install Rust 1.95
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
