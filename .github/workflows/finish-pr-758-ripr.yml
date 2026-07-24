@@ -1,0 +1,87 @@
+name: Finish PR 758 RIPR receipt
+
+on:
+  push:
+    branches: [feat/review-experience-contract]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: finish-pr-758-ripr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  finish:
+    if: github.ref_name == 'feat/review-experience-contract'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          ref: feat/review-experience-contract
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Verify expected parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "18388969040e28efce17bf828ca8d3e668d732d8"
+
+      - name: Install Rust 1.95
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: 1.95.0
+          components: rustfmt,clippy
+
+      - name: Apply bounded ceiling and receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/raise_pr758_ripr_ceiling.py
+          cargo fmt --all
+          git diff --check
+
+      - name: Compile
+        run: cargo check --workspace --all-targets --locked
+
+      - name: Focused tool-gate policy tests
+        run: cargo test --locked --bin ub-review tool_gate_outcome_ -- --test-threads=1
+
+      - name: Full binary suite
+        run: cargo test --locked --bin ub-review -- --test-threads=4
+
+      - name: Artifact verifier self-test
+        run: python scripts/verify-bun-review-artifacts.py --self-test
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Policy check
+        run: cargo xtask policy-check
+
+      - name: Formatting and diff hygiene
+        run: |
+          cargo fmt --all -- --check
+          git diff --check
+
+      - name: Commit and push validated receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/finish-pr-758-ripr.yml
+          rm scripts/raise_pr758_ripr_ceiling.py
+          git add \
+            .ub-review.toml \
+            policy/allow.toml \
+            src/main.rs \
+            src/tools.rs \
+            .github/workflows/finish-pr-758-ripr.yml \
+            scripts/raise_pr758_ripr_ceiling.py
+          git diff --cached --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(policy): receipt PR 758 RIPR ceiling"
+          git push origin HEAD:feat/review-experience-contract
