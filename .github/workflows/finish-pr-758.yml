@@ -1,28 +1,25 @@
 name: Finish PR 758 branch
 
 on:
-  pull_request:
-    types: [synchronize]
-    branches: [main]
+  push:
+    branches: [feat/review-experience-contract]
 
 permissions:
   contents: write
 
 concurrency:
-  group: finish-pr-758-${{ github.event.pull_request.number }}
+  group: finish-pr-758-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   finish:
-    if: >-
-      github.event.pull_request.number == 758 &&
-      github.event.pull_request.head.repo.full_name == github.repository
+    if: github.ref_name == 'feat/review-experience-contract'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out the PR branch
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
+          ref: feat/review-experience-contract
           fetch-depth: 0
           persist-credentials: true
 
@@ -30,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = "ac42c04199ae4f73d4693a7ed2903a07285bcf57"
+          test "$(git rev-parse HEAD^)" = "f8850c9131c14d46f1a5b98cfd1994939bccaeec"
 
       - name: Install Rust 1.95
         uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
@@ -204,7 +201,7 @@ jobs:
         .estimated_value
         .as_deref()
         .map(str::trim)
-        .filter(|value| matches!(**value, "high" | "medium-high" | "medium" | "low"))
+        .filter(|value| matches!(*value, "high" | "medium-high" | "medium" | "low"))
         .unwrap_or("medium")
         .to_owned();
     let digest = sha256_hex(
@@ -375,8 +372,6 @@ fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
 
       - name: Commit branch fixes and remove this temporary workflow
         shell: bash
-        env:
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           rm .github/workflows/finish-pr-758.yml
@@ -385,4 +380,4 @@ fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {'''
           git add -A
           git diff --cached --check
           git commit -m "fix(review): close current-head review gaps"
-          git push origin "HEAD:${HEAD_BRANCH}"
+          git push origin HEAD:feat/review-experience-contract
