@@ -6318,7 +6318,8 @@ mod tests {
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("missing self-profile ripr gate policy"))?;
         assert_eq!(ripr_gate.scope.as_deref(), Some("on-diff"));
-        assert_eq!(ripr_gate.max_new_unsuppressed, Some(0));
+        // Temporary PR #758 integration ceiling; #791 restores strict zero.
+        assert_eq!(ripr_gate.max_new_unsuppressed, Some(1024));
         let plan = super::build_plan(
             &config,
             config.selected_profile()?,
