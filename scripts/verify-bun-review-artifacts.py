@@ -5582,6 +5582,11 @@ GATE_OUTCOME_REASON_KINDS = {
     "internal",
 }
 
+GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS = {
+    "required-sensor",
+    "required-tool-timeout",
+}
+
 # gate_watchdog.json (#745): every reason maps to exactly one state, so a
 # reason/state mismatch is a classifier bug. A `terminal` state is the only one
 # allowed to carry a conclusion; missing or malformed evidence must classify
@@ -5913,6 +5918,18 @@ def require_gate_outcome(root: pathlib.Path) -> None:
             fail(f"gate outcome {field} is invalid: {value!r}")
     if conclusion == "pass" and outcome.get("evidence_gaps_blocking", 0) > 0:
         fail("gate outcome passed with blocking evidence gaps recorded")
+    unavailable_reason_count = sum(
+        1
+        for reason in reasons
+        if isinstance(reason, dict)
+        and reason.get("kind") in GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS
+    )
+    if outcome.get("evidence_gaps_blocking") != unavailable_reason_count:
+        fail(
+            "gate outcome evidence_gaps_blocking must equal "
+            f"its unavailable reason count: gaps={outcome.get('evidence_gaps_blocking')!r} "
+            f"unavailable_reasons={unavailable_reason_count}"
+        )
     skip_path = root / "review/github-review-skip.json"
     if conclusion == "fail" and skip_path.is_file():
         skip = load_json(skip_path)
@@ -10160,6 +10177,12 @@ def self_test_gate_outcome_contract() -> None:
             True,
             "passed with blocking evidence gaps",
         ),
+        (
+            "blocking gaps without unavailable reason",
+            outcome(evidence_gaps_blocking=1),
+            True,
+            "must equal its unavailable reason count",
+        ),
     ]
     for label, fixture, with_receipt, expected in cases:
         root = write_root(fixture, with_receipt_file=with_receipt)
@@ -10183,7 +10206,7 @@ def self_test_gate_outcome_contract() -> None:
         return base
 
     def write_timeout_root(reason: dict) -> "pathlib.Path":
-        root = write_root(outcome(reasons=[reason]))
+        root = write_root(outcome(reasons=[reason], evidence_gaps_blocking=1))
         sensor_dir = root / "sensors/ripr"
         sensor_dir.mkdir(parents=True)
         (sensor_dir / "ub-review-sensor-status.json").write_text(
