@@ -707,6 +707,7 @@ mod tests {
         let graph = build_shadow_claim_graph("abc123");
         assert_eq!(graph.schema, "ub-review.claim_graph.v1");
         assert_eq!(graph.head_sha, "abc123");
+        assert_ne!(graph.head_sha, build_shadow_claim_graph("def456").head_sha);
         assert!(graph.claims.is_empty());
         assert!(graph.conflicts.is_empty());
         assert!(graph.evidence_gaps.is_empty());

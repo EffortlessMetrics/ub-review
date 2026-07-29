@@ -241,10 +241,10 @@ fn github_thread_records(
                 .get("commit_id")
                 .and_then(serde_json::Value::as_str)
                 .map(str::to_owned);
-            let head_binding = match commit_id.as_deref() {
-                Some(commit) if commit.eq_ignore_ascii_case(current_head) => "current",
-                Some(_) => "stale",
-                None => "unbound",
+            let head_binding = match (kind, commit_id.as_deref()) {
+                ("review-comments", Some(commit)) if commit == current_head => "current",
+                ("review-comments", Some(_)) => "stale",
+                _ => "unbound",
             };
             ReviewThreadRecord {
                 id: item
@@ -286,56 +286,6 @@ fn github_thread_records(
             }
         })
         .collect()
-}
-
-#[cfg(test)]
-mod structured_thread_tests {
-    use super::*;
-
-    #[test]
-    fn github_records_preserve_anchor_and_exact_head() -> Result<()> {
-        let value = serde_json::json!([{
-            "id": 42,
-            "user": {"login": "reviewer"},
-            "body": "Postfix is discarded after the list item.",
-            "path": "src/parser.rs",
-            "line": 17,
-            "commit_id": "abc123",
-            "state": "COMMENTED"
-        }]);
-
-        let records = github_thread_records("review-comments", &value, "abc123");
-        let record = records
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
-        anyhow::ensure!(record.id == "42");
-        anyhow::ensure!(record.path.as_deref() == Some("src/parser.rs"));
-        anyhow::ensure!(record.line == Some(17));
-        anyhow::ensure!(record.head_binding == "current");
-        let stale_records = github_thread_records("review-comments", &value, "def456");
-        anyhow::ensure!(
-            stale_records
-                .first()
-                .is_some_and(|item| item.head_binding == "stale")
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn unbound_issue_comment_cannot_certify_current_head() -> Result<()> {
-        let value = serde_json::json!([{
-            "node_id": "IC_kwDO",
-            "user": {"login": "maintainer"},
-            "body": "Accepted tradeoff"
-        }]);
-
-        let records = github_thread_records("issue-comments", &value, "abc123");
-        let record = records
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
-        anyhow::ensure!(record.head_binding == "unbound");
-        Ok(())
-    }
 }
 
 pub(crate) fn run_github_api_get(root: &Path, url: &str, auth: &str) -> Result<serde_json::Value> {
@@ -601,4 +551,71 @@ pub(crate) fn pr_thread_reuse_guidance(context: &PrThreadContext) -> Option<&'st
 - Before emitting a verification question or proof request, compare it with the seeded thread. If the same concern is already answered and the current diff does not reopen it, emit a `resolved-check` observation or `failed_objection` instead of a fresh candidate.\n\
 - If the current diff reopens an answered concern, cite the changed file/line or proof receipt that makes the prior answer stale.\n",
     )
+}
+
+#[cfg(test)]
+mod structured_thread_tests {
+    use super::*;
+
+    #[test]
+    fn github_records_preserve_anchor_and_exact_head() -> Result<()> {
+        let value = serde_json::json!([{
+            "id": 42,
+            "user": {"login": "reviewer"},
+            "body": "Postfix is discarded after the list item.",
+            "path": "src/parser.rs",
+            "line": 17,
+            "commit_id": "abc123",
+            "state": "COMMENTED"
+        }]);
+
+        let records = github_thread_records("review-comments", &value, "abc123");
+        let record = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
+        anyhow::ensure!(record.id == "42");
+        anyhow::ensure!(record.path.as_deref() == Some("src/parser.rs"));
+        anyhow::ensure!(record.line == Some(17));
+        anyhow::ensure!(record.head_binding == "current");
+        let stale_records = github_thread_records("review-comments", &value, "def456");
+        anyhow::ensure!(
+            stale_records
+                .first()
+                .is_some_and(|item| item.head_binding == "stale")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unbound_issue_comment_cannot_certify_current_head() -> Result<()> {
+        let value = serde_json::json!([{
+            "node_id": "IC_kwDO",
+            "user": {"login": "maintainer"},
+            "body": "Accepted tradeoff"
+        }]);
+
+        let records = github_thread_records("issue-comments", &value, "abc123");
+        let record = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
+        anyhow::ensure!(record.head_binding == "unbound");
+        Ok(())
+    }
+
+    #[test]
+    fn issue_comment_with_matching_commit_id_stays_unbound() -> Result<()> {
+        let value = serde_json::json!([{
+            "id": 43,
+            "user": {"login": "maintainer"},
+            "body": "Issue-comment-shaped data must not certify delivery.",
+            "commit_id": "abc123"
+        }]);
+
+        let records = github_thread_records("issue-comments", &value, "abc123");
+        let record = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one structured issue comment record"))?;
+        anyhow::ensure!(record.head_binding == "unbound");
+        Ok(())
+    }
 }

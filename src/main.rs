@@ -12299,7 +12299,7 @@ index 1111111..2222222 100644
         args.pr_thread_context = "thread.md".to_owned();
         args.pr_thread_context_max_bytes = 40;
 
-        let context = collect_pr_thread_context(temp.path(), &args, "HEAD")?;
+        let context = collect_pr_thread_context(temp.path(), &args, "current-head")?;
         let rendered = render_pr_thread_context(&context);
 
         assert_eq!(context.status, "seeded");
@@ -12439,7 +12439,7 @@ index 1111111..2222222 100644
         args.github_api_url = github_api_url;
         args.pr_thread_context_max_bytes = 8_192;
 
-        let context = collect_pr_thread_context(temp.path(), &args, "HEAD")?;
+        let context = collect_pr_thread_context(temp.path(), &args, "current-head")?;
         let requests = join_fake_github_thread_api(handle)?;
         let rendered = render_pr_thread_context(&context);
 
@@ -12478,7 +12478,7 @@ index 1111111..2222222 100644
         assert!(rendered.contains("ub-review previous question resolved"));
         assert!(rendered.contains("`src/lib.rs`:`12`"));
         assert!(!rendered.contains("thread-token-redacted"));
-        anyhow::ensure!(context.threads.len() == 3);
+        anyhow::ensure!(context.threads.len() == 4);
         let inline = context
             .threads
             .iter()
@@ -12487,7 +12487,13 @@ index 1111111..2222222 100644
         anyhow::ensure!(inline.path.as_deref() == Some("src/lib.rs"));
         anyhow::ensure!(inline.line == Some(12));
         anyhow::ensure!(inline.commit_id.as_deref() == Some("current-head"));
-        anyhow::ensure!(inline.head_binding == "stale");
+        anyhow::ensure!(inline.head_binding == "current");
+        let stale = context
+            .threads
+            .iter()
+            .find(|thread| thread.id == "104")
+            .ok_or_else(|| anyhow::anyhow!("structured stale inline thread missing"))?;
+        anyhow::ensure!(stale.head_binding == "stale");
         Ok(())
     }
 
@@ -22302,6 +22308,15 @@ index 1111111..2222222 100644
                     "line": 12,
                     "commit_id": "current-head",
                     "body": "Inline thread points at the route proof receipt."
+                },
+                {
+                    "id": 104,
+                    "created_at": "2026-06-03T10:11:00Z",
+                    "user": {"login": "maintainer"},
+                    "path": "src/lib.rs",
+                    "line": 13,
+                    "commit_id": "old-head",
+                    "body": "Older inline thread must remain stale."
                 }
             ]))?
         } else {
