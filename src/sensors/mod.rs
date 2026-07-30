@@ -18,6 +18,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
+use crate::system_detect::command_on_path;
 use crate::*;
 
 /// Run a set of sensors on a bounded worker pool. Individual sensor failures

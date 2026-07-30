@@ -2,6 +2,7 @@
 //! mapping, cost computation (runner, tokens, cache, floor seconds),
 //! and prompt cache metrics (cleanup train step 29, pure code motion).
 
+use crate::test_parse::push_unique;
 use crate::*;
 
 pub(crate) fn fill_sensor_entry(

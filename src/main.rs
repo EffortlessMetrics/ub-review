@@ -100,7 +100,7 @@ pub(crate) use review_compiler::*;
 mod cost_artifact;
 pub(crate) use cost_artifact::*;
 mod quality_artifact;
-pub(crate) use quality_artifact::*;
+use quality_artifact::{write_quality_receipt_artifact, write_quality_trend_artifact};
 mod quality_github;
 pub(crate) use quality_github::*;
 mod artifact_writers;
@@ -109,9 +109,8 @@ mod witness;
 pub(crate) use witness::*;
 mod work_queue;
 pub(crate) use work_queue::*;
-mod test_parse;
-pub(crate) use test_parse::*;
 mod observation_merge;
+mod test_parse;
 pub(crate) use observation_merge::*;
 mod shared_context_render;
 pub(crate) use shared_context_render::*;
@@ -132,9 +131,11 @@ pub(crate) use summary_render::*;
 mod post_run_utils;
 pub(crate) use post_run_utils::*;
 mod system_detect;
-pub(crate) use system_detect::*;
+use system_detect::{
+    command_path, command_version, detect_disk_free_mb, detect_load_1m, detect_mem_available_mb,
+    doctor_binary_install_status, git_tree_sha, profile_config_hash,
+};
 mod diff_posture;
-pub(crate) use diff_posture::*;
 mod run_args;
 pub(crate) use run_args::*;
 mod post_command;
@@ -5474,64 +5475,63 @@ mod tests {
 
     use anyhow::{Context as _, Result, bail};
 
+    use super::diff_posture::{NO_LGTM_POSTURE, default_lanes_for_diff_context};
+    use super::quality_artifact::{build_quality_receipt, build_quality_trend_artifact};
+    use super::test_parse::command_display;
     use super::{
         BOX_FROM_ALLOCATION_FALSE_PREMISE_DEDUPE_KEY, BoxState, CandidateRecord, CommandStatus,
         Config, DEFAULT_REVIEW_PROFILE, DiffClass, DiffContext, DiffFlags, EventLog, FailOnGate,
         FollowUpOutputRecord, FollowUpQuestionTask, GateCheckArgs, GitHubReview,
         GitHubReviewComment, IssueBrokerPlanEntry, IssueCandidate, IssueCandidateEvidence,
         LaneModelOutput, LanePlan, LanguageMix, Limits, MinimaxPromptCache, ModelAssignment,
-        ModelCacheUsage, ModelCallOutcome, ModelCandidateComment, ModelCandidateFinding,
-        ModelCandidateObservation, ModelEvidenceIssue, ModelFailedObjection, ModelLaneReceipt,
+        ModelCacheUsage, ModelCallOutcome, ModelEvidenceIssue, ModelLaneReceipt,
         ModelLaneTaskResult, ModelMode, ModelOutputSinks, ModelProvider, ModelProviderPolicy,
-        ModelRunContext, NO_LGTM_POSTURE, Observation, ObservationInput, OpenCodeEndpointKindArg,
-        Plan, PostArgs, PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg,
-        ProofBudget, ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest,
-        ProofRequestGroup, ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision,
-        RefuterOutput, RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs,
-        ReviewBodyAudience, ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy,
-        ReviewCompilerInput, ReviewDepth, ReviewInlineComment, ReviewMetricsInput,
-        ReviewTerminalState, RunArgs, RunCompletion, RunMode, STANDARD_LANE_WIDTH,
-        STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs, SensorEvidenceIssue,
-        SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy, SummaryOnlyFinding,
-        TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass, ToolGateOutcomeEntry,
-        ToolGateOutcomeMetrics, ToolGatePolicy, append_follow_up_evidence_witnesses,
-        append_follow_up_proof_requests, apply_model_output, apply_plan_selectors,
+        ModelRunContext, Observation, ObservationInput, OpenCodeEndpointKindArg, Plan, PostArgs,
+        PostingMode, PrDecisionContext, PrThreadContext, Profile, ProfileArg, ProofBudget,
+        ProofCommandReceipt, ProofLeaseBudget, ProofReceipt, ProofRequest, ProofRequestGroup,
+        ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision, RefuterOutput,
+        RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs, ReviewBodyAudience,
+        ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
+        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
+        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
+        ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
+        append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
         apply_refuter_output, apply_runtime_profile_limits, build_candidate_records,
         build_cost_receipt, build_final_orchestrator_plan, build_issue_broker_plan,
         build_orchestrator_plan, build_review_metrics, build_review_terminal_state,
         build_witness_records, builtin_profiles, candidate_matches_inline_comment,
         candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
         classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
-        cmd_post, collect_pr_thread_context, collect_sensor_evidence_issues, combined_observations,
-        command_display, compile_review_surface, dedupe_inline_comments, deep_minimax_lanes,
-        default_lanes, direct_minimax_spec, execute_issue_broker, extract_model_content,
-        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
-        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
-        follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
-        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
-        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
-        model_auth_header, model_json_payload, model_lane, model_request_payload,
-        model_response_shape, normalize_run_args, observation_summary_artifacts,
-        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
-        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
-        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
-        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
-        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
-        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
-        run_available_model_lanes, run_available_model_lanes_with_runner, run_gate_failure_message,
-        run_refuter_pass, runtime_fallback_retry_spec, runtime_profile_from_toml,
-        runtime_profile_override, selected_provider_spec, sensor_job_count, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
-        validate_failed_objection, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_inline_candidate,
-        validate_model_observation, validate_pr_review_body_policy, validate_run_args,
-        validate_summary_only_candidate, wait_for_child_output_files, write_candidate_artifacts,
-        write_final_orchestrator_artifact, write_follow_up_evidence_artifact,
-        write_follow_up_output_artifacts, write_github_review_payload, write_issue_broker_results,
-        write_issue_capture_artifacts, write_observation_artifacts, write_orchestrator_artifacts,
-        write_proof_receipt_artifacts, write_proof_request_artifacts,
-        write_resolved_candidate_artifacts, write_resource_lease_artifacts, write_review_artifacts,
-        write_sensor_status, write_witness_artifacts,
+        cmd_post, collect_pr_thread_context, combined_observations, compile_review_surface,
+        dedupe_inline_comments, deep_minimax_lanes, default_lanes, direct_minimax_spec,
+        execute_issue_broker, extract_model_content, fallback_provider_spec_for_lane,
+        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
+        follow_up_output_record, follow_up_provider_assignment_with_key_state,
+        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
+        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
+        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
+        model_request_payload, model_response_shape, normalize_run_args,
+        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
+        proof_planner_assignment_with_key_state, provider_concurrency_limits,
+        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
+        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
+        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
+        resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
+        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
+        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
+        wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
+        write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
+        write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
+        write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
+        write_proof_request_artifacts, write_resolved_candidate_artifacts,
+        write_resource_lease_artifacts, write_review_artifacts, write_sensor_status,
+        write_witness_artifacts,
     };
 
     #[test]
@@ -5587,17 +5587,20 @@ mod tests {
     #[test]
     fn doctor_binary_install_status_reports_path_state_and_fix() {
         let current = PathBuf::from("/opt/ub-review/bin/ub-review");
-        let on_path =
-            super::doctor_binary_install_status_from_paths(Some(&current), Some(&current));
+        let on_path = super::system_detect::doctor_binary_install_status_from_paths(
+            Some(&current),
+            Some(&current),
+        );
         assert_eq!(on_path, "on PATH as /opt/ub-review/bin/ub-review");
 
-        let missing_path = super::doctor_binary_install_status_from_paths(Some(&current), None);
+        let missing_path =
+            super::system_detect::doctor_binary_install_status_from_paths(Some(&current), None);
         assert!(missing_path.contains("not on PATH"));
         assert!(missing_path.contains("add /opt/ub-review/bin to PATH"));
         assert!(missing_path.contains("install-mode=path"));
         assert!(missing_path.contains("binary-path=/opt/ub-review/bin/ub-review"));
 
-        let shadowed = super::doctor_binary_install_status_from_paths(
+        let shadowed = super::system_detect::doctor_binary_install_status_from_paths(
             Some(&current),
             Some(Path::new("/usr/local/bin/ub-review")),
         );
@@ -5613,17 +5616,6 @@ mod tests {
         assert_eq!(
             classify_diff_class(&["docs/readme.md".to_owned()], &flags),
             DiffClass::DocsOnly
-        );
-    }
-
-    #[test]
-    fn unsafe_tokens_trigger_native_risk() {
-        let flags = classify_diff(&["src/lib.rs".to_owned()], "+ let p = bytes.as_ptr();");
-        assert!(flags.rust_changed);
-        assert!(flags.unsafe_or_native_risk);
-        assert_eq!(
-            classify_diff_class(&["src/lib.rs".to_owned()], &flags),
-            DiffClass::SourceUb
         );
     }
 
@@ -5707,8 +5699,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -5740,8 +5731,7 @@ mod tests {
         plan.diff_class = DiffClass::WorkflowTooling;
         plan.changed_files = files.clone();
         plan.language_mix = super::classify_language_mix(&files);
-        plan.lanes =
-            super::default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
+        plan.lanes = default_lanes_for_diff_context(DiffClass::WorkflowTooling, &plan.language_mix);
         let mut args = test_run_args(std::path::PathBuf::from("out"));
         args.lane_width = 10;
         let lanes = review_lanes_for_args(&plan, &args);
@@ -5964,53 +5954,6 @@ mod tests {
                 profile.name
             );
         }
-    }
-
-    #[test]
-    fn gh_runner_profiles_carry_ripr_lease_override_quick_boxes_do_not() -> Result<()> {
-        let profiles = builtin_profiles();
-        for name in ["gh-runner", "gh-runner-standard", "gh-runner-full"] {
-            let profile = profiles
-                .iter()
-                .find(|profile| profile.name == name)
-                .ok_or_else(|| anyhow::anyhow!("missing builtin profile {name}"))?;
-            assert_eq!(
-                profile.tool_timeouts.get("ripr"),
-                Some(&720),
-                "{name} must carry the ripr lease override"
-            );
-        }
-        for name in ["cx23", "cx33", "cx43"] {
-            let profile = profiles
-                .iter()
-                .find(|profile| profile.name == name)
-                .ok_or_else(|| anyhow::anyhow!("missing builtin profile {name}"))?;
-            assert!(
-                profile.tool_timeouts.is_empty(),
-                "{name} keeps one-size sensor leases"
-            );
-        }
-
-        let mut config: Config = toml::from_str(include_str!("../.ub-review.toml"))?;
-        config.merge_defaults();
-        let profile = config.selected_profile()?;
-        assert_eq!(profile.tool_timeouts.get("ripr"), Some(&720));
-        let ripr = config
-            .tools
-            .get("ripr")
-            .ok_or_else(|| anyhow::anyhow!("ripr tool missing from repo config"))?;
-        assert!(
-            ripr.provided.timeout_sec,
-            "this repo pins ripr's lease explicitly in .ub-review.toml"
-        );
-        let resolved = super::resolve_sensor_timeout_sec(ripr, profile);
-        assert_eq!(
-            resolved,
-            ripr.timeout_sec.min(profile.budgets.default_timeout_sec),
-            "repo-pinned lease wins over the profile override"
-        );
-        assert_ne!(resolved, 720, "profile table must not shadow repo config");
-        Ok(())
     }
 
     #[test]
@@ -6264,132 +6207,6 @@ mod tests {
             None,
         );
         assert_eq!(resolved_plan["gate"], resolved_profile["gate"]);
-        Ok(())
-    }
-
-    #[test]
-    fn unsafe_review_swarm_recommended_config_loads_advisory_floor() -> Result<()> {
-        let mut config = Config::from_toml_with_policy_receipts(include_str!(
-            "../configs/unsafe-review-swarm.ub-review.toml"
-        ))?;
-        config.merge_defaults();
-
-        assert!(
-            config.policy_errors.is_empty(),
-            "recommended config should not rely on stripped or deprecated keys: {:?}",
-            config.policy_errors
-        );
-        assert_eq!(config.review_profile, "bun-ub-v0");
-        assert_eq!(config.profile, "gh-runner-full");
-        assert_eq!(config.repo.kind, "rust");
-        assert_eq!(config.repo.ledger, "docs/dogfood");
-        assert_eq!(
-            config.review_body.summary_only_body,
-            SummaryOnlyBodyPolicy::PostSubstantive
-        );
-        assert_eq!(config.gate.required_check, "ub-review/gate");
-        assert_eq!(
-            config.gate.post_review_on,
-            vec!["opened".to_owned(), "ready_for_review".to_owned()]
-        );
-        assert!(config.gate.blocking.required_proof_unproven);
-        assert!(!config.gate.blocking.tool_gate_missing_evidence);
-        assert_eq!(config.providers.policy, "primary-with-fallback");
-
-        let expected_proofs = [(
-            "check-pr",
-            "cargo run --locked -p xtask -- check-pr",
-            "focused-build",
-            300_u64,
-        )];
-        assert_eq!(config.proof.required.len(), expected_proofs.len());
-        for (id, command, cost, timeout_sec) in expected_proofs {
-            let policy = config
-                .proof
-                .required
-                .iter()
-                .find(|policy| policy.id == id)
-                .ok_or_else(|| anyhow::anyhow!("missing required proof {id}"))?;
-            assert!(policy.enabled);
-            assert!(policy.required);
-            assert_eq!(policy.command, command);
-            assert_eq!(policy.cost.as_deref(), Some(cost));
-            assert_eq!(policy.timeout_sec, timeout_sec);
-            assert_eq!(
-                super::proof_request_status(&policy.command, cost),
-                "requested",
-                "unsafe-review-swarm required proof {id} must be brokerable"
-            );
-        }
-
-        for id in ["cargo-fmt", "cargo-check", "cargo-test", "cargo-clippy"] {
-            let tool = config
-                .tools
-                .get(id)
-                .ok_or_else(|| anyhow::anyhow!("missing required cargo tool {id}"))?;
-            assert!(tool.enabled, "{id} should be enabled");
-            assert!(tool.required, "{id} should be required");
-            assert_eq!(tool.default, super::Trigger::Always);
-        }
-        let unsafe_review = config
-            .tools
-            .get("unsafe-review")
-            .ok_or_else(|| anyhow::anyhow!("missing unsafe-review tool"))?;
-        assert!(unsafe_review.enabled);
-        assert!(unsafe_review.required);
-        let ripr = config
-            .tools
-            .get("ripr")
-            .ok_or_else(|| anyhow::anyhow!("missing ripr tool"))?;
-        assert!(ripr.enabled);
-        assert!(!ripr.required);
-        let cargo_allow = config
-            .tools
-            .get("cargo-allow")
-            .ok_or_else(|| anyhow::anyhow!("missing cargo-allow tool"))?;
-        assert!(cargo_allow.enabled);
-        assert!(!cargo_allow.required);
-
-        let plan = super::build_plan(
-            &config,
-            config.selected_profile()?,
-            &BoxState {
-                cpus: 4,
-                free_mem_mb: Some(8_000),
-                free_disk_mb: Some(20_000),
-                load_1m: Some(0.5),
-                github_actions: true,
-            },
-            &test_diff(),
-            Path::new("."),
-            false,
-        );
-        let unsafe_review_sensor = plan
-            .sensors
-            .iter()
-            .find(|sensor| sensor.id == "unsafe-review")
-            .ok_or_else(|| anyhow::anyhow!("missing planned unsafe-review sensor"))?;
-        assert!(
-            unsafe_review_sensor.required,
-            "unsafe-review remains required when its trigger matches"
-        );
-        for id in ["cargo-fmt", "cargo-check", "cargo-test", "cargo-clippy"] {
-            let sensor = plan
-                .sensors
-                .iter()
-                .find(|sensor| sensor.id == id)
-                .ok_or_else(|| anyhow::anyhow!("missing planned cargo sensor {id}"))?;
-            assert!(sensor.run, "{id} should run in every advisory swarm pass");
-            assert!(sensor.required, "{id} should stay in the required floor");
-        }
-        let resolved_profile =
-            super::resolved_profile_artifact(&config, config.selected_profile()?);
-        assert_eq!(
-            resolved_profile["proof"]["required"]
-                .as_array()
-                .map(Vec::len),
-            Some(expected_proofs.len())
-        );
         Ok(())
     }
 
@@ -7197,45 +7014,6 @@ diff_classes = ["docs-only"]
     }
 
     #[test]
-    fn cargo_allow_foreign_dialect_reason_wins_before_box_guard() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let root = temp.path();
-        fs::create_dir_all(root.join("policy"))?;
-        fs::write(
-            root.join("policy/allow.toml"),
-            "schema_version = \"1\"\ntool = \"xtask-policy\"\n",
-        )?;
-        let config = Config::default();
-        let profile = config.selected_profile()?;
-        let cargo_allow = config
-            .tools
-            .get("cargo-allow")
-            .ok_or_else(|| anyhow::anyhow!("cargo-allow tool policy missing"))?;
-        let flags = DiffFlags {
-            source_changed: true,
-            ..DiffFlags::default()
-        };
-        let diff = DiffContext {
-            base: "HEAD~1".to_owned(),
-            head: "HEAD".to_owned(),
-            changed_files: vec!["src/lib.rs".to_owned()],
-            patch: "diff --git a/src/lib.rs b/src/lib.rs\n".to_owned(),
-            flags,
-            diff_class: DiffClass::SourceGeneral,
-        };
-
-        let plan = super::plan_tool(cargo_allow, profile, &diff, root, false, false);
-
-        assert!(!plan.run);
-        assert_eq!(
-            plan.reason,
-            "policy/allow.toml is not a cargo-allow-dialect ledger; add \
-             policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)"
-        );
-        Ok(())
-    }
-
-    #[test]
     fn partial_tool_config_inherits_builtin_routing_defaults() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let mut config: Config = toml::from_str(
@@ -7362,44 +7140,6 @@ enabled = false
         assert_eq!(actionlint.artifact_budget_mb, 45);
         assert!(actionlint.requires_lease);
         assert!(!actionlint.enabled);
-        Ok(())
-    }
-
-    #[test]
-    fn sensor_timeout_resolves_per_profile_with_repo_override_winning() -> Result<()> {
-        let tool = super::ToolPolicy {
-            id: "ripr".to_owned(),
-            command: "ripr".to_owned(),
-            default: super::Trigger::Always,
-            timeout_sec: 240,
-            ..super::ToolPolicy::default()
-        };
-        let diff = test_diff();
-        let temp = tempfile::tempdir()?;
-        let quick = Profile::default();
-        let mut hosted = Profile::default();
-        hosted.tool_timeouts.insert("ripr".to_owned(), 720);
-
-        let quick_plan = super::plan_tool(&tool, &quick, &diff, temp.path(), true, false);
-        let hosted_plan = super::plan_tool(&tool, &hosted, &diff, temp.path(), true, false);
-        assert!(quick_plan.run, "{}", quick_plan.reason);
-        assert!(hosted_plan.run, "{}", hosted_plan.reason);
-        assert_eq!(quick_plan.timeout_sec, 240, "no override: built-in lease");
-        assert_eq!(
-            hosted_plan.timeout_sec, 720,
-            "profile [tool_timeouts] applies"
-        );
-
-        let mut repo_tool = tool.clone();
-        repo_tool.timeout_sec = 600;
-        repo_tool.provided.timeout_sec = true;
-        let repo_plan = super::plan_tool(&repo_tool, &hosted, &diff, temp.path(), true, false);
-        assert_eq!(repo_plan.timeout_sec, 600, "explicit repo config wins");
-
-        let mut capped_profile = hosted.clone();
-        capped_profile.budgets.default_timeout_sec = 300;
-        let capped_plan = super::plan_tool(&tool, &capped_profile, &diff, temp.path(), true, false);
-        assert_eq!(capped_plan.timeout_sec, 300, "budget cap still bounds");
         Ok(())
     }
 
@@ -7534,48 +7274,6 @@ max_new_unsuppressed_findings = 0
     }
 
     #[test]
-    fn running_summary_reports_planned_skipped_sensor_evidence() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let out = temp.path().join("out");
-        let planned_dry_run = sensor_plan("tokmd", "tokmd", true);
-        let trigger_skipped = sensor_plan("ripr", "ripr", false);
-        write_sensor_status(
-            &out,
-            &planned_dry_run,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["tokmd".to_owned()],
-                duration_ms: 0,
-                reason: "dry-run; sensor not executed",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        write_sensor_status(
-            &out,
-            &trigger_skipped,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["ripr".to_owned()],
-                duration_ms: 0,
-                reason: "trigger did not match this diff",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        let plan = test_plan(vec![planned_dry_run, trigger_skipped]);
-
-        let summary = render_summary(&out, &plan, &test_diff())?;
-        let missing = summary_section(&summary, "## Missing evidence", "## Lane packets")
-            .ok_or_else(|| anyhow::anyhow!("missing evidence section not found"))?;
-
-        assert!(missing.contains("tokmd skipped; deterministic repository/diff packet unavailable; reason: dry-run; sensor not executed."));
-        assert!(!missing.contains("ripr"));
-        assert!(!missing.contains("No planned sensor evidence is currently missing."));
-        Ok(())
-    }
-
-    #[test]
     fn running_summary_renders_model_receipt_status() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
@@ -7627,883 +7325,6 @@ max_new_unsuppressed_findings = 0
         assert!(!summary.contains("No planned model evidence is currently missing or failed."));
         assert!(!has_standalone_approval_line(&summary));
         Ok(())
-    }
-
-    #[test]
-    fn skipped_out_of_scope_sensors_are_not_missing_review_evidence() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let out = temp.path().join("out");
-        let planned_dry_run = sensor_plan("tokmd", "tokmd", true);
-        let trigger_skipped = sensor_plan("ripr", "ripr", false);
-        let disabled = sensor_plan("semgrep", "semgrep", false);
-        let heavy = sensor_plan("miri", "cargo", false);
-
-        write_sensor_status(
-            &out,
-            &planned_dry_run,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["tokmd".to_owned()],
-                duration_ms: 0,
-                reason: "dry-run; sensor not executed",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        write_sensor_status(
-            &out,
-            &trigger_skipped,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["ripr".to_owned()],
-                duration_ms: 0,
-                reason: "trigger did not match this diff",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        write_sensor_status(
-            &out,
-            &disabled,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["semgrep".to_owned()],
-                duration_ms: 0,
-                reason: "disabled by config",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        write_sensor_status(
-            &out,
-            &heavy,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["cargo".to_owned(), "miri".to_owned()],
-                duration_ms: 0,
-                reason: "heavy/manual witness requires --allow-heavy",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        let plan = test_plan(vec![planned_dry_run, trigger_skipped, disabled, heavy]);
-
-        let issues = collect_sensor_evidence_issues(&out, &plan);
-
-        assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].sensor, "tokmd");
-        assert_eq!(issues[0].status, "skipped");
-        assert_eq!(issues[0].reason, "dry-run; sensor not executed");
-        Ok(())
-    }
-
-    #[test]
-    fn skipped_required_sensor_is_missing_review_evidence() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let out = temp.path().join("out");
-        let mut required_actionlint = sensor_plan("actionlint", "actionlint", false);
-        required_actionlint.required = true;
-        required_actionlint.reason = "disabled by config".to_owned();
-        let mut trigger_skipped = sensor_plan("ripr", "ripr", false);
-        trigger_skipped.reason = "trigger did not match this diff".to_owned();
-
-        write_sensor_status(
-            &out,
-            &required_actionlint,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["actionlint".to_owned()],
-                duration_ms: 0,
-                reason: "disabled by config",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        let required_status: serde_json::Value = serde_json::from_slice(&fs::read(
-            out.join("sensors/actionlint/ub-review-sensor-status.json"),
-        )?)?;
-        assert_eq!(required_status["required"], true);
-        write_sensor_status(
-            &out,
-            &trigger_skipped,
-            SensorStatusWrite {
-                status: "skipped",
-                argv: &["ripr".to_owned()],
-                duration_ms: 0,
-                reason: "trigger did not match this diff",
-                exit_code: None,
-                timed_out: false,
-            },
-        )?;
-        let plan = test_plan(vec![required_actionlint, trigger_skipped]);
-
-        let issues = collect_sensor_evidence_issues(&out, &plan);
-
-        assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].sensor, "actionlint");
-        assert_eq!(issues[0].status, "skipped");
-        assert_eq!(issues[0].reason, "disabled by config");
-        Ok(())
-    }
-
-    #[test]
-    fn unsafe_review_ok_without_gate_artifact_is_sensor_artifact_gap() -> Result<()> {
-        let temp = tempfile::tempdir()?;
-        let out = temp.path().join("out");
-        let mut sensor = sensor_plan("unsafe-review", "unsafe-review", true);
-        sensor.required = true;
-        write_sensor_status(
-            &out,
-            &sensor,
-            SensorStatusWrite {
-                status: "ok",
-                argv: &["unsafe-review".to_owned(), "first-pr".to_owned()],
-                duration_ms: 10,
-                reason: "completed",
-                exit_code: Some(0),
-                timed_out: false,
-            },
-        )?;
-        let plan = test_plan(vec![sensor.clone()]);
-
-        let issues = collect_sensor_evidence_issues(&out, &plan);
-
-        assert_eq!(issues.len(), 1);
-        assert_eq!(issues[0].sensor, "unsafe-review");
-        assert_eq!(issues[0].status, "artifact-gap");
-        assert_eq!(
-            issues[0].reason,
-            "unsafe-review-gate.json absent; structured evidence unavailable"
-        );
-
-        let gate_dir = out
-            .join("sensors")
-            .join("unsafe-review")
-            .join(super::UNSAFE_REVIEW_OUTPUT_SUBDIR);
-        fs::create_dir_all(&gate_dir)?;
-        fs::write(
-            gate_dir.join("unsafe-review-gate.json"),
-            r#"{"schema_version":"unsafe-review-gate/v1","status":"advisory"}"#,
-        )?;
-
-        let issues = collect_sensor_evidence_issues(&out, &plan);
-        assert!(
-            issues.is_empty(),
-            "valid structured unsafe-review evidence should clear the gap: {issues:?}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn summary_only_guard_rejects_unsupported_model_findings() -> Result<()> {
-        let lane = default_lanes()
-            .into_iter()
-            .find(|lane| lane.id == "tests")
-            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
-
-        let accepted = validate_summary_only_candidate(
-            &lane,
-            ModelCandidateFinding {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                reason: "The test reaches the helper but does not reveal the changed behavior."
-                    .to_owned(),
-                evidence: "ripr summary excerpt".to_owned(),
-            },
-        );
-        assert_eq!(accepted.severity, "medium");
-        assert_eq!(accepted.confidence, "medium-high");
-        assert_eq!(accepted.evidence, "ripr summary excerpt");
-
-        let rejected = validate_summary_only_candidate(
-            &lane,
-            ModelCandidateFinding {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                reason: " ".to_owned(),
-                evidence: "".to_owned(),
-            },
-        );
-        assert_eq!(rejected.severity, "low");
-        assert_eq!(rejected.confidence, "medium");
-        assert!(rejected.reason.contains("reason_present=false"));
-        assert!(rejected.reason.contains("evidence_present=false"));
-        assert_eq!(rejected.evidence, "model summary-only candidate guardrail");
-        Ok(())
-    }
-
-    #[test]
-    fn sibling_source_route_prompt_requires_scan_boundaries() -> Result<()> {
-        let lane = default_lanes()
-            .into_iter()
-            .find(|lane| lane.id == "source-route")
-            .ok_or_else(|| anyhow::anyhow!("source-route lane missing"))?;
-
-        let guidance = super::lane_specific_prompt_guidance(&lane);
-
-        assert!(guidance.contains("no-match scan"));
-        assert!(guidance.contains("not proof that no sibling paths exist"));
-        assert!(guidance.contains("checked pattern/scope"));
-        assert!(guidance.contains("unscanned variants"));
-        Ok(())
-    }
-
-    #[test]
-    fn sibling_summary_completeness_claim_becomes_verification_observation() -> Result<()> {
-        let lane = lane_plan("sibling-paths");
-        let output = LaneModelOutput {
-            summary: Some(
-                "No analogous sibling panic paths were found, so the fix is correctly scoped and need not be broadened."
-                    .to_owned(),
-            ),
-            inline_comments: Vec::new(),
-            candidate_findings: Vec::new(),
-            summary_only_findings: Vec::new(),
-            observations: Vec::new(),
-            failed_objections: Vec::new(),
-            proof_requests: Vec::new(),
-            issue_candidates: Vec::new(),
-            degraded: false,
-        };
-        let mut inline_comments = Vec::new();
-        let mut summary_only_findings = Vec::new();
-        let mut observations = Vec::new();
-        let mut proof_requests = Vec::new();
-        let mut issue_candidates = Vec::new();
-
-        apply_model_output(
-            &lane,
-            output,
-            &BTreeSet::new(),
-            ModelOutputSinks {
-                inline_comments: &mut inline_comments,
-                summary_only_findings: &mut summary_only_findings,
-                model_observations: &mut observations,
-                proof_requests: &mut proof_requests,
-                issue_candidates: &mut issue_candidates,
-            },
-        );
-
-        assert!(inline_comments.is_empty());
-        assert!(summary_only_findings.is_empty());
-        assert!(proof_requests.is_empty());
-        assert_eq!(observations.len(), 1);
-        let observation = &observations[0];
-        assert_eq!(observation.question, "sibling-path-coverage");
-        assert_eq!(observation.kind, "source-route-gap");
-        assert_eq!(observation.status, "open");
-        assert_eq!(observation.severity, "medium");
-        assert_eq!(observation.confidence, "high");
-        assert_eq!(
-            observation.dedupe_key,
-            super::SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY
-        );
-        assert!(
-            observation
-                .evidence
-                .iter()
-                .any(|item| item.contains("narrow no-match scans"))
-        );
-
-        let pr_body = render_review_body(
-            "shared-context-test",
-            &test_plan(Vec::new()),
-            &test_diff(),
-            &[],
-            &[],
-            &[],
-            &[],
-            &[],
-            &observations,
-            &[],
-            16_384,
-            ReviewBodyAudience::PullRequest,
-        );
-
-        assert!(pr_body.contains("## Decision"));
-        assert!(pr_body.contains("## Verification questions"));
-        assert!(pr_body.contains("Check sibling-path scan coverage"));
-        assert!(!pr_body.contains("## Refuted"));
-        assert!(!pr_body.contains("correctly scoped"));
-        assert!(!pr_body.contains("No analogous"));
-        Ok(())
-    }
-
-    #[test]
-    fn sibling_failed_objection_completeness_claim_is_not_refuted() {
-        let lane = lane_plan("source-route");
-
-        let observation = validate_failed_objection(
-            &lane,
-            ModelFailedObjection {
-                claim: "No analogous sibling panic paths were found.".to_owned(),
-                reason: "The fix is correctly scoped and need not be broadened.".to_owned(),
-                confidence: Some("high".to_owned()),
-                kind: Some("resolved-check".to_owned()),
-                evidence: vec!["single-pattern write/dispose scan".to_owned()],
-            },
-            0,
-        );
-
-        assert_eq!(observation.question, "sibling-path-coverage");
-        assert_eq!(observation.kind, "source-route-gap");
-        assert_eq!(observation.status, "open");
-        assert_ne!(observation.status, "refuted");
-        assert_eq!(
-            observation.dedupe_key,
-            super::SIBLING_COMPLETENESS_OVERCLAIM_DEDUPE_KEY
-        );
-    }
-
-    #[test]
-    fn scoped_sibling_scan_limit_remains_coverage_limited() {
-        let lane = lane_plan("sibling-paths");
-
-        let observation = validate_model_observation(
-            &lane,
-            ModelCandidateObservation {
-                claim: "Checked write/dispose only; did not scan ptr/toBuffer or to_int64 paths."
-                    .to_owned(),
-                question: Some("sibling-paths".to_owned()),
-                kind: Some("source-route-gap".to_owned()),
-                status: Some("open".to_owned()),
-                severity: Some("medium".to_owned()),
-                confidence: Some("medium".to_owned()),
-                path: None,
-                line: None,
-                evidence: vec!["coverage-limited sibling scan".to_owned()],
-                dedupe_key: Some("coverage-limited-sibling-scan".to_owned()),
-            },
-            0,
-        );
-
-        assert_eq!(
-            observation.claim,
-            "Checked write/dispose only; did not scan ptr/toBuffer or to_int64 paths."
-        );
-        assert_eq!(observation.kind, "source-route-gap");
-        assert_eq!(observation.status, "open");
-        assert_eq!(observation.dedupe_key, "coverage-limited-sibling-scan");
-        assert_eq!(observation.source, "model-observation");
-    }
-
-    #[test]
-    fn inline_guard_accepts_only_right_side_diff_lines() -> Result<()> {
-        let patch = "\
-diff --git a/src/lib.rs b/src/lib.rs
-index 1111111..2222222 100644
---- a/src/lib.rs
-+++ b/src/lib.rs
-@@ -1,3 +1,4 @@
- pub fn active_len(len: usize) -> usize {
-+    let ptr = &len as *const usize;
-     len
- }
-";
-        let line_map = right_side_diff_lines(patch);
-        let lane = default_lanes()
-            .into_iter()
-            .find(|lane| lane.id == "tests")
-            .ok_or_else(|| anyhow::anyhow!("tests lane missing"))?;
-        let accepted = validate_inline_candidate(
-            &lane,
-            ModelCandidateComment {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                path: "src/lib.rs".to_owned(),
-                line: 2,
-                body: "This reaches the helper but does not assert the changed boundary."
-                    .to_owned(),
-                evidence: "diff hunk".to_owned(),
-                suggestion: None,
-            },
-            &line_map,
-        )
-        .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
-        assert_eq!(accepted.side, "RIGHT");
-        assert!(accepted.body.starts_with("[tests]"));
-        assert!(accepted.suggestion.is_none());
-
-        let model_suggestion = validate_inline_candidate(
-            &lane,
-            ModelCandidateComment {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                path: "src/lib.rs".to_owned(),
-                line: 2,
-                body: "[tests] model-proposed edit must remain advisory".to_owned(),
-                evidence: "diff hunk".to_owned(),
-                suggestion: Some("assert!(proved);".to_owned()),
-            },
-            &line_map,
-        )
-        .map_err(|finding| anyhow::anyhow!("unexpected rejection: {}", finding.reason))?;
-        assert!(
-            model_suggestion.suggestion.is_none(),
-            "non-unsafe-review lanes must not smuggle suggestion blocks"
-        );
-
-        let rejected = validate_inline_candidate(
-            &lane,
-            ModelCandidateComment {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                path: "src/lib.rs".to_owned(),
-                line: 50,
-                body: "[tests] guessed stale line".to_owned(),
-                evidence: "none".to_owned(),
-                suggestion: None,
-            },
-            &line_map,
-        );
-        assert!(rejected.is_err());
-        let missing_evidence = validate_inline_candidate(
-            &lane,
-            ModelCandidateComment {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                path: "src/lib.rs".to_owned(),
-                line: 2,
-                body: "[tests] line-valid but unsupported claim".to_owned(),
-                evidence: "".to_owned(),
-                suggestion: None,
-            },
-            &line_map,
-        );
-        assert!(
-            missing_evidence
-                .is_err_and(|finding| { finding.reason.contains("evidence_present=false") })
-        );
-
-        let empty_body = validate_inline_candidate(
-            &lane,
-            ModelCandidateComment {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                path: "src/lib.rs".to_owned(),
-                line: 2,
-                body: "   ".to_owned(),
-                evidence: "diff hunk".to_owned(),
-                suggestion: None,
-            },
-            &line_map,
-        );
-        assert!(empty_body.is_err_and(|finding| { finding.reason.contains("body_present=false") }));
-        Ok(())
-    }
-
-    #[test]
-    fn candidate_only_lanes_cannot_emit_inline_comments() {
-        let patch = "\
-diff --git a/src/lib.rs b/src/lib.rs
-index 1111111..2222222 100644
---- a/src/lib.rs
-+++ b/src/lib.rs
-@@ -1,3 +1,4 @@
- pub fn active_len(len: usize) -> usize {
-+    let ptr = &len as *const usize;
-     len
- }
-";
-        let line_map = right_side_diff_lines(patch);
-        let lane = model_lane(
-            "source-route-fast",
-            "Fast source-route candidate generation",
-            &["tokmd", "ast-grep"],
-            "Generate candidate-only public API route and helper caller gaps.",
-        );
-        let output = LaneModelOutput {
-            summary: None,
-            inline_comments: vec![ModelCandidateComment {
-                severity: "medium".to_owned(),
-                confidence: "medium-high".to_owned(),
-                path: "src/lib.rs".to_owned(),
-                line: 2,
-                body: "[source-route-fast] This is line-valid but must stay candidate-only."
-                    .to_owned(),
-                evidence: "diff hunk".to_owned(),
-                suggestion: None,
-            }],
-            candidate_findings: Vec::new(),
-            summary_only_findings: Vec::new(),
-            observations: Vec::new(),
-            failed_objections: Vec::new(),
-            proof_requests: Vec::new(),
-            issue_candidates: Vec::new(),
-            degraded: false,
-        };
-        let mut inline_comments = Vec::new();
-        let mut summary_only_findings = Vec::new();
-        let mut model_observations = Vec::new();
-        let mut proof_requests = Vec::new();
-        let mut issue_candidates = Vec::new();
-
-        apply_model_output(
-            &lane,
-            output,
-            &line_map,
-            ModelOutputSinks {
-                inline_comments: &mut inline_comments,
-                summary_only_findings: &mut summary_only_findings,
-                model_observations: &mut model_observations,
-                proof_requests: &mut proof_requests,
-                issue_candidates: &mut issue_candidates,
-            },
-        );
-
-        assert!(inline_comments.is_empty());
-        assert_eq!(summary_only_findings.len(), 1);
-        assert_eq!(summary_only_findings[0].lane, "source-route-fast");
-        assert!(
-            summary_only_findings[0]
-                .reason
-                .contains("candidate-only lane emitted inline candidate")
-        );
-        assert_eq!(summary_only_findings[0].evidence, "diff hunk");
-    }
-
-    #[test]
-    fn lane_output_split_accepts_observations_candidates_and_proof_requests() -> Result<()> {
-        let patch = "\
-diff --git a/src/lib.rs b/src/lib.rs
-index 1111111..2222222 100644
---- a/src/lib.rs
-+++ b/src/lib.rs
-@@ -1,3 +1,4 @@
- pub fn active_len(len: usize) -> usize {
-+    let ptr = &len as *const usize;
-     len
- }
-";
-        let line_map = right_side_diff_lines(patch);
-        let lane = model_lane(
-            "tests-oracle",
-            "Test oracle review",
-            &["tokmd", "ripr"],
-            "Check test proof.",
-        );
-        let json = r#"{
-  "summary": "Checked red/green and route proof.",
-  "observations": [
-    {
-      "claim": "The new test needs a witnessed old-main red run.",
-      "question": "red-green",
-      "kind": "missing-evidence",
-      "status": "open",
-      "severity": "medium",
-      "confidence": "high",
-      "evidence": ["PR body claims old code fails"],
-      "dedupe_key": "markdown-red-green-witness"
-    }
-  ],
-  "candidate_findings": [
-    {
-      "severity": "medium",
-      "confidence": "medium-high",
-      "path": "src/lib.rs",
-      "line": 2,
-      "body": "[tests-oracle] The changed pointer path needs a test oracle.",
-      "evidence": "diff hunk"
-    }
-  ],
-  "failed_objections": [
-    {
-      "claim": "Box::from(slice) can return None on allocation failure",
-      "reason": "false premise: allocation failure does not return None",
-      "confidence": "high",
-      "kind": "false-premise",
-      "evidence": ["Rust allocation semantics"]
-    }
-  ],
-  "proof_requests": [
-    {
-      "command": "bun test test/js/bun/md/md-edge-cases.test.ts",
-      "reason": "Need a focused green witness on HEAD",
-      "cost": "focused-test",
-      "timeout_sec": 300,
-      "required": false
-    }
-  ]
-}"#;
-        let output: LaneModelOutput = serde_json::from_str(json)?;
-        let mut inline_comments = Vec::new();
-        let mut summary_only_findings = Vec::new();
-        let mut observations = Vec::new();
-        let mut proof_requests = Vec::new();
-        let mut issue_candidates = Vec::new();
-
-        apply_model_output(
-            &lane,
-            output,
-            &line_map,
-            ModelOutputSinks {
-                inline_comments: &mut inline_comments,
-                summary_only_findings: &mut summary_only_findings,
-                model_observations: &mut observations,
-                proof_requests: &mut proof_requests,
-                issue_candidates: &mut issue_candidates,
-            },
-        );
-
-        assert_eq!(inline_comments.len(), 1);
-        assert_eq!(inline_comments[0].lane, "tests-oracle");
-        assert_eq!(summary_only_findings.len(), 1);
-        assert_eq!(observations.len(), 2);
-        assert!(observations.iter().any(|observation| {
-            observation.kind == "missing-evidence"
-                && observation.dedupe_key == "markdown-red-green-witness"
-                && observation.source == "model-observation"
-        }));
-        assert!(observations.iter().any(|observation| {
-            observation.kind == "false-premise"
-                && observation.status == "refuted"
-                && observation.source == "model-failed-objection"
-        }));
-        assert_eq!(proof_requests.len(), 1);
-        assert_eq!(proof_requests[0].schema, "ub-review.proof_request.v1");
-        assert_eq!(proof_requests[0].status, "requested");
-        assert_eq!(
-            proof_requests[0].requested_by,
-            vec!["tests-oracle".to_owned()]
-        );
-
-        let temp = tempfile::tempdir()?;
-        write_proof_request_artifacts(
-            temp.path(),
-            &test_diff(),
-            &Profile::default(),
-            &proof_requests,
-            &[] as &[ProofReceipt],
-        )?;
-        let proof_json: Vec<super::ProofRequest> =
-            serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
-        let proof_groups: Vec<ProofRequestGroup> = serde_json::from_slice(&fs::read(
-            temp.path().join("review/proof_request_groups.json"),
-        )?)?;
-        let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
-            temp.path()
-                .join("proof_requests")
-                .join(format!("{}.json", proof_requests[0].id)),
-        )?)?;
-        let proof_plan = fs::read_to_string(temp.path().join("review/proof_plan.md"))?;
-        let proof_ndjson = fs::read_to_string(temp.path().join("proof_requests.ndjson"))?;
-        assert_eq!(proof_json.len(), 1);
-        assert_eq!(proof_request_file, serde_json::to_value(&proof_json[0])?);
-        assert_eq!(proof_groups.len(), 1);
-        assert_eq!(proof_groups[0].duplicate_count, 1);
-        assert!(proof_plan.contains("## Focused proof plan"));
-        assert!(proof_plan.contains("mode=`red-green`"));
-        assert!(proof_plan.contains("base+tests=`cwd=target/ub-review/proof-worktrees/base-plus-tests USE_SYSTEM_BUN=1 bun test test/js/bun/md/md-edge-cases.test.ts`"));
-        assert!(proof_ndjson.contains("bun test test/js/bun/md/md-edge-cases.test.ts"));
-        Ok(())
-    }
-
-    #[test]
-    fn lane_output_split_accepts_scalar_evidence_strings() -> Result<()> {
-        let lane = model_lane(
-            "source-route",
-            "Source route review",
-            &["tokmd", "ast-grep"],
-            "Check public API route proof.",
-        );
-        let json = r#"{
-  "observations": [
-    {
-      "claim": "FileHandle.write route still needs proof.",
-      "kind": "source-route-gap",
-      "status": "open",
-      "evidence": "route excerpt was scalar text"
-    }
-  ],
-  "failed_objections": [
-    {
-      "claim": "writev uses the patched scalar branch",
-      "reason": "sibling route still calls a separate helper",
-      "evidence": "sibling-path scan was scalar text"
-    }
-  ]
-}"#;
-        let output: LaneModelOutput = serde_json::from_str(json)?;
-        assert!(output.degraded);
-        assert_eq!(
-            output.observations[0].evidence,
-            vec!["route excerpt was scalar text".to_owned()]
-        );
-        assert_eq!(
-            output.failed_objections[0].evidence,
-            vec!["sibling-path scan was scalar text".to_owned()]
-        );
-
-        let mut inline_comments = Vec::new();
-        let mut summary_only_findings = Vec::new();
-        let mut observations = Vec::new();
-        let mut proof_requests = Vec::new();
-        let mut issue_candidates = Vec::new();
-        apply_model_output(
-            &lane,
-            output,
-            &BTreeSet::new(),
-            ModelOutputSinks {
-                inline_comments: &mut inline_comments,
-                summary_only_findings: &mut summary_only_findings,
-                model_observations: &mut observations,
-                proof_requests: &mut proof_requests,
-                issue_candidates: &mut issue_candidates,
-            },
-        );
-
-        assert_eq!(observations.len(), 2);
-        assert!(observations.iter().any(|observation| {
-            observation.source == "model-observation"
-                && observation.evidence == vec!["route excerpt was scalar text".to_owned()]
-        }));
-        assert!(observations.iter().any(|observation| {
-            observation.source == "model-failed-objection"
-                && observation.evidence == vec!["sibling-path scan was scalar text".to_owned()]
-        }));
-        Ok(())
-    }
-
-    #[test]
-    fn lane_output_split_degrades_scalar_sequence_fields() -> Result<()> {
-        let lane = model_lane(
-            "tests-oracle",
-            "Test oracle review",
-            &["tokmd", "ripr"],
-            "Check test proof.",
-        );
-        let json = r#"{
-  "observations": "The added regression test still needs base+tests red/green proof.",
-  "candidate_findings": "Malformed inline finding text should not erase the whole lane."
-}"#;
-        let (output, degraded) = super::parse_lane_model_output_or_degrade(
-            json,
-            Path::new("target/ub-review/review/model/tests-oracle/content.json"),
-        )?;
-        assert!(degraded);
-        assert!(output.degraded);
-        assert!(output.candidate_findings.is_empty());
-        assert_eq!(output.observations.len(), 2);
-
-        let mut inline_comments = Vec::new();
-        let mut summary_only_findings = Vec::new();
-        let mut observations = Vec::new();
-        let mut proof_requests = Vec::new();
-        let mut issue_candidates = Vec::new();
-        apply_model_output(
-            &lane,
-            output,
-            &BTreeSet::new(),
-            ModelOutputSinks {
-                inline_comments: &mut inline_comments,
-                summary_only_findings: &mut summary_only_findings,
-                model_observations: &mut observations,
-                proof_requests: &mut proof_requests,
-                issue_candidates: &mut issue_candidates,
-            },
-        );
-
-        assert!(inline_comments.is_empty());
-        assert!(summary_only_findings.is_empty());
-        assert_eq!(observations.len(), 2);
-        assert!(observations.iter().any(|observation| {
-            observation.source == "model-observation"
-                && observation.kind == "missing-evidence"
-                && observation.question == "lane-output-shape"
-                && observation.dedupe_key == "lane-output-shape-observations"
-                && observation.claim.contains("base+tests red/green proof")
-        }));
-        assert!(observations.iter().any(|observation| {
-            observation.source == "model-observation"
-                && observation.kind == "missing-evidence"
-                && observation.dedupe_key == "lane-output-shape-candidate_findings"
-                && observation
-                    .evidence
-                    .iter()
-                    .any(|item| item.contains("Malformed inline finding text"))
-        }));
-        Ok(())
-    }
-
-    #[test]
-    fn lane_output_split_degrades_contentful_malformed_output() -> Result<()> {
-        let raw = "args.buffer = StringOrBuffer::EncodedSlice(ZigStringSlice::init_owned(owned)); runs synchronously pre-schedule";
-        let parse_path = Path::new("target/ub-review/review/model/ub-worker-handoff/content.json");
-
-        let (output, degraded) = super::parse_lane_model_output_or_degrade(raw, parse_path)?;
-
-        assert!(degraded);
-        assert!(output.degraded);
-        assert!(output.inline_comments.is_empty());
-        assert!(output.candidate_findings.is_empty());
-        assert!(output.summary_only_findings.is_empty());
-        assert_eq!(output.observations.len(), 1);
-        assert_eq!(
-            output.observations[0].question.as_deref(),
-            Some("lane-output-shape")
-        );
-        assert_eq!(
-            output.observations[0].kind.as_deref(),
-            Some("missing-evidence")
-        );
-        assert!(output.observations[0].claim.contains("EncodedSlice"));
-        assert!(
-            output.observations[0]
-                .evidence
-                .iter()
-                .any(|item| item.contains("content.json"))
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn lane_output_split_degrades_contentful_schema_wrong_json() -> Result<()> {
-        let raw = r#"{"findings":"EncodedSlice route excerpt survived as text"}"#;
-        let parse_path = Path::new("target/ub-review/review/model/ub-worker-handoff/content.json");
-
-        let (output, degraded) = super::parse_lane_model_output_or_degrade(raw, parse_path)?;
-
-        assert!(degraded);
-        assert!(output.degraded);
-        assert!(output.inline_comments.is_empty());
-        assert!(output.candidate_findings.is_empty());
-        assert!(output.summary_only_findings.is_empty());
-        assert_eq!(output.observations.len(), 1);
-        assert!(
-            output.observations[0]
-                .claim
-                .contains("EncodedSlice route excerpt")
-        );
-        assert!(
-            output.observations[0]
-                .evidence
-                .iter()
-                .any(|item| item.contains("recognized lane evidence"))
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn lane_output_split_rejects_empty_unusable_output() -> Result<()> {
-        let parse_path = Path::new("target/ub-review/review/model/ub-active-view/content.json");
-
-        for raw in ["{}", r#"{"observations": ""}"#] {
-            let err = super::parse_lane_model_output_or_degrade(raw, parse_path)
-                .err()
-                .ok_or_else(|| anyhow::anyhow!("empty lane output unexpectedly parsed"))?;
-            assert_eq!(super::classify_model_error(&err), "invalid_json");
-            assert!(format!("{err:#}").contains("empty or unusable"));
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn degraded_model_lane_is_attempted_but_not_missing_evidence() {
-        let mut degraded = model_lane_receipt("ub-worker-handoff", "degraded");
-        degraded.reason = "contentful lane output was preserved as degraded evidence".to_owned();
-
-        assert!(super::model_call_attempted_status("degraded"));
-        assert!(!super::is_model_receipt_evidence_issue(&degraded));
     }
 
     #[test]
@@ -8640,7 +7461,7 @@ index 1111111..2222222 100644
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert_eq!(env.contains_key("USE_SYSTEM_BUN"), is_base);
                 assert_eq!(timeout, 180);
@@ -8758,7 +7579,7 @@ index 1111111..2222222 100644
             },
             tasks,
             |_root, argv, env, timeout, stdout, stderr| {
-                commands.push(super::command_display_with_env(env, argv));
+                commands.push(super::test_parse::command_display_with_env(env, argv));
                 let is_base = stdout.to_string_lossy().contains("base-plus-tests");
                 assert!(env.is_empty());
                 assert_eq!(timeout, 300);
@@ -12757,62 +11578,6 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn sensor_jobs_use_runtime_profile_limit() -> Result<()> {
-        let profiles = builtin_profiles();
-        let gh_runner = profiles
-            .iter()
-            .find(|profile| profile.name == "gh-runner")
-            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
-        let cx23 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx23")
-            .ok_or_else(|| anyhow::anyhow!("missing cx23 profile"))?;
-        let cx43 = profiles
-            .iter()
-            .find(|profile| profile.name == "cx43")
-            .ok_or_else(|| anyhow::anyhow!("missing cx43 profile"))?;
-
-        assert_eq!(sensor_job_count(gh_runner, 10)?, 4);
-        assert_eq!(sensor_job_count(cx23, 10)?, 2);
-        assert_eq!(sensor_job_count(cx43, 10)?, 6);
-        Ok(())
-    }
-
-    #[test]
-    fn sensor_jobs_cap_to_runnable_sensors() -> Result<()> {
-        let profiles = builtin_profiles();
-        let gh_runner = profiles
-            .iter()
-            .find(|profile| profile.name == "gh-runner")
-            .ok_or_else(|| anyhow::anyhow!("missing gh-runner profile"))?;
-
-        assert_eq!(sensor_job_count(gh_runner, 2)?, 2);
-        Ok(())
-    }
-
-    #[test]
-    fn zero_sensor_runtime_limit_is_rejected() -> Result<()> {
-        let profile = Profile {
-            name: "broken".to_owned(),
-            limits: Limits {
-                sensor_jobs: 0,
-                ..Limits::default()
-            },
-            ..Profile::default()
-        };
-
-        let err = sensor_job_count(&profile, 2)
-            .err()
-            .ok_or_else(|| anyhow::anyhow!("zero sensor limit unexpectedly passed"))?;
-
-        assert!(
-            err.to_string()
-                .contains("runtime profile broken has sensor_jobs=0")
-        );
-        Ok(())
-    }
-
-    #[test]
     fn nonstandard_depth_rejects_raw_budget_override() -> Result<()> {
         let mut args = test_run_args(Path::new("target/ub-review").to_path_buf());
         args.depth = ReviewDepth::Deep;
@@ -12870,36 +11635,6 @@ index 1111111..2222222 100644
             .unwrap_or_default();
 
         assert!(err.contains("unknown lane selector"));
-    }
-
-    #[test]
-    fn tool_selectors_filter_planned_sensors() -> Result<()> {
-        let mut plan = test_plan(vec![
-            sensor_plan("tokmd", "tokmd", true),
-            sensor_plan("ripr", "ripr", true),
-            sensor_plan("ast-grep", "ast-grep", true),
-        ]);
-        let selectors = SelectorArgs {
-            tools: "tokmd,ripr".to_owned(),
-            except_tools: "ripr".to_owned(),
-            ..SelectorArgs::default()
-        };
-
-        apply_plan_selectors(&mut plan, &selectors)?;
-
-        assert_eq!(
-            plan.sensors
-                .iter()
-                .map(|sensor| sensor.id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["tokmd"]
-        );
-        assert!(
-            plan.notes
-                .iter()
-                .any(|note| note.contains("tool selectors"))
-        );
-        Ok(())
     }
 
     #[test]
@@ -14130,45 +12865,6 @@ max_new_unsuppressed = 0
         let proof_container = Config::from_toml_with_policy_receipts("proof = 5\n")?;
         assert_eq!(proof_container.policy_errors.len(), 1);
         assert_eq!(proof_container.policy_errors[0].section, "proof");
-        Ok(())
-    }
-
-    #[test]
-    fn tool_gate_scope_outside_allowlist_is_receipted_and_stripped() -> Result<()> {
-        let config = Config::from_toml_with_policy_receipts(
-            r#"
-[tools.ripr.gate]
-scope = "repo-wide"
-max_new_unsuppressed = 0
-"#,
-        )?;
-        assert_eq!(config.policy_errors.len(), 1);
-        assert_eq!(config.policy_errors[0].section, "tools.ripr.gate.scope");
-        assert!(
-            config.policy_errors[0].detail.contains("repo-wide"),
-            "detail must name the rejected scope: {}",
-            config.policy_errors[0].detail
-        );
-        // The threshold sibling survives with the unknown scope stripped, so
-        // the only semantics that exist (on-diff) still apply.
-        let gate = config
-            .tools
-            .get("ripr")
-            .and_then(|tool| tool.gate.as_ref())
-            .ok_or_else(|| anyhow::anyhow!("ripr gate policy missing"))?;
-        assert_eq!(gate.scope, None);
-        // The threshold survives from the test fixture (which uses 0); this
-        // test validates scope stripping, not the repo's epic ceiling.
-        assert_eq!(gate.max_new_unsuppressed, Some(0));
-
-        let valid = Config::from_toml_with_policy_receipts(
-            r#"
-[tools.ripr.gate]
-scope = "on-diff"
-max_new_unsuppressed = 0
-"#,
-        )?;
-        assert!(valid.policy_errors.is_empty());
         Ok(())
     }
 
@@ -15449,10 +14145,8 @@ required_proof_unprooven = true
     fn workflow_pr_body_uses_workflow_route_language() {
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_context(
-            DiffClass::WorkflowTooling,
-            &LanguageMix::default(),
-        );
+        plan.lanes =
+            default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -15495,10 +14189,8 @@ required_proof_unprooven = true
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let mut plan = test_plan(Vec::new());
         plan.diff_class = DiffClass::WorkflowTooling;
-        plan.lanes = super::default_lanes_for_diff_context(
-            DiffClass::WorkflowTooling,
-            &LanguageMix::default(),
-        );
+        plan.lanes =
+            default_lanes_for_diff_context(DiffClass::WorkflowTooling, &LanguageMix::default());
         let diff = DiffContext {
             base: "origin/main".to_owned(),
             head: "HEAD".to_owned(),
@@ -17526,7 +16218,7 @@ index 1111111..2222222 100644
             ],
         };
 
-        let receipt = super::build_quality_receipt(&metrics, &review, &fill_ledger);
+        let receipt = build_quality_receipt(&metrics, &review, &fill_ledger);
 
         assert_eq!(receipt.schema, super::QUALITY_RECEIPT_SCHEMA);
         assert_eq!(receipt.run_id, fill_ledger.run_id);
@@ -17724,7 +16416,7 @@ index 1111111..2222222 100644
             missing: Vec::new(),
         };
 
-        let trend = super::build_quality_trend_artifact(&receipt);
+        let trend = build_quality_trend_artifact(&receipt);
         let missing_fields = trend
             .missing
             .iter()
@@ -22392,6 +21084,12 @@ index 1111111..2222222 100644
 
     // ----------------------------------------------------------------------
     // audit-ci (docs/CI_AUDIT_WIZARD.md): fixture-driven, no network.
+    #[path = "sensor_tests.rs"]
+    mod sensor_tests;
+
+    #[path = "validate_tests.rs"]
+    mod validate_tests;
+
     #[cfg(test)]
     #[path = "ci_audit_tests.rs"]
     mod ci_audit_tests;

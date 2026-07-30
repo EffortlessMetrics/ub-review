@@ -21,6 +21,13 @@ result. This guide gets you from zero to reviewed PRs in five minutes.
 ub-review enable --mode gate --model minimax
 ```
 
+For a brownfield repository, add `--inspect` to make the generated
+`.ub-review.toml` relevance-aware. The scan records the repository kind,
+MiniMax/OpenCode fallback policy, applicable sensors, and narrow review lanes
+for detected source, test, workflow, and documentation surfaces. It never
+turns scan heuristics into required proof or changes branch protection. Use
+`ub-review init` when you also want the longer `ub-review-init.md` handoff.
+
 `enable` resolves the latest ub-review release and generates a workflow that
 **downloads + sha256-verifies the binary** (~seconds per run). No SHA is needed
 when an installable release is available. If release lookup is unavailable,

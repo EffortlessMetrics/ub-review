@@ -7,6 +7,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 
+use crate::test_parse::push_unique;
 use crate::*;
 
 const MUTATION_HEAVY_WITNESS_SKIP_REASON: &str = "Targeted mutation proof is a heavy witness; skipped because this runtime profile does not lease mutation proof. Use a risk-pack/manual-heavy profile to run it.";
@@ -702,6 +703,7 @@ pub(crate) fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
 mod tests {
     use anyhow::Result;
 
+    use crate::test_parse::extract_focused_test_name;
     use crate::tests::test_diff;
     use crate::*;
 
@@ -919,42 +921,33 @@ index 1111111..2222222 100644
     #[test]
     fn focused_proof_tasks_detect_modified_bun_test_callees() -> Result<()> {
         assert_eq!(
-            super::extract_focused_test_name("test.only(\"bad free witness\", () => {})")
-                .as_deref(),
+            extract_focused_test_name("test.only(\"bad free witness\", () => {})").as_deref(),
             Some("bad free witness")
         );
         assert_eq!(
-            super::extract_focused_test_name(
-                "it.skip('parked until runtime supports it', () => {})"
-            )
-            .as_deref(),
+            extract_focused_test_name("it.skip('parked until runtime supports it', () => {})")
+                .as_deref(),
             Some("parked until runtime supports it")
         );
         assert_eq!(
-            super::extract_focused_test_name(
-                "test.concurrent.failing('racy callback path', () => {})"
-            )
-            .as_deref(),
+            extract_focused_test_name("test.concurrent.failing('racy callback path', () => {})")
+                .as_deref(),
             Some("racy callback path")
         );
         assert_eq!(
-            super::extract_focused_test_name(
-                "test.each([[\"arraybuffer\"]])('table case %s', () => {})"
-            )
-            .as_deref(),
+            extract_focused_test_name("test.each([[\"arraybuffer\"]])('table case %s', () => {})")
+                .as_deref(),
             Some("table case %s")
         );
         assert_eq!(
-            super::extract_focused_test_name(
+            extract_focused_test_name(
                 "describe.each([{ name: \"ffi\" }])('ownership %s', () => {})"
             )
             .as_deref(),
             Some("ownership %s")
         );
-        assert!(super::extract_focused_test_name("testHelper('not a test', () => {})").is_none());
-        assert!(
-            super::extract_focused_test_name("test.unknown('not brokered', () => {})").is_none()
-        );
+        assert!(extract_focused_test_name("testHelper('not a test', () => {})").is_none());
+        assert!(extract_focused_test_name("test.unknown('not brokered', () => {})").is_none());
 
         let patch = "\
 diff --git a/test/js/bun/ffi/ffi.test.js b/test/js/bun/ffi/ffi.test.js

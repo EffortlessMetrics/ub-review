@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::Result;
 
+use crate::test_parse::push_unique;
 use crate::*;
 
 pub(crate) fn run_initial_diff_proof_broker_v0(

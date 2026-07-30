@@ -5,11 +5,14 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
 use std::process::Command;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Result, bail};
+
+#[path = "cli_lock.rs"]
+mod cli_lock;
+pub use cli_lock::cli_subprocess_test_lock;
 
 pub const CARGO_ALLOW_FOREIGN_REASON: &str = "policy/allow.toml is not a cargo-allow-dialect ledger; add \
      policy/cargo-allow.toml (see EffortlessMetrics/cargo-allow#1465)";
@@ -305,17 +308,6 @@ pub fn spawn_fake_openai_provider_with_contents_and_delay(
         )
     });
     Ok((url, handle))
-}
-
-pub fn cli_subprocess_test_lock() -> Result<MutexGuard<'static, ()>> {
-    static CLI_SUBPROCESS_TEST_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-    // Recover a poisoned lock instead of erroring: one failing test must
-    // produce one failure receipt, not cascade into every later subprocess
-    // test in the suite.
-    Ok(CLI_SUBPROCESS_TEST_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner))
 }
 
 pub fn fake_openai_lane_content() -> String {

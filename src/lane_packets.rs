@@ -1,6 +1,7 @@
 //! Trigger matching and lane packet construction (cleanup train step
 //! 33, pure code motion).
 
+use crate::diff_posture::review_posture_for_diff_class;
 use crate::*;
 
 pub(crate) fn trigger_match(trigger: Trigger, flags: &DiffFlags) -> Option<String> {

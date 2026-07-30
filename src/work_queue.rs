@@ -2,6 +2,7 @@
 //! receipt and resource lease artifact writing (cleanup train step 43,
 //! pure code motion).
 
+use crate::test_parse::push_unique;
 use crate::*;
 
 pub(crate) fn proof_task_artifact(

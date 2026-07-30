@@ -33,6 +33,10 @@ receipts and nothing applied without your say-so:
 ub-review init --profile gh-runner  # starter config plus ub-review-init.md:
                                     # file-driven setup guidance for the repo
 
+ub-review enable --inspect --mode gate --model minimax
+                                    # generate the workflow plus a config
+                                    # tuned to this repo's detected surfaces
+
 ub-review audit-ci                  # read-only CI right-sizing report under
                                     # ci-audit/: which existing jobs actually
                                     # change merge decisions (receipts: run
