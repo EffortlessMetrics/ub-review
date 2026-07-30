@@ -145,7 +145,7 @@ pub(crate) use plan_artifacts::*;
 mod ci_audit;
 pub(crate) use ci_audit::*;
 mod gate_watchdog;
-pub(crate) use gate_watchdog::*;
+use gate_watchdog::cmd_gate_watchdog;
 
 const STANDARD_LANE_WIDTH: usize = 10;
 const STANDARD_MODEL_CONCURRENCY: usize = 8;
