@@ -8,7 +8,7 @@ use std::process::Command;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 
 #[path = "cli_lock.rs"]
 mod cli_lock;
@@ -549,6 +549,121 @@ pub fn base64_standard_for_test(bytes: &[u8]) -> String {
         });
     }
     encoded
+}
+
+pub fn collect_relative_file_paths(root: &Path) -> Result<Vec<String>> {
+    fn visit(base: &Path, dir: &Path, files: &mut Vec<String>) -> Result<()> {
+        for entry in fs::read_dir(dir).with_context(|| format!("read {}", dir.display()))? {
+            let entry = entry?;
+            let path = entry.path();
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                visit(base, &path, files)?;
+            } else if file_type.is_file() {
+                let relative = path
+                    .strip_prefix(base)
+                    .with_context(|| format!("strip prefix {}", base.display()))?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                files.push(relative);
+            }
+        }
+        Ok(())
+    }
+
+    let mut files = Vec::new();
+    visit(root, root, &mut files)?;
+    files.sort();
+    Ok(files)
+}
+
+pub fn write_setup_ci_cli_audit_fixture(dir: &Path) -> Result<()> {
+    write_init_audit_ci_fixture(dir)?;
+    for (name, schema) in [
+        ("history.json", "ub-review.ci_history.v1"),
+        ("costs.json", "ub-review.ci_costs.v1"),
+        ("correlation.json", "ub-review.ci_correlation.v1"),
+    ] {
+        fs::write(
+            dir.join(name),
+            serde_json::to_vec_pretty(&serde_json::json!({
+                "schema": schema,
+                "repo": "acme/widgets",
+                "window_days": 90,
+                "jobs": [],
+                "evidence_gaps": [],
+            }))?,
+        )?;
+    }
+    Ok(())
+}
+
+pub fn write_init_audit_ci_fixture(dir: &Path) -> Result<()> {
+    fs::create_dir_all(dir)?;
+    let job = |name: &str| {
+        serde_json::json!({
+            "workflow": ".github/workflows/ci.yml",
+            "job": name,
+            "name": name,
+            "triggers": ["pull_request"],
+            "path_filters": [],
+            "matrix_size": 1,
+            "timeout_minutes": 30,
+            "permissions": null,
+            "uses_secrets": [],
+            "required_check": null,
+            "required_check_source": "unknown",
+            "required_check_context": null,
+        })
+    };
+    fs::write(
+        dir.join("inventory.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.ci_inventory.v1",
+            "generated_at": "2026-06-14T00:00:00Z",
+            "repo": "acme/widgets",
+            "window_days": 90,
+            "jobs": [job("integration"), job("unit"), job("fmt"), job("deploy")],
+            "evidence_gaps": ["required checks unreadable from tokenless audit"],
+        }))?,
+    )?;
+    let recommendation = |name: &str, tier: &str, reason: &str| {
+        serde_json::json!({
+            "job": name,
+            "workflow": ".github/workflows/ci.yml",
+            "tier": tier,
+            "positioned_to_catch": "regressions in its scope",
+            "has_caught": "2 independent failures in the window",
+            "receipts": [format!("ci-audit/correlation.json#{name}")],
+            "proposed_policy": "per tier",
+            "confidence": "medium",
+            "judgment": "deterministic",
+            "reason": reason,
+            "report_note": "",
+        })
+    };
+    fs::write(
+        dir.join("recommendations.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.ci_recommendations.v1",
+            "repo": "acme/widgets",
+            "window_days": 90,
+            "jobs": [
+                recommendation("integration", "adaptive", "expensive and quiet on unrelated diffs"),
+                recommendation("unit", "move-to-ub-review-required", "already merge-relevant and cheap"),
+                recommendation("fmt", "keep-required", "cheap deterministic floor"),
+                recommendation("deploy", "flag-for-human", "release-sensitive job"),
+            ],
+            "evidence_gaps": ["history window truncated"],
+        }))?,
+    )?;
+    let report_path = dir.join("audit-report.md");
+    fs::write(
+        &report_path,
+        "# CI audit: acme/widgets\n\n## Jobs\n\n### Right-size to adaptive\n\n- `integration` (ci.yml) [medium]: p50 unknown, 2 runs, 0 independent failures, ~4 runner-min/mo, receipts: `ci-audit/correlation.json#integration`\n",
+    )
+    .with_context(|| format!("write {}", report_path.display()))?;
+    Ok(())
 }
 
 pub fn tool_entry<'a>(
