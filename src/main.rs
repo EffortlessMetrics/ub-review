@@ -12486,14 +12486,25 @@ index 1111111..2222222 100644
             .ok_or_else(|| anyhow::anyhow!("structured inline thread missing"))?;
         anyhow::ensure!(inline.path.as_deref() == Some("src/lib.rs"));
         anyhow::ensure!(inline.line == Some(12));
+        anyhow::ensure!(inline.kind == "review-comments");
+        anyhow::ensure!(inline.author == "maintainer");
+        anyhow::ensure!(inline.body == "Inline thread points at the route proof receipt.");
         anyhow::ensure!(inline.commit_id.as_deref() == Some("current-head"));
         anyhow::ensure!(inline.head_binding == "current");
+        anyhow::ensure!(inline.state.is_none());
         let stale = context
             .threads
             .iter()
             .find(|thread| thread.id == "104")
             .ok_or_else(|| anyhow::anyhow!("structured stale inline thread missing"))?;
+        anyhow::ensure!(stale.kind == "review-comments");
+        anyhow::ensure!(stale.author == "maintainer");
+        anyhow::ensure!(stale.body == "Older inline thread must remain stale.");
+        anyhow::ensure!(stale.path.as_deref() == Some("src/lib.rs"));
+        anyhow::ensure!(stale.line == Some(13));
+        anyhow::ensure!(stale.commit_id.as_deref() == Some("old-head"));
         anyhow::ensure!(stale.head_binding == "stale");
+        anyhow::ensure!(stale.state.is_none());
         Ok(())
     }
 

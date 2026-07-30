@@ -574,9 +574,14 @@ mod structured_thread_tests {
             .first()
             .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
         anyhow::ensure!(record.id == "42");
+        anyhow::ensure!(record.kind == "review-comments");
+        anyhow::ensure!(record.author == "reviewer");
+        anyhow::ensure!(record.body == "Postfix is discarded after the list item.");
         anyhow::ensure!(record.path.as_deref() == Some("src/parser.rs"));
         anyhow::ensure!(record.line == Some(17));
+        anyhow::ensure!(record.commit_id.as_deref() == Some("abc123"));
         anyhow::ensure!(record.head_binding == "current");
+        anyhow::ensure!(record.state.as_deref() == Some("COMMENTED"));
         let stale_records = github_thread_records("review-comments", &value, "def456");
         anyhow::ensure!(
             stale_records
@@ -598,7 +603,15 @@ mod structured_thread_tests {
         let record = records
             .first()
             .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
+        anyhow::ensure!(record.id == "IC_kwDO");
+        anyhow::ensure!(record.kind == "issue-comments");
+        anyhow::ensure!(record.author == "maintainer");
+        anyhow::ensure!(record.body == "Accepted tradeoff");
+        anyhow::ensure!(record.path.is_none());
+        anyhow::ensure!(record.line.is_none());
+        anyhow::ensure!(record.commit_id.is_none());
         anyhow::ensure!(record.head_binding == "unbound");
+        anyhow::ensure!(record.state.is_none());
         Ok(())
     }
 
@@ -615,7 +628,15 @@ mod structured_thread_tests {
         let record = records
             .first()
             .ok_or_else(|| anyhow::anyhow!("expected one structured issue comment record"))?;
+        anyhow::ensure!(record.id == "43");
+        anyhow::ensure!(record.kind == "issue-comments");
+        anyhow::ensure!(record.author == "maintainer");
+        anyhow::ensure!(record.body == "Issue-comment-shaped data must not certify delivery.");
+        anyhow::ensure!(record.path.is_none());
+        anyhow::ensure!(record.line.is_none());
+        anyhow::ensure!(record.commit_id.as_deref() == Some("abc123"));
         anyhow::ensure!(record.head_binding == "unbound");
+        anyhow::ensure!(record.state.is_none());
         Ok(())
     }
 }

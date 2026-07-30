@@ -12300,3 +12300,413 @@ kind = "exposure_gap"
 finding_id = "probe:src_main.rs:return_value:d3368aab"
 owner = "ub-review/core"
 reason = "Twin of the return_value probe above on the same overlap_ms formula: run_loop_overlap_ms_does_not_double_count_self_overlapping_side pins the exact result of this saturating_sub through the same pairwise-distinct union values; RIPR 0.10.0 cannot associate the oracle through the metrics() -> overlap_ms() indirection (#737). Re-verify after semantic edits or RIPR upgrades."
+
+# PR #779: exact-head structured thread binding adds a small adapter and its
+# fake GitHub API fixture. The focused structured-record tests and the API
+# integration fixture assert current, stale, and unbound binding plus the
+# serialized record fields. RIPR 0.10.0 reports these adapter/fixture probes as
+# weakly exposed or reachable_unrevealed because it does not associate the
+# field-level assertions through the iterator/fixture boundary. Keep each
+# finding visible as a reviewed, content-addressed suppression and re-verify
+# after semantic edits or a RIPR upgrade.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:f56df5ca"
+owner = "ub-review/core"
+reason = "PR #779 fake GitHub thread fixture construction is covered by pr_thread_context_fetches_github_thread_snapshot, which asserts the current and stale structured records; RIPR 0.10.0 does not associate the fixture field oracle. Re-verify after fixture or RIPR edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:1afd4d63"
+owner = "ub-review/core"
+reason = "PR #779 fake GitHub thread fixture construction is covered by pr_thread_context_fetches_github_thread_snapshot, which asserts the current and stale structured records; RIPR 0.10.0 does not associate the fixture field oracle. Re-verify after fixture or RIPR edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:68df439b"
+owner = "ub-review/core"
+reason = "PR #779 fake GitHub thread fixture construction is covered by pr_thread_context_fetches_github_thread_snapshot, which asserts the current and stale structured records; RIPR 0.10.0 does not associate the fixture field oracle. Re-verify after fixture or RIPR edits."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:4dc0ccd2"
+owner = "ub-review/core"
+reason = "PR #779 adds current-head adapter plumbing; the focused structured-record tests and GitHub API fixture cover the changed adapter path, but RIPR 0.10.0 cannot associate the argument construction through existing callers. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:7249ea57"
+owner = "ub-review/core"
+reason = "PR #779 adds current-head adapter plumbing; the focused structured-record tests and GitHub API fixture cover the changed adapter path, but RIPR 0.10.0 cannot associate the argument construction through existing callers. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:2cadc538"
+owner = "ub-review/core"
+reason = "PR #779 adds current-head adapter plumbing; the focused structured-record tests and GitHub API fixture cover the changed adapter path, but RIPR 0.10.0 cannot associate the argument construction through existing callers. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:match_arm:7ec8dc39"
+owner = "ub-review/core"
+reason = "PR #779 current-head adapter plumbing is covered by the GitHub API fixture and focused structured-record tests; RIPR 0.10.0 reports the changed call match as weakly exposed through the existing caller boundary. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:c6f6f213"
+owner = "ub-review/core"
+reason = "PR #779 current-head adapter plumbing is covered by the GitHub API fixture and focused structured-record tests; RIPR 0.10.0 reports the changed call construction as weakly exposed through the existing caller boundary. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:d4d5f1a4"
+owner = "ub-review/core"
+reason = "PR #779 current-head thread accumulation is covered by the GitHub API fixture, which asserts the resulting structured records; RIPR 0.10.0 reports the accumulator through an adapter boundary. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:f63b7fc6"
+owner = "ub-review/core"
+reason = "PR #779 current-head thread accumulation is covered by the GitHub API fixture, which asserts the resulting structured records; RIPR 0.10.0 reports the accumulator through an adapter boundary. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:a8186521"
+owner = "ub-review/core"
+reason = "PR #779 current-head thread accumulation is covered by the GitHub API fixture, which asserts the resulting structured records; RIPR 0.10.0 reports the accumulator through an adapter boundary. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:f11ca034"
+owner = "ub-review/core"
+reason = "PR #779 adds current-head adapter plumbing; the focused structured-record tests and GitHub API fixture cover the changed adapter path, but RIPR 0.10.0 cannot associate the argument construction through existing callers. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:3fe3673a"
+owner = "ub-review/core"
+reason = "PR #779 github_thread_records is covered by focused array-backed structured-record tests; RIPR 0.10.0 reports iterator plumbing as reachable without associating the record assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:3443110f"
+owner = "ub-review/core"
+reason = "PR #779 current binding is covered by exact current/stale/unbound assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 does not associate the match result through the constructed record. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:19fca71e"
+owner = "ub-review/core"
+reason = "PR #779 github_thread_records is covered by focused array-backed structured-record tests; RIPR 0.10.0 reports iterator plumbing as reachable without associating the record assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:e8d6643f"
+owner = "ub-review/core"
+reason = "PR #779 current binding is covered by exact current/stale/unbound assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 does not associate the match result through the constructed record. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:359456fc"
+owner = "ub-review/core"
+reason = "PR #779 github_thread_records is covered by focused array-backed structured-record tests; RIPR 0.10.0 reports iterator plumbing as reachable without associating the record assertions. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:da3f2826"
+owner = "ub-review/core"
+reason = "PR #779 current binding is covered by exact current/stale/unbound assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 does not associate the match result through the constructed record. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:7744a801"
+owner = "ub-review/core"
+reason = "PR #779 commit-id extraction is covered by exact commit assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the field-level oracle as weak through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:f7ba01f3"
+owner = "ub-review/core"
+reason = "PR #779 commit-id extraction is covered by exact commit assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the field-level oracle as weak through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:3319c44a"
+owner = "ub-review/core"
+reason = "PR #779 commit-id extraction is covered by exact commit assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the field-level oracle as weak through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:803cf94b"
+owner = "ub-review/core"
+reason = "PR #779 commit-id extraction is covered by exact commit assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the field-level oracle as weak through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:match_arm:39c796b8"
+owner = "ub-review/core"
+reason = "PR #779 current/stale/unbound match is covered by explicit binding assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 cannot associate the branch oracle through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:match_arm:bd76921d"
+owner = "ub-review/core"
+reason = "PR #779 current binding branch is covered by exact current-head assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 cannot associate the branch oracle through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:match_arm:3c5d8a48"
+owner = "ub-review/core"
+reason = "PR #779 stale binding branch is covered by exact stale-head assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 cannot associate the branch oracle through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:fe7e414f"
+owner = "ub-review/core"
+reason = "PR #779 unbound binding branch is covered by issue-comment assertions, including a matching commit id that remains unbound; RIPR 0.10.0 does not associate the branch oracle through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:match_arm:00cdc512"
+owner = "ub-review/core"
+reason = "PR #779 unbound binding branch is covered by issue-comment assertions, including a matching commit id that remains unbound; RIPR 0.10.0 does not associate the branch oracle through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:5866b60b"
+owner = "ub-review/core"
+reason = "PR #779 unbound binding branch is covered by issue-comment assertions, including a matching commit id that remains unbound; RIPR 0.10.0 does not associate the branch oracle through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:22663169"
+owner = "ub-review/core"
+reason = "PR #779 ReviewThreadRecord construction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the constructor boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:1954d560"
+owner = "ub-review/core"
+reason = "PR #779 ReviewThreadRecord construction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the constructor boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:88f357b4"
+owner = "ub-review/core"
+reason = "PR #779 structured record extraction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON extraction boundary as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:e568adad"
+owner = "ub-review/core"
+reason = "PR #779 structured record extraction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON extraction boundary as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:e0899d60"
+owner = "ub-review/core"
+reason = "PR #779 structured record extraction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON extraction boundary as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:adb8ea0e"
+owner = "ub-review/core"
+reason = "PR #779 structured record extraction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON extraction boundary as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:ebe5e9ab"
+owner = "ub-review/core"
+reason = "PR #779 structured record extraction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON extraction boundary as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:ac96ce2e"
+owner = "ub-review/core"
+reason = "PR #779 structured record extraction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON extraction boundary as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:f8ab21ae"
+owner = "ub-review/core"
+reason = "PR #779 line extraction is covered by exact line assertions for line and original_line-shaped API records; RIPR 0.10.0 reports the fallback adapter branch without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:5194faa8"
+owner = "ub-review/core"
+reason = "PR #779 line extraction is covered by exact line assertions for line and original_line-shaped API records; RIPR 0.10.0 reports the fallback adapter branch without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:3372ce31"
+owner = "ub-review/core"
+reason = "PR #779 line extraction is covered by exact line assertions for line and original_line-shaped API records; RIPR 0.10.0 reports the fallback adapter branch without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:4bab3a37"
+owner = "ub-review/core"
+reason = "PR #779 structured record fields are covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports JSON field construction as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:2672193e"
+owner = "ub-review/core"
+reason = "PR #779 structured record fields are covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports JSON field construction as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:a42ecd2b"
+owner = "ub-review/core"
+reason = "PR #779 structured record construction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON closure boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:0825b037"
+owner = "ub-review/core"
+reason = "PR #779 structured record construction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON closure boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:6fabebb6"
+owner = "ub-review/core"
+reason = "PR #779 author extraction is covered by exact author assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports JSON field construction as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:b5723ff9"
+owner = "ub-review/core"
+reason = "PR #779 author extraction is covered by exact author assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports JSON field construction as weak through the adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:b2fc9b5d"
+owner = "ub-review/core"
+reason = "PR #779 author extraction is covered by exact author assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON pointer boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:d888b7d4"
+owner = "ub-review/core"
+reason = "PR #779 author extraction is covered by exact author assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON pointer boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:79bc15be"
+owner = "ub-review/core"
+reason = "PR #779 author extraction is covered by exact author assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON pointer boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:e793f21e"
+owner = "ub-review/core"
+reason = "PR #779 structured record ownership and body/path fields are covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned-string conversion as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:0f6304ef"
+owner = "ub-review/core"
+reason = "PR #779 structured record ownership and body/path fields are covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned-string conversion as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:b6dffad7"
+owner = "ub-review/core"
+reason = "PR #779 structured record ownership and body/path fields are covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned-string conversion as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:f2ef71fa"
+owner = "ub-review/core"
+reason = "PR #779 optional body handling is covered by exact body assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the default-value adapter without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:7fa26e69"
+owner = "ub-review/core"
+reason = "PR #779 optional body handling is covered by exact body assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the default-value adapter without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:186452d7"
+owner = "ub-review/core"
+reason = "PR #779 optional body handling is covered by exact body assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the default-value adapter without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:e793f21e.2"
+owner = "ub-review/core"
+reason = "PR #779 structured record ownership and body/path fields are covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned-string conversion as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:0f6304ef.2"
+owner = "ub-review/core"
+reason = "PR #779 structured record ownership and body/path fields are covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned-string conversion as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:b6dffad7.2"
+owner = "ub-review/core"
+reason = "PR #779 structured record ownership and body/path fields are covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned-string conversion as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:3e462811"
+owner = "ub-review/core"
+reason = "PR #779 line extraction is covered by exact line assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the line/original-line fallback as weak through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:77340ed0"
+owner = "ub-review/core"
+reason = "PR #779 line extraction is covered by exact line assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the line/original-line fallback as weak through the JSON adapter. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:1913b8f1"
+owner = "ub-review/core"
+reason = "PR #779 commit-id retention is covered by exact current, stale, and matching-issue-comment assertions; RIPR 0.10.0 reports the record field through the JSON adapter without linking the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:5043aea8"
+owner = "ub-review/core"
+reason = "PR #779 commit-id retention is covered by exact current, stale, and matching-issue-comment assertions; RIPR 0.10.0 reports the record field through the JSON adapter without linking the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:b9e25e12"
+owner = "ub-review/core"
+reason = "PR #779 current/stale/unbound binding output is covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned binding conversion without linking the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:194c4ae2"
+owner = "ub-review/core"
+reason = "PR #779 current/stale/unbound binding output is covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned binding conversion without linking the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:return_value:16fffcae"
+owner = "ub-review/core"
+reason = "PR #779 current/stale/unbound binding output is covered by exact assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports owned binding conversion without linking the oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:6d8e3a05"
+owner = "ub-review/core"
+reason = "PR #779 structured record construction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON closure boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:call_deletion:a42ecd2b.2"
+owner = "ub-review/core"
+reason = "PR #779 structured record construction is covered by complete field assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the JSON closure boundary as reachable without linking the field oracle. Re-verify after semantic edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_pr_thread_context.rs:field_construction:da149fdb"
+owner = "ub-review/core"
+reason = "PR #779 author fixture data is covered by exact author assertions in focused structured-record tests and the API fixture; RIPR 0.10.0 reports the fixture field without linking the adapter oracle. Re-verify after fixture or RIPR edits."
