@@ -5577,6 +5577,8 @@ GATE_OUTCOME_REASON_KINDS = {
     "tool-gate",
     "required-sensor",
     "required-tool-timeout",
+    "sensor-finding",
+    "reporter-verdict",
     "blocking-finding",
     "policy",
     "internal",
@@ -5822,7 +5824,7 @@ def ndjson_parity(root: pathlib.Path, name: str, expected: list) -> None:
 
 
 def require_gate_outcome(root: pathlib.Path) -> None:
-    """The verdict artifact decides pass/fail; the verifier audits it
+    """The verdict artifact decides pass/fail/inconclusive; the verifier audits it
     (release lane step 3 / decision D5): schema, reason shapes, receipt
     pointers that resolve, count coherence, and conclusion-iff-reasons."""
     outcome = load_json(root / "review/gate_outcome.json")
@@ -5831,8 +5833,11 @@ def require_gate_outcome(root: pathlib.Path) -> None:
     if outcome.get("schema") != "ub-review.gate_outcome.v1":
         fail(f"gate outcome has wrong schema: {outcome.get('schema')!r}")
     conclusion = outcome.get("conclusion")
-    if conclusion not in {"pass", "fail"}:
-        fail(f"gate outcome conclusion must be pass or fail: {conclusion!r}")
+    if conclusion not in {"pass", "fail", "inconclusive"}:
+        fail(
+            "gate outcome conclusion must be pass, fail, or inconclusive: "
+            f"{conclusion!r}"
+        )
     terminal = load_json(root / "review/terminal_state.json")
     if isinstance(terminal, dict) and outcome.get("terminal_status") != terminal.get(
         "status"
@@ -5843,10 +5848,14 @@ def require_gate_outcome(root: pathlib.Path) -> None:
     reasons = outcome.get("reasons")
     if not isinstance(reasons, list):
         fail("gate outcome reasons is not an array")
-    if (conclusion == "fail") != bool(reasons):
+    if conclusion == "pass" and reasons:
         fail(
-            "gate outcome conclusion must be fail exactly when blocking "
-            f"reasons exist: conclusion={conclusion!r} reasons={len(reasons)}"
+            "gate outcome pass conclusion cannot carry reasons: "
+            f"reasons={len(reasons)}"
+        )
+    if conclusion in {"fail", "inconclusive"} and not reasons:
+        fail(
+            f"gate outcome {conclusion} conclusion requires at least one reason"
         )
     for index, reason in enumerate(reasons):
         if not isinstance(reason, dict):
@@ -5891,6 +5900,22 @@ def require_gate_outcome(root: pathlib.Path) -> None:
                     "next_action is not a non-empty string: "
                     f"{next_action!r}"
                 )
+    reason_kinds = {
+        reason.get("kind") for reason in reasons if isinstance(reason, dict)
+    }
+    evidence_unavailable_only = bool(reasons) and reason_kinds.issubset(
+        GATE_OUTCOME_EVIDENCE_UNAVAILABLE_REASON_KINDS
+    )
+    if conclusion == "inconclusive" and not evidence_unavailable_only:
+        fail(
+            "gate outcome inconclusive conclusion requires one or more "
+            "evidence-unavailable reasons"
+        )
+    if conclusion == "fail" and evidence_unavailable_only:
+        fail(
+            "gate outcome fail conclusion requires at least one demonstrated "
+            "blocking reason"
+        )
     required_proof = outcome.get("required_proof")
     if not isinstance(required_proof, dict):
         fail("gate outcome required_proof is not an object")
@@ -10131,13 +10156,35 @@ def self_test_gate_outcome_contract() -> None:
             "fail without reasons",
             outcome(reasons=[], required_proof={"matched": 0, "passed": 0, "failed": 0, "skipped": 0}),
             True,
-            "conclusion must be fail exactly when",
+            "fail conclusion requires at least one reason",
         ),
         (
             "pass with reasons",
             outcome(conclusion="pass"),
             True,
-            "conclusion must be fail exactly when",
+            "pass conclusion cannot carry reasons",
+        ),
+        (
+            "inconclusive with demonstrated reason",
+            outcome(conclusion="inconclusive"),
+            True,
+            "inconclusive conclusion requires one or more evidence-unavailable reasons",
+        ),
+        (
+            "fail with unavailable reason only",
+            outcome(
+                reasons=[
+                    {
+                        "kind": "required-sensor",
+                        "id": "ripr",
+                        "detail": "required sensor evidence is missing",
+                        "receipt": "review/proof_receipts.json#proof-build-abc",
+                    }
+                ],
+                evidence_gaps_blocking=1,
+            ),
+            True,
+            "fail conclusion requires at least one demonstrated",
         ),
         (
             "unknown reason kind",
@@ -10206,7 +10253,13 @@ def self_test_gate_outcome_contract() -> None:
         return base
 
     def write_timeout_root(reason: dict) -> "pathlib.Path":
-        root = write_root(outcome(reasons=[reason], evidence_gaps_blocking=1))
+        root = write_root(
+            outcome(
+                conclusion="inconclusive",
+                reasons=[reason],
+                evidence_gaps_blocking=1,
+            )
+        )
         sensor_dir = root / "sensors/ripr"
         sensor_dir.mkdir(parents=True)
         (sensor_dir / "ub-review-sensor-status.json").write_text(
@@ -10215,6 +10268,22 @@ def self_test_gate_outcome_contract() -> None:
         return root
 
     require_gate_outcome(write_timeout_root(timeout_reason()))
+
+    for kind in ("sensor-finding", "reporter-verdict"):
+        require_gate_outcome(
+            write_root(
+                outcome(
+                    reasons=[
+                        {
+                            "kind": kind,
+                            "id": f"{kind}-fixture",
+                            "detail": f"{kind} produced a blocking disposition",
+                            "receipt": "review/proof_receipts.json#proof-build-abc",
+                        }
+                    ]
+                )
+            )
+        )
     expect_self_test_failure(
         "gate-outcome timeout reason without lease seconds",
         "does not name the expired lease",

@@ -45,7 +45,8 @@ sufficient                   pass
 artifact-only                pass
 needs-reviewer-attention     pass        (review feedback, not a blocker)
 needs-reviewer-attention     fail        (only when a blocking condition below holds)
-failed-to-review             fail
+failed-to-review             fail        (only when a deterministic blocking condition holds)
+required evidence unavailable inconclusive (the code was not demonstrated defective)
 ```
 
 The gate goes red only for:
@@ -91,10 +92,10 @@ posting trouble is not gate trouble.
 }
 ```
 
-Every `fail` reason carries a receipt pointer. A red gate with no receipt is a
-bug in the gate, not a finding.
+Every `fail` or `inconclusive` reason carries a receipt pointer. A blocking gate
+with no receipt is a bug in the gate, not a finding.
 
-`gate_outcome.json` decides "is this compiled review a pass or fail?" A
+`gate_outcome.json` decides "is this compiled review a pass, fail, or inconclusive?" A
 separate, inert substrate — the current-head watchdog
 (`review/gate_watchdog.json`, schema `ub-review.gate_watchdog.v1`, issue #745,
 child of #658) — decides "did the current head actually reach an honest
