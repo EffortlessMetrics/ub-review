@@ -708,6 +708,7 @@ mod tests {
                     path: Some("src/parser.rs".to_owned()),
                     line: Some(12),
                     commit_id: Some(head.to_owned()),
+                    head_binding: "current".to_owned(),
                     state: Some("open".to_owned()),
                 },
                 ReviewThreadRecord {
@@ -718,6 +719,7 @@ mod tests {
                     path: Some("src/parser.rs".to_owned()),
                     line: Some(12),
                     commit_id: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned()),
+                    head_binding: "stale".to_owned(),
                     state: Some("open".to_owned()),
                 },
             ],

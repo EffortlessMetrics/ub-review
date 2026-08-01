@@ -3,7 +3,11 @@
 
 use crate::*;
 
-pub(crate) fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<PrThreadContext> {
+pub(crate) fn collect_pr_thread_context(
+    root: &Path,
+    args: &RunArgs,
+    current_head: &str,
+) -> Result<PrThreadContext> {
     let mut context = PrThreadContext {
         schema: PR_THREAD_CONTEXT_SCHEMA.to_owned(),
         status: "absent".to_owned(),
@@ -68,15 +72,20 @@ pub(crate) fn collect_pr_thread_context(root: &Path, args: &RunArgs) -> Result<P
             .warnings
             .push(format!("github-api thread context unavailable: {err}")),
         Some(Ok(request)) => {
-            match read_github_pr_thread_context(root, &request, args.pr_thread_context_max_bytes) {
+            match read_github_pr_thread_context(
+                root,
+                &request,
+                args.pr_thread_context_max_bytes,
+                current_head,
+            ) {
                 Ok(api_context) => {
                     context.sources.extend(api_context.sources);
+                    context.threads.extend(api_context.threads);
                     append_thread_context(
                         &mut context,
                         &api_context.thread_context,
                         args.pr_thread_context_max_bytes,
                     );
-                    context.threads.extend(api_context.threads);
                 }
                 Err(err) => context
                     .warnings
@@ -110,7 +119,7 @@ pub(crate) struct GitHubThreadApiContext {
     pub(crate) threads: Vec<ReviewThreadRecord>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub(crate) struct ReviewThreadRecord {
     pub(crate) id: String,
     pub(crate) kind: String,
@@ -119,6 +128,8 @@ pub(crate) struct ReviewThreadRecord {
     pub(crate) path: Option<String>,
     pub(crate) line: Option<u32>,
     pub(crate) commit_id: Option<String>,
+    /// `current`, `stale`, or `unbound` relative to the exact reviewed SHA.
+    pub(crate) head_binding: String,
     pub(crate) state: Option<String>,
 }
 
@@ -161,6 +172,7 @@ pub(crate) fn read_github_pr_thread_context(
     root: &Path,
     request: &GitHubThreadApiRequest<'_>,
     max_bytes: usize,
+    current_head: &str,
 ) -> Result<GitHubThreadApiContext> {
     let endpoints = [
         (
@@ -196,7 +208,7 @@ pub(crate) fn read_github_pr_thread_context(
             request.repo, request.pull_number, kind
         ));
         sections.push(render_github_pr_thread_section(kind, &value, max_bytes));
-        threads.extend(github_thread_records(kind, &value));
+        threads.extend(github_thread_records(kind, &value, current_head));
     }
 
     let mut text = String::new();
@@ -215,53 +227,63 @@ pub(crate) fn read_github_pr_thread_context(
     })
 }
 
-fn github_thread_records(kind: &str, value: &serde_json::Value) -> Vec<ReviewThreadRecord> {
+fn github_thread_records(
+    kind: &str,
+    value: &serde_json::Value,
+    current_head: &str,
+) -> Vec<ReviewThreadRecord> {
     value
         .as_array()
         .into_iter()
         .flatten()
-        .map(|item| ReviewThreadRecord {
-            id: item
-                .get("id")
-                .and_then(serde_json::Value::as_u64)
-                .map(|id| id.to_string())
-                .or_else(|| {
-                    item.get("node_id")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                })
-                .unwrap_or_else(|| "unknown-thread".to_owned()),
-            kind: kind.to_owned(),
-            author: item
-                .pointer("/user/login")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("unknown")
-                .to_owned(),
-            body: item
-                .get("body")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            path: item
-                .get("path")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned),
-            line: item
-                .get("line")
-                .and_then(serde_json::Value::as_u64)
-                .or_else(|| {
-                    item.get("original_line")
-                        .and_then(serde_json::Value::as_u64)
-                })
-                .and_then(|line| u32::try_from(line).ok()),
-            commit_id: item
+        .map(|item| {
+            let commit_id = item
                 .get("commit_id")
                 .and_then(serde_json::Value::as_str)
-                .map(str::to_owned),
-            state: item
-                .get("state")
-                .and_then(serde_json::Value::as_str)
-                .map(str::to_owned),
+                .map(str::to_owned);
+            let head_binding = match (kind, commit_id.as_deref()) {
+                ("review-comments", Some(commit)) if commit == current_head => "current",
+                ("review-comments", Some(_)) => "stale",
+                _ => "unbound",
+            };
+            ReviewThreadRecord {
+                id: item
+                    .get("id")
+                    .and_then(serde_json::Value::as_u64)
+                    .map(|id| id.to_string())
+                    .or_else(|| {
+                        item.get("node_id")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                    })
+                    .unwrap_or_else(|| "unknown-thread".to_owned()),
+                kind: kind.to_owned(),
+                author: item
+                    .pointer("/user/login")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("unknown")
+                    .to_owned(),
+                body: item
+                    .get("body")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                path: item
+                    .get("path")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+                line: item
+                    .get("line")
+                    .or_else(|| item.get("original_line"))
+                    .and_then(serde_json::Value::as_u64)
+                    .and_then(|line| u32::try_from(line).ok()),
+                commit_id,
+                head_binding: head_binding.to_owned(),
+                state: item
+                    .get("state")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+            }
         })
         .collect()
 }
@@ -532,4 +554,92 @@ pub(crate) fn pr_thread_reuse_guidance(context: &PrThreadContext) -> Option<&'st
 - Before emitting a verification question or proof request, compare it with the seeded thread. If the same concern is already answered and the current diff does not reopen it, emit a `resolved-check` observation or `failed_objection` instead of a fresh candidate.\n\
 - If the current diff reopens an answered concern, cite the changed file/line or proof receipt that makes the prior answer stale.\n",
     )
+}
+
+#[cfg(test)]
+mod structured_thread_tests {
+    use super::*;
+
+    #[test]
+    fn github_records_preserve_anchor_and_exact_head() -> Result<()> {
+        let value = serde_json::json!([{
+            "id": 42,
+            "user": {"login": "reviewer"},
+            "body": "Postfix is discarded after the list item.",
+            "path": "src/parser.rs",
+            "line": 17,
+            "commit_id": "abc123",
+            "state": "COMMENTED"
+        }]);
+
+        let records = github_thread_records("review-comments", &value, "abc123");
+        let record = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
+        anyhow::ensure!(record.id == "42");
+        anyhow::ensure!(record.kind == "review-comments");
+        anyhow::ensure!(record.author == "reviewer");
+        anyhow::ensure!(record.body == "Postfix is discarded after the list item.");
+        anyhow::ensure!(record.path.as_deref() == Some("src/parser.rs"));
+        anyhow::ensure!(record.line == Some(17));
+        anyhow::ensure!(record.commit_id.as_deref() == Some("abc123"));
+        anyhow::ensure!(record.head_binding == "current");
+        anyhow::ensure!(record.state.as_deref() == Some("COMMENTED"));
+        let stale_records = github_thread_records("review-comments", &value, "def456");
+        anyhow::ensure!(
+            stale_records
+                .first()
+                .is_some_and(|item| item.head_binding == "stale")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn unbound_issue_comment_cannot_certify_current_head() -> Result<()> {
+        let value = serde_json::json!([{
+            "node_id": "IC_kwDO",
+            "user": {"login": "maintainer"},
+            "body": "Accepted tradeoff"
+        }]);
+
+        let records = github_thread_records("issue-comments", &value, "abc123");
+        let record = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one structured thread record"))?;
+        anyhow::ensure!(record.id == "IC_kwDO");
+        anyhow::ensure!(record.kind == "issue-comments");
+        anyhow::ensure!(record.author == "maintainer");
+        anyhow::ensure!(record.body == "Accepted tradeoff");
+        anyhow::ensure!(record.path.is_none());
+        anyhow::ensure!(record.line.is_none());
+        anyhow::ensure!(record.commit_id.is_none());
+        anyhow::ensure!(record.head_binding == "unbound");
+        anyhow::ensure!(record.state.is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn issue_comment_with_matching_commit_id_stays_unbound() -> Result<()> {
+        let value = serde_json::json!([{
+            "id": 43,
+            "user": {"login": "maintainer"},
+            "body": "Issue-comment-shaped data must not certify delivery.",
+            "commit_id": "abc123"
+        }]);
+
+        let records = github_thread_records("issue-comments", &value, "abc123");
+        let record = records
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("expected one structured issue comment record"))?;
+        anyhow::ensure!(record.id == "43");
+        anyhow::ensure!(record.kind == "issue-comments");
+        anyhow::ensure!(record.author == "maintainer");
+        anyhow::ensure!(record.body == "Issue-comment-shaped data must not certify delivery.");
+        anyhow::ensure!(record.path.is_none());
+        anyhow::ensure!(record.line.is_none());
+        anyhow::ensure!(record.commit_id.as_deref() == Some("abc123"));
+        anyhow::ensure!(record.head_binding == "unbound");
+        anyhow::ensure!(record.state.is_none());
+        Ok(())
+    }
 }

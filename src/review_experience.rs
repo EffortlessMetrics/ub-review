@@ -200,7 +200,15 @@ mod tests {
     fn production_thread_context(
         fixture: &ReviewExperienceFixture,
         thread_commit: &str,
+        review_head: &str,
     ) -> PrThreadContext {
+        // Mirrors the production binding rule in `github_thread_records`: an
+        // inline thread is `current` only when its commit is the reviewed head.
+        let head_binding = if thread_commit == review_head {
+            "current"
+        } else {
+            "stale"
+        };
         PrThreadContext {
             schema: PR_THREAD_CONTEXT_SCHEMA.to_owned(),
             status: "seeded".to_owned(),
@@ -225,6 +233,7 @@ mod tests {
                     path: (!thread.path.is_empty()).then(|| thread.path.clone()),
                     line: thread.anchor,
                     commit_id: Some(thread_commit.to_owned()),
+                    head_binding: head_binding.to_owned(),
                     state: Some(thread.status.clone()),
                 })
                 .collect(),
@@ -498,7 +507,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &production_thread_context(&fixture, &fixture.buggy_head_sha),
+            &production_thread_context(&fixture, &fixture.buggy_head_sha, &fixture.buggy_head_sha),
         );
         require(
             current_graph
@@ -530,7 +539,7 @@ mod tests {
             &[],
             &[],
             &[],
-            &production_thread_context(&fixture, &fixture.buggy_head_sha),
+            &production_thread_context(&fixture, &fixture.buggy_head_sha, &fixture.fixed_head_sha),
         );
         let stale_reconciled =
             reconcile_inline_comments(&stale_graph, std::slice::from_ref(&candidate));

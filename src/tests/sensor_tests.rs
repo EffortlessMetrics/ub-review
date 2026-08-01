@@ -176,7 +176,8 @@ fn unsafe_review_swarm_recommended_config_loads_advisory_floor() -> Result<()> {
         assert!(sensor.run, "{id} should run in every advisory swarm pass");
         assert!(sensor.required, "{id} should stay in the required floor");
     }
-    let resolved_profile = crate::resolved_profile_artifact(&config, config.selected_profile()?);
+    let resolved_profile =
+        crate::plan_artifacts::resolved_profile_artifact(&config, config.selected_profile()?);
     assert_eq!(
         resolved_profile["proof"]["required"]
             .as_array()

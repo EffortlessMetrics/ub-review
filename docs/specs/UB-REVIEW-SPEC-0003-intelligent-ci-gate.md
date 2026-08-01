@@ -153,7 +153,7 @@ configurable.
 
 ```text
 schema                    "ub-review.gate_outcome.v1" exactly
-conclusion                "pass" | "fail"
+conclusion                "pass" | "fail" | "inconclusive"
 terminal_status           from ub-review.terminal_state.v1
 reasons[]                 {kind, id, detail, receipt, next_action?}
 required_proof            {matched, passed, failed, skipped}
@@ -180,6 +180,12 @@ required-tool-timeout
                     and, when configured, the [tools.<id>.gate] threshold
                     that never evaluated; next_action names the operator
                     move.
+sensor-finding      a required sensor ran and demonstrated a defect; unlike
+                    required-sensor, this is a fail rather than unavailable
+                    evidence
+reporter-verdict    the configured review-forward policy accepted a blocking
+                    reporter disposition; it is deterministic policy output,
+                    not an unvalidated model verdict
 blocking-finding    today emitted only by the two [gate.blocking] evidence
                     opt-ins (required_proof_unproven,
                     tool_gate_missing_evidence); per-finding-class
@@ -198,7 +204,7 @@ The two `[gate.blocking]` opt-ins surface as `blocking-finding` reasons, not
 as `required-proof`/`tool-gate` kinds — automation keying on reason kinds
 must expect that.
 
-Every `fail` reason carries a receipt pointer into existing artifacts: proof
+Every `fail` or `inconclusive` reason carries a receipt pointer into existing artifacts: proof
 reasons point into `review/proof_receipts.json#<id>`, required-sensor reasons
 point at `sensors/<id>/ub-review-sensor-status.json` (or
 `review/terminal_state.json` when the receipt itself is absent), tool-gate
@@ -291,7 +297,7 @@ exactly the schema `ub-review.gate_outcome.v1` (src/gate.rs
 ```text
 missing gate_outcome.json          failure
 unexpected or missing schema       failure, named in the error
-conclusion "fail"                  failure, reason ids listed
+conclusion "fail" or "inconclusive" failure, reason ids listed
 null / missing / case-drifted
 conclusion ("Fail")                failure naming the unexpected value
 ```
@@ -322,7 +328,7 @@ roadmap item 24 acceptance).
 
 ## Current-head watchdog (#745)
 
-`gate_outcome.json` answers "is this compiled review a pass or fail?" It does
+`gate_outcome.json` answers "is this compiled review a pass, fail, or inconclusive?" It does
 not answer "did the current PR head actually reach an honest terminal state, or
 is a green verdict stale, cancelled, or missing?" The current-head watchdog
 (`src/gate_watchdog.rs`, `ub-review gate-watchdog`) closes that gap. It is a
@@ -471,7 +477,7 @@ correct.
 
 What can a user rely on?
 The `ub-review.gate_outcome.v1` schema and its required fields; the reason
-kinds; receipt pointers on every fail reason; the exact-`pass` fail-closed
+kinds; receipt pointers on every fail or inconclusive reason; the exact-`pass` fail-closed
 gate check; `fail-on-gate=auto` meaning enforce only in `intelligent-ci`;
 a verdict on every head SHA; quiet synchronize/reopened passes leaving a
 truthful `skipped_pass_policy` receipt.

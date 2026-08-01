@@ -193,7 +193,12 @@ terminal_state.json            ub-review.terminal_state.v1; status is one of
                                needs-reviewer-attention | sufficient |
                                artifact-only | failed-to-review
 pr_thread_context.json         ub-review.pr_thread_context.v1; status
-                               seeded | absent | unavailable
+                               seeded | absent | unavailable; `threads` is an
+                               additive list of structured GitHub records with
+                               comment ID, kind, author, body, optional anchor,
+                               commit ID, exact-head binding (`current`, `stale`,
+                               or `unbound`), and review state. Only `current`
+                               may certify delivery for the reviewed head.
 github-review.json             XOR github-review-skip.json (skip statuses:
                                skipped_empty_smoke |
                                skipped_artifact_only_body |
