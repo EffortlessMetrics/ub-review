@@ -98,7 +98,9 @@ pub(crate) use calibration::{
 mod review_compiler;
 pub(crate) use review_compiler::*;
 mod cost_artifact;
-pub(crate) use cost_artifact::*;
+#[cfg(test)]
+use cost_artifact::{build_cost_receipt, build_floor_trend_artifact};
+use cost_artifact::{write_cost_receipt_artifact, write_floor_trend_artifact};
 mod quality_artifact;
 use quality_artifact::{write_quality_receipt_artifact, write_quality_trend_artifact};
 mod quality_github;
