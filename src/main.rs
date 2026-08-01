@@ -899,6 +899,8 @@ struct PrThreadContext {
     thread_context_path: Option<String>,
     thread_context: Option<String>,
     thread_context_truncated: bool,
+    #[serde(default)]
+    threads: Vec<ReviewThreadRecord>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -3580,7 +3582,7 @@ fn cmd_run(args: RunArgs) -> Result<RunCompletion> {
             }
         }
     }
-    let pr_thread_context = collect_pr_thread_context(&args.review.root, &args)?;
+    let pr_thread_context = collect_pr_thread_context(&args.review.root, &args, &diff.head)?;
 
     write_lane_packets(
         &args.review.out,
@@ -4462,7 +4464,7 @@ fn write_review_artifacts(
     // Shadow-mode claim graph (Order 3 of epic #655). Emitted but not consumed
     // for review compilation — the compiler still uses raw observations and
     // candidates. Future PRs populate claims, evidence, conflicts, and states.
-    let shadow_claim_graph = build_shadow_claim_graph();
+    let shadow_claim_graph = build_shadow_claim_graph(&diff.head);
     write_claim_graph(out, &shadow_claim_graph)?;
     let proof_receipts = proof_result.proof_receipts;
     let resource_leases = proof_result.resource_leases;
@@ -11126,7 +11128,7 @@ index 1111111..2222222 100644
         args.pr_thread_context = "thread.md".to_owned();
         args.pr_thread_context_max_bytes = 40;
 
-        let context = collect_pr_thread_context(temp.path(), &args)?;
+        let context = collect_pr_thread_context(temp.path(), &args, "current-head")?;
         let rendered = render_pr_thread_context(&context);
 
         assert_eq!(context.status, "seeded");
@@ -11266,7 +11268,7 @@ index 1111111..2222222 100644
         args.github_api_url = github_api_url;
         args.pr_thread_context_max_bytes = 8_192;
 
-        let context = collect_pr_thread_context(temp.path(), &args)?;
+        let context = collect_pr_thread_context(temp.path(), &args, "current-head")?;
         let requests = join_fake_github_thread_api(handle)?;
         let rendered = render_pr_thread_context(&context);
 
@@ -11305,6 +11307,33 @@ index 1111111..2222222 100644
         assert!(rendered.contains("ub-review previous question resolved"));
         assert!(rendered.contains("`src/lib.rs`:`12`"));
         assert!(!rendered.contains("thread-token-redacted"));
+        anyhow::ensure!(context.threads.len() == 4);
+        let inline = context
+            .threads
+            .iter()
+            .find(|thread| thread.id == "103")
+            .ok_or_else(|| anyhow::anyhow!("structured inline thread missing"))?;
+        anyhow::ensure!(inline.path.as_deref() == Some("src/lib.rs"));
+        anyhow::ensure!(inline.line == Some(12));
+        anyhow::ensure!(inline.kind == "review-comments");
+        anyhow::ensure!(inline.author == "maintainer");
+        anyhow::ensure!(inline.body == "Inline thread points at the route proof receipt.");
+        anyhow::ensure!(inline.commit_id.as_deref() == Some("current-head"));
+        anyhow::ensure!(inline.head_binding == "current");
+        anyhow::ensure!(inline.state.is_none());
+        let stale = context
+            .threads
+            .iter()
+            .find(|thread| thread.id == "104")
+            .ok_or_else(|| anyhow::anyhow!("structured stale inline thread missing"))?;
+        anyhow::ensure!(stale.kind == "review-comments");
+        anyhow::ensure!(stale.author == "maintainer");
+        anyhow::ensure!(stale.body == "Older inline thread must remain stale.");
+        anyhow::ensure!(stale.path.as_deref() == Some("src/lib.rs"));
+        anyhow::ensure!(stale.line == Some(13));
+        anyhow::ensure!(stale.commit_id.as_deref() == Some("old-head"));
+        anyhow::ensure!(stale.head_binding == "stale");
+        anyhow::ensure!(stale.state.is_none());
         Ok(())
     }
 
@@ -20851,6 +20880,7 @@ index 1111111..2222222 100644
             thread_context_path: None,
             thread_context: None,
             thread_context_truncated: false,
+            threads: Vec::new(),
         }
     }
 
@@ -20964,6 +20994,7 @@ index 1111111..2222222 100644
         let response_body = if request_line.contains("/issues/76/comments?per_page=30") {
             serde_json::to_vec(&serde_json::json!([
                 {
+                    "id": 101,
                     "created_at": "2026-06-03T10:00:00Z",
                     "user": {"login": "author"},
                     "body": "Author reply: ASAN receipt attached; prior verification question is answered."
@@ -20972,6 +21003,7 @@ index 1111111..2222222 100644
         } else if request_line.contains("/pulls/76/reviews?per_page=30") {
             serde_json::to_vec(&serde_json::json!([
                 {
+                    "id": 102,
                     "created_at": "2026-06-03T10:05:00Z",
                     "user": {"login": "ub-review[bot]"},
                     "state": "COMMENTED",
@@ -20981,11 +21013,22 @@ index 1111111..2222222 100644
         } else if request_line.contains("/pulls/76/comments?per_page=50") {
             serde_json::to_vec(&serde_json::json!([
                 {
+                    "id": 103,
                     "created_at": "2026-06-03T10:10:00Z",
                     "user": {"login": "maintainer"},
                     "path": "src/lib.rs",
                     "line": 12,
+                    "commit_id": "current-head",
                     "body": "Inline thread points at the route proof receipt."
+                },
+                {
+                    "id": 104,
+                    "created_at": "2026-06-03T10:11:00Z",
+                    "user": {"login": "maintainer"},
+                    "path": "src/lib.rs",
+                    "line": 13,
+                    "commit_id": "old-head",
+                    "body": "Older inline thread must remain stale."
                 }
             ]))?
         } else {
