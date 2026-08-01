@@ -17,6 +17,7 @@ pub(crate) fn run_proof_planner_model_lane(
     missing_or_failed_model_evidence: &mut Vec<ModelEvidenceIssue>,
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
+    proof_intents: &mut Vec<ProofIntent>,
 ) -> Result<usize> {
     if !should_run_proof_planner_model_lane(context.args, context.diff) {
         return Ok(0);
@@ -154,6 +155,7 @@ pub(crate) fn run_proof_planner_model_lane(
                 context.line_map,
                 model_observations,
                 proof_requests,
+                proof_intents,
             );
         }
         Err(err) => {
@@ -451,6 +453,7 @@ pub(crate) fn follow_up_output_record(
             summary_only_findings: &mut summary_only_findings,
             model_observations: &mut observations,
             proof_requests: &mut proof_requests,
+            proof_intents: &mut Vec::new(),
             issue_candidates: &mut follow_up_issue_candidates,
         },
     );

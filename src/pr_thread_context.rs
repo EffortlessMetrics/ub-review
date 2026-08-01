@@ -386,8 +386,11 @@ pub(crate) fn render_github_pr_thread_item(
         .unwrap_or("");
     let line = item
         .get("line")
-        .or_else(|| item.get("original_line"))
-        .and_then(serde_json::Value::as_u64);
+        .and_then(serde_json::Value::as_u64)
+        .or_else(|| {
+            item.get("original_line")
+                .and_then(serde_json::Value::as_u64)
+        });
     let body = item
         .get("body")
         .and_then(serde_json::Value::as_str)

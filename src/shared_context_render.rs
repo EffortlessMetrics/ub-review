@@ -256,6 +256,11 @@ pub(crate) fn render_shared_context(
         text.push('\n');
     }
     text.push_str("```\n");
+    // Diff and thread excerpts can contain fixture assignments that look like
+    // real credentials. Redact those values before the shared context crosses
+    // into model/provider storage or durable artifacts; placeholders such as
+    // `${{ secrets.OPENCODE }}` remain safe and useful context.
+    let text = redact_shared_context_secret_assignments(&text);
     // Derive the ordered source sections from the rendered prefix by scanning
     // for `## ` headers. The prefix is generated here from stable headers, so
     // this reads exactly what was written (no drift). Each section's byte range
@@ -263,6 +268,129 @@ pub(crate) fn render_shared_context(
     // cohort's shared-prefix contract inspectable. (Order 6 of #678.)
     let sections = prefix_sections_from_rendered(&text);
     Ok((text, sections))
+}
+
+const SHARED_CONTEXT_SECRET_NAMES: [&str; 9] = [
+    "FACTORY_API_KEY",
+    "GITHUB_TOKEN",
+    "MINIMAX_API_KEY",
+    "OPENCODE",
+    "OPENCODE_API_KEY",
+    "UB_REVIEW_GITHUB_TOKEN",
+    "UB_REVIEW_MINIMAX_API_KEY",
+    "UB_REVIEW_OPENCODE_API_KEY",
+    "github_token",
+];
+
+const SHARED_CONTEXT_SAFE_SECRET_VALUES: [&str; 11] = [
+    "", "false", "masked", "missing", "none", "null", "present", "redacted", "true", "unset",
+    "unknown",
+];
+
+/// Redact credential-like assignment values in all shared-context material,
+/// including diff and test-source excerpts. This is intentionally
+/// conservative: a model does not need a literal credential value to reason
+/// about the changed path, while a leaked value cannot be recovered once the
+/// prefix is cached or persisted.
+pub(crate) fn redact_shared_context_secret_assignments(text: &str) -> String {
+    text.split_inclusive('\n')
+        .map(redact_shared_context_secret_line)
+        .collect()
+}
+
+fn redact_shared_context_secret_line(line: &str) -> String {
+    let mut output = String::with_capacity(line.len());
+    let mut cursor = 0usize;
+    while cursor < line.len() {
+        let Some((relative_start, name)) = find_shared_context_secret_name(&line[cursor..]) else {
+            output.push_str(&line[cursor..]);
+            break;
+        };
+        let name_start = cursor + relative_start;
+        let name_end = name_start + name.len();
+        let mut separator = name_end;
+        while line
+            .as_bytes()
+            .get(separator)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            separator += 1;
+        }
+        if !matches!(line.as_bytes().get(separator), Some(b'=') | Some(b':')) {
+            output.push_str(&line[cursor..name_end]);
+            cursor = name_end;
+            continue;
+        }
+        let mut value_start = separator + 1;
+        while line
+            .as_bytes()
+            .get(value_start)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            value_start += 1;
+        }
+        let quote = line
+            .as_bytes()
+            .get(value_start)
+            .copied()
+            .filter(|byte| matches!(byte, b'\'' | b'"'));
+        let content_start = value_start + usize::from(quote.is_some());
+        let content_end = if let Some(quote) = quote {
+            line[content_start..]
+                .find(char::from(quote))
+                .map_or(line.len(), |offset| content_start + offset)
+        } else {
+            line[content_start..]
+                .find(|character: char| {
+                    character.is_ascii_whitespace()
+                        || matches!(character, ',' | ';' | '}' | ']' | ')' | '"' | '\'')
+                })
+                .map_or(line.len(), |offset| content_start + offset)
+        };
+        let value = &line[content_start..content_end];
+        output.push_str(&line[cursor..content_start]);
+        if shared_context_secret_value_needs_redaction(value) {
+            output.push_str("[redacted]");
+        } else {
+            output.push_str(value);
+        }
+        cursor = content_end;
+    }
+    output
+}
+
+fn find_shared_context_secret_name(text: &str) -> Option<(usize, &'static str)> {
+    let upper = text.to_ascii_uppercase();
+    SHARED_CONTEXT_SECRET_NAMES
+        .iter()
+        .filter_map(|name| {
+            let upper_name = name.to_ascii_uppercase();
+            let start = upper.find(&upper_name)?;
+            let before_is_boundary = start == 0
+                || !upper.as_bytes()[start - 1].is_ascii_alphanumeric()
+                    && upper.as_bytes()[start - 1] != b'_';
+            let end = start + name.len();
+            let after_is_boundary = end == upper.len()
+                || !upper.as_bytes()[end].is_ascii_alphanumeric() && upper.as_bytes()[end] != b'_';
+            (before_is_boundary && after_is_boundary).then_some((start, *name))
+        })
+        .min_by_key(|(start, _)| *start)
+}
+
+fn shared_context_secret_value_needs_redaction(value: &str) -> bool {
+    let trimmed = value.trim().trim_matches(['"', '\'']);
+    if SHARED_CONTEXT_SAFE_SECRET_VALUES
+        .iter()
+        .any(|safe| trimmed.eq_ignore_ascii_case(safe))
+        || trimmed.starts_with(['$', '%', '<', '[', '`'])
+    {
+        return false;
+    }
+    let compact = trimmed
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .collect::<String>();
+    compact.len() >= 16
 }
 
 /// Scan rendered shared-context Markdown for `## ` headers and produce
@@ -647,6 +775,24 @@ pub(crate) fn shared_context_cache_lane(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_context_redacts_credential_like_assignments_but_keeps_placeholders() {
+        let source = concat!(
+            "OPENCODE=opencodeSecret123456\n",
+            "FACTORY_API_KEY=abcdefghijklmnop\n",
+            "github_token=1234567890123456\n",
+            "UB_REVIEW_OPENCODE_API_KEY=${{ secrets.OPENCODE }}\n",
+            "MINIMAX_API_KEY=present\n",
+        );
+        let redacted = redact_shared_context_secret_assignments(source);
+        assert!(!redacted.contains("opencodeSecret123456"));
+        assert!(!redacted.contains("abcdefghijklmnop"));
+        assert!(!redacted.contains("1234567890123456"));
+        assert!(redacted.contains("OPENCODE=[redacted]"));
+        assert!(redacted.contains("${{ secrets.OPENCODE }}"));
+        assert!(redacted.contains("MINIMAX_API_KEY=present"));
+    }
 
     #[test]
     fn prefix_sections_scan_finds_headers_with_byte_ranges() {

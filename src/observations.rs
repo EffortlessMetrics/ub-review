@@ -135,6 +135,7 @@ pub(crate) fn lane_model_output_has_value(output: &LaneModelOutput) -> bool {
         || !output.observations.is_empty()
         || !output.failed_objections.is_empty()
         || !output.proof_requests.is_empty()
+        || !output.proof_intents.is_empty()
 }
 
 pub(crate) fn lane_model_json_payload_has_content(json_payload: &str) -> bool {
@@ -173,6 +174,7 @@ pub(crate) fn degraded_lane_model_output(
         )],
         failed_objections: Vec::new(),
         proof_requests: Vec::new(),
+        proof_intents: Vec::new(),
         issue_candidates: Vec::new(),
         degraded: true,
     }

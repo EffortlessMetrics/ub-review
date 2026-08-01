@@ -288,8 +288,21 @@ pub(crate) fn render_pull_request_review_body(
                 && !is_verification_question(finding)
                 && !summary_finding_matches_observations(finding, &observation_items)
         }));
-    let has_specific_missing_evidence = !missing_observations.is_empty()
-        || proof_receipts.iter().any(proof_receipt_is_missing_evidence);
+    // A missing receipt is useful to a reviewer only when it is still linked
+    // to a surviving missing-evidence observation. A receipt from another
+    // lane or an already-answered question must remain artifact-only; the
+    // presence of a failed proof elsewhere is not itself a public claim.
+    let missing_proof_receipts = proof_receipts
+        .iter()
+        .filter(|receipt| {
+            proof_receipt_is_missing_evidence(receipt)
+                && missing_observations
+                    .iter()
+                    .any(|observation| proof_receipt_matches_observation(receipt, observation))
+        })
+        .collect::<Vec<_>>();
+    let has_specific_missing_evidence =
+        !missing_observations.is_empty() || !missing_proof_receipts.is_empty();
     let proof_result_receipts = proof_receipts
         .iter()
         .filter(|receipt| proof_receipt_is_test_proof_result(receipt))
@@ -433,13 +446,28 @@ pub(crate) fn render_pull_request_review_body(
         for observation in &missing_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Signal);
         }
-        for receipt in proof_receipts
-            .iter()
-            .filter(|receipt| proof_receipt_is_missing_evidence(receipt))
-        {
+        for receipt in missing_proof_receipts {
             render_missing_proof_receipt_summary(&mut text, receipt);
         }
     }
 
     cap_review_body(text, review_body_max_bytes)
+}
+
+/// Return true only when the receipt carries an exact identity emitted by the
+/// surviving observation. Lane ownership is intentionally insufficient: a
+/// lane may ask several unrelated questions, and one of those receipts must
+/// not make every other question public.
+fn proof_receipt_matches_observation(
+    receipt: &ProofReceipt,
+    observation: &ObservationGroup,
+) -> bool {
+    receipt.request_ids.iter().any(|request_id| {
+        request_id == &observation.id
+            || request_id == &observation.dedupe_key
+            || observation
+                .observation_ids
+                .iter()
+                .any(|id| id == request_id)
+    })
 }

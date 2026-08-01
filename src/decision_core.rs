@@ -30,13 +30,6 @@ pub(crate) fn pr_decision_sentence(context: PrDecisionContext) -> Option<&'stati
     None
 }
 
-pub(crate) fn proof_receipt_changes_review_value(receipt: &ProofReceipt) -> bool {
-    matches!(
-        receipt.result.as_str(),
-        "discriminating" | "non_discriminating" | "head_passed" | "head_failed"
-    )
-}
-
 pub(crate) fn proof_receipt_is_test_proof_result(receipt: &ProofReceipt) -> bool {
     matches!(
         receipt.result.as_str(),

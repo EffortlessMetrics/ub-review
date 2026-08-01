@@ -121,6 +121,7 @@ pub(crate) fn run_available_model_lanes(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
+    proof_intents: &mut Vec<ProofIntent>,
     issue_candidates: &mut Vec<IssueCandidate>,
 ) -> Result<usize> {
     run_available_model_lanes_with_runner(
@@ -131,6 +132,7 @@ pub(crate) fn run_available_model_lanes(
         summary_only_findings,
         model_observations,
         proof_requests,
+        proof_intents,
         issue_candidates,
         run_model_lane_tasks,
     )
@@ -199,6 +201,7 @@ pub(crate) fn run_available_model_lanes_with_runner(
     summary_only_findings: &mut Vec<SummaryOnlyFinding>,
     model_observations: &mut Vec<Observation>,
     proof_requests: &mut Vec<ProofRequest>,
+    proof_intents: &mut Vec<ProofIntent>,
     issue_candidates: &mut Vec<IssueCandidate>,
     runner: impl Fn(&ModelRunContext<'_>, &Path, Vec<ModelLaneTask>) -> Result<Vec<ModelLaneTaskResult>>,
 ) -> Result<usize> {
@@ -385,6 +388,7 @@ pub(crate) fn run_available_model_lanes_with_runner(
                             summary_only_findings,
                             model_observations,
                             proof_requests,
+                            proof_intents,
                             issue_candidates,
                         },
                     );

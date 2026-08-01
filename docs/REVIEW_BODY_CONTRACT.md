@@ -54,6 +54,14 @@ Everything else stays in artifacts:
 - successful-tool announcements;
 - generic residual risk.
 
+Missing-proof receipts are public only when their `head` matches the current
+review head and at least one `request_ids` value exactly matches the topic's
+structural claim ID, an exact observation ID or dedupe key compiled into that
+topic, or an explicitly linked proof-request ID. Lane ownership alone is routing
+metadata, not proof linkage. Identity matching is exact; prefixes and substrings
+do not establish linkage. A failed receipt for another claim, or a receipt for a
+question already answered by newer evidence, remains artifact-only.
+
 ## Outcomes
 
 Needs attention:
