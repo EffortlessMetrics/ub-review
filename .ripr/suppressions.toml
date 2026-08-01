@@ -12852,3 +12852,170 @@ kind = "exposure_gap"
 finding_id = "probe:tests_common_mod.rs:return_value:a59d7443"
 owner = "ub-review/core"
 reason = "Line-move false positive from PR #782: extracting the shared lock moved the adjacent fake_openai_lane_content return without changing it; the existing cli suite covers the helper's consumers. Re-verify after editing tests/common/mod.rs or upgrading RIPR."
+
+# PR #794: setup-ci tests and their fixture helpers moved from cli.rs into a
+# child module/shared support module without changing production behavior.
+# RIPR 0.10.0 has no move detection and reports the relocated test plumbing as
+# new exposure gaps. Keep these exact, owned entries until move-aware analysis
+# or cfg(test) filtering makes the suppressions unnecessary.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:fd21468c"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: spawn_fake_setup_ci_api fallible fixture setup moved with the unchanged setup-ci integration test; the focused setup-ci suite and full cli suite exercise the real binary and assert the API contract. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:match_arm:2e49f92f"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: fake setup-ci API thread result handling moved with the unchanged integration test; request sequencing and terminal receipts remain asserted. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:match_arm:b1e62ec9"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: fake setup-ci API thread panic handling moved with unchanged test infrastructure; the real CLI request and receipt assertions remain in place. Re-verify after editing the fixture or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:57cfa1f0"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: write_init_audit_ci_fixture propagation moved into shared test support without behavior change; setup-ci and audit-ci callers retain focused assertions. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:ba96ef0f"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture serialization propagation moved into shared test support; callers assert the generated artifacts and receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b2085de1"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture serialization propagation moved into shared test support; callers assert the generated artifacts and receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:f18adc2d"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture directory creation moved into shared test support; callers exercise the real CLI and assert generated files. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:ba96ef0f.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture serialization propagation moved into shared test support; callers assert the generated artifacts and receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b2085de1.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture serialization propagation moved into shared test support; callers assert the generated artifacts and receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:ba96ef0f.3"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture serialization propagation moved into shared test support; callers assert the generated artifacts and receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:error_path:b2085de1.3"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture serialization propagation moved into shared test support; callers assert the generated artifacts and receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:1a19a3ef"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture field construction moved into shared test support; callers assert the generated config and workflow contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:0fa67bd9"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture field construction moved into shared test support; callers assert the generated config and workflow contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:field_construction:4fdc5004"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture field construction moved into shared test support; callers assert the generated config and workflow contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:90f0df07"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture success return moved into shared test support; callers assert the generated artifacts and terminal receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:90f0df07.2"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture success return moved into shared test support; callers assert the generated artifacts and terminal receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_cli.rs:return_value:90f0df07.3"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci fixture success return moved into shared test support; callers assert the generated artifacts and terminal receipts. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:error_path:9ba612e7"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: collect_relative_file_paths moved into shared test support without behavior change; callers assert exact generated file lists. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:19180149"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: collect_relative_file_paths success return moved into shared test support; callers assert exact generated file lists. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:88ad5e7f"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: write_setup_ci_cli_audit_fixture success return moved into shared test support; callers assert the setup-ci artifact contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:8a3d3d26"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci audit fixture field construction moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:f4846e7c"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci audit fixture field construction moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:082081f6"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci audit fixture field construction moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:26175e8d"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci audit fixture field construction moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:19b2b253"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci audit fixture field construction moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:1477cd24"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged setup-ci audit fixture field construction moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:c8e17f7e"
+owner = "ub-review/core"
+reason = "Line-move false positive from PR #794: unchanged init audit fixture success return moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
