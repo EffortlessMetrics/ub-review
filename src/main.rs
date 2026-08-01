@@ -147,7 +147,9 @@ pub(crate) use run_args::*;
 mod post_command;
 pub(crate) use post_command::*;
 mod plan_artifacts;
-pub(crate) use plan_artifacts::*;
+use plan_artifacts::{
+    PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan, write_plan_artifacts,
+};
 mod ci_audit;
 pub(crate) use ci_audit::*;
 mod gate_watchdog;
@@ -6199,7 +6201,7 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing status ripr tool"))?;
         assert_eq!(status_ripr.gate, ripr.gate);
         let resolved_profile =
-            super::resolved_profile_artifact(&config, config.selected_profile()?);
+            super::plan_artifacts::resolved_profile_artifact(&config, config.selected_profile()?);
         assert_eq!(resolved_profile["gate"]["required_check"], "ub-review/gate");
         let resolved_plan = super::resolved_plan_artifact(
             &config,
