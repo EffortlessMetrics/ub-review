@@ -2,6 +2,9 @@
 //! broker plan building, and resolution tracking (cleanup train step 27,
 //! pure code motion).
 
+use crate::artifact_writers::{
+    observation_is_covered, observation_is_parked, observation_is_refuted,
+};
 use crate::*;
 
 pub(crate) const ISSUE_CANDIDATE_KINDS: &[&str] = &[

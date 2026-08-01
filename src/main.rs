@@ -104,7 +104,11 @@ use quality_artifact::{write_quality_receipt_artifact, write_quality_trend_artif
 mod quality_github;
 pub(crate) use quality_github::*;
 mod artifact_writers;
-pub(crate) use artifact_writers::*;
+use artifact_writers::{
+    write_final_compiler_input_artifact, write_final_orchestrator_artifact,
+    write_follow_up_output_artifacts, write_follow_up_result_artifacts,
+    write_model_stage_artifacts, write_resolved_candidate_artifacts,
+};
 mod witness;
 pub(crate) use witness::*;
 mod work_queue;
@@ -18134,7 +18138,8 @@ index 1111111..2222222 100644
         tertiary.stage = "tertiary".to_owned();
         let follow_up_results = vec![secondary, tertiary];
 
-        let records = super::model_stage_records(&model_lanes, &follow_up_results, &args);
+        let records =
+            crate::artifact_writers::model_stage_records(&model_lanes, &follow_up_results, &args);
         assert_eq!(records.len(), 5);
         assert_eq!(records[0].lane, "tests-oracle");
         assert_eq!(records[0].source, "model-lane");
