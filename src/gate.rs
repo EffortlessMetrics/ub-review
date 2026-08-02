@@ -5,6 +5,7 @@
 //! Extracted from main.rs as pure code motion (cleanup train PR 2); spec
 //! 0003 owns the field contract and the verifier audits the artifact.
 
+use std::borrow::Cow;
 use std::fs;
 
 use anyhow::{Context as _, Result, bail};
@@ -216,20 +217,29 @@ pub(crate) fn run_gate_failure_message(completion: &RunCompletion) -> Option<Str
         return None;
     }
     let receipt = completion.run_dir.join("review/gate_outcome.json");
-    let message = match completion.gate_conclusion.as_str() {
-        "fail" => format!(
-            "gate conclusion is `fail`; blocking evidence is recorded in {}",
-            receipt.display()
-        ),
-        "inconclusive" => format!(
-            "gate conclusion is `inconclusive`; required evidence was unavailable; retry or repair the run using {}",
-            receipt.display()
-        ),
-        other => format!(
-            "gate conclusion `{other}` is unrecognized; failing closed; inspect or regenerate {}",
-            receipt.display()
-        ),
+    let (conclusion, detail) = if completion.gate_conclusion == "fail" {
+        (
+            Cow::Borrowed("is `fail`"),
+            "blocking evidence is recorded in",
+        )
+    } else if completion.gate_conclusion == "inconclusive" {
+        (
+            Cow::Borrowed("is `inconclusive`"),
+            "required evidence was unavailable; retry or repair the run using",
+        )
+    } else {
+        let mut conclusion = String::from("`");
+        conclusion.push_str(&completion.gate_conclusion);
+        conclusion.push_str("` is unrecognized");
+        (
+            Cow::Owned(conclusion),
+            "failing closed; inspect or regenerate",
+        )
     };
+    let message = format!(
+        "gate conclusion {conclusion}; {detail} {}",
+        receipt.display()
+    );
     Some(message)
 }
 
@@ -697,48 +707,109 @@ mod tests {
     fn run_gate_failure_message_enforces_exact_pass_matrix() {
         let run_dir = Path::new("target/ub-review");
         let receipt = run_dir.join("review/gate_outcome.json");
-        let receipt_path = receipt.to_string_lossy();
-        for (fail_on_gate, conclusion, expected_fragment) in [
-            (false, "pass", None),
-            (false, "fail", None),
-            (false, "inconclusive", None),
-            (false, "unknown", None),
-            (true, "pass", None),
-            (true, "fail", Some("blocking evidence")),
-            (
-                true,
-                "inconclusive",
-                Some("required evidence was unavailable"),
-            ),
-            (true, "unknown", Some("failing closed")),
-            (true, "", Some("unrecognized")),
-        ] {
-            let completion = RunCompletion {
-                gate_conclusion: conclusion.to_owned(),
-                fail_on_gate,
-                run_dir: run_dir.to_path_buf(),
-            };
-            let message = run_gate_failure_message(&completion);
-            match expected_fragment {
-                None => assert!(
-                    message.is_none(),
-                    "advisory or exact-pass completion must succeed: {fail_on_gate}/{conclusion}"
-                ),
-                Some(fragment) => {
-                    let message = message
-                        .as_deref()
-                        .unwrap_or("missing direct-run failure message");
-                    assert!(
-                        message.contains(fragment),
-                        "{fail_on_gate}/{conclusion} message lacked `{fragment}`: {message}"
-                    );
-                    assert!(
-                        message.contains(receipt_path.as_ref()),
-                        "{fail_on_gate}/{conclusion} message lacked exact receipt path: {message}"
-                    );
-                }
-            }
-        }
+        let advisory_pass = RunCompletion {
+            gate_conclusion: "pass".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let advisory_fail = RunCompletion {
+            gate_conclusion: "fail".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let advisory_inconclusive = RunCompletion {
+            gate_conclusion: "inconclusive".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let advisory_unknown = RunCompletion {
+            gate_conclusion: "unknown".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_pass = RunCompletion {
+            gate_conclusion: "pass".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_fail = RunCompletion {
+            gate_conclusion: "fail".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_inconclusive = RunCompletion {
+            gate_conclusion: "inconclusive".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_unknown = RunCompletion {
+            gate_conclusion: "unknown".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_empty = RunCompletion {
+            gate_conclusion: String::new(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+
+        assert_eq!(
+            run_gate_failure_message(&advisory_pass),
+            None,
+            "advisory exact-pass completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&advisory_fail),
+            None,
+            "advisory fail completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&advisory_inconclusive),
+            None,
+            "advisory inconclusive completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&advisory_unknown),
+            None,
+            "advisory unknown completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_pass),
+            None,
+            "enforced exact-pass completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_fail),
+            Some(format!(
+                "gate conclusion is `fail`; blocking evidence is recorded in {}",
+                receipt.display()
+            )),
+            "enforced fail completion must block with the receipt path"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_inconclusive),
+            Some(format!(
+                "gate conclusion is `inconclusive`; required evidence was unavailable; retry or repair the run using {}",
+                receipt.display()
+            )),
+            "enforced inconclusive completion must block with the receipt path"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_unknown),
+            Some(format!(
+                "gate conclusion `unknown` is unrecognized; failing closed; inspect or regenerate {}",
+                receipt.display()
+            )),
+            "enforced unknown completion must fail closed with the receipt path"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_empty),
+            Some(format!(
+                "gate conclusion `` is unrecognized; failing closed; inspect or regenerate {}",
+                receipt.display()
+            )),
+            "enforced empty completion must fail closed with the receipt path"
+        );
     }
 
     #[test]
