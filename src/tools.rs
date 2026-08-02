@@ -485,8 +485,7 @@ mod tests {
             .find(|outcome| outcome.tool == "ripr")
             .ok_or_else(|| anyhow::anyhow!("ripr gate outcome missing"))?;
         assert_eq!(ripr.schema, "ub-review.tool_gate_outcome.v1");
-        // Temporary PR #758 integration ceiling; #791 restores strict zero.
-        assert_eq!(ripr.policy.max_new_unsuppressed, Some(1024));
+        assert_eq!(ripr.policy.max_new_unsuppressed, Some(0));
         assert_eq!(ripr.outcome, "missing_evidence");
         assert!(!ripr.evaluated);
         assert_eq!(
@@ -583,14 +582,16 @@ mod tests {
             Path::new("."),
             true,
         );
-        // The temporary PR #758 ceiling is 1024: the measured 942-gap
-        // integration diff passes, while a value above the ceiling still fails.
-        // #791 restores the strict-zero cases immediately after merge.
-        let cases = [
-            (0u64, "passed", true),
-            (942u64, "passed", true),
-            (1025u64, "failed", true),
-        ];
+        assert_eq!(
+            plan.sensors
+                .iter()
+                .find(|sensor| sensor.id == "ripr")
+                .and_then(|sensor| sensor.gate.as_ref())
+                .and_then(|gate| gate.max_new_unsuppressed),
+            Some(0),
+            "the threshold cases must exercise the root config's strict-zero policy"
+        );
+        let cases = [(0u64, "passed", true), (1u64, "failed", true)];
         for (gaps, expected_outcome, expected_evaluated) in cases {
             let temp = tempfile::tempdir()?;
             let ripr = plan
