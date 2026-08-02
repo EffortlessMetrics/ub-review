@@ -14399,32 +14399,51 @@ required_proof_unprooven = true
     }
 
     #[test]
-    fn run_gate_failure_message_names_gate_outcome_artifact() {
-        let failing = RunCompletion {
-            gate_conclusion: "fail".to_owned(),
-            fail_on_gate: true,
-            run_dir: Path::new("target/ub-review").to_path_buf(),
-        };
-        let message = run_gate_failure_message(&failing);
-        assert!(
-            message
-                .as_deref()
-                .is_some_and(|message| message.contains("review/gate_outcome.json"))
-        );
-
-        let tolerated = RunCompletion {
-            gate_conclusion: "fail".to_owned(),
-            fail_on_gate: false,
-            run_dir: Path::new("target/ub-review").to_path_buf(),
-        };
-        assert!(run_gate_failure_message(&tolerated).is_none());
-
-        let passing = RunCompletion {
-            gate_conclusion: "pass".to_owned(),
-            fail_on_gate: true,
-            run_dir: Path::new("target/ub-review").to_path_buf(),
-        };
-        assert!(run_gate_failure_message(&passing).is_none());
+    fn run_gate_failure_message_enforces_exact_pass_matrix() {
+        let run_dir = Path::new("target/ub-review");
+        let receipt = run_dir.join("review/gate_outcome.json");
+        let receipt_path = receipt.to_string_lossy();
+        for (fail_on_gate, conclusion, expected_fragment) in [
+            (false, "pass", None),
+            (false, "fail", None),
+            (false, "inconclusive", None),
+            (false, "unknown", None),
+            (true, "pass", None),
+            (true, "fail", Some("blocking evidence")),
+            (
+                true,
+                "inconclusive",
+                Some("required evidence was unavailable"),
+            ),
+            (true, "unknown", Some("failing closed")),
+            (true, "", Some("unrecognized")),
+        ] {
+            let completion = RunCompletion {
+                gate_conclusion: conclusion.to_owned(),
+                fail_on_gate,
+                run_dir: run_dir.to_path_buf(),
+            };
+            let message = run_gate_failure_message(&completion);
+            match expected_fragment {
+                None => assert!(
+                    message.is_none(),
+                    "advisory or exact-pass completion must succeed: {fail_on_gate}/{conclusion}"
+                ),
+                Some(fragment) => {
+                    let message = message
+                        .as_deref()
+                        .unwrap_or("missing direct-run failure message");
+                    assert!(
+                        message.contains(fragment),
+                        "{fail_on_gate}/{conclusion} message lacked `{fragment}`: {message}"
+                    );
+                    assert!(
+                        message.contains(receipt_path.as_ref()),
+                        "{fail_on_gate}/{conclusion} message lacked exact receipt path: {message}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

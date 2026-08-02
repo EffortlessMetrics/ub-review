@@ -48,7 +48,8 @@ pub(crate) enum Command {
     /// Artifact-only; never posts or edits GitHub.
     QualityGithubCollect(QualityGithubCollectArgs),
     /// Enforce a recorded gate outcome: exit non-zero when enforcement
-    /// resolves on and review/gate_outcome.json records a `fail` conclusion.
+    /// resolves on and review/gate_outcome.json records anything other than
+    /// an exact `pass` conclusion.
     GateCheck(GateCheckArgs),
     /// Classify the current PR head's terminal state from frozen
     /// observations and write `review/gate_watchdog.json`. Pure and
@@ -628,10 +629,10 @@ pub(crate) struct RunArgs {
         env = "UB_REVIEW_SENSOR_PHASES"
     )]
     pub(crate) sensor_phases: SensorPhasesMode,
-    /// Gate enforcement. When this resolves to true and review/gate_outcome.json
-    /// records a `fail` conclusion, `run` exits non-zero (exit code 1) after all
-    /// artifacts are written. `auto` resolves to true for --mode intelligent-ci
-    /// and false otherwise.
+    /// Gate enforcement. When this resolves to true, `run` exits non-zero
+    /// (exit code 1) after all artifacts are written unless the recorded
+    /// conclusion is exactly `pass`. `auto` resolves to true for --mode
+    /// intelligent-ci and false otherwise.
     #[arg(
         long = "fail-on-gate",
         value_enum,

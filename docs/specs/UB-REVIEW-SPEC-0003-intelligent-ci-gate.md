@@ -316,8 +316,9 @@ review posting; the final "Enforce gate outcome" step then calls
 --fail-on-gate <input> --mode <input>`. `gate-check` is the single source of
 the `FailOnGate::resolved` semantics; the workflow step only forwards inputs
 and never re-implements the resolution in bash. Direct CLI runs get the same
-contract from `run` itself: it exits non-zero when the conclusion is `fail`
-and the resolved flag is true (src/main.rs run completion).
+contract from `run` itself: they exit non-zero when the conclusion is anything
+other than the exact string `pass` and the resolved flag is true (src/main.rs
+run completion).
 
 Policy parse errors fail closed in the repo's favor: malformed keys in
 `[gate]`, `[proof]`, `[review_body]`, `[tools.*]`, or `[tools.*.gate]` are

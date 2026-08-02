@@ -45,10 +45,9 @@ Do not reopen these without a concrete failing receipt.
   preserves distinct claims with shared vocabulary (PRs #749/#750).
 - Internal planner language is withheld to artifacts rather than failing a
   valid code gate at the final compiler boundary (PR #751).
-- The artifact verifier now enforces watchdog cross-field coherence (PR #753),
-  and direct runs fail closed for every non-pass gate conclusion (PR #754).
-  Both slices have successful artifact verification but remain unmergeable while
-  the required gate reports the upstream RIPR exposure blocker.
+- The artifact verifier now enforces watchdog cross-field coherence (current
+  main), and direct runs fail closed for every non-pass gate conclusion (PR
+  #800).
 - The current-head watchdog classifier landed (#745, child of #658): a pure
   `src/gate_watchdog.rs` classifier over frozen observations, the
   `gate-watchdog` CLI, the `review/gate_watchdog.json` artifact

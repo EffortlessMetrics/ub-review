@@ -1,7 +1,7 @@
 //! Gate verdict surface: the `gate_outcome.json` writer-side contract and
 //! its enforcement. `build_gate_outcome` derives the deterministic verdict
 //! (model output never feeds it); `cmd_gate_check` is the single source of
-//! truth that turns a recorded `fail` conclusion into a non-zero exit.
+//! truth that turns a recorded non-`pass` conclusion into a non-zero exit.
 //! Extracted from main.rs as pure code motion (cleanup train PR 2); spec
 //! 0003 owns the field contract and the verifier audits the artifact.
 
@@ -40,7 +40,7 @@ pub(crate) struct GateCheckReason {
 
 /// Single source of truth for gate enforcement: resolves `fail-on-gate` with
 /// the same `FailOnGate::resolved` semantics `run` uses, then turns a recorded
-/// `fail` conclusion into a non-zero exit. The action's "Enforce gate outcome"
+/// non-`pass` conclusion into a non-zero exit. The action's "Enforce gate outcome"
 /// step calls this instead of re-implementing the resolution in bash.
 ///
 /// Enforcement fails closed: only a conclusion of exactly `pass` in an
@@ -163,7 +163,7 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
                 .unwrap_or_else(|| "missing".to_owned());
             let message = format!(
                 "gate enforcement is on but {} records unrecognized conclusion {value} \
-                 (expected exactly `pass` or `fail`); failing closed",
+                 (expected exactly `pass`, `fail`, or `inconclusive`); failing closed",
                 path.display()
             );
             println!("::error::{message}");
@@ -212,13 +212,25 @@ pub(crate) struct GateToolGateCounts {
 }
 
 pub(crate) fn run_gate_failure_message(completion: &RunCompletion) -> Option<String> {
-    if !completion.fail_on_gate || completion.gate_conclusion != "fail" {
+    if !completion.fail_on_gate || completion.gate_conclusion == "pass" {
         return None;
     }
-    Some(format!(
-        "gate conclusion is `fail`; receipts are in review/gate_outcome.json under {}",
-        completion.run_dir.display()
-    ))
+    let receipt = completion.run_dir.join("review/gate_outcome.json");
+    let message = match completion.gate_conclusion.as_str() {
+        "fail" => format!(
+            "gate conclusion is `fail`; blocking evidence is recorded in {}",
+            receipt.display()
+        ),
+        "inconclusive" => format!(
+            "gate conclusion is `inconclusive`; required evidence was unavailable; retry or repair the run using {}",
+            receipt.display()
+        ),
+        other => format!(
+            "gate conclusion `{other}` is unrecognized; failing closed; inspect or regenerate {}",
+            receipt.display()
+        ),
+    };
+    Some(message)
 }
 
 pub(crate) const REQUIRED_PROOF_POLICY_LANE: &str = "intelligent-ci-policy";
