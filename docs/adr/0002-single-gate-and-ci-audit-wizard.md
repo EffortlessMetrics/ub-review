@@ -64,7 +64,7 @@ observations, or generic caveats. Missing model keys degrade the review; they do
 not fail the gate.
 
 Exit-code contract: `ub-review run --mode intelligent-ci` exits non-zero when
-the gate conclusion is `fail`. The action exposes `fail-on-gate` (default
+the gate conclusion is anything other than the exact string `pass`. The action exposes `fail-on-gate` (default
 `true` for `intelligent-ci`, `false` for `review-byok`) and a
 `gate-outcome-path` output path. Posting failures keep the separate
 `fail-on-post-error` input;

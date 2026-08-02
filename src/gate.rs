@@ -1,10 +1,11 @@
 //! Gate verdict surface: the `gate_outcome.json` writer-side contract and
 //! its enforcement. `build_gate_outcome` derives the deterministic verdict
 //! (model output never feeds it); `cmd_gate_check` is the single source of
-//! truth that turns a recorded `fail` conclusion into a non-zero exit.
+//! truth that turns a recorded non-`pass` conclusion into a non-zero exit.
 //! Extracted from main.rs as pure code motion (cleanup train PR 2); spec
 //! 0003 owns the field contract and the verifier audits the artifact.
 
+use std::borrow::Cow;
 use std::fs;
 
 use anyhow::{Context as _, Result, bail};
@@ -40,7 +41,7 @@ pub(crate) struct GateCheckReason {
 
 /// Single source of truth for gate enforcement: resolves `fail-on-gate` with
 /// the same `FailOnGate::resolved` semantics `run` uses, then turns a recorded
-/// `fail` conclusion into a non-zero exit. The action's "Enforce gate outcome"
+/// non-`pass` conclusion into a non-zero exit. The action's "Enforce gate outcome"
 /// step calls this instead of re-implementing the resolution in bash.
 ///
 /// Enforcement fails closed: only a conclusion of exactly `pass` in an
@@ -163,7 +164,7 @@ pub(crate) fn cmd_gate_check(args: GateCheckArgs) -> Result<()> {
                 .unwrap_or_else(|| "missing".to_owned());
             let message = format!(
                 "gate enforcement is on but {} records unrecognized conclusion {value} \
-                 (expected exactly `pass` or `fail`); failing closed",
+                 (expected exactly `pass`, `fail`, or `inconclusive`); failing closed",
                 path.display()
             );
             println!("::error::{message}");
@@ -212,13 +213,34 @@ pub(crate) struct GateToolGateCounts {
 }
 
 pub(crate) fn run_gate_failure_message(completion: &RunCompletion) -> Option<String> {
-    if !completion.fail_on_gate || completion.gate_conclusion != "fail" {
+    if !completion.fail_on_gate || completion.gate_conclusion == "pass" {
         return None;
     }
-    Some(format!(
-        "gate conclusion is `fail`; receipts are in review/gate_outcome.json under {}",
-        completion.run_dir.display()
-    ))
+    let receipt = completion.run_dir.join("review/gate_outcome.json");
+    let (conclusion, detail) = if completion.gate_conclusion == "fail" {
+        (
+            Cow::Borrowed("is `fail`"),
+            "blocking evidence is recorded in",
+        )
+    } else if completion.gate_conclusion == "inconclusive" {
+        (
+            Cow::Borrowed("is `inconclusive`"),
+            "required evidence was unavailable; retry or repair the run using",
+        )
+    } else {
+        let mut conclusion = String::from("`");
+        conclusion.push_str(&completion.gate_conclusion);
+        conclusion.push_str("` is unrecognized");
+        (
+            Cow::Owned(conclusion),
+            "failing closed; inspect or regenerate",
+        )
+    };
+    let message = format!(
+        "gate conclusion {conclusion}; {detail} {}",
+        receipt.display()
+    );
+    Some(message)
 }
 
 pub(crate) const REQUIRED_PROOF_POLICY_LANE: &str = "intelligent-ci-policy";
@@ -679,6 +701,115 @@ mod tests {
             required: true,
             status: "requested".to_owned(),
         }
+    }
+
+    #[test]
+    fn run_gate_failure_message_enforces_exact_pass_matrix() {
+        let run_dir = Path::new("target/ub-review");
+        let receipt = run_dir.join("review/gate_outcome.json");
+        let advisory_pass = RunCompletion {
+            gate_conclusion: "pass".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let advisory_fail = RunCompletion {
+            gate_conclusion: "fail".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let advisory_inconclusive = RunCompletion {
+            gate_conclusion: "inconclusive".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let advisory_unknown = RunCompletion {
+            gate_conclusion: "unknown".to_owned(),
+            fail_on_gate: false,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_pass = RunCompletion {
+            gate_conclusion: "pass".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_fail = RunCompletion {
+            gate_conclusion: "fail".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_inconclusive = RunCompletion {
+            gate_conclusion: "inconclusive".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_unknown = RunCompletion {
+            gate_conclusion: "unknown".to_owned(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+        let enforced_empty = RunCompletion {
+            gate_conclusion: String::new(),
+            fail_on_gate: true,
+            run_dir: run_dir.to_path_buf(),
+        };
+
+        assert_eq!(
+            run_gate_failure_message(&advisory_pass),
+            None,
+            "advisory exact-pass completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&advisory_fail),
+            None,
+            "advisory fail completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&advisory_inconclusive),
+            None,
+            "advisory inconclusive completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&advisory_unknown),
+            None,
+            "advisory unknown completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_pass),
+            None,
+            "enforced exact-pass completion must succeed"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_fail),
+            Some(format!(
+                "gate conclusion is `fail`; blocking evidence is recorded in {}",
+                receipt.display()
+            )),
+            "enforced fail completion must block with the receipt path"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_inconclusive),
+            Some(format!(
+                "gate conclusion is `inconclusive`; required evidence was unavailable; retry or repair the run using {}",
+                receipt.display()
+            )),
+            "enforced inconclusive completion must block with the receipt path"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_unknown),
+            Some(format!(
+                "gate conclusion `unknown` is unrecognized; failing closed; inspect or regenerate {}",
+                receipt.display()
+            )),
+            "enforced unknown completion must fail closed with the receipt path"
+        );
+        assert_eq!(
+            run_gate_failure_message(&enforced_empty),
+            Some(format!(
+                "gate conclusion `` is unrecognized; failing closed; inspect or regenerate {}",
+                receipt.display()
+            )),
+            "enforced empty completion must fail closed with the receipt path"
+        );
     }
 
     #[test]

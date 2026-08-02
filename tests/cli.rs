@@ -5648,6 +5648,17 @@ fn gate_check_exit_codes_follow_fail_on_gate_resolution() -> Result<()> {
   ]
 }"#,
     )?;
+    let inconclusive = temp.path().join("gate-inconclusive.json");
+    write_file(
+        &inconclusive,
+        r#"{
+  "schema": "ub-review.gate_outcome.v1",
+  "conclusion": "inconclusive",
+  "reasons": [
+    {"kind": "required-sensor", "id": "runner", "detail": "runner unavailable", "receipt": "review/sensors/status.json"}
+  ]
+}"#,
+    )?;
     let missing = temp.path().join("absent/gate_outcome.json");
 
     // Exit 0: passing outcome under enforcement.
@@ -5740,6 +5751,37 @@ fn gate_check_exit_codes_follow_fail_on_gate_resolution() -> Result<()> {
             "intelligent-ci",
         ],
     )?;
+    let inconclusive_enforced = run_expect_failure(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&inconclusive)?,
+            "--fail-on-gate",
+            "true",
+            "--mode",
+            "review-byok",
+        ],
+    )?;
+    assert!(
+        inconclusive_enforced.contains("required evidence unavailable")
+            && inconclusive_enforced.contains("gate-inconclusive.json"),
+        "inconclusive enforcement must name unavailable evidence and its receipt: {inconclusive_enforced}"
+    );
+    run(
+        temp.path(),
+        bin,
+        &[
+            "gate-check",
+            "--gate-outcome",
+            path_str(&inconclusive)?,
+            "--fail-on-gate",
+            "false",
+            "--mode",
+            "intelligent-ci",
+        ],
+    )?;
     // Non-zero: enforcement on with a missing artifact is a hard error.
     let missing_enforced = run_expect_failure(
         temp.path(),
@@ -5759,7 +5801,7 @@ fn gate_check_exit_codes_follow_fail_on_gate_resolution() -> Result<()> {
         "{missing_enforced}"
     );
     // Non-zero: enforcement fails closed on any conclusion that is not
-    // exactly `pass` or `fail` (missing key, null, casing drift, other
+    // exactly `pass`, `fail`, or `inconclusive` (missing key, null, casing drift, other
     // strings), naming the unexpected value and the artifact path.
     let weird = temp.path().join("gate-weird.json");
     for conclusion_json in [r#""error""#, r#""Fail""#, "null"] {
