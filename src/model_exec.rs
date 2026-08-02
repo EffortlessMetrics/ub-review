@@ -1754,7 +1754,7 @@ fn validate_proof_intent(
 
     if let Some(reason) = rejection_reason {
         return Err(Box::new(Observation {
-            schema: "observation".to_owned(),
+            schema: crate::artifacts::OBSERVATION_SCHEMA.to_owned(),
             id: format!("proof-intent-validation-{}-{observation_ordinal}", lane.id),
             lane: lane.id.clone(),
             question: "proof-intent-validation".to_owned(),
@@ -1820,7 +1820,7 @@ mod receipt_reconsideration_tests {
 
     fn observation(id: &str) -> Observation {
         Observation {
-            schema: "observation".to_owned(),
+            schema: crate::artifacts::OBSERVATION_SCHEMA.to_owned(),
             id: id.to_owned(),
             lane: "tests-oracle".to_owned(),
             question: "does the focused proof answer this claim?".to_owned(),

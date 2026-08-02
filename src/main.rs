@@ -8273,7 +8273,7 @@ index 1111111..2222222 100644
     }
 
     #[test]
-    fn lane_output_accepts_typed_proof_intents_without_command() -> Result<()> {
+    fn lane_output_validates_typed_proof_intents_without_command() -> Result<()> {
         let lane = model_lane(
             "tests-oracle",
             "Test oracle review",
@@ -8332,6 +8332,32 @@ index 1111111..2222222 100644
         let artifact = serde_json::to_value(&proof_intents[0])?;
         anyhow::ensure!(artifact.get("command").is_none());
         anyhow::ensure!(artifact["proof_kind"] == "focused-test");
+        anyhow::ensure!(observations.len() == 1);
+        let rejected_observation = &observations[0];
+        anyhow::ensure!(rejected_observation.schema == crate::artifacts::OBSERVATION_SCHEMA);
+        let rejected_artifact = serde_json::to_value(rejected_observation)?;
+        for field in [
+            "schema",
+            "id",
+            "lane",
+            "question",
+            "claim",
+            "kind",
+            "status",
+            "severity",
+            "confidence",
+            "fingerprint",
+            "dedupe_key",
+            "source",
+        ] {
+            anyhow::ensure!(
+                rejected_artifact
+                    .get(field)
+                    .and_then(serde_json::Value::as_str)
+                    .is_some_and(|value| !value.is_empty()),
+                "rejected proof-intent observation field {field} must be a non-empty string"
+            );
+        }
         Ok(())
     }
 
