@@ -5686,9 +5686,9 @@ mod tests {
         ProviderConcurrencyLimits, ProviderKindArg, RefuterDecision, RefuterOutput,
         RefuterRunContext, ResolvedCandidateRecord, ResourceLease, ReviewArgs, ReviewBodyAudience,
         ReviewBodyExecutionSummaryPolicy, ReviewBodyPolicy, ReviewCompilerInput, ReviewDepth,
-        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunCompletion,
-        RunMode, STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY,
-        SelectorArgs, SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
+        ReviewInlineComment, ReviewMetricsInput, ReviewTerminalState, RunArgs, RunMode,
+        STANDARD_LANE_WIDTH, STANDARD_MAX_MODEL_CALLS, STANDARD_MODEL_CONCURRENCY, SelectorArgs,
+        SensorEvidenceIssue, SensorPlan, SensorStatusWrite, SummaryOnlyBodyPolicy,
         SummaryOnlyFinding, TOOL_GATE_OUTCOME_SCHEMA, TerminalStateInput, ToolClass,
         ToolGateOutcomeEntry, ToolGateOutcomeMetrics, ToolGatePolicy,
         append_follow_up_evidence_witnesses, append_follow_up_proof_requests, apply_model_output,
@@ -5714,12 +5714,12 @@ mod tests {
         render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
         resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
         review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_available_model_lanes_with_runner, run_gate_failure_message, run_refuter_pass,
-        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
-        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
-        terminalize_proof_requests, validate_github_review_payload,
-        validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
-        wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
+        run_available_model_lanes_with_runner, run_refuter_pass, runtime_fallback_retry_spec,
+        runtime_profile_from_toml, runtime_profile_override, selected_provider_spec, sha256_hex,
+        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
+        validate_github_review_payload, validate_github_review_payload_for_post,
+        validate_pr_review_body_policy, validate_run_args, wait_for_child_output_files,
+        write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
         write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
         write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
@@ -14396,54 +14396,6 @@ required_proof_unprooven = true
         assert_eq!(args.mode, super::RunMode::ReviewByok);
         assert_eq!(args.fail_on_gate, super::FailOnGate::Auto);
         assert!(config.gate.review_forward, "TOML review_forward preserved");
-    }
-
-    #[test]
-    fn run_gate_failure_message_enforces_exact_pass_matrix() {
-        let run_dir = Path::new("target/ub-review");
-        let receipt = run_dir.join("review/gate_outcome.json");
-        let receipt_path = receipt.to_string_lossy();
-        for (fail_on_gate, conclusion, expected_fragment) in [
-            (false, "pass", None),
-            (false, "fail", None),
-            (false, "inconclusive", None),
-            (false, "unknown", None),
-            (true, "pass", None),
-            (true, "fail", Some("blocking evidence")),
-            (
-                true,
-                "inconclusive",
-                Some("required evidence was unavailable"),
-            ),
-            (true, "unknown", Some("failing closed")),
-            (true, "", Some("unrecognized")),
-        ] {
-            let completion = RunCompletion {
-                gate_conclusion: conclusion.to_owned(),
-                fail_on_gate,
-                run_dir: run_dir.to_path_buf(),
-            };
-            let message = run_gate_failure_message(&completion);
-            match expected_fragment {
-                None => assert!(
-                    message.is_none(),
-                    "advisory or exact-pass completion must succeed: {fail_on_gate}/{conclusion}"
-                ),
-                Some(fragment) => {
-                    let message = message
-                        .as_deref()
-                        .unwrap_or("missing direct-run failure message");
-                    assert!(
-                        message.contains(fragment),
-                        "{fail_on_gate}/{conclusion} message lacked `{fragment}`: {message}"
-                    );
-                    assert!(
-                        message.contains(receipt_path.as_ref()),
-                        "{fail_on_gate}/{conclusion} message lacked exact receipt path: {message}"
-                    );
-                }
-            }
-        }
     }
 
     #[test]

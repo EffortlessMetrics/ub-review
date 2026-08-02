@@ -694,6 +694,54 @@ mod tests {
     }
 
     #[test]
+    fn run_gate_failure_message_enforces_exact_pass_matrix() {
+        let run_dir = Path::new("target/ub-review");
+        let receipt = run_dir.join("review/gate_outcome.json");
+        let receipt_path = receipt.to_string_lossy();
+        for (fail_on_gate, conclusion, expected_fragment) in [
+            (false, "pass", None),
+            (false, "fail", None),
+            (false, "inconclusive", None),
+            (false, "unknown", None),
+            (true, "pass", None),
+            (true, "fail", Some("blocking evidence")),
+            (
+                true,
+                "inconclusive",
+                Some("required evidence was unavailable"),
+            ),
+            (true, "unknown", Some("failing closed")),
+            (true, "", Some("unrecognized")),
+        ] {
+            let completion = RunCompletion {
+                gate_conclusion: conclusion.to_owned(),
+                fail_on_gate,
+                run_dir: run_dir.to_path_buf(),
+            };
+            let message = run_gate_failure_message(&completion);
+            match expected_fragment {
+                None => assert!(
+                    message.is_none(),
+                    "advisory or exact-pass completion must succeed: {fail_on_gate}/{conclusion}"
+                ),
+                Some(fragment) => {
+                    let message = message
+                        .as_deref()
+                        .unwrap_or("missing direct-run failure message");
+                    assert!(
+                        message.contains(fragment),
+                        "{fail_on_gate}/{conclusion} message lacked `{fragment}`: {message}"
+                    );
+                    assert!(
+                        message.contains(receipt_path.as_ref()),
+                        "{fail_on_gate}/{conclusion} message lacked exact receipt path: {message}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn gate_outcome_maps_terminal_states_deterministically() {
         let args = test_run_args(Path::new("target/ub-review").to_path_buf());
         let plan = test_plan(Vec::new());
