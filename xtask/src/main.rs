@@ -2234,17 +2234,16 @@ fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
                     path.display()
                 )
             })?;
-            if expires_date < review_date {
+            if expires_date < review_date || expires_date < today_date {
+                let reason = if expires_date < review_date {
+                    format!("is before `review_after` ({review_after})")
+                } else {
+                    "is before the evaluation date".to_owned()
+                };
                 bail!(
-                    "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after})",
+                    "{} exception `{id}` `expires` ({expires_str}) {reason}",
                     path.display()
                 );
-            }
-            if expires_date < today_date {
-                return Err(anyhow::Error::msg(format!(
-                    "{} exception `{id}` `expires` ({expires_str}) is before the evaluation date",
-                    path.display()
-                )));
             }
         }
         if review_date < today_date {
