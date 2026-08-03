@@ -13430,6 +13430,111 @@ owner = "ub-review/core"
 reason = "Line-move false positive from PR #794: unchanged init audit fixture success return moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:619c0392"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:1555bb7c"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:b611e7f8"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:ce24c5a6"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:8fdcfdac.2"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:e46be280.2"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:a93211c7"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:6beb9fc6"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:3bc2d8ee"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:7c64426a"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9ff8448e"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9ff8448e.2"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9ff8448e.3"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:4bdf6a3c"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:71cfaf0a"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:f9a5a6ee"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:bb533714"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:1d8b049f"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:80dbd581"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:7d5e324b"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:c8e67d26"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_artifact_writers.rs:field_construction:419f306e"
 owner = "ub-review/core"
 reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."

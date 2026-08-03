@@ -831,6 +831,47 @@ mod tests {
     }
 
     #[test]
+    fn inline_claim_id_uses_matching_observation_identity() -> Result<()> {
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "observation-identity".to_owned(),
+            lane: "tests".to_owned(),
+            question: "parser subscript behavior".to_owned(),
+            claim: "Parser subscript finding".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "fingerprint".to_owned(),
+            evidence: Vec::new(),
+            dedupe_key: "parser-subscript".to_owned(),
+            source: "model".to_owned(),
+        };
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "Parser subscript finding".to_owned(),
+            evidence: "receipt".to_owned(),
+            suggestion: None,
+        };
+        let expected = structural_claim_id(
+            Some("src/parser.rs"),
+            Some(12),
+            "bug",
+            "parser-subscript",
+            "Parser subscript finding",
+        );
+        ensure!(topic_claim_id_for_inline(&comment, &[observation]) == expected);
+        Ok(())
+    }
+
+    #[test]
     fn active_graph_links_current_threads_and_separates_stale_threads() -> Result<()> {
         let head = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
         let graph = build_active_claim_graph(
