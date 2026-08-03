@@ -1831,7 +1831,15 @@ path = "src/x.rs"
         )?;
         let mut report = PolicyReport::default();
         validate_allow_at::<2026, 8, 2>(&allow, &mut report)?;
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         assert_eq!(report.exceptions, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn validate_allow_at_uses_injected_date_for_expiry_boundary() -> Result<()> {
+        let root = temp_repo_root("date-injection")?;
+        let allow = root.join("allow.toml");
         fs::write(
             &allow,
             r#"schema_version = "1"
@@ -1848,6 +1856,11 @@ expires = "2026-08-01"
 path = "src/x.rs"
 "#,
         )?;
+
+        let mut valid_report = PolicyReport::default();
+        validate_allow_at::<2026, 8, 1>(&allow, &mut valid_report)?;
+        assert_eq!(valid_report.exceptions, 1);
+
         let mut expired_report = PolicyReport::default();
         let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report);
         let error = expired
@@ -1860,6 +1873,7 @@ path = "src/x.rs"
                 allow.display()
             )
         );
+
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         Ok(())
     }
