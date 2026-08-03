@@ -1850,27 +1850,11 @@ path = "src/x.rs"
         )?;
         let mut expired_report = PolicyReport::default();
         let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report);
-        let error = expired.err().context("the day after expires must block")?;
+        let error = expired
+            .err()
+            .context("the day after expires must block")?;
         assert_eq!(
             error.to_string(),
-            format!(
-                "{} exception `boundary` `expires` (2026-08-01) is before the evaluation date",
-                allow.display()
-            )
-        );
-        let helper_error = validate_expiry_dates(
-            &allow,
-            "boundary",
-            "2026-07-01",
-            (2026, 7, 1),
-            "2026-08-01",
-            (2026, 8, 1),
-            (2026, 8, 2),
-        )
-        .err()
-        .context("the pure expiry validator must reject the expired date")?;
-        assert_eq!(
-            helper_error.to_string(),
             format!(
                 "{} exception `boundary` `expires` (2026-08-01) is before the evaluation date",
                 allow.display()
@@ -2228,15 +2212,18 @@ fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
                     path.display()
                 )
             })?;
-            validate_expiry_dates(
-                path,
-                id,
-                review_after,
-                review_date,
-                expires_str,
-                expires_date,
-                today_date,
-            )?;
+            if expires_date < review_date {
+                bail!(
+                    "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after})",
+                    path.display()
+                );
+            }
+            if expires_date < today_date {
+                return Err(anyhow::Error::msg(format!(
+                    "{} exception `{id}` `expires` ({expires_str}) is before the evaluation date",
+                    path.display()
+                )));
+            }
         }
         if review_date < today_date {
             let warning = format!(
@@ -2249,30 +2236,6 @@ fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
         report.exceptions += 1;
     }
 
-    Ok(())
-}
-
-fn validate_expiry_dates(
-    path: &Path,
-    id: &str,
-    review_after: &str,
-    review_date: (i32, u32, u32),
-    expires_str: &str,
-    expires_date: (i32, u32, u32),
-    today_date: (i32, u32, u32),
-) -> Result<()> {
-    if expires_date < review_date {
-        bail!(
-            "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after})",
-            path.display()
-        );
-    }
-    if expires_date < today_date {
-        return Err(anyhow::Error::msg(format!(
-            "{} exception `{id}` `expires` ({expires_str}) is before the evaluation date",
-            path.display()
-        )));
-    }
     Ok(())
 }
 
