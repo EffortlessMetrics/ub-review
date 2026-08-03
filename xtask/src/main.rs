@@ -1862,14 +1862,16 @@ path = "src/x.rs"
         assert_eq!(valid_report.exceptions, 1);
 
         let mut expired_report = PolicyReport::default();
-        let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report)
-            .map_err(|error| format!("{error}"));
+        let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report);
+        let error = expired
+            .err()
+            .context("the day after expires must block")?;
         assert_eq!(
-            expired,
-            Err(format!(
+            error.to_string(),
+            format!(
                 "{} exception `boundary` `expires` (2026-08-01) is before the evaluation date",
                 allow.display()
-            ))
+            )
         );
 
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
