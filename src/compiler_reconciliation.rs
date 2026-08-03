@@ -34,6 +34,9 @@ pub(crate) struct RemovedCompilerSurfaceReceipt {
 pub(crate) struct CompilerReconciliationReceipt {
     pub(crate) schema: &'static str,
     pub(crate) head_sha: String,
+    pub(crate) status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) error: Option<String>,
     pub(crate) input_surfaces: Vec<CompilerSurfaceReceipt>,
     pub(crate) retained_surfaces: Vec<CompilerSurfaceReceipt>,
     pub(crate) removed_surfaces: Vec<RemovedCompilerSurfaceReceipt>,
@@ -46,6 +49,7 @@ struct SurfaceIdentity {
 
 pub(crate) struct CompilerReconciliationInput<'a> {
     pub(crate) head_sha: &'a str,
+    pub(crate) observations: &'a [Observation],
     pub(crate) review_inline_comments: &'a [ReviewInlineComment],
     pub(crate) review_summary_only_findings: &'a [SummaryOnlyFinding],
     pub(crate) follow_up_summary_only_findings: &'a [SummaryOnlyFinding],
@@ -59,26 +63,26 @@ pub(crate) fn build_compiler_reconciliation_receipt(
     input: CompilerReconciliationInput<'_>,
 ) -> Result<CompilerReconciliationReceipt> {
     let input_surfaces = input_surfaces(
+        input.observations,
         input.review_inline_comments,
         input.review_summary_only_findings,
         input.follow_up_summary_only_findings,
         input.resolved_away_candidates,
     );
-    let final_surfaces = final_surfaces(
+    let final_surfaces = final_surface_keys(
         input.final_inline_comments,
         input.final_summary_only_findings,
     );
 
     let mut available = input_surfaces.clone();
     let mut retained_surfaces = Vec::with_capacity(final_surfaces.len());
-    for final_surface in final_surfaces {
+    for (surface_id, kind) in final_surfaces {
         let Some(position) = available.iter().position(|candidate| {
-            candidate.receipt.surface_id == final_surface.receipt.surface_id
-                && candidate.receipt.kind == final_surface.receipt.kind
+            candidate.receipt.surface_id == surface_id && candidate.receipt.kind == kind
         }) else {
             bail!(
                 "final compiler surface {} was not present in reconciled input",
-                final_surface.receipt.surface_id
+                surface_id
             );
         };
         retained_surfaces.push(available.remove(position).receipt);
@@ -101,6 +105,8 @@ pub(crate) fn build_compiler_reconciliation_receipt(
     Ok(CompilerReconciliationReceipt {
         schema: COMPILER_RECONCILIATION_SCHEMA,
         head_sha: input.head_sha.to_owned(),
+        status: "ok",
+        error: None,
         input_surfaces: input_surfaces
             .into_iter()
             .map(|surface| surface.receipt)
@@ -110,7 +116,23 @@ pub(crate) fn build_compiler_reconciliation_receipt(
     })
 }
 
+pub(crate) fn compiler_reconciliation_failure(
+    head_sha: &str,
+    error: impl Into<String>,
+) -> CompilerReconciliationReceipt {
+    CompilerReconciliationReceipt {
+        schema: COMPILER_RECONCILIATION_SCHEMA,
+        head_sha: head_sha.to_owned(),
+        status: "error",
+        error: Some(error.into()),
+        input_surfaces: Vec::new(),
+        retained_surfaces: Vec::new(),
+        removed_surfaces: Vec::new(),
+    }
+}
+
 fn input_surfaces(
+    observations: &[Observation],
     review_inline_comments: &[ReviewInlineComment],
     review_summary_only_findings: &[SummaryOnlyFinding],
     follow_up_summary_only_findings: &[SummaryOnlyFinding],
@@ -125,7 +147,12 @@ fn input_surfaces(
             continue;
         }
         surfaces.push(SurfaceIdentity {
-            receipt: inline_surface_receipt(comment, "review/review.json", source_index),
+            receipt: inline_surface_receipt(
+                comment,
+                observations,
+                "review/review.json",
+                source_index,
+            ),
         });
     }
     for (source_index, finding) in review_summary_only_findings.iter().enumerate() {
@@ -151,18 +178,18 @@ fn input_surfaces(
     surfaces
 }
 
-fn final_surfaces(
+fn final_surface_keys(
     inline_comments: &[ReviewInlineComment],
     summary_only_findings: &[SummaryOnlyFinding],
-) -> Vec<SurfaceIdentity> {
+) -> Vec<(String, &'static str)> {
     inline_comments
         .iter()
-        .map(|comment| SurfaceIdentity {
-            receipt: inline_surface_receipt(comment, "review/review.json", 0),
-        })
-        .chain(summary_only_findings.iter().map(|finding| SurfaceIdentity {
-            receipt: summary_surface_receipt(finding, "review/review.json", 0),
-        }))
+        .map(|comment| (inline_surface_id(comment), "inline"))
+        .chain(
+            summary_only_findings
+                .iter()
+                .map(|finding| (summary_surface_id(finding), "summary")),
+        )
         .collect()
 }
 
@@ -254,23 +281,16 @@ fn removal_explanation(
 
 fn inline_surface_receipt(
     comment: &ReviewInlineComment,
+    observations: &[Observation],
     source_artifact: &'static str,
     source_index: usize,
 ) -> CompilerSurfaceReceipt {
     CompilerSurfaceReceipt {
-        surface_id: compiler_surface_id(
-            "inline",
-            &comment.lane,
-            Some(&comment.path),
-            Some(comment.line),
-            &comment.body,
-            &comment.evidence,
-            comment.suggestion.as_deref(),
-        ),
+        surface_id: inline_surface_id(comment),
         kind: "inline",
         source_artifact,
         source_index,
-        claim_id: topic_claim_id_for_inline(comment),
+        claim_id: topic_claim_id_for_inline(comment, observations),
         lane: comment.lane.clone(),
         subject: comment.body.clone(),
         path: Some(comment.path.clone()),
@@ -279,21 +299,37 @@ fn inline_surface_receipt(
     }
 }
 
+fn inline_surface_id(comment: &ReviewInlineComment) -> String {
+    compiler_surface_id(
+        "inline",
+        &comment.lane,
+        Some(&comment.path),
+        Some(comment.line),
+        &comment.body,
+        &comment.evidence,
+        comment.suggestion.as_deref(),
+    )
+}
+
+fn summary_surface_id(finding: &SummaryOnlyFinding) -> String {
+    compiler_surface_id(
+        "summary",
+        &finding.lane,
+        None,
+        None,
+        &finding.reason,
+        &finding.evidence,
+        None,
+    )
+}
+
 fn summary_surface_receipt(
     finding: &SummaryOnlyFinding,
     source_artifact: &'static str,
     source_index: usize,
 ) -> CompilerSurfaceReceipt {
     CompilerSurfaceReceipt {
-        surface_id: compiler_surface_id(
-            "summary",
-            &finding.lane,
-            None,
-            None,
-            &finding.reason,
-            &finding.evidence,
-            None,
-        ),
+        surface_id: summary_surface_id(finding),
         kind: "summary",
         source_artifact,
         source_index,
@@ -315,11 +351,14 @@ fn compiler_surface_id(
     evidence: &str,
     suggestion: Option<&str>,
 ) -> String {
+    let escape = |value: &str| value.replace('\\', "\\\\").replace('\n', "\\n");
+    let escaped_path = escape(path.unwrap_or_default());
+    let escaped_text = escape(text);
+    let escaped_evidence = escape(evidence);
+    let escaped_suggestion = escape(suggestion.unwrap_or_default());
     let identity = format!(
-        "kind={kind}\nlane={lane}\npath={}\nline={}\ntext={text}\nevidence={evidence}\nsuggestion={}",
-        path.unwrap_or_default(),
+        "kind={kind}\nlane={lane}\npath={escaped_path}\nline={}\ntext={escaped_text}\nevidence={escaped_evidence}\nsuggestion={escaped_suggestion}",
         line.map_or_else(String::new, |value| value.to_string()),
-        suggestion.unwrap_or_default(),
     );
     format!("surface-{}", sha256_hex(identity.as_bytes()))
 }
@@ -459,6 +498,7 @@ mod tests {
         let graph = loser_graph(&losing);
         let receipt = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
             head_sha: "HEAD",
+            observations: &[],
             review_inline_comments: &[],
             review_summary_only_findings: &[losing.clone(), retained.clone()],
             follow_up_summary_only_findings: &[],
@@ -486,6 +526,7 @@ mod tests {
         let losing = summary("The parser claim has no adjudication receipt.");
         let result = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
             head_sha: "HEAD",
+            observations: &[],
             review_inline_comments: &[],
             review_summary_only_findings: &[losing],
             follow_up_summary_only_findings: &[],
@@ -501,6 +542,143 @@ mod tests {
             error
                 .to_string()
                 .contains("removed without an adjudication")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn current_head_thread_explains_removed_surface() -> Result<()> {
+        let finding = summary("The parser claim is already covered by the current thread.");
+        let claim_id = topic_claim_id_for_summary(&finding);
+        let graph = ClaimGraph {
+            schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
+            head_sha: "HEAD".to_owned(),
+            claims: Vec::new(),
+            topics: vec![ReviewTopic {
+                claim_id: claim_id.clone(),
+                head_sha: "HEAD".to_owned(),
+                path: None,
+                anchor: None,
+                symbol: None,
+                failure_family: "summary-finding".to_owned(),
+                mechanism: finding.reason.clone(),
+                status: "supported".to_owned(),
+                thread_disposition: "current_thread".to_owned(),
+                severity: finding.severity.clone(),
+                evidence: Vec::new(),
+                existing_threads: vec!["thread-1".to_owned()],
+                stale_threads: Vec::new(),
+                proof_requests: Vec::new(),
+                proof_receipts: Vec::new(),
+                delivery: "summary-only".to_owned(),
+                source_lane: finding.lane.clone(),
+                subject: finding.reason.clone(),
+            }],
+            conflicts: Vec::new(),
+            evidence_gaps: Vec::new(),
+            mode: "active",
+        };
+        let receipt = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: "HEAD",
+            observations: &[],
+            review_inline_comments: &[],
+            review_summary_only_findings: &[finding],
+            follow_up_summary_only_findings: &[],
+            resolved_away_candidates: &[],
+            final_inline_comments: &[],
+            final_summary_only_findings: &[],
+            graph: &graph,
+        })?;
+        assert_eq!(
+            receipt.removed_surfaces[0].disposition,
+            "covered_by_current_head_thread"
+        );
+        assert_eq!(
+            receipt.removed_surfaces[0].evidence_receipts,
+            vec!["review/pr_thread_context.json#thread-1"]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_surface_is_explicitly_accounted() -> Result<()> {
+        let finding = summary("The parser claim is duplicated structurally.");
+        let graph = build_shadow_claim_graph("HEAD");
+        let receipt = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: "HEAD",
+            observations: &[],
+            review_inline_comments: &[],
+            review_summary_only_findings: &[finding.clone(), finding.clone()],
+            follow_up_summary_only_findings: &[],
+            resolved_away_candidates: &[],
+            final_inline_comments: &[],
+            final_summary_only_findings: std::slice::from_ref(&finding),
+            graph: &graph,
+        })?;
+        assert_eq!(
+            receipt.removed_surfaces[0].disposition,
+            "duplicate_structurally_identical"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn resolved_candidate_is_subtracted_before_accounting() -> Result<()> {
+        let finding = summary("The parser claim was resolved by follow-up evidence.");
+        let candidate = CandidateRecord {
+            schema: "ub-review.candidate.v1".to_owned(),
+            id: "candidate-1".to_owned(),
+            lane: finding.lane.clone(),
+            source: "summary-only-finding".to_owned(),
+            status: "resolved".to_owned(),
+            disposition: "dropped".to_owned(),
+            severity: finding.severity.clone(),
+            confidence: finding.confidence.clone(),
+            claim: finding.reason.clone(),
+            evidence: finding.evidence.clone(),
+            path: None,
+            line: None,
+            side: None,
+        };
+        let candidate_refs = [&candidate];
+        let receipt = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: "HEAD",
+            observations: &[],
+            review_inline_comments: &[],
+            review_summary_only_findings: &[finding],
+            follow_up_summary_only_findings: &[],
+            resolved_away_candidates: &candidate_refs,
+            final_inline_comments: &[],
+            final_summary_only_findings: &[],
+            graph: &build_shadow_claim_graph("HEAD"),
+        })?;
+        assert!(receipt.input_surfaces.is_empty());
+        assert!(receipt.removed_surfaces.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn final_surface_missing_from_input_is_rejected() -> Result<()> {
+        let input = summary("The input claim is not the final claim.");
+        let final_only = summary("A final claim absent from the input.");
+        let result = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: "HEAD",
+            observations: &[],
+            review_inline_comments: &[],
+            review_summary_only_findings: &[input],
+            follow_up_summary_only_findings: &[],
+            resolved_away_candidates: &[],
+            final_inline_comments: &[],
+            final_summary_only_findings: &[final_only],
+            graph: &build_shadow_claim_graph("HEAD"),
+        });
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("missing final surface unexpectedly passed"))?;
+        assert!(
+            error
+                .to_string()
+                .contains("not present in reconciled input")
         );
         Ok(())
     }

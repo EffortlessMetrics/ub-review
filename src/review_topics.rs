@@ -250,7 +250,7 @@ pub(crate) fn reconcile_inline_comments(
     comments
         .iter()
         .filter(|comment| {
-            let claim_id = topic_claim_id_for_inline(comment);
+            let claim_id = topic_claim_id_for_inline(comment, &[]);
             let refuted_by_adjudication = graph.topics.iter().any(|topic| {
                 topic_is_adjudicated_loser(graph, topic)
                     && (topic.claim_id == claim_id
@@ -271,7 +271,7 @@ pub(crate) fn reconcile_inline_comments(
             if covered_by_current_thread {
                 return false;
             }
-            seen_claims.insert(topic_claim_id_for_inline(comment))
+            seen_claims.insert(topic_claim_id_for_inline(comment, &[]))
         })
         .cloned()
         .collect()
@@ -383,13 +383,30 @@ pub(crate) fn add_resolved_candidate_topics(
         .sort_by(|left, right| left.claim_id.cmp(&right.claim_id));
 }
 
-pub(crate) fn topic_claim_id_for_inline(comment: &ReviewInlineComment) -> String {
+pub(crate) fn topic_claim_id_for_inline(
+    comment: &ReviewInlineComment,
+    observations: &[Observation],
+) -> String {
+    let matching_observation = observations.iter().find(|observation| {
+        observation.path.as_deref() == Some(comment.path.as_str())
+            && observation.line == Some(comment.line)
+            && subject_tokens_overlap(&observation.claim, &comment.body)
+    });
+    let failure_family = matching_observation
+        .map(|observation| observation.kind.as_str())
+        .unwrap_or("inline-finding");
+    let mechanism = matching_observation
+        .map(|observation| stable_mechanism(&observation.dedupe_key, &observation.claim))
+        .unwrap_or_else(|| stable_mechanism("", &comment.body));
+    let subject = matching_observation
+        .map(|observation| observation.claim.as_str())
+        .unwrap_or(&comment.body);
     structural_claim_id(
         Some(&comment.path),
         Some(comment.line),
-        "inline-finding",
-        &stable_mechanism("", &comment.body),
-        &comment.body,
+        failure_family,
+        &mechanism,
+        subject,
     )
 }
 
