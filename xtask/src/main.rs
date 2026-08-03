@@ -2241,10 +2241,10 @@ fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
                 );
             }
             if expires_date < today_date {
-                bail!(
+                return Err(anyhow::Error::msg(format!(
                     "{} exception `{id}` `expires` ({expires_str}) is before the evaluation date",
                     path.display()
-                );
+                )));
             }
         }
         if review_date < today_date {
