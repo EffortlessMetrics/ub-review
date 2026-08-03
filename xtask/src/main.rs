@@ -1777,6 +1777,17 @@ path = "src/x.rs"
         let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report)
             .map_err(|error| format!("{error}"));
         assert_eq!(expired, Err(expected));
+        let mut live_report = PolicyReport::default();
+        let live_error = validate_allow(&allow, &mut live_report)
+            .err()
+            .context("the live policy validator must reject the expired date")?;
+        assert_eq!(
+            live_error.to_string(),
+            format!(
+                "{} exception `expired-gate-ceiling` `expires` (2026-08-01) is before the evaluation date",
+                allow.display()
+            )
+        );
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         Ok(())
     }
