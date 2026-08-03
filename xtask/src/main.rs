@@ -1725,7 +1725,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_allow_at_rejects_expired_gate_ceiling_and_bad_order() -> Result<()> {
+    fn validate_allow_date_validation_rejects_expires_before_review() -> Result<()> {
         let root = temp_repo_root("date-expiry")?;
         let allow = root.join("allow.toml");
         fs::write(
