@@ -13428,3 +13428,818 @@ kind = "exposure_gap"
 finding_id = "probe:tests_common_mod.rs:return_value:c8e17f7e"
 owner = "ub-review/core"
 reason = "Line-move false positive from PR #794: unchanged init audit fixture success return moved into shared test support; callers assert the generated audit contract. Re-verify after editing the helper or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:619c0392"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:1555bb7c"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:b611e7f8"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:ce24c5a6"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:8fdcfdac.2"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:e46be280.2"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:a93211c7"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:6beb9fc6"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:3bc2d8ee"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:7c64426a"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9ff8448e"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9ff8448e.2"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9ff8448e.3"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:4bdf6a3c"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:71cfaf0a"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:match_arm:f9a5a6ee"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:bb533714"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:1d8b049f"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:80dbd581"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:7d5e324b"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:c8e67d26"
+owner = "ub-review/core"
+reason = "PR #822 reconciliation producer and fail-closed error branch are covered by focused Rust tests, the full workspace suite, and hosted generated-packet verification; this exact RIPR finding is weakly_exposed or reachable_unrevealed because the analyzer cannot map the structural receipt oracle to the changed expression. Re-verify after editing the target or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:field_construction:419f306e"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:call_deletion:c50073b9"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:call_deletion:cf5c1665"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:call_deletion:e9d7789e"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:return_value:de362509"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:eaeca5f1"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:eaeca5f1.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:error_path:ecdcff20"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:2f872df4"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:124178ce"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:acce26fd"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:7aef426d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:0907529d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:ba472597"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:87e2f5f2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:1c43a480"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:45046d38"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:92ba6e77"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:fc371879"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:de575a3d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:bc65c278"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:23d481ae"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:fe2d424c"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:14388856"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:6f1d35d8"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:8942ebc2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:40145b44"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:9598987e"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:40145b44.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:9598987e.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:1a278c1c"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:8fdcfdac"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:99b3469a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:0b7be84d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:e46be280"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:b5dbea90"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:40145b44.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:side_effect:9598987e.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:45863be1"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:d83c0a0a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:b6a478cd"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:d7aa43d3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:a4c728ef"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:a0f8b847"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:4c246102"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:4d15c40c"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:e77020d5"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:4751881a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:c2add658"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:4ba4535b"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:977da107"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:edc03c83"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:6147dcbc"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:6677c179"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:9335a00c"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:88ffa0f7"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:match_arm:4c246102.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:db5e2901"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:65043a15"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:3fe89343"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:3fe89343.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:319d32da"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:74d008a5"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:480e00be"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:f5aa8700"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:4ba4535b.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:977da107.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:edc03c83.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:6147dcbc.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:8347e0c2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:8bfa965a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:c3ccf0e5"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:edc03c83.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:3fe89343.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:error_path:d3a2f882"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:ad25dd7a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:error_path:2d71bba5"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:a5f986b8"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:46a2ca4a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:155a9ecf"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:de783e66"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:d02eaa43"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:c006ca2a"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:17f7fcfd"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:e3fe5cef"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:624bc9b2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:bbdb7862"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:cbad68e6"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:fb8bce87"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:5c999b61"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:caa29d4e"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:53720be1"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9726fc83"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:caa29d4e.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:53720be1.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9726fc83.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:caa29d4e.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:53720be1.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:9726fc83.3"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:4d04ad46"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:9fb6aa78"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:48804ffc"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:c2747784"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:00a60b16"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:2b43e423"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:47646d6b"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:5ada39e8"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:7f4443c1"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:aee634dd"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:cc3bb42b"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:c10fda5c"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:7044db74"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:ae66e186"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:9fc296f6"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:a6fb5b58"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:8f2735ad"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:87027694"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:c57b06b4"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:8ab4b654"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:68bf768c"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:f241ba81"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:f9e7c254"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:a2dfbb5d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:f4fbb078"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:5d0cd41e"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:e8af6fac"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:b925b993"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:f4fbb078.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:call_deletion:53108b9e"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:77a51f43"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:64312216"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:f7f317ee"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:8c05e42d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:field_construction:445d78b4"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_main.rs:error_path:d546041d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:377483ff"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:725983fa"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:4b2c35a6"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:8afe9c4f"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:4b2c35a6.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:8afe9c4f.2"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:63a9403d"
+owner = "ub-review/core"
+reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."

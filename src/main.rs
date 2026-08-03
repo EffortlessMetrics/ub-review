@@ -53,6 +53,8 @@ mod promotion;
 pub(crate) use promotion::*;
 mod claim_graph;
 pub(crate) use claim_graph::*;
+mod compiler_reconciliation;
+pub(crate) use compiler_reconciliation::*;
 mod review_topics;
 pub(crate) use review_topics::*;
 mod impact_plan;
@@ -4815,6 +4817,11 @@ fn write_review_artifacts(
             .any(|candidate| candidate_matches_summary_finding(candidate, finding))
     });
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
+    // Keep the pre-adjudication compiler surfaces available for the final
+    // claim graph. Reconciliation may remove public surfaces, but their
+    // claims and conflicts remain required audit evidence for the receipt.
+    let compiler_input_inline_comments = compiler_inline_comments.clone();
+    let compiler_input_summary_only_findings = compiler_summary_only_findings.clone();
     let mut compiler_observations = review.observations.clone();
     compiler_observations.extend(follow_up_evidence.observations.clone());
     let pre_compile_claim_graph = build_active_claim_graph(
@@ -4830,7 +4837,34 @@ fn write_review_artifacts(
         reconcile_inline_comments(&pre_compile_claim_graph, &compiler_inline_comments);
     compiler_summary_only_findings =
         reconcile_summary_only_findings(&pre_compile_claim_graph, &compiler_summary_only_findings);
+    let compiler_reconciliation =
+        match build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: &diff.head,
+            observations: &compiler_observations,
+            review_inline_comments: &review.inline_comments,
+            review_summary_only_findings: &review.summary_only_findings,
+            follow_up_summary_only_findings: &follow_up_evidence.summary_only_findings,
+            resolved_away_candidates: &resolved_away_candidates,
+            final_inline_comments: &compiler_inline_comments,
+            final_summary_only_findings: &compiler_summary_only_findings,
+            graph: &pre_compile_claim_graph,
+        }) {
+            Ok(receipt) => receipt,
+            Err(error) => {
+                review
+                    .missing_or_failed_sensor_evidence
+                    .push(SensorEvidenceIssue {
+                        sensor: "compiler-reconciliation".to_owned(),
+                        status: "failed".to_owned(),
+                        reason: format!("final compiler reconciliation failed: {error:#}"),
+                    });
+                compiler_inline_comments.clear();
+                compiler_summary_only_findings.clear();
+                compiler_reconciliation_failure(&diff.head, format!("{error:#}"))
+            }
+        };
     write_claim_graph(out, &pre_compile_claim_graph)?;
+    artifact_writers::write_compiler_reconciliation_artifact(out, &compiler_reconciliation)?;
     write_final_compiler_input_artifact(
         out,
         FinalCompilerInputArtifact {
@@ -4847,6 +4881,7 @@ fn write_review_artifacts(
                 "review/receipt_reconsiderations.json",
                 "review/final_orchestrator_plan.json",
                 "review/claim_graph.json",
+                "review/compiler_reconciliation.json",
                 "review/pr_thread_context.json",
                 "review/proof_intents.json",
             ],
@@ -4913,8 +4948,8 @@ fn write_review_artifacts(
     let mut active_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,
-        &compiler_inline_comments,
-        &compiler_summary_only_findings,
+        &compiler_input_inline_comments,
+        &compiler_input_summary_only_findings,
         &review.proof_requests,
         &review.proof_receipts,
         &review.pr_thread_context,
@@ -19602,6 +19637,7 @@ index 1111111..2222222 100644
                     "review/receipt_routes.json",
                     "review/final_orchestrator_plan.json",
                     "review/claim_graph.json",
+                    "review/compiler_reconciliation.json",
                     "review/pr_thread_context.json",
                     "review/proof_intents.json",
                 ],
@@ -19641,6 +19677,7 @@ index 1111111..2222222 100644
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
                 "review/claim_graph.json",
+                "review/compiler_reconciliation.json",
                 "review/pr_thread_context.json",
                 "review/proof_intents.json"
             ])

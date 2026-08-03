@@ -91,6 +91,12 @@ GITHUB_SUGGESTION_MAX_CHARS = 800
 ARTIFACT_NAME_MAX_CHARS = 96
 ARTIFACT_NAME_HASH_CHARS = 16
 CLAIM_GRAPH_SCHEMA = "ub-review.claim_graph.v1"
+COMPILER_RECONCILIATION_SCHEMA = "ub-review.compiler_reconciliation.v1"
+COMPILER_SURFACE_DISPOSITIONS = {
+    "refuted_by_stronger_evidence",
+    "covered_by_current_head_thread",
+    "duplicate_structurally_identical",
+}
 THREAD_DISPOSITIONS = {
     "novel",
     "already_covered",
@@ -1467,6 +1473,7 @@ def require_common_tree(root: pathlib.Path) -> None:
         "review/resolved_candidates.json",
         "review/prior_resolved_candidates.json",
         "review/final_compiler_input.json",
+        "review/compiler_reconciliation.json",
         "review/witnesses.json",
         "review/witness_registry.json",
         "review/proof_requests.json",
@@ -5603,8 +5610,389 @@ def candidate_matches_summary_finding(candidate: dict, finding: dict) -> bool:
     )
 
 
+def compiler_canonical_tokens(value: str) -> list[str]:
+    tokens = []
+    for raw_token in value.split():
+        start = 0
+        end = len(raw_token)
+        while start < end and not raw_token[start].isalnum():
+            start += 1
+        while end > start and not raw_token[end - 1].isalnum():
+            end -= 1
+        token = raw_token[start:end]
+        if token:
+            tokens.append("".join(
+                chr(ord(character) + 32)
+                if "A" <= character <= "Z"
+                else character
+                for character in token
+            ))
+    return tokens[:24]
+
+
+def compiler_canonical_text(value: str) -> str:
+    return " ".join(compiler_canonical_tokens(value))
+
+
+def compiler_structural_claim_id(
+    path: str | None, line: int | None, failure_family: str, mechanism: str, subject: str
+) -> str:
+    identity = "{}|{}|{}|{}|{}".format(
+        (path or "<none>").replace("\\", "/"),
+        "<none>" if line is None else str(line),
+        failure_family,
+        mechanism,
+        compiler_canonical_text(subject),
+    )
+    return "claim-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+
+
+def compiler_subject_tokens_overlap(left: str, right: str) -> bool:
+    low_information = {
+        "finding", "issue", "problem", "review", "change", "changed",
+        "code", "line", "path", "check", "needs", "should",
+    }
+    left_tokens = compiler_canonical_tokens(left)
+    right_tokens = compiler_canonical_tokens(right)
+    distinctive = {
+        token for token in left_tokens
+        if token not in low_information
+        and (len(token) >= 6 or token in {"ub", "ffi", "leak", "lock", "null", "race"})
+    }
+    return len(distinctive.intersection(right_tokens)) >= 2
+
+
+def compiler_surface_id(
+    kind: str,
+    lane: str,
+    path: str | None,
+    line: int | None,
+    subject: str,
+    evidence: str,
+    suggestion: str | None,
+) -> str:
+    def escape(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("\n", "\\n")
+
+    identity = (
+        f"kind={kind}\n"
+        f"lane={lane}\n"
+        f"path={escape(path or '')}\n"
+        f"line={'' if line is None else line}\n"
+        f"text={escape(subject)}\n"
+        f"evidence={escape(evidence)}\n"
+        f"suggestion={escape(suggestion or '')}"
+    )
+    return "surface-" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def compiler_surface_record(
+    kind: str,
+    source_artifact: str,
+    source_index: int,
+    surface: dict,
+    observations: list[dict] | None = None,
+) -> dict:
+    if kind == "inline":
+        lane = surface.get("lane")
+        path = surface.get("path")
+        line = surface.get("line")
+        subject = surface.get("body")
+        evidence = surface.get("evidence")
+        suggestion = surface.get("suggestion")
+        failure_family = "inline-finding"
+    elif kind == "summary":
+        lane = surface.get("lane")
+        path = None
+        line = None
+        subject = surface.get("reason")
+        evidence = surface.get("evidence")
+        suggestion = None
+        failure_family = "summary-finding"
+    else:
+        fail(f"unsupported compiler surface kind: {kind!r}")
+    if not isinstance(lane, str) or not lane:
+        fail(f"compiler {kind} surface lane is not a non-empty string: {surface!r}")
+    if not isinstance(subject, str) or not subject:
+        fail(f"compiler {kind} surface subject is not a non-empty string: {surface!r}")
+    if not isinstance(evidence, str):
+        fail(f"compiler {kind} surface evidence is not a string: {surface!r}")
+    if path is not None and not isinstance(path, str):
+        fail(f"compiler {kind} surface path is not null or a string: {surface!r}")
+    if line is not None and (isinstance(line, bool) or not isinstance(line, int)):
+        fail(f"compiler {kind} surface line is not null or an integer: {surface!r}")
+    matching_observation = None
+    if kind == "inline":
+        matching_observation = next(
+            (
+                observation
+                for observation in observations or []
+                if observation.get("path") == path
+                and observation.get("line") == line
+                and compiler_subject_tokens_overlap(
+                    observation.get("claim", ""), subject
+                )
+            ),
+            None,
+        )
+    if matching_observation is None:
+        mechanism = compiler_canonical_text(subject)
+        claim_subject = subject
+    else:
+        mechanism = compiler_canonical_text(
+            matching_observation.get("dedupe_key", "")
+            or matching_observation.get("claim", "")
+        )
+        claim_subject = matching_observation.get("claim", subject)
+    claim_id = compiler_structural_claim_id(
+        path, line, failure_family, mechanism, claim_subject
+    )
+    return {
+        "surface_id": compiler_surface_id(
+            kind, lane, path, line, subject, evidence, suggestion
+        ),
+        "kind": kind,
+        "source_artifact": source_artifact,
+        "source_index": source_index,
+        "claim_id": claim_id,
+        "lane": lane,
+        "subject": subject,
+        "path": path,
+        "line": line,
+    }
+
+
+def compiler_input_surface_records(
+    review: dict,
+    follow_up_evidence: dict,
+    resolved_away: list[str],
+    resolved_candidates: list[dict],
+    observations: list[dict] | None = None,
+) -> list[dict]:
+    # The caller already applied the candidate filter through the existing
+    # Rust-mirror checks. Reconstruct the same filtered source list here by
+    # using the candidate records from the packet, without matching prose in
+    # the reconciliation verifier.
+    records = []
+    for index, comment in enumerate(review.get("inline_comments", [])):
+        if any(
+            candidate.get("id") in resolved_away
+            and candidate_matches_inline_comment(candidate, comment)
+            for candidate in resolved_candidates
+        ):
+            continue
+        records.append(
+            compiler_surface_record(
+                "inline", "review/review.json", index, comment, observations
+            )
+        )
+    for index, finding in enumerate(review.get("summary_only_findings", [])):
+        if any(
+            candidate.get("id") in resolved_away
+            and candidate_matches_summary_finding(candidate, finding)
+            for candidate in resolved_candidates
+        ):
+            continue
+        records.append(
+            compiler_surface_record(
+                "summary", "review/review.json", index, finding, observations
+            )
+        )
+    for index, finding in enumerate(follow_up_evidence.get("summary_only_findings", [])):
+        records.append(
+            compiler_surface_record(
+                "summary", "review/follow_up_evidence.json", index, finding, observations
+            )
+        )
+    return records
+
+
+def require_compiler_reconciliation(
+    root: pathlib.Path,
+    review: dict,
+    follow_up_evidence: dict,
+    final_input: dict,
+    claim_graph: dict,
+) -> None:
+    receipt = load_json(root / "review/compiler_reconciliation.json")
+    if not isinstance(receipt, dict):
+        fail("review/compiler_reconciliation.json is not an object")
+    if receipt.get("schema") != COMPILER_RECONCILIATION_SCHEMA:
+        fail("compiler reconciliation has the wrong schema")
+    head_sha = receipt.get("head_sha")
+    if head_sha != claim_graph.get("head_sha"):
+        fail("compiler reconciliation head_sha does not match claim_graph.json")
+    status = receipt.get("status", "ok")
+    if status not in {"ok", "error"}:
+        fail(f"compiler reconciliation status is unsupported: {status!r}")
+    if status == "error":
+        if not isinstance(receipt.get("error"), str) or not receipt["error"]:
+            fail("failed compiler reconciliation lacks an error description")
+        if final_input.get("inline_comments") or final_input.get("summary_only_findings"):
+            fail("failed compiler reconciliation must not expose compiler surfaces")
+        return
+    resolved_away = final_input.get("follow_up_resolved_candidate_ids", [])
+    candidates = load_json(root / "review/candidates.json")
+    if not isinstance(candidates, list):
+        fail("review/candidates.json is not an array")
+    expected_input = compiler_input_surface_records(
+        review,
+        follow_up_evidence,
+        resolved_away,
+        candidates,
+        final_input.get("observations", []),
+    )
+    input_surfaces = receipt.get("input_surfaces")
+    if input_surfaces != expected_input:
+        fail(
+            "compiler reconciliation input_surfaces do not match review.json "
+            "minus follow-up-resolved candidates plus follow_up_evidence"
+        )
+
+    expected_final = [
+        compiler_surface_record(
+            "inline", "final", index, comment, final_input.get("observations", [])
+        )
+        for index, comment in enumerate(final_input.get("inline_comments", []))
+    ] + [
+        compiler_surface_record(
+            "summary", "final", index, finding, final_input.get("observations", [])
+        )
+        for index, finding in enumerate(final_input.get("summary_only_findings", []))
+    ]
+    available = list(expected_input)
+    expected_retained = []
+    for final_surface in expected_final:
+        match = next(
+            (
+                candidate
+                for candidate in available
+                if candidate["surface_id"] == final_surface["surface_id"]
+                and candidate["kind"] == final_surface["kind"]
+            ),
+            None,
+        )
+        if match is None:
+            fail(
+                "final compiler output contains a surface absent from the "
+                "reconciliation input"
+            )
+        expected_retained.append(match)
+        available.remove(match)
+    if receipt.get("retained_surfaces") != expected_retained:
+        fail("compiler reconciliation retained_surfaces do not match final compiler input")
+
+    removed = receipt.get("removed_surfaces")
+    if not isinstance(removed, list):
+        fail("compiler reconciliation removed_surfaces is not an array")
+    if len(removed) != len(available):
+        fail("compiler reconciliation does not account for every omitted surface")
+
+    conflicts = claim_graph.get("conflicts", [])
+    topics = claim_graph.get("topics", [])
+    seen_removed = set()
+    for expected, entry in zip(available, removed, strict=True):
+        if not isinstance(entry, dict):
+            fail("compiler reconciliation removed surface is not an object")
+        for field in [
+            "surface_id",
+            "kind",
+            "source_artifact",
+            "source_index",
+            "claim_id",
+            "lane",
+            "subject",
+            "path",
+            "line",
+        ]:
+            if entry.get(field) != expected.get(field):
+                fail(f"compiler reconciliation removed surface {field} is not source-bound")
+        removal_key = (
+            entry["source_artifact"],
+            entry["surface_id"],
+            entry["kind"],
+            entry["source_index"],
+        )
+        if removal_key in seen_removed:
+            fail("compiler reconciliation removed a surface more than once")
+        seen_removed.add(removal_key)
+        disposition = entry.get("disposition")
+        if disposition not in COMPILER_SURFACE_DISPOSITIONS:
+            fail(f"compiler reconciliation disposition is unsupported: {disposition!r}")
+        evidence_receipts = entry.get("evidence_receipts")
+        if not isinstance(evidence_receipts, list) or not evidence_receipts:
+            fail("compiler reconciliation removal lacks evidence receipts")
+        adjudicating = entry.get("adjudicating_claim_ids")
+        if not isinstance(adjudicating, list) or not adjudicating:
+            fail("compiler reconciliation removal lacks adjudicating claim ids")
+        if disposition == "duplicate_structurally_identical":
+            if not any(
+                retained["surface_id"] == expected["surface_id"]
+                and retained["kind"] == expected["kind"]
+                for retained in expected_retained
+            ):
+                fail("duplicate reconciliation removal has no retained twin")
+        elif disposition == "refuted_by_stronger_evidence":
+            loser_ids = {
+                conflict.get("loser")
+                for conflict in conflicts
+                if isinstance(conflict, dict)
+            }
+            if not set(adjudicating) <= loser_ids:
+                fail("refuted reconciliation removal cites a non-loser claim")
+            conflict_loser_ids = set()
+            for evidence_receipt in evidence_receipts:
+                prefix = "review/claim_graph.json#conflicts/"
+                if not evidence_receipt.startswith(prefix):
+                    continue
+                try:
+                    conflict_index = int(evidence_receipt[len(prefix) :])
+                except ValueError:
+                    fail("refuted reconciliation removal has a malformed conflict receipt")
+                if conflict_index < 0 or conflict_index >= len(conflicts):
+                    fail("refuted reconciliation removal points to a missing conflict")
+                loser = conflicts[conflict_index].get("loser")
+                if not isinstance(loser, str) or not loser:
+                    fail("refuted reconciliation removal conflict has no loser")
+                conflict_loser_ids.add(loser)
+            if conflict_loser_ids != set(adjudicating):
+                fail(
+                    "refuted reconciliation removal claim ids do not match "
+                    "its explicit conflict receipts"
+                )
+            matching_topics = [
+                topic
+                for topic in topics
+                if topic.get("claim_id") in adjudicating
+                and topic.get("source_lane") == expected["lane"]
+                and (
+                    expected["kind"] == "summary"
+                    or (
+                        topic.get("path") == expected["path"]
+                        and topic.get("anchor") == expected["line"]
+                    )
+                )
+            ]
+            if len(matching_topics) != len(set(adjudicating)):
+                fail("refuted reconciliation removal is not source-bound")
+        else:
+            thread_ids = {
+                thread_id
+                for topic in topics
+                if topic.get("claim_id") in adjudicating
+                for thread_id in topic.get("existing_threads", [])
+            }
+            if not any(receipt_name.startswith("review/pr_thread_context.json#") for receipt_name in evidence_receipts):
+                fail("thread-covered reconciliation removal lacks a thread receipt")
+            if not thread_ids:
+                fail("thread-covered reconciliation removal cites no current thread")
+
+
 def require_final_compiler_input(
-    root: pathlib.Path, review: dict, follow_up_evidence: dict
+    root: pathlib.Path,
+    review: dict,
+    follow_up_evidence: dict,
+    claim_graph: dict | None = None,
 ) -> None:
     final_input = load_json(root / "review/final_compiler_input.json")
     if not isinstance(final_input, dict):
@@ -5625,6 +6013,7 @@ def require_final_compiler_input(
         "review/tool-gate-outcomes.json",
         "review/receipt_routes.json",
         "review/final_orchestrator_plan.json",
+        "review/compiler_reconciliation.json",
     ]:
         if source not in source_artifacts:
             fail(f"final compiler input missing source artifact {source}")
@@ -5665,39 +6054,10 @@ def require_final_compiler_input(
             "final compiler input follow_up_resolved_candidate_ids does not "
             "match resolved_candidates.json refuted/dropped resolutions"
         )
-    resolved_away = [
-        candidate
-        for candidate in candidates
-        if isinstance(candidate, dict)
-        and candidate.get("id") in set(expected_resolved_away)
-    ]
-    expected_inline = [
-        comment
-        for comment in review.get("inline_comments", [])
-        if not any(
-            candidate_matches_inline_comment(candidate, comment)
-            for candidate in resolved_away
-        )
-    ]
-    if final_input.get("inline_comments") != expected_inline:
-        fail(
-            "final compiler input inline_comments does not match review.json "
-            "minus follow-up-resolved candidates"
-        )
-    expected_summary = [
-        finding
-        for finding in review.get("summary_only_findings", [])
-        if not any(
-            candidate_matches_summary_finding(candidate, finding)
-            for candidate in resolved_away
-        )
-    ] + list(follow_up_evidence.get("summary_only_findings", []))
-    if final_input.get("summary_only_findings") != expected_summary:
-        fail(
-            "final compiler input summary_only_findings does not match "
-            "review.json minus follow-up-resolved candidates plus "
-            "follow_up_evidence"
-        )
+    # Claim-graph reconciliation may remove or retain otherwise valid input
+    # surfaces after this candidate filter. The receipt verifier below binds
+    # the final compiler surfaces to the pre-reconciliation inputs and requires
+    # an explicit disposition for every omission.
     expected_observations = list(review.get("observations", [])) + list(
         follow_up_evidence.get("observations", [])
     )
@@ -5706,6 +6066,11 @@ def require_final_compiler_input(
             "final compiler input observations does not match "
             "review.json plus follow_up_evidence"
         )
+    if claim_graph is None:
+        claim_graph = load_json(root / "review/claim_graph.json")
+    require_compiler_reconciliation(
+        root, review, follow_up_evidence, final_input, claim_graph
+    )
 
 
 # Reason kinds the gate may emit (SPEC-0003). `internal` is declared in the
@@ -10604,6 +10969,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 "review/tool-gate-outcomes.json",
                 "review/receipt_routes.json",
                 "review/final_orchestrator_plan.json",
+                "review/compiler_reconciliation.json",
             ],
             "model_lanes": [],
             "missing_or_failed_sensor_evidence": [],
@@ -10623,7 +10989,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
         (
             "leaked refuted summary surface",
             {"summary_only_findings": [refuted_finding]},
-            "minus follow-up-resolved candidates",
+            "final compiler output contains a surface absent",
         ),
         (
             "leaked refuted inline surface",
@@ -10634,10 +11000,11 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                         "path": "src/lib.rs",
                         "line": 7,
                         "body": "The new test may also pass on base.",
+                        "evidence": "test sensor receipt",
                     }
                 ]
             },
-            "inline_comments does not match review.json",
+            "final compiler output contains a surface absent",
         ),
         (
             "resolved-away ids drifted from resolved_candidates.json",
@@ -10660,6 +11027,22 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 "[]", encoding="utf-8"
             )
             (review_dir / "proof_receipts.json").write_text("[]", encoding="utf-8")
+            (review_dir / "claim_graph.json").write_text(
+                json.dumps({"head_sha": "HEAD", "topics": [], "conflicts": []}),
+                encoding="utf-8",
+            )
+            (review_dir / "compiler_reconciliation.json").write_text(
+                json.dumps(
+                    {
+                        "schema": COMPILER_RECONCILIATION_SCHEMA,
+                        "head_sha": "HEAD",
+                        "input_surfaces": [],
+                        "retained_surfaces": [],
+                        "removed_surfaces": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
             leak = final_input(overrides)
             if label == "leaked refuted inline surface":
                 # An inline leak needs the review side to carry the inline
@@ -10674,7 +11057,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 (review_dir / "candidates.json").write_text(
                     json.dumps([inline_candidate]), encoding="utf-8"
                 )
-                case_review = review_inline
+                case_review = dict(review_inline, summary_only_findings=[])
             else:
                 case_review = review
             (review_dir / "final_compiler_input.json").write_text(
@@ -10687,6 +11070,179 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                     root, case_review, follow_up_evidence
                 ),
             )
+
+
+def self_test_compiler_reconciliation_contract() -> None:
+    """The final compiler must account for the hosted 18-to-12 reduction."""
+    import copy
+
+    raw_findings = [
+        {
+            "lane": "shared-parser-lane",
+            "severity": "medium",
+            "confidence": "medium",
+            "reason": f"Parser claim {index} has distinct mechanism {index}.",
+            "evidence": f"receipt-{index}",
+        }
+        for index in range(18)
+    ]
+    review = {
+        "inline_comments": [],
+        "summary_only_findings": raw_findings,
+    }
+    follow_up_evidence = {"summary_only_findings": [], "observations": []}
+    final_findings = raw_findings[:12]
+    final_input = {
+        "inline_comments": [],
+        "summary_only_findings": final_findings,
+        "follow_up_resolved_candidate_ids": [],
+    }
+    expected_input = compiler_input_surface_records(
+        review, follow_up_evidence, [], [], []
+    )
+    retained = expected_input[:12]
+    removed = []
+    conflicts = []
+    topics = []
+    for surface in expected_input[12:]:
+        claim_id = surface["claim_id"]
+        removed.append(
+            {
+                **surface,
+                "adjudicating_claim_ids": [claim_id],
+                "disposition": "refuted_by_stronger_evidence",
+                "evidence_receipts": [
+                    f"review/claim_graph.json#claims/{claim_id}",
+                    f"review/claim_graph.json#conflicts/{len(conflicts)}",
+                ],
+            }
+        )
+        topics.append(
+            {
+                "claim_id": claim_id,
+                "source_lane": surface["lane"],
+                "subject": surface["subject"],
+                "path": None,
+                "anchor": None,
+                "existing_threads": [],
+            }
+        )
+        conflicts.append({"claim_ids": [f"winner-{claim_id}", claim_id], "loser": claim_id})
+        removed[-1]["evidence_receipts"][-1] = (
+            f"review/claim_graph.json#conflicts/{len(conflicts) - 1}"
+        )
+    graph = {
+        "head_sha": "HEAD",
+        "topics": topics,
+        "conflicts": conflicts,
+    }
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        write_self_test_json(root / "review/candidates.json", [])
+        write_self_test_json(
+            root / "review/compiler_reconciliation.json",
+            {
+                "schema": COMPILER_RECONCILIATION_SCHEMA,
+                "head_sha": "HEAD",
+                "input_surfaces": expected_input,
+                "retained_surfaces": retained,
+                "removed_surfaces": removed,
+            },
+        )
+        require_compiler_reconciliation(
+            root, review, follow_up_evidence, final_input, graph
+        )
+        write_self_test_json(
+            root / "review/compiler_reconciliation.json",
+            {
+                "schema": COMPILER_RECONCILIATION_SCHEMA,
+                "head_sha": "HEAD",
+                "status": "error",
+                "error": "reconciliation fixture failure",
+                "input_surfaces": [],
+                "retained_surfaces": [],
+                "removed_surfaces": [],
+            },
+        )
+        require_compiler_reconciliation(
+            root,
+            review,
+            follow_up_evidence,
+            {**final_input, "summary_only_findings": []},
+            graph,
+        )
+        if compiler_input_surface_records(review, follow_up_evidence, [], [], []) != expected_input:
+            fail("compiler reconciliation input ordering is not deterministic")
+
+        def write_case(
+            case_final: list[dict],
+            case_receipt: dict | None = None,
+            case_graph: dict | None = None,
+        ) -> None:
+            write_self_test_json(
+                root / "review/compiler_reconciliation.json",
+                case_receipt
+                or {
+                    "schema": COMPILER_RECONCILIATION_SCHEMA,
+                    "head_sha": "HEAD",
+                    "input_surfaces": expected_input,
+                    "retained_surfaces": retained,
+                    "removed_surfaces": removed,
+                },
+            )
+            require_compiler_reconciliation(
+                root,
+                review,
+                follow_up_evidence,
+                {
+                    **final_input,
+                    "summary_only_findings": case_final,
+                },
+                case_graph or graph,
+            )
+
+        expect_self_test_failure(
+            "compiler reconciliation unexplained loss",
+            "retained_surfaces do not match final compiler input",
+            lambda: write_case(final_findings[:11]),
+        )
+        expect_self_test_failure(
+            "compiler reconciliation unexplained addition",
+            "surface absent from the reconciliation input",
+            lambda: write_case([*final_findings, {
+                    "lane": "shared-parser-lane",
+                    "severity": "medium",
+                    "confidence": "medium",
+                    "reason": "Unexplained new public surface.",
+                    "evidence": "untrusted",
+                }]),
+        )
+        wrong_claim = copy.deepcopy(removed)
+        wrong_claim[0]["adjudicating_claim_ids"] = ["claim-wrong-lane"]
+        expect_self_test_failure(
+            "compiler reconciliation wrong claim",
+            "non-loser claim",
+            lambda: write_case(final_findings, {
+                "schema": COMPILER_RECONCILIATION_SCHEMA,
+                "head_sha": "HEAD",
+                "input_surfaces": expected_input,
+                "retained_surfaces": retained,
+                "removed_surfaces": wrong_claim,
+            }),
+        )
+        wrong_head = {
+            "schema": COMPILER_RECONCILIATION_SCHEMA,
+            "head_sha": "OLD-HEAD",
+            "input_surfaces": expected_input,
+            "retained_surfaces": retained,
+            "removed_surfaces": removed,
+        }
+        expect_self_test_failure(
+            "compiler reconciliation stale head",
+            "head_sha does not match claim_graph.json",
+            lambda: write_case(final_findings, wrong_head),
+        )
 
 
 def self_test_routed_receipt_excerpt_matches_rust_contract() -> None:
@@ -11906,6 +12462,7 @@ def run_self_tests() -> None:
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_proof_command_stream_bound_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
+    self_test_compiler_reconciliation_contract()
     self_test_gate_outcome_contract()
     self_test_gate_watchdog_contract()
     self_test_ci_audit_core_artifact_contract()

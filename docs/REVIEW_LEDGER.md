@@ -31,6 +31,9 @@ src/candidate.rs build_orchestrator_plan / build_final_orchestrator_plan
   <-> verifier expected_orchestrator_plan / expected_final_orchestrator_plan
 src/review_compiler.rs FinalCompilerInputArtifact (v2 filter contract)
   <-> verifier require_final_compiler_input
+src/compiler_reconciliation.rs CompilerReconciliationReceipt (v1 surface
+  accounting contract)
+  <-> scripts/verify-bun-review-artifacts.py require_compiler_reconciliation
 src/issue_broker.rs follow_up_resolved_away_candidate_ids + surface matchers
   <-> verifier mirrors (pinned by self-tests)
 src/work_queue.rs work_queue_task_from_sensor (#325 late-phase pending rule)

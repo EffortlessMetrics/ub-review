@@ -29,8 +29,8 @@ pub(crate) struct ReviewTopic {
     pub(crate) proof_requests: Vec<String>,
     pub(crate) proof_receipts: Vec<String>,
     pub(crate) delivery: String,
-    source_lane: String,
-    subject: String,
+    pub(crate) source_lane: String,
+    pub(crate) subject: String,
 }
 
 #[derive(Clone, Debug)]
@@ -250,7 +250,7 @@ pub(crate) fn reconcile_inline_comments(
     comments
         .iter()
         .filter(|comment| {
-            let claim_id = topic_claim_id_for_inline(comment);
+            let claim_id = topic_claim_id_for_inline(comment, &[]);
             let refuted_by_adjudication = graph.topics.iter().any(|topic| {
                 topic_is_adjudicated_loser(graph, topic)
                     && (topic.claim_id == claim_id
@@ -271,7 +271,7 @@ pub(crate) fn reconcile_inline_comments(
             if covered_by_current_thread {
                 return false;
             }
-            seen_claims.insert(topic_claim_id_for_inline(comment))
+            seen_claims.insert(topic_claim_id_for_inline(comment, &[]))
         })
         .cloned()
         .collect()
@@ -297,7 +297,7 @@ pub(crate) fn reconcile_summary_only_findings(
         .collect()
 }
 
-fn topic_is_adjudicated_loser(graph: &ClaimGraph, topic: &ReviewTopic) -> bool {
+pub(crate) fn topic_is_adjudicated_loser(graph: &ClaimGraph, topic: &ReviewTopic) -> bool {
     graph
         .conflicts
         .iter()
@@ -383,13 +383,40 @@ pub(crate) fn add_resolved_candidate_topics(
         .sort_by(|left, right| left.claim_id.cmp(&right.claim_id));
 }
 
-pub(crate) fn topic_claim_id_for_inline(comment: &ReviewInlineComment) -> String {
+pub(crate) fn topic_claim_id_for_inline(
+    comment: &ReviewInlineComment,
+    observations: &[Observation],
+) -> String {
+    let matching_observation = observations.iter().find(|observation| {
+        observation.path.as_deref() == Some(comment.path.as_str())
+            && observation.line == Some(comment.line)
+            && subject_tokens_overlap(&observation.claim, &comment.body)
+    });
+    let failure_family = matching_observation
+        .map(|observation| observation.kind.as_str())
+        .unwrap_or("inline-finding");
+    let mechanism = matching_observation
+        .map(|observation| stable_mechanism(&observation.dedupe_key, &observation.claim))
+        .unwrap_or_else(|| stable_mechanism("", &comment.body));
+    let subject = matching_observation
+        .map(|observation| observation.claim.as_str())
+        .unwrap_or(&comment.body);
     structural_claim_id(
         Some(&comment.path),
         Some(comment.line),
-        "inline-finding",
-        &stable_mechanism("", &comment.body),
-        &comment.body,
+        failure_family,
+        &mechanism,
+        subject,
+    )
+}
+
+pub(crate) fn topic_claim_id_for_summary(finding: &SummaryOnlyFinding) -> String {
+    structural_claim_id(
+        None,
+        None,
+        "summary-finding",
+        &stable_mechanism("", &finding.reason),
+        &finding.reason,
     )
 }
 
@@ -485,7 +512,7 @@ fn canonical_tokens(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn subject_tokens_overlap(left: &str, right: &str) -> bool {
+pub(crate) fn subject_tokens_overlap(left: &str, right: &str) -> bool {
     let left = canonical_tokens(left);
     let right = canonical_tokens(right);
     left.iter()
@@ -800,6 +827,47 @@ mod tests {
         );
         ensure!(graph.conflicts.is_empty());
         ensure!(reconcile_inline_comments(&graph, std::slice::from_ref(&comment)).len() == 1);
+        Ok(())
+    }
+
+    #[test]
+    fn inline_claim_id_uses_matching_observation_identity() -> Result<()> {
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "observation-identity".to_owned(),
+            lane: "tests".to_owned(),
+            question: "parser subscript behavior".to_owned(),
+            claim: "Parser subscript finding".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "fingerprint".to_owned(),
+            evidence: Vec::new(),
+            dedupe_key: "parser-subscript".to_owned(),
+            source: "model".to_owned(),
+        };
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "Parser subscript finding".to_owned(),
+            evidence: "receipt".to_owned(),
+            suggestion: None,
+        };
+        let expected = structural_claim_id(
+            Some("src/parser.rs"),
+            Some(12),
+            "bug",
+            "parser-subscript",
+            "Parser subscript finding",
+        );
+        ensure!(topic_claim_id_for_inline(&comment, &[observation]) == expected);
         Ok(())
     }
 

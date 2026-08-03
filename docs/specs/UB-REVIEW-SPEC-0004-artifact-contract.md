@@ -232,6 +232,11 @@ follow_up_results.json         follow-up lane results
 follow_up_outputs.json         follow-up model outputs
 follow_up_evidence.json        evidence routed into the final compile
 model_stages.json              ub-review.model_stage.v1 records
+claim_graph.json               ub-review.claim_graph.v1; exact-head claim
+                               identities, conflicts, and thread dispositions
+compiler_reconciliation.json   ub-review.compiler_reconciliation.v1;
+                               exact-head accounting of retained and explicitly
+                               receipted compiler surface removals
 final_compiler_input.json      ub-review.final_compiler_input.v2; the v2
                                example of a schema bump (PR #309)
 witnesses.json                 ub-review.witness.v1 records
@@ -658,6 +663,7 @@ named Rust test in src/main.rs. The schema column abbreviates
 | review/terminal_state.json | stable | terminal_state.v1 | downstream automation; gate-check cross-check | required (require_review; status mirror in require_gate_outcome) |
 | review/pr_thread_context.json | stable | pr_thread_context.v1 | downstream automation | required (require_review) |
 | review/claim_graph.json | stable | claim_graph.v1; exact head parity with metrics/proof receipts, claim/topic parity, and thread disposition enum | downstream automation; reviewer reconciliation | required (require_claim_graph) |
+| review/compiler_reconciliation.json | stable | compiler_reconciliation.v1; exact-head surface accounting with source-bound identities, retained surfaces, and receipted adjudicated removals | downstream automation; final compiler verifier | required (require_compiler_reconciliation) |
 | review/github-review.json XOR github-review-skip.json | stable | none (field-checked; skip statuses pinned) | `ub-review post` (cmd_post); downstream automation | required (require_common_tree XOR; require_review; require_pr_review_body_policy) |
 | review/provider-preflight-status.json | stable | none | downstream automation | required (require_common_tree; receipt fields via require_model_receipts) |
 | review/shared_context.md + shared_context_cache_block.md + shared_context_hash.txt + cache_manifest.json + cache_events.ndjson | stable | cache_manifest.v1, cache_event.v1; byte-equal mirror + repeated hash | downstream automation; verifier (mirror proof) | required (require_cache_artifacts) |
@@ -751,6 +757,9 @@ strings; root/review mirror equality for the tool registry trio; NDJSON
 line-for-line parity with the JSON arrays; metrics counts equal to array
 lengths; the github-review XOR skip rule; lane packet set equality;
 `final_compiler_input.v2` excluding follow-up-refuted/dropped candidates;
+every compiler surface dropped after that exclusion accounted for by
+`compiler_reconciliation.v1`, which binds each removal to an exact-head
+identity and one explicit disposition;
 required headings in running-summary.md and review.md; the eight required
 events.ndjson kinds; append-only events and immutable emitted artifacts.
 
