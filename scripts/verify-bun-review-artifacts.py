@@ -5963,39 +5963,10 @@ def require_final_compiler_input(
             "final compiler input follow_up_resolved_candidate_ids does not "
             "match resolved_candidates.json refuted/dropped resolutions"
         )
-    resolved_away = [
-        candidate
-        for candidate in candidates
-        if isinstance(candidate, dict)
-        and candidate.get("id") in set(expected_resolved_away)
-    ]
-    expected_inline = [
-        comment
-        for comment in review.get("inline_comments", [])
-        if not any(
-            candidate_matches_inline_comment(candidate, comment)
-            for candidate in resolved_away
-        )
-    ]
-    if final_input.get("inline_comments") != expected_inline:
-        fail(
-            "final compiler input inline_comments does not match review.json "
-            "minus follow-up-resolved candidates"
-        )
-    expected_summary = [
-        finding
-        for finding in review.get("summary_only_findings", [])
-        if not any(
-            candidate_matches_summary_finding(candidate, finding)
-            for candidate in resolved_away
-        )
-    ] + list(follow_up_evidence.get("summary_only_findings", []))
-    if final_input.get("summary_only_findings") != expected_summary:
-        fail(
-            "final compiler input summary_only_findings does not match "
-            "review.json minus follow-up-resolved candidates plus "
-            "follow_up_evidence"
-        )
+    # Claim-graph reconciliation may remove or retain otherwise valid input
+    # surfaces after this candidate filter. The receipt verifier below binds
+    # the final compiler surfaces to the pre-reconciliation inputs and requires
+    # an explicit disposition for every omission.
     expected_observations = list(review.get("observations", [])) + list(
         follow_up_evidence.get("observations", [])
     )
@@ -10927,7 +10898,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
         (
             "leaked refuted summary surface",
             {"summary_only_findings": [refuted_finding]},
-            "minus follow-up-resolved candidates",
+            "final compiler output contains a surface absent",
         ),
         (
             "leaked refuted inline surface",
@@ -10938,10 +10909,11 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                         "path": "src/lib.rs",
                         "line": 7,
                         "body": "The new test may also pass on base.",
+                        "evidence": "test sensor receipt",
                     }
                 ]
             },
-            "inline_comments does not match review.json",
+            "final compiler output contains a surface absent",
         ),
         (
             "resolved-away ids drifted from resolved_candidates.json",
@@ -10964,6 +10936,22 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 "[]", encoding="utf-8"
             )
             (review_dir / "proof_receipts.json").write_text("[]", encoding="utf-8")
+            (review_dir / "claim_graph.json").write_text(
+                json.dumps({"head_sha": "HEAD", "topics": [], "conflicts": []}),
+                encoding="utf-8",
+            )
+            (review_dir / "compiler_reconciliation.json").write_text(
+                json.dumps(
+                    {
+                        "schema": COMPILER_RECONCILIATION_SCHEMA,
+                        "head_sha": "HEAD",
+                        "input_surfaces": [],
+                        "retained_surfaces": [],
+                        "removed_surfaces": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
             leak = final_input(overrides)
             if label == "leaked refuted inline surface":
                 # An inline leak needs the review side to carry the inline
@@ -10978,7 +10966,7 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
                 (review_dir / "candidates.json").write_text(
                     json.dumps([inline_candidate]), encoding="utf-8"
                 )
-                case_review = review_inline
+                case_review = dict(review_inline, summary_only_findings=[])
             else:
                 case_review = review
             (review_dir / "final_compiler_input.json").write_text(
