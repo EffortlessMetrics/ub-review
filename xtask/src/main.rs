@@ -1770,7 +1770,7 @@ path = "src/x.rs"
         )?;
         let mut expired_report = PolicyReport::default();
         let expected = format!(
-            "{} exception `expired-gate-ceiling` `expires` (2026-08-01) is before `review_after` (2026-07-01) or the evaluation date",
+            "{} exception `expired-gate-ceiling` `expires` (2026-08-01) is before the evaluation date",
             allow.display()
         );
         let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report)
@@ -1866,7 +1866,7 @@ path = "src/x.rs"
         assert!(
             expired
                 .as_ref()
-                .is_err_and(|message| message.contains("before `review_after`")),
+                .is_err_and(|message| message.contains("before the evaluation date")),
             "the day after expires must block: {expired:?}"
         );
 
@@ -2222,10 +2222,15 @@ fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
                     path.display()
                 )
             })?;
-            let expiry_boundary = review_date.max(today_date);
-            if expires_date < expiry_boundary {
+            if expires_date < review_date {
                 bail!(
-                    "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after}) or the evaluation date",
+                    "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after})",
+                    path.display()
+                );
+            }
+            if expires_date < today_date {
+                bail!(
+                    "{} exception `{id}` `expires` ({expires_str}) is before the evaluation date",
                     path.display()
                 );
             }
