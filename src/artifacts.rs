@@ -16,6 +16,7 @@ pub(crate) const CALIBRATION_SCHEMA: &str = "ub-review.calibration.v0";
 pub(crate) const CANDIDATE_SCHEMA: &str = "ub-review.candidate.v1";
 pub(crate) const CI_CORRELATION_SCHEMA: &str = "ub-review.ci_correlation.v1";
 pub(crate) const CLAIM_GRAPH_SCHEMA: &str = "ub-review.claim_graph.v1";
+pub(crate) const COMPILER_RECONCILIATION_SCHEMA: &str = "ub-review.compiler_reconciliation.v1";
 pub(crate) const CI_COSTS_SCHEMA: &str = "ub-review.ci_costs.v1";
 pub(crate) const CI_HISTORY_SCHEMA: &str = "ub-review.ci_history.v1";
 pub(crate) const CI_INVENTORY_SCHEMA: &str = "ub-review.ci_inventory.v1";

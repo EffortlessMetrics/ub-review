@@ -29,8 +29,8 @@ pub(crate) struct ReviewTopic {
     pub(crate) proof_requests: Vec<String>,
     pub(crate) proof_receipts: Vec<String>,
     pub(crate) delivery: String,
-    source_lane: String,
-    subject: String,
+    pub(crate) source_lane: String,
+    pub(crate) subject: String,
 }
 
 #[derive(Clone, Debug)]
@@ -297,7 +297,7 @@ pub(crate) fn reconcile_summary_only_findings(
         .collect()
 }
 
-fn topic_is_adjudicated_loser(graph: &ClaimGraph, topic: &ReviewTopic) -> bool {
+pub(crate) fn topic_is_adjudicated_loser(graph: &ClaimGraph, topic: &ReviewTopic) -> bool {
     graph
         .conflicts
         .iter()
@@ -393,6 +393,16 @@ pub(crate) fn topic_claim_id_for_inline(comment: &ReviewInlineComment) -> String
     )
 }
 
+pub(crate) fn topic_claim_id_for_summary(finding: &SummaryOnlyFinding) -> String {
+    structural_claim_id(
+        None,
+        None,
+        "summary-finding",
+        &stable_mechanism("", &finding.reason),
+        &finding.reason,
+    )
+}
+
 fn upsert_topic(topics: &mut BTreeMap<String, ReviewTopic>, head_sha: &str, seed: TopicSeed) {
     let claim_id = structural_claim_id(
         seed.path.as_deref(),
@@ -485,7 +495,7 @@ fn canonical_tokens(value: &str) -> Vec<String> {
         .collect()
 }
 
-fn subject_tokens_overlap(left: &str, right: &str) -> bool {
+pub(crate) fn subject_tokens_overlap(left: &str, right: &str) -> bool {
     let left = canonical_tokens(left);
     let right = canonical_tokens(right);
     left.iter()
