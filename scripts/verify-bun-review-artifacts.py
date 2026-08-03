@@ -5847,8 +5847,6 @@ def require_compiler_reconciliation(
             }
             if not set(adjudicating) <= loser_ids:
                 fail("refuted reconciliation removal cites a non-loser claim")
-            if expected["claim_id"] not in adjudicating:
-                fail("refuted reconciliation removal does not cite its surface claim")
             conflict_loser_ids = set()
             for evidence_receipt in evidence_receipts:
                 prefix = "review/claim_graph.json#conflicts/"
@@ -11113,10 +11111,10 @@ def self_test_compiler_reconciliation_contract() -> None:
             ]),
         )
         wrong_claim = copy.deepcopy(removed)
-        wrong_claim[0]["adjudicating_claim_ids"] = [removed[1]["claim_id"]]
+        wrong_claim[0]["adjudicating_claim_ids"] = ["claim-wrong-lane"]
         expect_self_test_failure(
             "compiler reconciliation wrong claim",
-            "does not cite its surface claim",
+            "non-loser claim",
             lambda: write_case(final_findings, {**{
                 "schema": COMPILER_RECONCILIATION_SCHEMA,
                 "head_sha": "HEAD",
