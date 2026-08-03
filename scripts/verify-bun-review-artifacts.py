@@ -11113,6 +11113,15 @@ def self_test_compiler_reconciliation_contract() -> None:
     )
     if matched["claim_id"] != expected_matched_claim:
         fail("compiler inline identity did not mirror the matched observation kind")
+    missing_kind = dict(inline_observation)
+    missing_kind.pop("kind")
+    expect_self_test_failure(
+        "matched inline observation missing kind",
+        "without a kind",
+        lambda: compiler_surface_record(
+            "inline", "review/review.json", 0, inline_surface, [missing_kind]
+        ),
+    )
     changed_kind = {**inline_observation, "kind": "verification-question"}
     changed = compiler_surface_record(
         "inline", "review/review.json", 0, inline_surface, [changed_kind]
