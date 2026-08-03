@@ -1864,11 +1864,12 @@ path = "src/x.rs"
         let mut expired_report = PolicyReport::default();
         let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report)
             .map_err(|error| format!("{error}"));
-        assert!(
-            expired
-                .as_ref()
-                .is_err_and(|message| message.contains("before the evaluation date")),
-            "the day after expires must block: {expired:?}"
+        assert_eq!(
+            expired,
+            Err(format!(
+                "{} exception `boundary` `expires` (2026-08-01) is before the evaluation date",
+                allow.display()
+            ))
         );
 
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
@@ -2230,10 +2231,10 @@ fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
                 );
             }
             if expires_date < today_date {
-                bail!(
+                return Err(anyhow::Error::msg(format!(
                     "{} exception `{id}` `expires` ({expires_str}) is before the evaluation date",
                     path.display()
-                );
+                )));
             }
         }
         if review_date < today_date {
