@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
 use anyhow::{Context, Result, bail};
+use chrono::NaiveDate;
 use serde_json::{Value as JsonValue, json};
 use toml::Value;
 use toml::map::Map;
@@ -1619,6 +1620,9 @@ mod tests {
         assert_eq!(parse_policy_date("2026-06-03")?, (2026, 6, 3));
         assert_eq!(parse_policy_date("2024-02-29")?, (2024, 2, 29)); // leap day
         assert_eq!(parse_policy_date("1999-12-31")?, (1999, 12, 31));
+        assert_eq!(parse_policy_date("2000-02-29")?, (2000, 2, 29));
+        assert_eq!(parse_policy_date("2026-02-28")?, (2026, 2, 28));
+        assert_eq!(parse_policy_date("2026-04-30")?, (2026, 4, 30));
         Ok(())
     }
 
@@ -1634,6 +1638,44 @@ mod tests {
         );
         assert!(parse_policy_date("2026-06-32").is_err(), "day out of range");
         assert!(parse_policy_date("abcd-06-03").is_err(), "non-numeric year");
+        let impossible_february =
+            parse_policy_date("2026-02-30").map_err(|error| format!("{error}"));
+        assert_eq!(
+            impossible_february,
+            Err("invalid calendar date `2026-02-30`".to_owned())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn parse_policy_date_rejects_impossible_calendar_dates() -> Result<()> {
+        let non_leap_february = parse_policy_date("2026-02-29").map_err(|error| format!("{error}"));
+        assert_eq!(
+            non_leap_february,
+            Err("invalid calendar date `2026-02-29`".to_owned()),
+        );
+        let impossible_february =
+            parse_policy_date("2026-02-30").map_err(|error| format!("{error}"));
+        assert_eq!(
+            impossible_february,
+            Err("invalid calendar date `2026-02-30`".to_owned()),
+        );
+        let impossible_april = parse_policy_date("2026-04-31").map_err(|error| format!("{error}"));
+        assert_eq!(
+            impossible_april,
+            Err("invalid calendar date `2026-04-31`".to_owned()),
+        );
+        let non_leap_century = parse_policy_date("1900-02-29").map_err(|error| format!("{error}"));
+        assert_eq!(
+            non_leap_century,
+            Err("invalid calendar date `1900-02-29`".to_owned()),
+        );
+        assert_eq!(parse_policy_date("2000-02-29")?, (2000, 2, 29));
+        assert_eq!(parse_policy_date("1999-02-28")?, (1999, 2, 28));
+        assert_eq!(parse_policy_date("2026-01-31")?, (2026, 1, 31));
+        assert_eq!(parse_policy_date("2026-02-28")?, (2026, 2, 28));
+        assert_eq!(parse_policy_date("2026-03-01")?, (2026, 3, 1));
+        assert_eq!(parse_policy_date("2026-04-30")?, (2026, 4, 30));
         Ok(())
     }
 
@@ -1641,7 +1683,7 @@ mod tests {
     fn epoch_to_ymd_matches_known_dates() {
         // 1970-01-01 epoch = 0
         assert_eq!(epoch_to_ymd(0), (1970, 1, 1));
-        // 2026-06-22 (today, per SOURCE_DATE_EPOCH-independent fallback):
+        // Stable calendar anchors independent of the machine clock:
         // verify a well-known anchor. 2024-01-01 = epoch 1704067200.
         assert_eq!(epoch_to_ymd(1_704_067_200), (2024, 1, 1));
         // 2000-03-01 (the day after the 2000 leap day) = 951868800
@@ -1701,16 +1743,52 @@ mod tests {
         )?;
         let mut report = PolicyReport::default();
         let result = validate_allow(&allow, &mut report);
-        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         assert!(result.is_err(), "expires before review_after must fail");
         let msg = match result {
             Err(error) => format!("{error}"),
             Ok(_) => String::new(),
         };
-        assert!(
-            msg.contains("before `review_after`"),
-            "error should explain the ordering: {msg}"
+        let expected = format!(
+            "{} exception `bad-expiry` `expires` (2026-06-15) is before `review_after` (2026-07-01)",
+            allow.display()
         );
+        assert_eq!(msg, expected, "error should explain the ordering");
+        fs::write(
+            &allow,
+            r#"schema_version = "1"
+tool = "cargo-allow"
+
+[[exception]]
+id = "expired-gate-ceiling"
+kind = "temporary-gate-ceiling"
+owner = "test"
+reason = "expired receipt"
+created = "2026-06-01"
+review_after = "2026-07-01"
+expires = "2026-08-01"
+path = "src/x.rs"
+"#,
+        )?;
+        let mut expired_report = PolicyReport::default();
+        let expected = format!(
+            "{} exception `expired-gate-ceiling` `expires` (2026-08-01) is before the evaluation date",
+            allow.display()
+        );
+        let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report)
+            .map_err(|error| format!("{error}"));
+        assert_eq!(expired, Err(expected));
+        let mut live_report = PolicyReport::default();
+        let live_error = validate_allow(&allow, &mut live_report)
+            .err()
+            .context("the live policy validator must reject the expired date")?;
+        assert_eq!(
+            live_error.to_string(),
+            format!(
+                "{} exception `expired-gate-ceiling` `expires` (2026-08-01) is before the evaluation date",
+                allow.display()
+            )
+        );
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         Ok(())
     }
 
@@ -1746,7 +1824,7 @@ mod tests {
     }
 
     #[test]
-    fn validate_allow_date_validation_passes_valid_ordered_dates() -> Result<()> {
+    fn validate_allow_at_keeps_overdue_review_and_same_day_expiry_valid() -> Result<()> {
         let root = temp_repo_root("date-good")?;
         let allow = root.join("allow.toml");
         fs::write(
@@ -1759,13 +1837,66 @@ mod tests {
              reason = \"well-formed\"\n\
              created = \"2026-06-01\"\n\
              review_after = \"2026-07-01\"\n\
-             expires = \"2026-12-01\"\n\
+             expires = \"2026-08-02\"\n\
              path = \"src/x.rs\"\n",
         )?;
         let mut report = PolicyReport::default();
-        validate_allow(&allow, &mut report)?;
+        validate_allow_at::<2026, 8, 2>(&allow, &mut report)?;
         fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
         assert_eq!(report.exceptions, 1);
+        Ok(())
+    }
+
+    #[test]
+    fn validate_allow_at_uses_injected_date_for_expiry_boundary() -> Result<()> {
+        let root = temp_repo_root("date-injection")?;
+        let allow = root.join("allow.toml");
+        fs::write(
+            &allow,
+            r#"schema_version = "1"
+tool = "cargo-allow"
+
+[[exception]]
+id = "boundary"
+kind = "temporary-gate-ceiling"
+owner = "test"
+reason = "boundary fixture"
+created = "2026-06-01"
+review_after = "2026-07-01"
+expires = "2026-08-01"
+path = "src/x.rs"
+"#,
+        )?;
+
+        let mut valid_report = PolicyReport::default();
+        validate_allow_at::<2026, 8, 1>(&allow, &mut valid_report)?;
+        assert_eq!(valid_report.exceptions, 1);
+
+        let mut expired_report = PolicyReport::default();
+        let expired = validate_allow_at::<2026, 8, 2>(&allow, &mut expired_report)
+            .map_err(|error| format!("{error}"));
+        assert!(
+            expired
+                .as_ref()
+                .is_err_and(|message| message.contains("before the evaluation date")),
+            "the day after expires must block: {expired:?}"
+        );
+
+        fs::remove_dir_all(&root).with_context(|| format!("remove {}", root.display()))?;
+        Ok(())
+    }
+
+    #[test]
+    fn today_uses_the_actual_wall_clock_date() -> Result<()> {
+        let seconds = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .context("system clock is before the Unix epoch")?;
+        let expected = epoch_to_ymd(i64::try_from(seconds.as_secs())?);
+        assert_eq!(
+            today()?,
+            expected,
+            "SOURCE_DATE_EPOCH must not override the actual policy date"
+        );
         Ok(())
     }
 }
@@ -2025,6 +2156,19 @@ fn parse_toml(path: &Path) -> Result<Value> {
 }
 
 fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
+    // A zero year selects the live date; non-zero const dates make policy tests deterministic.
+    validate_allow_at::<0, 0, 0>(path, report)
+}
+
+fn validate_allow_at<const YEAR: i32, const MONTH: u32, const DAY: u32>(
+    path: &Path,
+    report: &mut PolicyReport,
+) -> Result<()> {
+    let today_date = if YEAR == 0 {
+        today()?
+    } else {
+        (YEAR, MONTH, DAY)
+    };
     let value = parse_toml(path)?;
     let root = table(&value, path, "root")?;
     require_schema_version(root, path)?;
@@ -2055,8 +2199,8 @@ fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
         }
         // Date-shape validation: created / review_after / expires must parse
         // as YYYY-MM-DD, ordering must hold (created <= review_after <=
-        // expires), and an overdue review_after or expires is a warning (not
-        // a failure) so a lapse does not red the gate. See #600.
+        // expires), an overdue review_after is a warning, and a past expires
+        // date is blocking. See #600 and successor #818.
         let created = require_str(item, path, "created")?;
         let review_after = require_str(item, path, "review_after")?;
         let created_date = parse_policy_date(created).with_context(|| {
@@ -2090,24 +2234,24 @@ fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
                     path.display()
                 )
             })?;
-            if expires_date < review_date {
+            if expires_date < review_date || expires_date < today_date {
+                let reason = if expires_date < review_date {
+                    format!("is before `review_after` ({review_after})")
+                } else {
+                    "is before the evaluation date".to_owned()
+                };
                 bail!(
-                    "{} exception `{id}` `expires` ({expires_str}) is before `review_after` ({review_after})",
-                    path.display()
-                );
-            }
-            if expires_date < today() {
-                eprintln!(
-                    "warning: {} exception `{id}` `expires` ({expires_str}) is in the past — review or renew",
+                    "{} exception `{id}` `expires` ({expires_str}) {reason}",
                     path.display()
                 );
             }
         }
-        if review_date < today() {
-            eprintln!(
+        if review_date < today_date {
+            let warning = format!(
                 "warning: {} exception `{id}` `review_after` ({review_after}) is overdue — review or renew",
                 path.display()
             );
+            eprintln!("{warning}");
         }
         *report.exception_kinds.entry(kind.to_owned()).or_insert(0) += 1;
         report.exceptions += 1;
@@ -2117,7 +2261,7 @@ fn validate_allow(path: &Path, report: &mut PolicyReport) -> Result<()> {
 }
 
 /// Parse a `YYYY-MM-DD` policy date into a comparable `(year, month, day)` triple.
-/// Avoids pulling in chrono to keep the xtask dependency surface tiny.
+/// Keeps exact Gregorian calendar validation in the established date library.
 fn parse_policy_date(value: &str) -> Result<(i32, u32, u32)> {
     let bytes = value.as_bytes();
     if bytes.len() != 10 || bytes[4] != b'-' || bytes[7] != b'-' {
@@ -2138,27 +2282,19 @@ fn parse_policy_date(value: &str) -> Result<(i32, u32, u32)> {
     if !(1..=31).contains(&day) {
         bail!("day {day} out of range in `{value}`");
     }
+    NaiveDate::from_ymd_opt(year, month, day)
+        .with_context(|| format!("invalid calendar date `{value}`"))?;
     Ok((year, month, day))
 }
 
-/// Today's date as a comparable `(year, month, day)` triple.
-/// Reads `Source-Date-Epoch` if set (for reproducible builds), else the
-/// system clock. The system-clock read is intentionally simple: the warning
-/// is advisory, not a correctness-critical comparison.
-fn today() -> (i32, u32, u32) {
-    if let Some(secs) = std::env::var("SOURCE_DATE_EPOCH")
-        .ok()
-        .and_then(|epoch| epoch.parse::<i64>().ok())
-    {
-        return epoch_to_ymd(secs);
-    }
-    // Fallback: system clock via std. This is intentionally a coarse
-    // day-resolution read for advisory warnings only.
-    let secs = std::time::SystemTime::now()
+/// Read the actual wall-clock date for blocking policy decisions.
+fn today() -> Result<(i32, u32, u32)> {
+    let duration = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    epoch_to_ymd(secs)
+        .context("system clock is before the Unix epoch")?;
+    let seconds =
+        i64::try_from(duration.as_secs()).context("system clock duration does not fit in i64")?;
+    Ok(epoch_to_ymd(seconds))
 }
 
 /// Convert a Unix epoch second count to a (year, month, day) triple using the
