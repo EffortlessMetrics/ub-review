@@ -96,6 +96,7 @@ COMPILER_SURFACE_DISPOSITIONS = {
     "refuted_by_stronger_evidence",
     "covered_by_current_head_thread",
     "duplicate_structurally_identical",
+    "duplicate_cross_surface",
 }
 THREAD_DISPOSITIONS = {
     "novel",
@@ -1916,6 +1917,50 @@ def require_claim_graph(root: pathlib.Path) -> None:
                 f"claim_graph.json topics[{index}] thread_disposition invalid: "
                 f"{disposition!r}"
             )
+        planned_action = topic.get("planned_action")
+        planned_thread_id = topic.get("planned_thread_id")
+        if planned_action is not None:
+            if planned_action not in {"none", "inline", "reply", "summary"}:
+                fail(
+                    f"claim_graph.json topics[{index}] planned_action invalid: "
+                    f"{planned_action!r}"
+                )
+            if disposition in {
+                "already_covered",
+                "accepted_tradeoff",
+                "fixed_on_current_head",
+                "superseded_by_head_change",
+            }:
+                expected_action = "none"
+            elif disposition in {
+                "corroborated_with_new_evidence",
+                "refuted_by_new_evidence",
+            } and topic.get("existing_threads"):
+                expected_action = "reply"
+            elif disposition == "novel":
+                expected_action = (
+                    "inline"
+                    if topic.get("path") is not None and topic.get("anchor") is not None
+                    else "summary"
+                )
+            else:
+                expected_action = "none"
+            if planned_action != expected_action:
+                fail(
+                    f"claim_graph.json topics[{index}] planned_action does not match "
+                    "thread disposition"
+                )
+            if planned_action == "reply":
+                if not isinstance(planned_thread_id, str) or planned_thread_id not in topic.get(
+                    "existing_threads", []
+                ):
+                    fail(
+                        f"claim_graph.json topics[{index}] reply plan lacks current source thread"
+                    )
+            elif planned_thread_id is not None:
+                fail(
+                    f"claim_graph.json topics[{index}] non-reply plan has a source thread"
+                )
         existing = topic.get("existing_threads")
         stale = topic.get("stale_threads")
         receipts = topic.get("proof_receipts")
@@ -5634,6 +5679,12 @@ def compiler_canonical_text(value: str) -> str:
     return " ".join(compiler_canonical_tokens(value))
 
 
+def compiler_public_claim_key(value: str) -> str:
+    if value.startswith("[") and "]" in value:
+        value = value.split("]", 1)[1].strip()
+    return compiler_canonical_text(value)
+
+
 def compiler_structural_claim_id(
     path: str | None, line: int | None, failure_family: str, mechanism: str, subject: str
 ) -> str:
@@ -5940,6 +5991,20 @@ def require_compiler_reconciliation(
                 for retained in expected_retained
             ):
                 fail("duplicate reconciliation removal has no retained twin")
+        elif disposition == "duplicate_cross_surface":
+            retained_ids = {
+                retained["claim_id"]
+                for retained in expected_retained
+                if retained["kind"] == "inline"
+                and compiler_public_claim_key(retained["subject"])
+                == compiler_public_claim_key(expected["subject"])
+            }
+            if len(retained_ids) != 1 or set(adjudicating) != retained_ids:
+                fail("cross-surface duplicate removal has no exact retained inline twin")
+            if evidence_receipts != [
+                f"review/claim_graph.json#claims/{next(iter(retained_ids))}"
+            ]:
+                fail("cross-surface duplicate removal receipt is not source-bound")
         elif disposition == "refuted_by_stronger_evidence":
             loser_ids = {
                 conflict.get("loser")
@@ -11309,6 +11374,83 @@ def self_test_compiler_reconciliation_contract() -> None:
             lambda: write_case(final_findings, wrong_head),
         )
 
+        cross_inline = {
+            "lane": "tests",
+            "path": "src/parser.rs",
+            "line": 12,
+            "body": "[tests] Parser drops the later subscript",
+            "evidence": "focused receipt",
+        }
+        cross_summary = {
+            "lane": "reviewer",
+            "severity": "medium",
+            "confidence": "high",
+            "reason": "Parser drops the later subscript",
+            "evidence": "source inspection",
+        }
+        cross_review = {
+            "inline_comments": [cross_inline],
+            "summary_only_findings": [cross_summary],
+        }
+        cross_follow_up = {"summary_only_findings": [], "observations": []}
+        cross_input = {
+            "inline_comments": [cross_inline],
+            "summary_only_findings": [],
+            "follow_up_resolved_candidate_ids": [],
+        }
+        cross_expected = compiler_input_surface_records(
+            cross_review, cross_follow_up, [], [], []
+        )
+        cross_retained = [cross_expected[0]]
+        cross_removed = {
+            **cross_expected[1],
+            "adjudicating_claim_ids": [cross_expected[0]["claim_id"]],
+            "disposition": "duplicate_cross_surface",
+            "evidence_receipts": [
+                f"review/claim_graph.json#claims/{cross_expected[0]['claim_id']}"
+            ],
+        }
+        write_self_test_json(
+            root / "review/compiler_reconciliation.json",
+            {
+                "schema": COMPILER_RECONCILIATION_SCHEMA,
+                "head_sha": "HEAD",
+                "input_surfaces": cross_expected,
+                "retained_surfaces": cross_retained,
+                "removed_surfaces": [cross_removed],
+            },
+        )
+        require_compiler_reconciliation(
+            root, cross_review, cross_follow_up, cross_input, {"head_sha": "HEAD", "topics": [], "conflicts": []}
+        )
+        bad_cross = copy.deepcopy(cross_removed)
+        bad_cross["adjudicating_claim_ids"] = ["claim-wrong-surface"]
+
+        def require_bad_cross() -> None:
+            write_self_test_json(
+                root / "review/compiler_reconciliation.json",
+                {
+                    "schema": COMPILER_RECONCILIATION_SCHEMA,
+                    "head_sha": "HEAD",
+                    "input_surfaces": cross_expected,
+                    "retained_surfaces": cross_retained,
+                    "removed_surfaces": [bad_cross],
+                },
+            )
+            require_compiler_reconciliation(
+                root,
+                cross_review,
+                cross_follow_up,
+                cross_input,
+                {"head_sha": "HEAD", "topics": [], "conflicts": []},
+            )
+
+        expect_self_test_failure(
+            "compiler reconciliation cross-surface wrong claim",
+            "cross-surface duplicate removal has no exact retained inline twin",
+            require_bad_cross,
+        )
+
 
 def self_test_routed_receipt_excerpt_matches_rust_contract() -> None:
     import tempfile
@@ -11724,6 +11866,8 @@ def self_test_claim_graph_contract() -> None:
                     "claim_id": "claim-1",
                     "head_sha": "HEAD",
                     "thread_disposition": "novel",
+                    "planned_action": "summary",
+                    "planned_thread_id": None,
                     "existing_threads": [],
                     "stale_threads": [],
                     "proof_receipts": [],

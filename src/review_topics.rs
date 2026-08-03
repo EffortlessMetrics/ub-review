@@ -29,6 +29,10 @@ pub(crate) struct ReviewTopic {
     pub(crate) proof_requests: Vec<String>,
     pub(crate) proof_receipts: Vec<String>,
     pub(crate) delivery: String,
+    /// Deterministic handoff for the delivery seam. This is a plan only;
+    /// GitHub confirmation belongs to the posting transaction.
+    pub(crate) planned_action: String,
+    pub(crate) planned_thread_id: Option<String>,
     pub(crate) source_lane: String,
     pub(crate) subject: String,
 }
@@ -192,6 +196,12 @@ pub(crate) fn build_active_claim_graph(
             }
         }
         topic.thread_disposition = thread_disposition(topic, &matching_threads);
+        topic.planned_action = planned_action(topic);
+        topic.planned_thread_id = if topic.planned_action == "reply" {
+            topic.existing_threads.first().cloned()
+        } else {
+            None
+        };
     }
 
     let mut claims = Vec::with_capacity(topics.len());
@@ -297,6 +307,56 @@ pub(crate) fn reconcile_summary_only_findings(
         .collect()
 }
 
+/// Reconcile the two public compiler vectors as one surface set. Inline
+/// delivery wins when the exact normalized claim is also present as a summary
+/// finding; the summary copy is retained in the claim graph and accounted for
+/// by the compiler reconciliation receipt.
+pub(crate) fn reconcile_public_surfaces(
+    graph: &ClaimGraph,
+    comments: &[ReviewInlineComment],
+    findings: &[SummaryOnlyFinding],
+) -> (Vec<ReviewInlineComment>, Vec<SummaryOnlyFinding>) {
+    let reconciled_comments = reconcile_inline_comments(graph, comments);
+    let mut reconciled_findings = reconcile_summary_only_findings(graph, findings);
+    reconciled_findings.retain(|finding| {
+        reconciled_comments
+            .iter()
+            .filter(|comment| same_public_claim(comment.body.as_str(), finding.reason.as_str()))
+            .count()
+            != 1
+    });
+    (reconciled_comments, reconciled_findings)
+}
+
+/// Compare only an exact normalized public claim. Similarity is deliberately
+/// not enough to suppress a distinct nearby finding.
+pub(crate) fn same_public_claim(left: &str, right: &str) -> bool {
+    let left = left
+        .split_once(']')
+        .filter(|(prefix, _)| prefix.starts_with('['))
+        .map_or(left, |(_, body)| body.trim());
+    let left = canonical_text(left);
+    let right = canonical_text(right);
+    !left.is_empty() && left == right
+}
+
+fn planned_action(topic: &ReviewTopic) -> String {
+    match topic.thread_disposition.as_str() {
+        "already_covered"
+        | "accepted_tradeoff"
+        | "fixed_on_current_head"
+        | "superseded_by_head_change" => "none".to_owned(),
+        "corroborated_with_new_evidence" | "refuted_by_new_evidence"
+            if !topic.existing_threads.is_empty() =>
+        {
+            "reply".to_owned()
+        }
+        "novel" if topic.path.is_some() && topic.anchor.is_some() => "inline".to_owned(),
+        "novel" => "summary".to_owned(),
+        _ => "none".to_owned(),
+    }
+}
+
 pub(crate) fn topic_is_adjudicated_loser(graph: &ClaimGraph, topic: &ReviewTopic) -> bool {
     graph
         .conflicts
@@ -346,6 +406,8 @@ pub(crate) fn add_resolved_candidate_topics(
             proof_requests: Vec::new(),
             proof_receipts: Vec::new(),
             delivery: "no-human-surface".to_owned(),
+            planned_action: "none".to_owned(),
+            planned_thread_id: None,
             source_lane: candidate.lane.clone(),
             subject: candidate.claim.clone(),
         };
@@ -462,6 +524,8 @@ fn upsert_topic(topics: &mut BTreeMap<String, ReviewTopic>, head_sha: &str, seed
             proof_requests: Vec::new(),
             proof_receipts: Vec::new(),
             delivery: seed.delivery,
+            planned_action: "none".to_owned(),
+            planned_thread_id: None,
             source_lane: seed.source_lane,
             subject: seed.subject,
         },
@@ -905,6 +969,8 @@ mod tests {
         ensure!(graph.topics[0].existing_threads == ["current-thread"]);
         ensure!(graph.topics[0].stale_threads == ["stale-thread"]);
         ensure!(graph.topics[0].thread_disposition == "already_covered");
+        ensure!(graph.topics[0].planned_action == "none");
+        ensure!(graph.topics[0].planned_thread_id.is_none());
         ensure!(graph.claims[0].state == ClaimState::Confirmed);
         Ok(())
     }
@@ -1150,6 +1216,8 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].proof_receipts.is_empty());
         ensure!(graph.topics[0].evidence.is_empty());
+        ensure!(graph.topics[0].planned_action == "none");
+        ensure!(graph.topics[0].planned_thread_id.is_none());
         ensure!(graph.evidence_gaps.len() == 1);
         Ok(())
     }
@@ -1190,6 +1258,8 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.claims.len() == 1);
         ensure!(graph.topics[0].thread_disposition == "fixed_on_current_head");
+        ensure!(graph.topics[0].planned_action == "none");
+        ensure!(graph.topics[0].planned_thread_id.is_none());
         ensure!(graph.topics[0].stale_threads == ["current-thread", "stale-thread"]);
         ensure!(graph.claims[0].state == ClaimState::Refuted);
         Ok(())
@@ -1250,6 +1320,8 @@ mod tests {
         );
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].delivery == "inline-candidate");
+        ensure!(graph.topics[0].planned_action == "inline");
+        ensure!(graph.topics[0].planned_thread_id.is_none());
         ensure!(graph.topics[0].proof_requests == ["proof-1"]);
         Ok(())
     }
@@ -1319,6 +1391,133 @@ mod tests {
         let reconciled = reconcile_inline_comments(&graph, &comments);
         ensure!(reconciled.len() == 1);
         ensure!(reconciled[0].body == "attribute lowering finding");
+        Ok(())
+    }
+
+    #[test]
+    fn public_surface_reconciliation_prefers_inline_for_exact_duplicate_claims() -> Result<()> {
+        let head = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[tests] Parser drops the later subscript".to_owned(),
+            evidence: "focused receipt".to_owned(),
+            suggestion: None,
+        };
+        let duplicate = SummaryOnlyFinding {
+            lane: "reviewer".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Parser drops the later subscript".to_owned(),
+            evidence: "source inspection".to_owned(),
+        };
+        let distinct = SummaryOnlyFinding {
+            reason: "Parser drops the later percent sigil".to_owned(),
+            ..duplicate.clone()
+        };
+        let graph = build_active_claim_graph(
+            head,
+            &[],
+            std::slice::from_ref(&comment),
+            &[duplicate.clone(), distinct.clone()],
+            &[],
+            &[],
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        let (comments, findings) = reconcile_public_surfaces(
+            &graph,
+            std::slice::from_ref(&comment),
+            &[duplicate.clone(), distinct.clone()],
+        );
+        ensure!(comments.len() == 1);
+        ensure!(findings.len() == 1);
+        ensure!(findings[0].reason == distinct.reason);
+        ensure!(
+            graph
+                .topics
+                .iter()
+                .any(|topic| { topic.path.is_none() && topic.planned_action == "summary" })
+        );
+
+        let second_comment = ReviewInlineComment {
+            path: "src/other_parser.rs".to_owned(),
+            line: 18,
+            ..comment.clone()
+        };
+        let ambiguous_graph = build_active_claim_graph(
+            head,
+            &[],
+            &[comment.clone(), second_comment.clone()],
+            std::slice::from_ref(&duplicate),
+            &[],
+            &[],
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        let (ambiguous_comments, ambiguous_findings) = reconcile_public_surfaces(
+            &ambiguous_graph,
+            &[comment, second_comment],
+            std::slice::from_ref(&duplicate),
+        );
+        ensure!(ambiguous_comments.len() == 2);
+        ensure!(ambiguous_findings.len() == 1);
+        Ok(())
+    }
+
+    #[test]
+    fn planned_delivery_action_names_reply_and_source_thread() -> Result<()> {
+        let head = "ffffffffffffffffffffffffffffffffffffffff";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "observation-reply-plan".to_owned(),
+            lane: "tests".to_owned(),
+            question: "answer".to_owned(),
+            claim: "later subscript is dropped".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "reply-plan".to_owned(),
+            evidence: vec!["focused proof".to_owned()],
+            dedupe_key: "later-subscript".to_owned(),
+            source: "tests".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            schema: "proof".to_owned(),
+            id: "proof-reply-plan".to_owned(),
+            kind: "focused-test".to_owned(),
+            base: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
+            head: head.to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["tests".to_owned()],
+            request_ids: vec![observation.id.clone()],
+            commands: Vec::new(),
+            result: "discriminating".to_owned(),
+            reason: "focused proof adds evidence".to_owned(),
+        };
+        let graph = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            &[],
+            &[],
+            &[],
+            std::slice::from_ref(&receipt),
+            &context(head),
+        );
+        ensure!(graph.topics[0].thread_disposition == "corroborated_with_new_evidence");
+        ensure!(graph.topics[0].planned_action == "reply");
+        ensure!(graph.topics[0].planned_thread_id == Some("current-thread".to_owned()));
         Ok(())
     }
 }

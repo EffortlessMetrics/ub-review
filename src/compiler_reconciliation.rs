@@ -253,6 +253,25 @@ fn removal_explanation(
         ));
     }
 
+    let matching_inline_claims = retained_surfaces
+        .iter()
+        .filter(|retained| {
+            retained.kind == "inline"
+                && same_public_claim(&retained.subject, &surface.receipt.subject)
+        })
+        .collect::<Vec<_>>();
+    if surface.receipt.kind == "summary" && matching_inline_claims.len() == 1 {
+        let retained_inline = matching_inline_claims[0];
+        return Ok((
+            "duplicate_cross_surface",
+            vec![retained_inline.claim_id.clone()],
+            vec![format!(
+                "review/claim_graph.json#claims/{}",
+                retained_inline.claim_id
+            )],
+        ));
+    }
+
     if retained_surfaces.iter().any(|retained| {
         retained.surface_id == surface.receipt.surface_id && retained.kind == surface.receipt.kind
     }) {
@@ -476,6 +495,8 @@ mod tests {
                 proof_requests: Vec::new(),
                 proof_receipts: Vec::new(),
                 delivery: "no-human-surface".to_owned(),
+                planned_action: "none".to_owned(),
+                planned_thread_id: None,
                 source_lane: finding.lane.clone(),
                 subject: finding.reason.clone(),
             }],
@@ -571,6 +592,8 @@ mod tests {
                 proof_requests: Vec::new(),
                 proof_receipts: Vec::new(),
                 delivery: "summary-only".to_owned(),
+                planned_action: "none".to_owned(),
+                planned_thread_id: None,
                 source_lane: finding.lane.clone(),
                 subject: finding.reason.clone(),
             }],
@@ -619,6 +642,37 @@ mod tests {
             receipt.removed_surfaces[0].disposition,
             "duplicate_structurally_identical"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn cross_surface_duplicate_is_explicitly_accounted() -> Result<()> {
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[tests] Parser drops the later subscript".to_owned(),
+            evidence: "focused receipt".to_owned(),
+            suggestion: None,
+        };
+        let summary_finding = summary("Parser drops the later subscript");
+        let receipt = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: "HEAD",
+            observations: &[],
+            review_inline_comments: std::slice::from_ref(&comment),
+            review_summary_only_findings: std::slice::from_ref(&summary_finding),
+            follow_up_summary_only_findings: &[],
+            resolved_away_candidates: &[],
+            final_inline_comments: std::slice::from_ref(&comment),
+            final_summary_only_findings: &[],
+            graph: &build_shadow_claim_graph("HEAD"),
+        })?;
+        anyhow::ensure!(receipt.removed_surfaces.len() == 1);
+        anyhow::ensure!(receipt.removed_surfaces[0].disposition == "duplicate_cross_surface");
+        anyhow::ensure!(receipt.removed_surfaces[0].evidence_receipts.len() == 1);
         Ok(())
     }
 
