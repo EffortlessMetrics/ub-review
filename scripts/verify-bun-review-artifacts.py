@@ -5739,6 +5739,14 @@ def compiler_surface_record(
         mechanism = compiler_canonical_text(subject)
         claim_subject = subject
     else:
+        observed_kind = matching_observation.get("kind")
+        if not isinstance(observed_kind, str) or not observed_kind:
+            fail("compiler inline surface matched an observation without a kind")
+        # Rust's topic_claim_id_for_inline uses the matched observation's
+        # failure family, mechanism, and claim subject. Keep this mirror
+        # source-bound so a matched observation cannot silently fall back to
+        # the generic inline-finding family.
+        failure_family = observed_kind
         mechanism = compiler_canonical_text(
             matching_observation.get("dedupe_key", "")
             or matching_observation.get("claim", "")
@@ -5964,7 +5972,10 @@ def require_compiler_reconciliation(
                 topic
                 for topic in topics
                 if topic.get("claim_id") in adjudicating
-                and topic.get("source_lane") == expected["lane"]
+                and (
+                    expected["kind"] == "inline"
+                    or topic.get("source_lane") == expected["lane"]
+                )
                 and (
                     expected["kind"] == "summary"
                     or (
@@ -11075,6 +11086,60 @@ def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
 def self_test_compiler_reconciliation_contract() -> None:
     """The final compiler must account for the hosted 18-to-12 reduction."""
     import copy
+
+    inline_surface = {
+        "lane": "correctness",
+        "path": "src/lib.rs",
+        "line": 42,
+        "body": "The parser drops a distinct claim before compilation.",
+        "evidence": "focused receipt",
+    }
+    inline_observation = {
+        "path": "src/lib.rs",
+        "line": 42,
+        "claim": "The parser drops a distinct claim before compilation.",
+        "kind": "bug",
+        "dedupe_key": "parser-claim-loss",
+    }
+    matched = compiler_surface_record(
+        "inline", "review/review.json", 0, inline_surface, [inline_observation]
+    )
+    expected_matched_claim = compiler_structural_claim_id(
+        "src/lib.rs",
+        42,
+        "bug",
+        "parser-claim-loss",
+        inline_observation["claim"],
+    )
+    if matched["claim_id"] != expected_matched_claim:
+        fail("compiler inline identity did not mirror the matched observation kind")
+    missing_kind = dict(inline_observation)
+    missing_kind.pop("kind")
+    expect_self_test_failure(
+        "matched inline observation missing kind",
+        "without a kind",
+        lambda: compiler_surface_record(
+            "inline", "review/review.json", 0, inline_surface, [missing_kind]
+        ),
+    )
+    changed_kind = {**inline_observation, "kind": "verification-question"}
+    changed = compiler_surface_record(
+        "inline", "review/review.json", 0, inline_surface, [changed_kind]
+    )
+    if changed["claim_id"] == matched["claim_id"]:
+        fail("compiler inline identity ignored the matched observation kind")
+    unmatched = compiler_surface_record(
+        "inline", "review/review.json", 0, inline_surface, []
+    )
+    fallback_claim = compiler_structural_claim_id(
+        "src/lib.rs",
+        42,
+        "inline-finding",
+        compiler_canonical_text(inline_surface["body"]),
+        inline_surface["body"],
+    )
+    if unmatched["claim_id"] != fallback_claim:
+        fail("compiler inline identity changed the unmatched fallback contract")
 
     raw_findings = [
         {
