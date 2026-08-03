@@ -1748,10 +1748,11 @@ mod tests {
             Err(error) => format!("{error}"),
             Ok(_) => String::new(),
         };
-        assert!(
-            msg.contains("before `review_after`"),
-            "error should explain the ordering: {msg}"
+        let expected = format!(
+            "{} exception `bad-expiry` `expires` (2026-06-15) is before `review_after` (2026-07-01)",
+            allow.display()
         );
+        assert_eq!(msg, expected, "error should explain the ordering");
         fs::write(
             &allow,
             r#"schema_version = "1"
