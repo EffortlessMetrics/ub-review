@@ -4817,6 +4817,11 @@ fn write_review_artifacts(
             .any(|candidate| candidate_matches_summary_finding(candidate, finding))
     });
     compiler_summary_only_findings.extend(follow_up_evidence.summary_only_findings.clone());
+    // Keep the pre-adjudication compiler surfaces available for the final
+    // claim graph. Reconciliation may remove public surfaces, but their
+    // claims and conflicts remain required audit evidence for the receipt.
+    let compiler_input_inline_comments = compiler_inline_comments.clone();
+    let compiler_input_summary_only_findings = compiler_summary_only_findings.clone();
     let mut compiler_observations = review.observations.clone();
     compiler_observations.extend(follow_up_evidence.observations.clone());
     let pre_compile_claim_graph = build_active_claim_graph(
@@ -4928,8 +4933,8 @@ fn write_review_artifacts(
     let mut active_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,
-        &compiler_inline_comments,
-        &compiler_summary_only_findings,
+        &compiler_input_inline_comments,
+        &compiler_input_summary_only_findings,
         &review.proof_requests,
         &review.proof_receipts,
         &review.pr_thread_context,
