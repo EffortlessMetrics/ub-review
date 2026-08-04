@@ -5246,7 +5246,7 @@ fn post_receipt_marks_semantically_invalid_review_json_invalid() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
     let out = temp.path().join("post");
-    let token = "test-token-redacted";
+    let token = "redacted";
     fs::write(
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -5306,7 +5306,7 @@ fn post_receipt_rejects_boilerplate_review_body_before_payload_write() -> Result
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
     let out = temp.path().join("post");
-    let token = "test-token-redacted";
+    let token = "redacted";
     fs::write(
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -5358,7 +5358,7 @@ fn post_receipt_rejects_off_diff_inline_comment_before_payload_write() -> Result
     let review_json = temp.path().join("github-review.json");
     let diff_patch = temp.path().join("input/diff.patch");
     let out = temp.path().join("post");
-    let token = "test-token-redacted";
+    let token = "redacted";
     write_file(
         &diff_patch,
         "\
@@ -5455,7 +5455,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let review_json = temp.path().join("github-review.json");
     let out = temp.path().join("post");
-    let token = "test-token-redacted";
+    let token = "redacted";
     fs::write(
         &review_json,
         serde_json::to_vec_pretty(&serde_json::json!({
@@ -5492,7 +5492,7 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert!(request_text.starts_with(
         "POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events HTTP/1.1"
     ));
-    assert!(request_text.contains("Authorization: Bearer test-token-redacted"));
+    assert!(request_text.contains("Authorization: Bearer redacted"));
     assert!(request_text.contains("\"event\": \"COMMENT\""));
     assert!(request_text.contains("\"body\": \"## Test proof"));
     assert!(requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 "));
@@ -5551,7 +5551,7 @@ fn post_payload_renders_suggestion_blocks_for_github_api() -> Result<()> {
     let review_json = temp.path().join("github-review.json");
     let diff_patch = temp.path().join("diff.patch");
     let out = temp.path().join("post");
-    let token = "test-token-redacted";
+    let token = "redacted";
     fs::write(
         &diff_patch,
         "\
@@ -5674,7 +5674,7 @@ fn post_failure_attempts_cleanup_and_receipts_cleanup_success() -> Result<()> {
             "--pull-number",
             "123",
             "--github-token",
-            "test-token-redacted",
+            "redacted",
             "--github-api-url",
             &github_api_url,
             "--fail-on-post-error",
@@ -5730,7 +5730,7 @@ fn post_failure_receipts_cleanup_failure() -> Result<()> {
             "--pull-number",
             "123",
             "--github-token",
-            "test-token-redacted",
+            "redacted",
             "--github-api-url",
             &github_api_url,
             "--fail-on-post-error",
