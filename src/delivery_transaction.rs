@@ -21,45 +21,45 @@ pub enum DeliveryAction {
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct PlannedDelivery {
-    pub exact_head_sha: String,
-    pub claim_id: String,
-    pub action: DeliveryAction,
-    pub path: String,
-    pub line: u32,
-    pub side: String,
-    pub source_thread_id: Option<String>,
-    pub expected_body_digest: String,
+    exact_head_sha: String,
+    claim_id: String,
+    action: DeliveryAction,
+    path: String,
+    line: u32,
+    side: String,
+    source_thread_id: Option<String>,
+    expected_body_digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ObservedDelivery {
-    pub comment_id: String,
-    pub delivery: PlannedDelivery,
+    comment_id: String,
+    delivery: PlannedDelivery,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeliveryReceipt {
-    pub schema: String,
-    pub exact_head_sha: String,
-    pub claim_id: String,
-    pub action: DeliveryAction,
-    pub path: String,
-    pub line: u32,
-    pub side: String,
-    pub source_thread_id: Option<String>,
-    pub expected_body_digest: String,
-    pub review_id: String,
-    pub comment_id: String,
-    pub confirmed_head_sha: String,
+    schema: String,
+    exact_head_sha: String,
+    claim_id: String,
+    action: DeliveryAction,
+    path: String,
+    line: u32,
+    side: String,
+    source_thread_id: Option<String>,
+    expected_body_digest: String,
+    review_id: String,
+    comment_id: String,
+    confirmed_head_sha: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeliveryReconciliation {
-    pub schema: String,
-    pub exact_head_sha: String,
-    pub planned_count: usize,
-    pub observed_count: usize,
-    pub receipts: Vec<DeliveryReceipt>,
+    schema: String,
+    exact_head_sha: String,
+    planned_count: usize,
+    observed_count: usize,
+    receipts: Vec<DeliveryReceipt>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
@@ -99,18 +99,18 @@ pub enum CleanupOutcome {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeliveryFailure {
-    pub stage: DeliveryFailureStage,
-    pub reason: String,
+    stage: DeliveryFailureStage,
+    reason: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DeliveryTransaction {
-    pub schema: String,
-    pub exact_head_sha: String,
-    pub planned: Vec<PlannedDelivery>,
-    pub state: DeliveryTransactionState,
-    pub failure: Option<DeliveryFailure>,
-    pub cleanup: CleanupOutcome,
+    schema: String,
+    exact_head_sha: String,
+    planned: Vec<PlannedDelivery>,
+    state: DeliveryTransactionState,
+    failure: Option<DeliveryFailure>,
+    cleanup: CleanupOutcome,
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
