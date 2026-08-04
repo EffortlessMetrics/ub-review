@@ -5992,6 +5992,8 @@ def require_compiler_reconciliation(
             ):
                 fail("duplicate reconciliation removal has no retained twin")
         elif disposition == "duplicate_cross_surface":
+            if expected["kind"] != "summary":
+                fail("cross-surface duplicate removal must remove a summary surface")
             retained_ids = {
                 retained["claim_id"]
                 for retained in expected_retained
@@ -11903,6 +11905,40 @@ def self_test_claim_graph_contract() -> None:
             "claim graph evidence gaps shape",
             "evidence_gaps must be an array",
             lambda: require_claim_graph(write_graph({"evidence_gaps": {}})),
+        )
+        invalid_action = dict(graph["topics"][0])
+        invalid_action["planned_action"] = "inline"
+        expect_self_test_failure(
+            "claim graph planned action mismatch",
+            "planned_action does not match thread disposition",
+            lambda: require_claim_graph(
+                write_graph({"topics": [invalid_action]})
+            ),
+        )
+        missing_reply_thread = dict(graph["topics"][0])
+        missing_reply_thread.update(
+            {
+                "thread_disposition": "corroborated_with_new_evidence",
+                "existing_threads": ["thread-1"],
+                "planned_action": "reply",
+                "planned_thread_id": None,
+            }
+        )
+        expect_self_test_failure(
+            "claim graph reply source thread missing",
+            "reply plan lacks current source thread",
+            lambda: require_claim_graph(
+                write_graph({"topics": [missing_reply_thread]})
+            ),
+        )
+        non_reply_thread = dict(graph["topics"][0])
+        non_reply_thread["planned_thread_id"] = "thread-1"
+        expect_self_test_failure(
+            "claim graph non-reply source thread",
+            "non-reply plan has a source thread",
+            lambda: require_claim_graph(
+                write_graph({"topics": [non_reply_thread]})
+            ),
         )
 
 

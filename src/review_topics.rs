@@ -248,6 +248,18 @@ pub(crate) fn build_active_claim_graph(
         observations,
     );
     adjudicate_claim_graph_conflicts(&mut graph, &conflict_pairs);
+    let loser_ids = graph
+        .conflicts
+        .iter()
+        .filter_map(|conflict| conflict.loser.as_deref())
+        .collect::<std::collections::BTreeSet<_>>();
+    for topic in &mut graph.topics {
+        if loser_ids.contains(topic.claim_id.as_str()) {
+            topic.delivery = "no-human-surface".to_owned();
+            topic.planned_action = "none".to_owned();
+            topic.planned_thread_id = None;
+        }
+    }
     graph
 }
 
@@ -364,8 +376,8 @@ fn normalized_public_claim(value: &str, lane: &str) -> String {
                 .is_some_and(|candidate| candidate.trim() == lane.trim())
         })
         .map_or_else(
-            || canonical_text(value),
-            |(_, body)| canonical_text(body.trim()),
+            || exact_canonical_text(value),
+            |(_, body)| exact_canonical_text(body.trim()),
         )
 }
 
@@ -594,6 +606,10 @@ fn canonical_text(value: &str) -> String {
         .take(24)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+fn exact_canonical_text(value: &str) -> String {
+    canonical_tokens(value).join(" ")
 }
 
 fn canonical_tokens(value: &str) -> Vec<String> {
@@ -1071,6 +1087,13 @@ mod tests {
         ensure!(graph.topics.iter().any(|topic| {
             topic.source_lane == "lane-a" && topic.delivery == "no-human-surface"
         }));
+        let losing_topic = graph
+            .topics
+            .iter()
+            .find(|topic| topic.source_lane == "lane-a")
+            .ok_or_else(|| anyhow::anyhow!("missing losing topic"))?;
+        assert_eq!(losing_topic.planned_action, "none");
+        assert_eq!(losing_topic.planned_thread_id, None);
         ensure!(
             reconcile_inline_comments(&graph, std::slice::from_ref(&candidate)).is_empty(),
             "proof-refuted inline surface must not render"
@@ -1701,6 +1724,18 @@ mod tests {
             "[src/other_parser.rs:18] Parser drops the later subscript",
             "reviewer",
         ));
+        let long_prefix = (0..24)
+            .map(|index| format!("token{index}"))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let long_left = format!("{long_prefix} final condition differs");
+        let long_right = format!("{long_prefix} different final condition");
+        assert!(!same_public_claim(
+            &long_left,
+            "tests",
+            &long_right,
+            "reviewer"
+        ));
     }
 
     #[test]
@@ -1752,9 +1787,15 @@ mod tests {
         assert_eq!(planned_action(&topic), "none".to_owned());
 
         topic.thread_disposition = "corroborated_with_new_evidence".to_owned();
+        topic.existing_threads.clear();
+        assert_eq!(planned_action(&topic), "none".to_owned());
+        topic.existing_threads = vec!["current-thread".to_owned()];
         assert_eq!(planned_action(&topic), "reply".to_owned());
 
         topic.thread_disposition = "refuted_by_new_evidence".to_owned();
+        topic.existing_threads.clear();
+        assert_eq!(planned_action(&topic), "none".to_owned());
+        topic.existing_threads = vec!["current-thread".to_owned()];
         assert_eq!(planned_action(&topic), "reply".to_owned());
 
         topic.thread_disposition = "accepted_tradeoff".to_owned();

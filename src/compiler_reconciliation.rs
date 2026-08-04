@@ -479,7 +479,7 @@ mod tests {
 
     fn loser_graph(finding: &SummaryOnlyFinding) -> ClaimGraph {
         let claim_id = topic_claim_id_for_summary(finding);
-        let graph = ClaimGraph {
+        ClaimGraph {
             schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
             head_sha: "HEAD".to_owned(),
             claims: Vec::new(),
@@ -514,10 +514,7 @@ mod tests {
             }],
             evidence_gaps: Vec::new(),
             mode: "active",
-        };
-        assert_eq!(graph.topics[0].planned_action, "none");
-        assert_eq!(graph.topics[0].planned_thread_id, None);
-        graph
+        }
     }
 
     #[test]
