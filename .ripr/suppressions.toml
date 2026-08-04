@@ -14532,3 +14532,162 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_topics.rs:match_arm:ffa3c354"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 match-discriminator false-negative for the fail-closed planned-action default: direct tests assert unknown dispositions return none and no thread ID, and Python verifier self-tests reject mismatched plans. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+
+# PR #765A: ripr 0.10.0 cannot connect the exact delivery-contract oracles to
+# several constructor, state-machine, validation, and test-fixture probes.
+# These are individual finding receipts, not a file or function exemption.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:4729cbf7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on DeliveryTransaction::new: transaction_constructor_returns_the_complete_initial_contract and public_delivery_contract_serializes_exact_initial_state assert the complete initial object and serialized fields. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:c993aa27"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on the successful transition return: transaction_state_machine_requires_exact_order_and_receipts and legal_transition_matrix_covers_success_and_cleanup_paths assert every legal state edge and resulting state. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:field_construction:72d43494"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on record_failure cleanup state: failure_after_creation_records_cleanup_success_or_failure asserts failure stage, cleanup outcome, and terminal state for success and failure cleanup. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:1420601c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on DeliveryFailure construction: failure_after_creation_records_cleanup_success_or_failure asserts the exact serialized failure and cleanup receipt. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:b5bde165"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on successful record_failure completion: failure_after_creation_records_cleanup_success_or_failure asserts both cleanup-success and cleanup-failure terminal outcomes. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:predicate:e345bbd2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative on finish_cleanup state validation: failure_and_cleanup_guards_reject_terminal_or_unstarted_states and failure_after_creation_records_cleanup_success_or_failure cover pre-attempt rejection, not-attempted rejection, success, and failure cleanup. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:eb97f9f8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on finish_cleanup success: failure_after_creation_records_cleanup_success_or_failure asserts CleanedUp and the Succeeded cleanup receipt. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:7dfe7184"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on reply/inline validation: public_constructors_validate_and_preserve_delivery_identity and reply_and_inline_thread_identity_rules_are_fail_closed assert both action arms and exact thread requirements. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:9d24ac53"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on successful planned-delivery validation: public constructors, exact receipt serialization, and the complete delivery validation matrix assert valid identity fields and invalid-field rejection. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:888e5e89"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on valid head validation: exact-head constructor, empty-head rejection, wrong-head rejection, and hosted exact-head receipt tests cover this helper. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:816563f8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on identifier validation: the complete invalid identity matrix asserts empty, control-character, path, side, line, and digest errors exactly. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:cb2c002c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on identity_label: delivery_identity_labels_are_stable_for_inline_and_reply asserts stable inline and reply labels, and mismatch tests assert exact missing/unexpected identities. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:2c0b0db1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative on DeliveryAction::as_str: exact inline/reply receipt JSON and identity-label tests assert both serialized action values and labels. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:53a03dc2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on legal_transition: legal_transition_matrix_covers_success_and_cleanup_paths enumerates every allowed and representative forbidden edge, while the state-machine test asserts the complete success path. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on the cleanup transition arms: the legal transition matrix enumerates every cleanup edge and the failure tests assert each resulting terminal cleanup outcome. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.2"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.3"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.4"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.5"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.6"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.7"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.8"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.9"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.10"
+owner = "ub-review/core"
+reason = "Twin of the cleanup transition receipt above: the exact legal-transition matrix and cleanup outcome tests cover this generated probe. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:fb3ec763"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on the inline test fixture constructor: exact constructor, reconciliation, serialization, and cross-surface identity tests exercise the complete PlannedDelivery inline shape. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:d3b84c35"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque false-negative on the reply test fixture constructor: exact constructor, reconciliation, serialization, and source-thread tests exercise the complete PlannedDelivery reply shape. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
