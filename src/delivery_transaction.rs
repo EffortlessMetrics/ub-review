@@ -1826,11 +1826,13 @@ mod tests {
     }
 
     #[test]
-    fn cleanup_outcome_validation_is_fail_closed() {
+    fn cleanup_outcome_validation_is_fail_closed() -> Result<()> {
         assert!(validate_cleanup_outcome(&CleanupOutcome::NotAttempted).is_ok());
         assert!(validate_cleanup_outcome(&CleanupOutcome::Succeeded).is_ok());
-        let error = validate_cleanup_outcome(&CleanupOutcome::Failed(String::new()))
-            .expect_err("empty cleanup failure reason must be rejected");
+        let error = match validate_cleanup_outcome(&CleanupOutcome::Failed(String::new())) {
+            Ok(()) => return Err(anyhow::anyhow!("empty cleanup failure reason was accepted")),
+            Err(error) => error,
+        };
         assert_eq!(
             error.to_string(),
             "cleanup failure reason must be non-empty"
@@ -1838,6 +1840,7 @@ mod tests {
         assert!(
             validate_cleanup_outcome(&CleanupOutcome::Failed("delete rejected".to_owned())).is_ok()
         );
+        Ok(())
     }
 
     #[test]
