@@ -1826,6 +1826,21 @@ mod tests {
     }
 
     #[test]
+    fn cleanup_outcome_validation_is_fail_closed() {
+        assert!(validate_cleanup_outcome(&CleanupOutcome::NotAttempted).is_ok());
+        assert!(validate_cleanup_outcome(&CleanupOutcome::Succeeded).is_ok());
+        let error = validate_cleanup_outcome(&CleanupOutcome::Failed(String::new()))
+            .expect_err("empty cleanup failure reason must be rejected");
+        assert_eq!(
+            error.to_string(),
+            "cleanup failure reason must be non-empty"
+        );
+        assert!(
+            validate_cleanup_outcome(&CleanupOutcome::Failed("delete rejected".to_owned())).is_ok()
+        );
+    }
+
+    #[test]
     fn reconciliation_validates_empty_inputs_and_duplicate_identities() {
         let error = require_error(
             reconcile_deliveries("", "review-42", &[], &[]),
