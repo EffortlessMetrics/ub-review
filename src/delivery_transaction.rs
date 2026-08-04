@@ -20,6 +20,23 @@ pub enum DeliveryAction {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+pub struct DeliveryLocation {
+    path: String,
+    line: u32,
+    side: String,
+}
+
+impl DeliveryLocation {
+    pub fn new(path: impl Into<String>, line: u32, side: impl Into<String>) -> Self {
+        Self {
+            path: path.into(),
+            line,
+            side: side.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct PlannedDelivery {
     exact_head_sha: String,
     claim_id: String,
@@ -31,10 +48,45 @@ pub struct PlannedDelivery {
     expected_body_digest: String,
 }
 
+impl PlannedDelivery {
+    pub fn new(
+        exact_head_sha: impl Into<String>,
+        claim_id: impl Into<String>,
+        action: DeliveryAction,
+        location: DeliveryLocation,
+        source_thread_id: Option<String>,
+        expected_body_digest: impl Into<String>,
+    ) -> Result<Self> {
+        let delivery = Self {
+            exact_head_sha: exact_head_sha.into(),
+            claim_id: claim_id.into(),
+            action,
+            path: location.path,
+            line: location.line,
+            side: location.side,
+            source_thread_id,
+            expected_body_digest: expected_body_digest.into(),
+        };
+        validate_planned_delivery(&delivery.exact_head_sha, &delivery)?;
+        Ok(delivery)
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ObservedDelivery {
     comment_id: String,
     delivery: PlannedDelivery,
+}
+
+impl ObservedDelivery {
+    pub fn new(comment_id: impl Into<String>, delivery: PlannedDelivery) -> Result<Self> {
+        let observed = Self {
+            comment_id: comment_id.into(),
+            delivery,
+        };
+        validate_observed_delivery(&observed.delivery.exact_head_sha, &observed)?;
+        Ok(observed)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -445,6 +497,7 @@ fn legal_transition(current: &DeliveryTransactionState, next: &DeliveryTransacti
 mod tests {
     use super::*;
     use anyhow::Result;
+    use serde_json::Value;
 
     const HEAD: &str = "0123456789abcdef0123456789abcdef01234567";
 
@@ -474,6 +527,140 @@ mod tests {
         }
     }
 
+    #[test]
+    fn public_constructors_validate_and_preserve_delivery_identity() -> Result<()> {
+        let planned = PlannedDelivery::new(
+            HEAD,
+            "claim-a",
+            DeliveryAction::Reply,
+            DeliveryLocation::new("src/lib.rs", 12, "RIGHT"),
+            Some("thread-7".to_owned()),
+            "digest-a",
+        )?;
+        assert_eq!(planned.exact_head_sha, HEAD);
+        assert_eq!(planned.claim_id, "claim-a");
+        assert_eq!(planned.action, DeliveryAction::Reply);
+        assert_eq!(planned.path, "src/lib.rs");
+        assert_eq!(planned.line, 12);
+        assert_eq!(planned.side, "RIGHT");
+        assert_eq!(planned.source_thread_id.as_deref(), Some("thread-7"));
+        assert_eq!(planned.expected_body_digest, "digest-a");
+
+        let observed = ObservedDelivery::new("comment-1", planned.clone())?;
+        assert_eq!(observed.comment_id, "comment-1");
+        assert_eq!(observed.delivery, planned);
+        Ok(())
+    }
+
+    #[test]
+    fn transaction_constructor_returns_the_complete_initial_contract() -> Result<()> {
+        let transaction = DeliveryTransaction::new(HEAD, vec![])?;
+        assert_eq!(
+            transaction,
+            DeliveryTransaction {
+                schema: DELIVERY_TRANSACTION_SCHEMA.to_owned(),
+                exact_head_sha: HEAD.to_owned(),
+                planned: vec![],
+                state: DeliveryTransactionState::Planned,
+                failure: None,
+                cleanup: CleanupOutcome::NotAttempted,
+            }
+        );
+        let transaction = DeliveryTransaction::new(HEAD, vec![])?;
+        assert_eq!(transaction.schema, DELIVERY_TRANSACTION_SCHEMA);
+        assert_eq!(transaction.exact_head_sha, HEAD);
+        assert!(transaction.planned.is_empty());
+        assert_eq!(transaction.state, DeliveryTransactionState::Planned);
+        assert_eq!(transaction.failure, None);
+        assert_eq!(transaction.cleanup, CleanupOutcome::NotAttempted);
+        Ok(())
+    }
+
+    #[test]
+    fn delivery_identity_labels_are_stable_for_inline_and_reply() {
+        let inline_identity = DeliveryIdentity::from(&inline("claim-a", "src/a.rs", 4));
+        assert_eq!(
+            identity_label(&inline_identity),
+            "claim-a:inline:src/a.rs:4:RIGHT:-"
+        );
+        let reply_identity = DeliveryIdentity::from(&reply("claim-b", "thread-7"));
+        assert_eq!(
+            identity_label(&reply_identity),
+            "claim-b:reply:src/lib.rs:12:RIGHT:thread-7"
+        );
+    }
+
+    #[test]
+    fn delivery_validation_rejects_each_invalid_identity_component() {
+        type Mutator = fn(&mut PlannedDelivery);
+        let cases: [(&str, Mutator, &str); 6] = [
+            (
+                "claim",
+                |delivery| delivery.claim_id.clear(),
+                "claim id must be non-empty",
+            ),
+            (
+                "path",
+                |delivery| delivery.path.clear(),
+                "comment path must be non-empty",
+            ),
+            (
+                "line",
+                |delivery| delivery.line = 0,
+                "comment line must be positive",
+            ),
+            (
+                "side",
+                |delivery| delivery.side = "BOTH".to_owned(),
+                "comment side must be LEFT or RIGHT, got BOTH",
+            ),
+            (
+                "digest",
+                |delivery| delivery.expected_body_digest.clear(),
+                "expected body digest must be non-empty",
+            ),
+            (
+                "control",
+                |delivery| delivery.claim_id = "claim\n-a".to_owned(),
+                "claim id must not contain control characters",
+            ),
+        ];
+        for (label, mutate, expected_error) in cases {
+            let mut invalid = inline("claim-a", "src/a.rs", 4);
+            mutate(&mut invalid);
+            let error = require_error(
+                DeliveryTransaction::new(HEAD, vec![invalid]),
+                "invalid delivery identity must fail",
+            );
+            assert_eq!(
+                error.to_string(),
+                expected_error,
+                "{label} error contract changed"
+            );
+        }
+
+        let error = require_error(DeliveryTransaction::new("", vec![]), "empty head must fail");
+        assert_eq!(error.to_string(), "exact head SHA must be non-empty");
+
+        let error = require_error(
+            DeliveryTransaction::new(
+                HEAD,
+                vec![PlannedDelivery {
+                    exact_head_sha: "other-head".to_owned(),
+                    ..inline("claim-a", "src/a.rs", 4)
+                }],
+            ),
+            "wrong head must fail",
+        );
+        assert!(error.to_string().contains("bound to head"));
+
+        let error = require_error(
+            ObservedDelivery::new("", inline("claim-a", "src/a.rs", 4)),
+            "empty comment id must fail",
+        );
+        assert_eq!(error.to_string(), "GitHub comment id must be non-empty");
+    }
+
     fn observed(comment_id: &str, delivery: PlannedDelivery) -> ObservedDelivery {
         ObservedDelivery {
             comment_id: comment_id.to_owned(),
@@ -482,10 +669,7 @@ mod tests {
     }
 
     fn require_error<T>(result: Result<T>, context: &str) -> anyhow::Error {
-        match result {
-            Ok(_) => anyhow::anyhow!("{context}"),
-            Err(error) => error,
-        }
+        result.err().unwrap_or_else(|| anyhow::anyhow!("{context}"))
     }
 
     #[test]
@@ -515,6 +699,104 @@ mod tests {
             Some("thread-7")
         );
         assert_eq!(result.receipts[0].confirmed_head_sha, HEAD);
+        assert_eq!(result.receipts[0].schema, DELIVERY_RECEIPT_SCHEMA);
+        assert_eq!(result.receipts[0].claim_id, "claim-a");
+        assert_eq!(result.receipts[0].action, DeliveryAction::Reply);
+        assert_eq!(result.receipts[0].path, "src/lib.rs");
+        assert_eq!(result.receipts[0].line, 12);
+        assert_eq!(result.receipts[0].side, "RIGHT");
+        assert_eq!(result.receipts[0].expected_body_digest, "digest-claim-a");
+        assert_eq!(result.receipts[0].review_id, "review-42");
+        assert_eq!(result.receipts[0].comment_id, "comment-a");
+        assert_eq!(
+            result,
+            DeliveryReconciliation {
+                schema: DELIVERY_RECEIPT_SCHEMA.to_owned(),
+                exact_head_sha: HEAD.to_owned(),
+                planned_count: 2,
+                observed_count: 2,
+                receipts: vec![
+                    DeliveryReceipt {
+                        schema: DELIVERY_RECEIPT_SCHEMA.to_owned(),
+                        exact_head_sha: HEAD.to_owned(),
+                        claim_id: "claim-a".to_owned(),
+                        action: DeliveryAction::Reply,
+                        path: "src/lib.rs".to_owned(),
+                        line: 12,
+                        side: "RIGHT".to_owned(),
+                        source_thread_id: Some("thread-7".to_owned()),
+                        expected_body_digest: "digest-claim-a".to_owned(),
+                        review_id: "review-42".to_owned(),
+                        comment_id: "comment-a".to_owned(),
+                        confirmed_head_sha: HEAD.to_owned(),
+                    },
+                    DeliveryReceipt {
+                        schema: DELIVERY_RECEIPT_SCHEMA.to_owned(),
+                        exact_head_sha: HEAD.to_owned(),
+                        claim_id: "claim-b".to_owned(),
+                        action: DeliveryAction::Inline,
+                        path: "src/b.rs".to_owned(),
+                        line: 8,
+                        side: "RIGHT".to_owned(),
+                        source_thread_id: None,
+                        expected_body_digest: "digest-claim-b".to_owned(),
+                        review_id: "review-42".to_owned(),
+                        comment_id: "comment-b".to_owned(),
+                        confirmed_head_sha: HEAD.to_owned(),
+                    },
+                ],
+            }
+        );
+        assert_eq!(
+            serde_json::to_value(&result)?,
+            serde_json::json!({
+                "schema": DELIVERY_RECEIPT_SCHEMA,
+                "exact_head_sha": HEAD,
+                "planned_count": 2,
+                "observed_count": 2,
+                "receipts": [
+                    {
+                        "schema": DELIVERY_RECEIPT_SCHEMA,
+                        "exact_head_sha": HEAD,
+                        "claim_id": "claim-a",
+                        "action": "reply",
+                        "path": "src/lib.rs",
+                        "line": 12,
+                        "side": "RIGHT",
+                        "source_thread_id": "thread-7",
+                        "expected_body_digest": "digest-claim-a",
+                        "review_id": "review-42",
+                        "comment_id": "comment-a",
+                        "confirmed_head_sha": HEAD,
+                    },
+                    {
+                        "schema": DELIVERY_RECEIPT_SCHEMA,
+                        "exact_head_sha": HEAD,
+                        "claim_id": "claim-b",
+                        "action": "inline",
+                        "path": "src/b.rs",
+                        "line": 8,
+                        "side": "RIGHT",
+                        "source_thread_id": Value::Null,
+                        "expected_body_digest": "digest-claim-b",
+                        "review_id": "review-42",
+                        "comment_id": "comment-b",
+                        "confirmed_head_sha": HEAD,
+                    },
+                ],
+            })
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn empty_reconciliation_is_a_deterministic_empty_receipt_set() -> Result<()> {
+        let result = reconcile_deliveries(HEAD, "review-42", &[], &[])?;
+        assert_eq!(result.schema, DELIVERY_RECEIPT_SCHEMA);
+        assert_eq!(result.exact_head_sha, HEAD);
+        assert_eq!(result.planned_count, 0);
+        assert_eq!(result.observed_count, 0);
+        assert!(result.receipts.is_empty());
         Ok(())
     }
 
@@ -531,7 +813,10 @@ mod tests {
             ),
             "partial returned set must not confirm delivery",
         );
-        assert!(error.to_string().contains("missing"));
+        assert_eq!(
+            error.to_string(),
+            "GitHub delivery set mismatch; missing=[\"claim-b:inline:src/b.rs:5:RIGHT:-\"], unexpected=[]"
+        );
     }
 
     #[test]
@@ -575,7 +860,10 @@ mod tests {
             ),
             "wrong claim cannot confirm delivery",
         );
-        assert!(error.to_string().contains("unexpected"));
+        assert_eq!(
+            error.to_string(),
+            "GitHub delivery set mismatch; missing=[\"claim-a:inline:src/a.rs:4:RIGHT:-\"], unexpected=[\"claim-other:inline:src/a.rs:4:RIGHT:-\"]"
+        );
 
         let mut wrong_head = planned.clone();
         wrong_head.exact_head_sha = "fedcba9876543210fedcba9876543210fedcba98".to_owned();
@@ -588,7 +876,10 @@ mod tests {
             ),
             "wrong head cannot confirm delivery",
         );
-        assert!(error.to_string().contains("bound to head"));
+        assert_eq!(
+            error.to_string(),
+            "planned delivery claim claim-a is bound to head fedcba9876543210fedcba9876543210fedcba98, expected 0123456789abcdef0123456789abcdef01234567"
+        );
     }
 
     #[test]
@@ -636,7 +927,10 @@ mod tests {
             DeliveryTransaction::new(HEAD, vec![missing_thread]),
             "reply without a source thread must fail",
         );
-        assert!(error.to_string().contains("source thread"));
+        assert_eq!(
+            error.to_string(),
+            "reply delivery requires a source thread id"
+        );
 
         let mut inline_with_thread = inline("claim-a", "src/a.rs", 4);
         inline_with_thread.source_thread_id = Some("thread-7".to_owned());
@@ -644,7 +938,10 @@ mod tests {
             DeliveryTransaction::new(HEAD, vec![inline_with_thread]),
             "inline with a source thread must fail",
         );
-        assert!(error.to_string().contains("must not carry"));
+        assert_eq!(
+            error.to_string(),
+            "inline delivery must not carry a source thread id"
+        );
     }
 
     #[test]
@@ -665,6 +962,78 @@ mod tests {
         );
         assert!(error.to_string().contains("illegal"));
         Ok(())
+    }
+
+    #[test]
+    fn legal_transition_matrix_covers_success_and_cleanup_paths() {
+        let legal = [
+            (
+                DeliveryTransactionState::Planned,
+                DeliveryTransactionState::PendingReviewCreated,
+            ),
+            (
+                DeliveryTransactionState::PendingReviewCreated,
+                DeliveryTransactionState::CommentsCreated,
+            ),
+            (
+                DeliveryTransactionState::CommentsCreated,
+                DeliveryTransactionState::CommentsReconciled,
+            ),
+            (
+                DeliveryTransactionState::CommentsReconciled,
+                DeliveryTransactionState::HeadRevalidated,
+            ),
+            (
+                DeliveryTransactionState::HeadRevalidated,
+                DeliveryTransactionState::Submitted,
+            ),
+            (
+                DeliveryTransactionState::Submitted,
+                DeliveryTransactionState::ReceiptsPersisted,
+            ),
+            (
+                DeliveryTransactionState::PendingReviewCreated,
+                DeliveryTransactionState::CleanupAttempted,
+            ),
+            (
+                DeliveryTransactionState::CommentsCreated,
+                DeliveryTransactionState::CleanupAttempted,
+            ),
+            (
+                DeliveryTransactionState::CommentsReconciled,
+                DeliveryTransactionState::CleanupAttempted,
+            ),
+            (
+                DeliveryTransactionState::HeadRevalidated,
+                DeliveryTransactionState::CleanupAttempted,
+            ),
+            (
+                DeliveryTransactionState::Submitted,
+                DeliveryTransactionState::CleanupAttempted,
+            ),
+        ];
+        for (current, next) in legal {
+            assert!(legal_transition(&current, &next), "{current:?} -> {next:?}");
+        }
+        for (current, next) in [
+            (
+                DeliveryTransactionState::Planned,
+                DeliveryTransactionState::CommentsCreated,
+            ),
+            (
+                DeliveryTransactionState::ReceiptsPersisted,
+                DeliveryTransactionState::CleanupAttempted,
+            ),
+            (
+                DeliveryTransactionState::CleanedUp,
+                DeliveryTransactionState::Failed,
+            ),
+        ] {
+            assert!(
+                !legal_transition(&current, &next),
+                "{current:?} -> {next:?}"
+            );
+        }
     }
 
     #[test]
@@ -690,6 +1059,32 @@ mod tests {
         failed.finish_cleanup(CleanupOutcome::Failed("delete rejected".to_owned()))?;
         assert_eq!(failed.state, DeliveryTransactionState::Failed);
         assert!(matches!(failed.cleanup, CleanupOutcome::Failed(_)));
+        assert_eq!(
+            serde_json::to_value(&failed)?,
+            serde_json::json!({
+                "schema": DELIVERY_TRANSACTION_SCHEMA,
+                "exact_head_sha": HEAD,
+                "planned": [{
+                    "exact_head_sha": HEAD,
+                    "claim_id": "claim-a",
+                    "action": "inline",
+                    "path": "src/a.rs",
+                    "line": 4,
+                    "side": "RIGHT",
+                    "source_thread_id": Value::Null,
+                    "expected_body_digest": "digest-claim-a",
+                }],
+                "state": "failed",
+                "failure": {
+                    "stage": "submission",
+                    "reason": "submit rejected",
+                },
+                "cleanup": {
+                    "status": "failed",
+                    "reason": "delete rejected",
+                },
+            })
+        );
 
         let mut missing_cleanup =
             DeliveryTransaction::new(HEAD, vec![inline("claim-a", "src/a.rs", 4)])?;
@@ -707,6 +1102,84 @@ mod tests {
     }
 
     #[test]
+    fn failure_and_cleanup_guards_reject_terminal_or_unstarted_states() -> Result<()> {
+        let mut planned = DeliveryTransaction::new(HEAD, vec![])?;
+        let error = require_error(
+            planned.finish_cleanup(CleanupOutcome::Succeeded),
+            "cleanup before an attempt must fail",
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("only finish after cleanup was attempted")
+        );
+
+        planned.transition(DeliveryTransactionState::PendingReviewCreated)?;
+        planned.transition(DeliveryTransactionState::CleanupAttempted)?;
+        let error = require_error(
+            planned.finish_cleanup(CleanupOutcome::NotAttempted),
+            "not-attempted cleanup must fail",
+        );
+        assert!(error.to_string().contains("must record success or failure"));
+
+        let mut persisted = DeliveryTransaction::new(HEAD, vec![])?;
+        for next in [
+            DeliveryTransactionState::PendingReviewCreated,
+            DeliveryTransactionState::CommentsCreated,
+            DeliveryTransactionState::CommentsReconciled,
+            DeliveryTransactionState::HeadRevalidated,
+            DeliveryTransactionState::Submitted,
+            DeliveryTransactionState::ReceiptsPersisted,
+        ] {
+            persisted.transition(next)?;
+        }
+        let error = require_error(
+            persisted.record_failure(DeliveryFailureStage::Submission, "too late", true),
+            "persisted transaction must be terminal",
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("cannot record failure after transaction is terminal")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reconciliation_validates_empty_inputs_and_duplicate_identities() {
+        let error = require_error(
+            reconcile_deliveries("", "review-42", &[], &[]),
+            "empty head must fail",
+        );
+        assert!(error.to_string().contains("exact head SHA"));
+
+        let error = require_error(
+            reconcile_deliveries(HEAD, "", &[], &[]),
+            "empty review id must fail",
+        );
+        assert!(error.to_string().contains("review id"));
+
+        let planned = inline("claim-a", "src/a.rs", 4);
+        let error = require_error(
+            reconcile_deliveries(
+                HEAD,
+                "review-42",
+                std::slice::from_ref(&planned),
+                &[
+                    observed("comment-a", planned.clone()),
+                    observed("comment-b", planned.clone()),
+                ],
+            ),
+            "duplicate identities must fail even with distinct comment ids",
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate planned delivery identity")
+        );
+    }
+
+    #[test]
     fn transaction_serialization_preserves_contract_fields() -> Result<()> {
         let transaction = DeliveryTransaction::new(HEAD, vec![reply("claim-a", "thread-7")])?;
         let value = serde_json::to_value(transaction)?;
@@ -715,6 +1188,32 @@ mod tests {
         assert_eq!(value["planned"][0]["source_thread_id"], "thread-7");
         assert_eq!(value["state"], "planned");
         assert_eq!(value["cleanup"]["status"], "not_attempted");
+        assert_eq!(
+            value,
+            serde_json::json!({
+                "schema": DELIVERY_TRANSACTION_SCHEMA,
+                "exact_head_sha": HEAD,
+                "planned": [{
+                    "exact_head_sha": HEAD,
+                    "claim_id": "claim-a",
+                    "action": "reply",
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "source_thread_id": "thread-7",
+                    "expected_body_digest": "digest-claim-a",
+                }],
+                "state": "planned",
+                "failure": Value::Null,
+                "cleanup": {"status": "not_attempted"},
+            })
+        );
+
+        let inline_value = serde_json::to_value(DeliveryTransaction::new(
+            HEAD,
+            vec![inline("claim-b", "src/lib.rs", 12)],
+        )?)?;
+        assert_eq!(inline_value["planned"][0]["source_thread_id"], Value::Null);
         Ok(())
     }
 }
