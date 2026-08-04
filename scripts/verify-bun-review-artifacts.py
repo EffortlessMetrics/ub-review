@@ -133,21 +133,21 @@ SECRET_HEADER_PATTERNS = [
         "Authorization header",
         re.compile(
             r"(?im)\bAuthorization\s*:\s*(?:Bearer\s+)?"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?!redacted\b|test-token-redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
         ),
     ),
     (
         "Bearer token",
         re.compile(
             r"(?im)\bBearer\s+"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?!redacted\b|test-token-redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
         ),
     ),
     (
         "API key header",
         re.compile(
             r"(?im)\bX-API-Key\s*:\s*"
-            r"(?!redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
+            r"(?!redacted\b|test-token-redacted\b|\[redacted\]|\*\*\*)[A-Za-z0-9][A-Za-z0-9._~+/=-]{7,}"
         ),
     ),
 ]
@@ -12377,6 +12377,8 @@ def run_self_tests() -> None:
         fail("self-test OPENCODE secret assignment was not detected")
     if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
         fail("self-test OPENCODE secret placeholder was treated as a leak")
+    if secret_leak_marker("Authorization: Bearer test-token-redacted") is not None:
+        fail("self-test redacted GitHub fixture token was treated as a leak")
     expect_self_test_failure(
         "legacy run mode artifact",
         "expected one of",
