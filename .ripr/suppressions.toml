@@ -14768,3 +14768,27 @@ kind = "exposure_gap"
 finding_id = "probe:src_delivery_transaction.rs:error_path:318d934e"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 test-fixture false-positive on serde_json serialization setup inside contract_round_trips_each_serialized_shape_and_lifecycle_state: the complete round-trip assertion is the oracle and a setup serialization error is itself test failure. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:error_path:a9348116"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 test-fixture false-positive on require_error's Result::err extraction: deserialization_reapplies_invariants_for_each_receipt_shape asserts the exact invalid JSON error for every fixture, so the helper path has a complete failing-input oracle. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:4ae06c0a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 test-fixture false-positive on require_error's Result::err extraction: deserialization_reapplies_invariants_for_each_receipt_shape asserts the exact invalid JSON error for every fixture, so the helper path has a complete failing-input oracle. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:error_path:76032ad2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 test-fixture false-positive on require_error's error conversion: deserialization_reapplies_invariants_for_each_receipt_shape asserts the exact invalid JSON error for every fixture, so the helper path has a complete failing-input oracle. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:c6beccf6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 test-fixture false-positive on require_error's error conversion: deserialization_reapplies_invariants_for_each_receipt_shape asserts the exact invalid JSON error for every fixture, so the helper path has a complete failing-input oracle. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
