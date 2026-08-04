@@ -489,8 +489,7 @@ pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
-    let token = args
-        .github_token
+    args.github_token
         .as_ref()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| anyhow::anyhow!("github token is required for posting"))?;
@@ -513,42 +512,8 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
     let api_payload = github_review_post_payload(&review)?;
     let post_payload = args.out.join("github-review-post-payload.json");
     fs::write(&post_payload, serde_json::to_vec_pretty(&api_payload)?)?;
-    let url = format!(
-        "{}/repos/{}/pulls/{}/reviews",
-        args.github_api_url.trim_end_matches('/'),
-        repo,
-        pull_number
-    );
-    let output = run_curl_json_post(
-        Path::new("."),
-        &url,
-        &format!("Authorization: Bearer {token}"),
-        &post_payload,
-        &[
-            "Accept: application/vnd.github+json",
-            "Content-Type: application/json",
-            "X-GitHub-Api-Version: 2022-11-28",
-        ],
-        60,
-    )
-    .with_context(|| "run GitHub review curl")?;
-    let response_text = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr_text = String::from_utf8_lossy(&output.stderr).to_string();
-    fs::write(args.out.join("post-stdout.json"), &response_text)?;
-    fs::write(args.out.join("post-stderr.txt"), &stderr_text)?;
-    let response = serde_json::from_str(&response_text).unwrap_or_else(|_| {
-        serde_json::json!({
-            "raw": response_text,
-        })
-    });
-    if !output.status.success() {
-        bail!(
-            "GitHub review post failed with exit code {:?} and http status {:?}: {}",
-            output.status.code(),
-            output.http_status,
-            stderr_text
-        );
-    }
+    let outcome = execute_pending_review_delivery(args, &review, &api_payload)
+        .with_context(|| "run GitHub pending-review delivery transaction")?;
     let review_metadata = read_github_review_metadata(args);
     Ok(PostResultReceipt {
         schema_version: 1,
@@ -581,12 +546,12 @@ pub(crate) fn post_github_review(args: &PostArgs) -> Result<PostResultReceipt> {
         off_diff_comment_count: review_metadata
             .as_ref()
             .and_then(|review| review.off_diff_comment_count),
-        http_status: output.http_status,
+        http_status: outcome.http_status,
         token_present: true,
         payload_written: post_payload.exists(),
         post_stdout_written: args.out.join("post-stdout.json").exists(),
         post_stderr_written: args.out.join("post-stderr.txt").exists(),
-        response,
+        response: outcome.response,
     })
 }
 

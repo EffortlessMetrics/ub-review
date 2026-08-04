@@ -72,6 +72,14 @@ impl PlannedDelivery {
         validate_planned_delivery(&delivery.exact_head_sha, &delivery)?;
         Ok(delivery)
     }
+
+    pub(crate) fn location(&self) -> (&str, u32, &str) {
+        (&self.path, self.line, &self.side)
+    }
+
+    pub(crate) fn expected_body_digest(&self) -> &str {
+        &self.expected_body_digest
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -399,6 +407,10 @@ impl DeliveryTransaction {
         Ok(())
     }
 
+    pub(crate) fn state(&self) -> &DeliveryTransactionState {
+        &self.state
+    }
+
     pub fn record_failure(
         &mut self,
         stage: DeliveryFailureStage,
@@ -462,6 +474,27 @@ impl DeliveryTransaction {
         );
         self.cleanup = outcome;
         self.state = next;
+        Ok(())
+    }
+
+    pub fn record_post_submission_failure(
+        &mut self,
+        stage: DeliveryFailureStage,
+        reason: impl Into<String>,
+    ) -> Result<()> {
+        ensure!(
+            matches!(
+                self.state,
+                DeliveryTransactionState::Submitted | DeliveryTransactionState::ReceiptsPersisted
+            ),
+            "post-submission failure requires a submitted transaction, current state: {:?}",
+            self.state
+        );
+        let reason = reason.into();
+        validate_identifier(&reason, "failure reason")?;
+        self.failure = Some(DeliveryFailure { stage, reason });
+        self.cleanup = CleanupOutcome::NotAttempted;
+        self.state = DeliveryTransactionState::Failed;
         Ok(())
     }
 }
@@ -841,6 +874,12 @@ fn legal_transition(current: &DeliveryTransactionState, next: &DeliveryTransacti
         ) | (
             DeliveryTransactionState::Submitted,
             DeliveryTransactionState::CleanupAttempted
+        ) | (
+            DeliveryTransactionState::Submitted,
+            DeliveryTransactionState::Failed
+        ) | (
+            DeliveryTransactionState::ReceiptsPersisted,
+            DeliveryTransactionState::Failed
         ) | (
             DeliveryTransactionState::CleanupAttempted,
             DeliveryTransactionState::CleanedUp
@@ -1822,6 +1861,54 @@ mod tests {
                 .to_string()
                 .contains("cannot record failure after transaction is terminal")
         );
+        Ok(())
+    }
+
+    #[test]
+    fn post_submission_failure_is_terminal_and_never_deletes_submitted_review() -> Result<()> {
+        for terminal in [
+            DeliveryTransactionState::Submitted,
+            DeliveryTransactionState::ReceiptsPersisted,
+        ] {
+            let mut transaction = DeliveryTransaction::new(HEAD, vec![])?;
+            for next in [
+                DeliveryTransactionState::PendingReviewCreated,
+                DeliveryTransactionState::CommentsCreated,
+                DeliveryTransactionState::CommentsReconciled,
+                DeliveryTransactionState::HeadRevalidated,
+                DeliveryTransactionState::Submitted,
+            ] {
+                transaction.transition(next.clone())?;
+                if next == terminal {
+                    break;
+                }
+            }
+            if terminal == DeliveryTransactionState::ReceiptsPersisted {
+                transaction.transition(DeliveryTransactionState::ReceiptsPersisted)?;
+            }
+            transaction.record_post_submission_failure(
+                DeliveryFailureStage::ReceiptPersistence,
+                "receipt write failed",
+            )?;
+            assert_eq!(transaction.state, DeliveryTransactionState::Failed);
+            assert_eq!(transaction.cleanup, CleanupOutcome::NotAttempted);
+            assert_eq!(
+                transaction.failure.as_ref().map(|failure| &failure.stage),
+                Some(&DeliveryFailureStage::ReceiptPersistence)
+            );
+            let error = require_error(
+                transaction.record_post_submission_failure(
+                    DeliveryFailureStage::ReceiptPersistence,
+                    "second failure",
+                ),
+                "terminal post-submission state must reject a second failure",
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("requires a submitted transaction")
+            );
+        }
         Ok(())
     }
 
