@@ -114,6 +114,7 @@ pub struct DeliveryReceipt {
 pub struct DeliveryReconciliation {
     schema: String,
     exact_head_sha: String,
+    review_id: String,
     planned_count: usize,
     observed_count: usize,
     receipts: Vec<DeliveryReceipt>,
@@ -209,6 +210,7 @@ struct RawDeliveryReceipt {
 struct RawDeliveryReconciliation {
     schema: String,
     exact_head_sha: String,
+    review_id: String,
     planned_count: usize,
     observed_count: usize,
     receipts: Vec<RawDeliveryReceipt>,
@@ -277,6 +279,7 @@ impl TryFrom<RawDeliveryReconciliation> for DeliveryReconciliation {
         let reconciliation = Self {
             schema: raw.schema,
             exact_head_sha: raw.exact_head_sha,
+            review_id: raw.review_id,
             planned_count: raw.planned_count,
             observed_count: raw.observed_count,
             receipts: raw
@@ -380,6 +383,13 @@ impl DeliveryTransaction {
 
     pub fn transition(&mut self, next: DeliveryTransactionState) -> Result<()> {
         ensure!(
+            !matches!(
+                next,
+                DeliveryTransactionState::Failed | DeliveryTransactionState::CleanedUp
+            ),
+            "metadata-dependent delivery states require record_failure or finish_cleanup"
+        );
+        ensure!(
             legal_transition(&self.state, &next),
             "illegal delivery transaction transition: {:?} -> {:?}",
             self.state,
@@ -438,6 +448,7 @@ impl DeliveryTransaction {
             !matches!(outcome, CleanupOutcome::NotAttempted),
             "cleanup attempt must record success or failure"
         );
+        validate_cleanup_outcome(&outcome)?;
         let next = if matches!(outcome, CleanupOutcome::Succeeded) {
             DeliveryTransactionState::CleanedUp
         } else {
@@ -512,6 +523,7 @@ pub fn reconcile_deliveries(
     Ok(DeliveryReconciliation {
         schema: DELIVERY_RECONCILIATION_SCHEMA.to_owned(),
         exact_head_sha: exact_head_sha.to_owned(),
+        review_id: review_id.to_owned(),
         planned_count: planned.len(),
         observed_count: observed.len(),
         receipts,
@@ -561,6 +573,7 @@ fn validate_delivery_reconciliation(reconciliation: &DeliveryReconciliation) -> 
         "delivery reconciliation schema must be {DELIVERY_RECONCILIATION_SCHEMA}"
     );
     validate_head_sha(&reconciliation.exact_head_sha)?;
+    validate_identifier(&reconciliation.review_id, "review id")?;
     ensure!(
         reconciliation.planned_count == reconciliation.observed_count,
         "planned and observed delivery counts must match"
@@ -577,6 +590,10 @@ fn validate_delivery_reconciliation(reconciliation: &DeliveryReconciliation) -> 
         ensure!(
             receipt.exact_head_sha == reconciliation.exact_head_sha,
             "reconciliation receipt is bound to another head"
+        );
+        ensure!(
+            receipt.review_id == reconciliation.review_id,
+            "reconciliation receipt is bound to another review"
         );
         ensure!(
             identities.insert(DeliveryIdentity::from(receipt)),
@@ -612,6 +629,7 @@ fn validate_delivery_transaction(transaction: &DeliveryTransaction) -> Result<()
     if let Some(failure) = &transaction.failure {
         validate_identifier(&failure.reason, "failure reason")?;
     }
+    validate_cleanup_outcome(&transaction.cleanup)?;
     match transaction.state {
         DeliveryTransactionState::Planned
         | DeliveryTransactionState::PendingReviewCreated
@@ -659,6 +677,13 @@ fn validate_delivery_transaction(transaction: &DeliveryTransaction) -> Result<()
                 "failed delivery transaction cannot carry successful cleanup"
             );
         }
+    }
+    Ok(())
+}
+
+fn validate_cleanup_outcome(outcome: &CleanupOutcome) -> Result<()> {
+    if let CleanupOutcome::Failed(reason) = outcome {
+        validate_identifier(reason, "cleanup failure reason")?;
     }
     Ok(())
 }
@@ -1090,6 +1115,23 @@ mod tests {
         );
         assert!(error.to_string().contains("delivery reconciliation schema"));
 
+        let reconciliation = reconcile_deliveries(
+            HEAD,
+            "review-42",
+            &[inline("claim-a", "src/a.rs", 4)],
+            &[observed("comment-a", inline("claim-a", "src/a.rs", 4))],
+        )?;
+        let mut wrong_review_receipt = serde_json::to_value(reconciliation)?;
+        wrong_review_receipt["receipts"][0]["review_id"] = "review-other".into();
+        let error = require_error(
+            serde_json::from_value::<DeliveryReconciliation>(wrong_review_receipt),
+            "mixed review ids must fail on deserialization",
+        );
+        assert_eq!(
+            error.to_string(),
+            "reconciliation receipt is bound to another review"
+        );
+
         let valid_reconciliation = reconcile_deliveries(
             HEAD,
             "review-42",
@@ -1262,6 +1304,7 @@ mod tests {
             DeliveryReconciliation {
                 schema: DELIVERY_RECONCILIATION_SCHEMA.to_owned(),
                 exact_head_sha: HEAD.to_owned(),
+                review_id: "review-42".to_owned(),
                 planned_count: 2,
                 observed_count: 2,
                 receipts: vec![
@@ -1301,6 +1344,7 @@ mod tests {
             serde_json::json!({
                 "schema": DELIVERY_RECONCILIATION_SCHEMA,
                 "exact_head_sha": HEAD,
+                "review_id": "review-42",
                 "planned_count": 2,
                 "observed_count": 2,
                 "receipts": [
@@ -1343,6 +1387,7 @@ mod tests {
         let result = reconcile_deliveries(HEAD, "review-42", &[], &[])?;
         assert_eq!(result.schema, DELIVERY_RECONCILIATION_SCHEMA);
         assert_eq!(result.exact_head_sha, HEAD);
+        assert_eq!(result.review_id, "review-42");
         assert_eq!(result.planned_count, 0);
         assert_eq!(result.observed_count, 0);
         assert!(result.receipts.is_empty());
@@ -1527,7 +1572,28 @@ mod tests {
             transaction.transition(DeliveryTransactionState::CleanedUp),
             "persisted transaction cannot jump to cleanup",
         );
-        assert!(error.to_string().contains("illegal"));
+        assert!(error.to_string().contains("metadata-dependent"));
+        Ok(())
+    }
+
+    #[test]
+    fn metadata_dependent_states_require_their_validating_operations() -> Result<()> {
+        let mut planned = DeliveryTransaction::new(HEAD, vec![])?;
+        let error = require_error(
+            planned.transition(DeliveryTransactionState::Failed),
+            "direct failure transition must be rejected",
+        );
+        assert!(error.to_string().contains("metadata-dependent"));
+        assert_eq!(planned.state, DeliveryTransactionState::Planned);
+
+        planned.transition(DeliveryTransactionState::PendingReviewCreated)?;
+        planned.transition(DeliveryTransactionState::CleanupAttempted)?;
+        let error = require_error(
+            planned.transition(DeliveryTransactionState::CleanedUp),
+            "direct cleanup transition must be rejected",
+        );
+        assert!(error.to_string().contains("metadata-dependent"));
+        assert_eq!(planned.state, DeliveryTransactionState::CleanupAttempted);
         Ok(())
     }
 
@@ -1659,6 +1725,34 @@ mod tests {
                 },
             })
         );
+
+        let mut invalid_cleanup = serde_json::to_value(&failed)?;
+        invalid_cleanup["cleanup"]["reason"] = "".into();
+        let error = require_error(
+            serde_json::from_value::<DeliveryTransaction>(invalid_cleanup),
+            "empty cleanup failure reason must fail on deserialization",
+        );
+        assert_eq!(
+            error.to_string(),
+            "cleanup failure reason must be non-empty"
+        );
+
+        let mut empty_cleanup = DeliveryTransaction::new(HEAD, vec![])?;
+        empty_cleanup.transition(DeliveryTransactionState::PendingReviewCreated)?;
+        empty_cleanup.record_failure(DeliveryFailureStage::Submission, "submit rejected", true)?;
+        let error = require_error(
+            empty_cleanup.finish_cleanup(CleanupOutcome::Failed(String::new())),
+            "empty cleanup failure reason must fail before mutation",
+        );
+        assert_eq!(
+            error.to_string(),
+            "cleanup failure reason must be non-empty"
+        );
+        assert_eq!(
+            empty_cleanup.state,
+            DeliveryTransactionState::CleanupAttempted
+        );
+        assert_eq!(empty_cleanup.cleanup, CleanupOutcome::NotAttempted);
 
         let mut missing_cleanup =
             DeliveryTransaction::new(HEAD, vec![inline("claim-a", "src/a.rs", 4)])?;
