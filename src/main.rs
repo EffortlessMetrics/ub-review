@@ -25,6 +25,7 @@ use cli::*;
 mod config;
 use config::*;
 mod builtin;
+pub mod delivery_transaction;
 use builtin::*;
 mod gate;
 use gate::*;
