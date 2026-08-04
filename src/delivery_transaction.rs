@@ -910,6 +910,119 @@ mod tests {
     }
 
     #[test]
+    fn contract_round_trips_each_serialized_shape_and_lifecycle_state() -> Result<()> {
+        let planned_inline = PlannedDelivery::new(
+            HEAD,
+            "claim-inline",
+            DeliveryAction::Inline,
+            DeliveryLocation::new("src/lib.rs", 12, "RIGHT"),
+            None,
+            "digest-inline",
+        )?;
+        let planned_reply = PlannedDelivery::new(
+            HEAD,
+            "claim-reply",
+            DeliveryAction::Reply,
+            DeliveryLocation::new("src/lib.rs", 13, "RIGHT"),
+            Some("thread-7".to_owned()),
+            "digest-reply",
+        )?;
+        let observed_inline = ObservedDelivery::new("comment-inline", planned_inline.clone())?;
+        let observed_reply = ObservedDelivery::new("comment-reply", planned_reply.clone())?;
+        let reconciliation = reconcile_deliveries(
+            HEAD,
+            "review-42",
+            &[planned_inline.clone(), planned_reply.clone()],
+            &[observed_inline.clone(), observed_reply.clone()],
+        )?;
+
+        assert_eq!(
+            serde_json::from_value::<PlannedDelivery>(serde_json::to_value(&planned_inline)?)?,
+            planned_inline
+        );
+        assert_eq!(
+            serde_json::from_value::<ObservedDelivery>(serde_json::to_value(&observed_reply)?)?,
+            observed_reply
+        );
+        let receipt = reconciliation
+            .receipts
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("expected a receipt"))?;
+        assert_eq!(
+            serde_json::from_value::<DeliveryReceipt>(serde_json::to_value(&receipt)?)?,
+            receipt
+        );
+        assert_eq!(
+            serde_json::from_value::<DeliveryReconciliation>(serde_json::to_value(
+                &reconciliation
+            )?,)?,
+            reconciliation
+        );
+
+        assert_eq!(DeliveryAction::Inline.as_str(), "inline");
+        assert_eq!(DeliveryAction::Reply.as_str(), "reply");
+        assert!(validate_head_sha(HEAD).is_ok());
+        assert!(validate_identifier("claim-inline", "claim id").is_ok());
+
+        let mut transaction = DeliveryTransaction::new(HEAD, vec![planned_reply])?;
+        for next in [
+            DeliveryTransactionState::PendingReviewCreated,
+            DeliveryTransactionState::CommentsCreated,
+            DeliveryTransactionState::CommentsReconciled,
+            DeliveryTransactionState::HeadRevalidated,
+            DeliveryTransactionState::Submitted,
+            DeliveryTransactionState::ReceiptsPersisted,
+        ] {
+            assert!(transaction.transition(next.clone()).is_ok());
+            assert_eq!(transaction.state, next);
+            assert_eq!(
+                serde_json::from_value::<DeliveryTransaction>(serde_json::to_value(&transaction)?)?
+                    .state,
+                next
+            );
+        }
+
+        let mut failed = DeliveryTransaction::new(HEAD, vec![])?;
+        assert!(
+            failed
+                .record_failure(DeliveryFailureStage::Submission, "submit rejected", false)
+                .is_ok()
+        );
+        assert_eq!(failed.state, DeliveryTransactionState::Failed);
+        assert!(failed.failure.is_some());
+        assert_eq!(
+            serde_json::from_value::<DeliveryTransaction>(serde_json::to_value(&failed)?)?.state,
+            DeliveryTransactionState::Failed
+        );
+
+        let mut cleaned = DeliveryTransaction::new(HEAD, vec![])?;
+        assert!(
+            cleaned
+                .transition(DeliveryTransactionState::PendingReviewCreated)
+                .is_ok()
+        );
+        assert!(
+            cleaned
+                .record_failure(
+                    DeliveryFailureStage::CommentCreation,
+                    "comment rejected",
+                    true
+                )
+                .is_ok()
+        );
+        assert_eq!(cleaned.state, DeliveryTransactionState::CleanupAttempted);
+        assert!(cleaned.finish_cleanup(CleanupOutcome::Succeeded).is_ok());
+        assert_eq!(cleaned.state, DeliveryTransactionState::CleanedUp);
+        assert_eq!(cleaned.cleanup, CleanupOutcome::Succeeded);
+        assert_eq!(
+            serde_json::from_value::<DeliveryTransaction>(serde_json::to_value(&cleaned)?)?.state,
+            DeliveryTransactionState::CleanedUp
+        );
+        Ok(())
+    }
+
+    #[test]
     fn deserialization_reapplies_invariants_for_each_receipt_shape() -> Result<()> {
         let planned_value = serde_json::to_value(inline("claim-a", "src/a.rs", 4))?;
         let mut invalid_planned = planned_value.clone();
@@ -1420,67 +1533,62 @@ mod tests {
 
     #[test]
     fn legal_transition_matrix_covers_success_and_cleanup_paths() {
-        let legal = [
-            (
-                DeliveryTransactionState::Planned,
-                DeliveryTransactionState::PendingReviewCreated,
-            ),
-            (
-                DeliveryTransactionState::PendingReviewCreated,
-                DeliveryTransactionState::CommentsCreated,
-            ),
-            (
-                DeliveryTransactionState::CommentsCreated,
-                DeliveryTransactionState::CommentsReconciled,
-            ),
-            (
-                DeliveryTransactionState::CommentsReconciled,
-                DeliveryTransactionState::HeadRevalidated,
-            ),
-            (
-                DeliveryTransactionState::HeadRevalidated,
-                DeliveryTransactionState::Submitted,
-            ),
-            (
-                DeliveryTransactionState::Submitted,
-                DeliveryTransactionState::ReceiptsPersisted,
-            ),
-            (
-                DeliveryTransactionState::Planned,
-                DeliveryTransactionState::Failed,
-            ),
-            (
-                DeliveryTransactionState::PendingReviewCreated,
-                DeliveryTransactionState::CleanupAttempted,
-            ),
-            (
-                DeliveryTransactionState::CommentsCreated,
-                DeliveryTransactionState::CleanupAttempted,
-            ),
-            (
-                DeliveryTransactionState::CommentsReconciled,
-                DeliveryTransactionState::CleanupAttempted,
-            ),
-            (
-                DeliveryTransactionState::HeadRevalidated,
-                DeliveryTransactionState::CleanupAttempted,
-            ),
-            (
-                DeliveryTransactionState::Submitted,
-                DeliveryTransactionState::CleanupAttempted,
-            ),
-            (
-                DeliveryTransactionState::CleanupAttempted,
-                DeliveryTransactionState::CleanedUp,
-            ),
-            (
-                DeliveryTransactionState::CleanupAttempted,
-                DeliveryTransactionState::Failed,
-            ),
-        ];
-        for (current, next) in legal {
-            assert!(legal_transition(&current, &next), "{current:?} -> {next:?}");
-        }
+        assert!(legal_transition(
+            &DeliveryTransactionState::Planned,
+            &DeliveryTransactionState::PendingReviewCreated
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::PendingReviewCreated,
+            &DeliveryTransactionState::CommentsCreated
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::CommentsCreated,
+            &DeliveryTransactionState::CommentsReconciled
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::CommentsReconciled,
+            &DeliveryTransactionState::HeadRevalidated
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::HeadRevalidated,
+            &DeliveryTransactionState::Submitted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::Submitted,
+            &DeliveryTransactionState::ReceiptsPersisted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::Planned,
+            &DeliveryTransactionState::Failed
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::PendingReviewCreated,
+            &DeliveryTransactionState::CleanupAttempted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::CommentsCreated,
+            &DeliveryTransactionState::CleanupAttempted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::CommentsReconciled,
+            &DeliveryTransactionState::CleanupAttempted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::HeadRevalidated,
+            &DeliveryTransactionState::CleanupAttempted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::Submitted,
+            &DeliveryTransactionState::CleanupAttempted
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::CleanupAttempted,
+            &DeliveryTransactionState::CleanedUp
+        ));
+        assert!(legal_transition(
+            &DeliveryTransactionState::CleanupAttempted,
+            &DeliveryTransactionState::Failed
+        ));
         for (current, next) in [
             (
                 DeliveryTransactionState::Planned,

@@ -14532,3 +14532,239 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_topics.rs:match_arm:ffa3c354"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 match-discriminator false-negative for the fail-closed planned-action default: direct tests assert unknown dispositions return none and no thread ID, and Python verifier self-tests reject mismatched plans. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+
+# PR #826 / #765A delivery contract: the focused contract matrix exercises
+# every successful and failing constructor, deserialization, reconciliation,
+# identity, lifecycle, cleanup, and legal-transition branch below. ripr 0.10.0
+# reports these exact entries as weakly_exposed false negatives (zero
+# reachable-unrevealed findings) because the assertion-bearing matrix is
+# indirect through serde and the private validation helpers. Keep these
+# receipts narrow and re-verify after any edit to delivery_transaction.rs.
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:d2879f9a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on PlannedDelivery deserialization through Self::new: contract_round_trips_each_serialized_shape_and_lifecycle_state asserts the complete round-trip, while deserialization_reapplies_invariants_for_each_receipt_shape asserts invalid line and thread cases. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:field_construction:ff727d7b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on reconciliation receipt collection: contract_round_trips_each_serialized_shape_and_lifecycle_state round-trips the complete reconciliation and asserts receipt identity. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:field_construction:82239331"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on transaction deserialization mapping: contract_round_trips_each_serialized_shape_and_lifecycle_state round-trips every active and terminal transaction state. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:4729cbf7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on the initial DeliveryTransaction constructor result: transaction_constructor_returns_the_complete_initial_contract asserts the full object and contract_round_trips_each_serialized_shape_and_lifecycle_state exercises its serialized form. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:c993aa27"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on successful lifecycle transition: contract_round_trips_each_serialized_shape_and_lifecycle_state asserts every state after each transition and round-trips it. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:field_construction:72d43494"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on the cleanup_attempted failure input: failure_after_creation_records_cleanup_success_or_failure and contract_round_trips_each_serialized_shape_and_lifecycle_state assert cleanup success, cleanup failure, and direct failure outcomes. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:b5bde165"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on atomic failure recording: failure_and_cleanup_guards_reject_terminal_or_unstarted_states asserts the error and unchanged state, while the success matrix asserts the recorded failure and terminal state. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:predicate:e345bbd2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on cleanup-attempted state validation: failure_and_cleanup_guards_reject_terminal_or_unstarted_states covers cleanup before attempt, not-attempted outcome, and successful cleanup with exact state assertions. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:eb97f9f8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on successful cleanup completion: failure_after_creation_records_cleanup_success_or_failure and contract_round_trips_each_serialized_shape_and_lifecycle_state assert CleanedUp plus CleanupOutcome::Succeeded. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:847ef79d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative on receipt action/thread validation: contract_round_trips_each_serialized_shape_and_lifecycle_state covers inline and reply receipts, while reply_and_inline_thread_identity_rules_are_fail_closed rejects both invalid pairings. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:e3d8ca43"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on successful receipt validation: contract_round_trips_each_serialized_shape_and_lifecycle_state round-trips both receipt actions and deserialization_reapplies_invariants_for_each_receipt_shape rejects a wrong confirmed head. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:e6096f59"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on deterministic reconciliation identity ordering: exact_reconciliation_returns_sorted_confirmed_receipts asserts full receipt order and contract_round_trips_each_serialized_shape_and_lifecycle_state asserts serialized order. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:617ade5e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on reconciliation validation completion: deserialization_reapplies_invariants_for_each_receipt_shape rejects wrong schema, duplicate identities, and duplicate comments, while exact_reconciliation_returns_sorted_confirmed_receipts asserts the complete valid result. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:f648dbc5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative on deserialized transaction state validation: contract_round_trips_each_serialized_shape_and_lifecycle_state round-trips active, failed, cleanup-attempted, and cleaned-up states, while deserialization_reapplies_invariants_for_each_receipt_shape rejects an inconsistent failed state. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:f719be85"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative on ReceiptsPersisted validation: contract_round_trips_each_serialized_shape_and_lifecycle_state reaches and round-trips the exact terminal state with no failure or cleanup outcome. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:260d1e71"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on complete transaction validation: contract_round_trips_each_serialized_shape_and_lifecycle_state asserts exact equality for every valid serialized state and deserialization_reapplies_invariants_for_each_receipt_shape asserts invalid state rejection. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:7dfe7184"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative on planned delivery action/thread validation: contract_round_trips_each_serialized_shape_and_lifecycle_state covers inline and reply, and reply_and_inline_thread_identity_rules_are_fail_closed asserts both invalid combinations. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:9d24ac53"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on successful planned-delivery validation: contract_round_trips_each_serialized_shape_and_lifecycle_state asserts exact inline and reply identity, while delivery_validation_rejects_each_invalid_identity_component covers invalid line, side, head, digest, and thread data. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:888e5e89"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on valid head validation: delivery_validation_rejects_each_invalid_identity_component covers invalid heads and contract_round_trips_each_serialized_shape_and_lifecycle_state uses the exact valid 40-character head. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:816563f8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on valid identifier validation: the exact delivery identity and mismatch matrices assert valid claim, path, thread, comment, review, and digest identifiers plus their invalid counterparts. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:8094a674"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on digest-inclusive identity labels: delivery_identity_labels_are_stable_for_inline_and_reply asserts exact inline and reply labels including digest, and reconciliation_rejects_wrong_identity_or_head asserts full missing/unexpected labels. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:match_arm:2c0b0db1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative on DeliveryAction serialization labels: contract_round_trips_each_serialized_shape_and_lifecycle_state asserts both inline and reply strings, and transaction_serialization_preserves_contract_fields asserts the serialized reply action. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:53a03dc2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on the legal transition matrix: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts every allowed transition and three forbidden transitions. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success and cleanup paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.10"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.11"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.12"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:65d0712c.13"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on legal transition matrix arm: legal_transition_matrix_covers_success_and_cleanup_paths directly asserts the complete success and cleanup transition set. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:error_path:12d1cdd0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 test-fixture false-positive on JSON fixture construction inside deserialization_reapplies_invariants_for_each_receipt_shape: the fixture is setup and its exact deserialization error is asserted. A test setup error is itself test failure; no additional oracle is possible. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:error_path:318d934e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 test-fixture false-positive on serde_json serialization setup inside contract_round_trips_each_serialized_shape_and_lifecycle_state: the complete round-trip assertion is the oracle and a setup serialization error is itself test failure. Re-verify after edits to delivery_transaction.rs or an RIPR upgrade."
