@@ -1897,6 +1897,13 @@ def require_claim_graph(root: pathlib.Path) -> None:
             fail(f"claim_graph.json {field} must be an array")
     if graph.get("mode") not in {"active", "shadow"}:
         fail(f"claim_graph.json mode is invalid: {graph.get('mode')!r}")
+    adjudicated_loser_ids = {
+        conflict.get("loser")
+        for conflict in graph.get("conflicts", [])
+        if isinstance(conflict, dict)
+        and isinstance(conflict.get("loser"), str)
+        and conflict.get("loser")
+    }
     claim_ids = []
     for index, claim in enumerate(claims):
         if not isinstance(claim, dict) or not isinstance(claim.get("id"), str):
@@ -1925,7 +1932,9 @@ def require_claim_graph(root: pathlib.Path) -> None:
                     f"claim_graph.json topics[{index}] planned_action invalid: "
                     f"{planned_action!r}"
                 )
-            if disposition in {
+            if topic_id in adjudicated_loser_ids and topic.get("delivery") == "no-human-surface":
+                expected_action = "none"
+            elif disposition in {
                 "already_covered",
                 "accepted_tradeoff",
                 "fixed_on_current_head",
@@ -11891,6 +11900,17 @@ def self_test_claim_graph_contract() -> None:
         write_self_test_json(root / "review/metrics.json", {"head": "HEAD"})
         write_self_test_json(root / "review/proof_receipts.json", [])
         require_claim_graph(root)
+        adjudicated_loser = dict(graph["topics"][0])
+        adjudicated_loser["planned_action"] = "none"
+        adjudicated_loser["delivery"] = "no-human-surface"
+        require_claim_graph(
+            write_graph(
+                {
+                    "topics": [adjudicated_loser],
+                    "conflicts": [{"loser": "claim-1"}],
+                }
+            )
+        )
         expect_self_test_failure(
             "claim graph invalid mode",
             "mode is invalid",
