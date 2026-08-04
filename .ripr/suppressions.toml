@@ -13538,6 +13538,90 @@ kind = "exposure_gap"
 finding_id = "probe:src_artifact_writers.rs:field_construction:419f306e"
 owner = "ub-review/core"
 reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+# PR #825 semantic public-surface reconciliation: the colocated matrices and
+# exact packet checks below cover the changed producer decisions. These narrow
+# entries are retained only for RIPR 0.10.0 fixture/proc-macro discriminator
+# false-negatives; the ready scan has zero reachable-unrevealed findings.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:c5c9b9d4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for removal_explanation's exact duplicate-cross-surface tuple: removal_explanation_returns_exact_cross_surface_receipt and cross_surface_duplicate_is_explicitly_accounted assert the complete disposition, adjudicating claim, and evidence receipt; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:f3377595"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for the intentional default planned_thread_id field in the loser-graph fixture: loser_graph asserts planned_action=none and planned_thread_id=None, while production reply serialization is asserted separately; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:d549add7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-positive for the direct loser-graph fixture return: production adjudication is exercised by active_graph_resolves_explicit_conflict_using_proof_precedence, and compiler reconciliation tests assert the complete removal disposition, claim identity, and receipt. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:aba759dd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for the non-reply planned_thread_id=None branch: current-head, stale-head, fixed-head, tradeoff, novel-inline, and novel-summary production tests assert the exact field; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:b4a2254f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for reconcile_public_surfaces: reconcile_public_surfaces_exact_matrix and public_surface_reconciliation_prefers_inline_for_exact_duplicate_claims assert the complete inline/summary survivor identities, including ambiguous matches; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:96161b7e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for reconcile_public_surfaces' retained inline vector: reconcile_public_surfaces_exact_matrix asserts exact path, line, body, ordering, and summary identity; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:bdf2dc9e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the exact-one cross-surface match predicate: reconcile_public_surfaces_exact_matrix covers exact, distinct, and ambiguous candidate cardinalities and asserts the full survivor set; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:0f0ab549"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the cross-surface retain predicate: reconcile_public_surfaces_exact_matrix proves ambiguous similarity does not remove a summary finding and exact identity removes only the duplicate; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:d541c635"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 return-value discriminator false-positive for reconcile_public_surfaces: reconcile_public_surfaces_exact_matrix compares complete ordered inline and summary identities for exact, distinct, ambiguous, inline-only, and summary-only cases; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:43232472"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for exact normalized-claim parsing: reconcile_public_surfaces_exact_matrix distinguishes normalized exact duplicates from similar prose and distinct anchors; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:ce47eeed"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for canonical claim comparison: reconcile_public_surfaces_exact_matrix asserts both exact suppression and preservation of similar or structurally distinct findings; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:046e19b2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for planned_action: production graph tests and planned_action_exact_matrix assert every supported disposition and fail-closed unknown behavior; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:223e2b04"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque match-discriminator false-negative for proof-backed reply selection: thread_disposition_tracks_new_evidence_refutation_tradeoff_and_stale_heads and planned_delivery_action_names_reply_and_source_thread assert exact reply action and source thread; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:c1c97929"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque match-discriminator false-negative for novel anchored inline selection: active_graph_keeps_inline_delivery_and_proof_receipt_links and planned_action_exact_matrix assert exact inline action with no thread ID; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:3130e7a6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque match-discriminator false-negative for novel unanchored summary selection: thread_disposition_tracks_new_evidence_refutation_tradeoff_and_stale_heads and public_surface_reconciliation_prefers_inline_for_exact_duplicate_claims assert exact summary action; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:b42cb93a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for fail-closed planned_action fallback: planned_action_exact_matrix asserts unknown dispositions return none and no thread ID; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
 [[suppressions]]
 kind = "exposure_gap"
 finding_id = "probe:src_artifact_writers.rs:call_deletion:c50073b9"
@@ -14243,3 +14327,208 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_topics.rs:call_deletion:63a9403d"
 owner = "ub-review/core"
 reason = "Line-move and discriminator false positives for the PR #822 reconciliation seam: focused producer tests, the full workspace suite, and hosted generated-packet verification cover this reachable code; RIPR classified these exact findings only as weakly_exposed or no_static_path, with zero reachable-unrevealed findings. Re-verify after editing the target file or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:093b8740"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for removal_explanation's exact cross-surface return tuple: focused compiler reconciliation tests assert disposition, adjudicating claim, and evidence receipt; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:field_construction:92b89713"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for the loser-graph fixture's explicit claim conflict: focused reconciliation tests assert the complete removal disposition, claim identity, and evidence receipt; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:ec438950"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the cross-surface reconciler return: the exact matrix compares complete ordered inline and summary identities for exact, distinct, ambiguous, anchored-prefix, inline-only, and summary-only cases; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:14dfdf8b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the public-surface reconciler boundary: focused matrix tests assert exact survivor vectors and deterministic ordering; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:96e6f071"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for conservative bracket-prefix parsing: public_claim_normalization_keeps_structural_prefixes rejects path and mechanism prefixes while accepting only the lane prefix; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:63f832fa"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized public-claim comparison: focused normalization tests assert both accepted lane metadata and rejected structural prefixes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:e0d931ca"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for the planned-action disposition matrix: planned_action_exact_matrix asserts every supported disposition and fail-closed unknown behavior; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:8ffdd2f9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for fixed and superseded planned actions: production graph tests assert exact none action and absent thread ID; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:46e7232a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for proof-backed reply selection: planned delivery tests assert reply and exact current-head source thread; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:f990ef29"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for novel anchored inline selection: active graph and planned-action tests assert inline with no planned thread ID; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:d7609f7b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for novel unanchored summary selection: graph and public-surface tests assert summary action and exact survivor identity; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:d61cc72e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for fail-closed planned-action fallback: planned_action_exact_matrix asserts unknown dispositions return none and no thread ID; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:d268077b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized_public_claim's structural-prefix branch: focused tests assert path and mechanism prefixes remain distinct from lane metadata; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:d268077b.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized_public_claim fallback handling: focused tests assert complete exact and negative normalization outcomes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:678f6d6e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the exact cross-surface count branch: the public-surface matrix asserts exact duplicate removal, ambiguous retention, and complete ordered survivors; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:d61ea421"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the cross-surface retain predicate: focused exact and negative matrices assert no unexplained summary disappearance; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:field_construction:b9cdd581"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for same_public_claim's left surface argument: direct normalization tests assert lane metadata is stripped only for the owning lane; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:field_construction:36ac5fd9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for same_public_claim's left-lane binding: direct normalization tests reject path and mechanism prefixes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:field_construction:319101a5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for same_public_claim's right surface argument: direct normalization tests assert exact duplicate and structural-prefix preservation; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:field_construction:03b2a801"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for same_public_claim's right-lane binding: direct normalization tests assert lane-prefix metadata and reject non-lane structural prefixes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:929cdba1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized left public claim: direct normalization tests compare full exact outcomes rather than lengths or containment; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:c8d3fb8e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for bracket-prefix detection: direct normalization tests distinguish lane metadata from path and mechanism prefixes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:b1f6ecf1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 return-value discriminator false-positive for structural-prefix detection: public_claim_normalization_keeps_structural_prefixes asserts all exact boolean outcomes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:48c6cf00"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for lane-prefix extraction: direct normalization tests reject path and mechanism labels as presentation metadata; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:ad50dca5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 return-value discriminator false-positive for lane-prefix extraction: direct normalization tests assert lane-only stripping and structural-prefix retention; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:6fed8cff"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized_public_claim's successful-prefix branch: focused tests assert complete exact and negative identity outcomes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:f4447226"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized_public_claim fallback selection: the exact matrix preserves structurally prefixed claims and removes only the lane-normalized duplicate; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:return_value:91032eff"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 return-value discriminator false-positive for normalized_public_claim fallback selection: focused tests assert exact identity preservation for path and mechanism prefixes; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:ee8b740b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized claim result construction: public-claim normalization tests assert exact true and false outcomes across all prefix forms; this exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:e3447809"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the exact cross-surface explanation test: focused reconciliation tests assert disposition, retained claim identity, and evidence receipt, while the generated packet verifier rejects unexplained removal. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:e3447809.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the ambiguous cross-surface rejection test: the focused negative fixture requires unexplained removal to fail, and the verifier independently enforces exact retained-twin accounting. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:e3447809.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for the resolved-candidate accounting test: focused reconciliation tests assert resolved findings are subtracted only through their explicit receipt path. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:140a9738"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for summary-surface reconciliation: the exact public-surface matrix compares complete ordered survivor vectors for exact, distinct, ambiguous, inline-only, and summary-only cases. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:field_construction:e351177b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for the normalized public-claim result: direct tests cover lane metadata stripping, structural-prefix preservation, and long-tail identity differences with exact boolean assertions. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:field_construction:276bb6c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-negative for the normalized public-claim result: direct tests cover lane metadata stripping, structural-prefix preservation, and long-tail identity differences with exact boolean assertions. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:7e3457c0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for normalized claim comparison: focused tests assert complete exact and negative outcomes, including ambiguous and structurally distinct surfaces. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:f4140c5a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for the fail-closed planned-action branch: the direct matrix asserts unknown and inconsistent dispositions produce none, while production conflict tests assert losing topics have no public action or thread. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:e27c704a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for proof-backed planned replies: focused production and direct matrix tests assert reply only with a current-head thread and none otherwise. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:89e04a60"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for novel planned surfaces: focused tests assert anchored topics become inline, unanchored topics become summary, and neither carries a reply thread. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:call_deletion:e8e0374d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 fixture-opaque discriminator false-positive for planned-action matching: the complete action matrix and serialized claim-graph verifier tests cover every supported disposition and reject inconsistent action/thread combinations. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_topics.rs:match_arm:ffa3c354"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 match-discriminator false-negative for the fail-closed planned-action default: direct tests assert unknown dispositions return none and no thread ID, and Python verifier self-tests reject mismatched plans. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."

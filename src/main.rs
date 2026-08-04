@@ -4833,10 +4833,11 @@ fn write_review_artifacts(
         &review.proof_receipts,
         &review.pr_thread_context,
     );
-    compiler_inline_comments =
-        reconcile_inline_comments(&pre_compile_claim_graph, &compiler_inline_comments);
-    compiler_summary_only_findings =
-        reconcile_summary_only_findings(&pre_compile_claim_graph, &compiler_summary_only_findings);
+    (compiler_inline_comments, compiler_summary_only_findings) = reconcile_public_surfaces(
+        &pre_compile_claim_graph,
+        &compiler_inline_comments,
+        &compiler_summary_only_findings,
+    );
     let compiler_reconciliation =
         match build_compiler_reconciliation_receipt(CompilerReconciliationInput {
             head_sha: &diff.head,
