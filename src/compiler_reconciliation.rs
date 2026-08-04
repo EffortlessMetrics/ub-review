@@ -257,7 +257,12 @@ fn removal_explanation(
         .iter()
         .filter(|retained| {
             retained.kind == "inline"
-                && same_public_claim(&retained.subject, &surface.receipt.subject)
+                && same_public_claim(
+                    &retained.subject,
+                    &retained.lane,
+                    &surface.receipt.subject,
+                    &surface.receipt.lane,
+                )
         })
         .collect::<Vec<_>>();
     if surface.receipt.kind == "summary" && matching_inline_claims.len() == 1 {

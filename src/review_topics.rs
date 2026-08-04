@@ -325,23 +325,48 @@ pub(crate) fn reconcile_public_surfaces(
     reconciled_findings.retain(|finding| {
         reconciled_comments
             .iter()
-            .filter(|comment| same_public_claim(comment.body.as_str(), finding.reason.as_str()))
+            .filter(|comment| {
+                same_public_claim(
+                    comment.body.as_str(),
+                    comment.lane.as_str(),
+                    finding.reason.as_str(),
+                    finding.lane.as_str(),
+                )
+            })
             .count()
             != 1
     });
     (reconciled_comments, reconciled_findings)
 }
 
-/// Compare only an exact normalized public claim. Similarity is deliberately
-/// not enough to suppress a distinct nearby finding.
-pub(crate) fn same_public_claim(left: &str, right: &str) -> bool {
-    let left = left
-        .split_once(']')
-        .filter(|(prefix, _)| prefix.starts_with('['))
-        .map_or(left, |(_, body)| body.trim());
-    let left = canonical_text(left);
-    let right = canonical_text(right);
+/// Compare only an exact normalized public claim. A bracketed prefix is
+/// presentation metadata only when it names the surface's own lane; a path,
+/// mechanism, or other structural prefix remains part of the claim identity.
+/// Similarity is deliberately not enough to suppress a distinct nearby
+/// finding.
+pub(crate) fn same_public_claim(
+    left: &str,
+    left_lane: &str,
+    right: &str,
+    right_lane: &str,
+) -> bool {
+    let left = normalized_public_claim(left, left_lane);
+    let right = normalized_public_claim(right, right_lane);
     !left.is_empty() && left == right
+}
+
+fn normalized_public_claim(value: &str, lane: &str) -> String {
+    value
+        .split_once(']')
+        .filter(|(prefix, _)| {
+            prefix
+                .strip_prefix('[')
+                .is_some_and(|candidate| candidate.trim() == lane.trim())
+        })
+        .map_or_else(
+            || canonical_text(value),
+            |(_, body)| canonical_text(body.trim()),
+        )
 }
 
 fn planned_action(topic: &ReviewTopic) -> String {
@@ -1567,6 +1592,25 @@ mod tests {
         assert_eq!(similar.len(), 1);
         assert_eq!(similar[0].reason, similar_summary.reason);
 
+        let other_surface_summary =
+            finding("[src/other_parser.rs:18] Parser drops the later subscript");
+        let (_, other_surface) = reconcile_public_surfaces(
+            &graph,
+            std::slice::from_ref(&exact),
+            std::slice::from_ref(&other_surface_summary),
+        );
+        assert_eq!(other_surface.len(), 1);
+        assert_eq!(other_surface[0].reason, other_surface_summary.reason);
+
+        let other_mechanism_summary = finding("[hir-lowering] Parser drops the later subscript");
+        let (_, other_mechanism) = reconcile_public_surfaces(
+            &graph,
+            std::slice::from_ref(&exact),
+            std::slice::from_ref(&other_mechanism_summary),
+        );
+        assert_eq!(other_mechanism.len(), 1);
+        assert_eq!(other_mechanism[0].reason, other_mechanism_summary.reason);
+
         let other_anchor = comment(
             "src/other_parser.rs",
             18,
@@ -1629,6 +1673,34 @@ mod tests {
         assert_eq!(all_inline[1].path, mixed_second.path);
         assert_eq!(all_summary.len(), 0);
         Ok(())
+    }
+
+    #[test]
+    fn public_claim_normalization_keeps_structural_prefixes() {
+        assert!(same_public_claim(
+            "[tests] Parser drops the later subscript",
+            "tests",
+            "Parser drops the later subscript",
+            "reviewer",
+        ));
+        assert!(!same_public_claim(
+            "[src/other_parser.rs:18] Parser drops the later subscript",
+            "tests",
+            "Parser drops the later subscript",
+            "reviewer",
+        ));
+        assert!(!same_public_claim(
+            "[hir-lowering] Parser drops the later subscript",
+            "tests",
+            "Parser drops the later subscript",
+            "reviewer",
+        ));
+        assert!(!same_public_claim(
+            "[tests] Parser drops the later subscript",
+            "tests",
+            "[src/other_parser.rs:18] Parser drops the later subscript",
+            "reviewer",
+        ));
     }
 
     #[test]
