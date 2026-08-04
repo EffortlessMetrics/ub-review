@@ -782,11 +782,18 @@ mod tests {
     }
 
     fn command_status(success: bool) -> Result<std::process::ExitStatus> {
-        let code = if success { "exit 0" } else { "exit 1" };
-        Ok(std::process::Command::new("cmd")
-            .arg("/c")
-            .arg(code)
-            .status()?)
+        #[cfg(windows)]
+        {
+            let code = if success { "exit 0" } else { "exit 1" };
+            Ok(std::process::Command::new("cmd")
+                .arg("/c")
+                .arg(code)
+                .status()?)
+        }
+        #[cfg(not(windows))]
+        {
+            Ok(std::process::Command::new(if success { "true" } else { "false" }).status()?)
+        }
     }
 
     fn scripted_output(body: &str, success: bool) -> Result<HttpPostOutput> {
@@ -1057,10 +1064,7 @@ mod tests {
             );
         }
         let success = HttpPostOutput {
-            status: std::process::Command::new("cmd")
-                .arg("/c")
-                .arg("exit 0")
-                .status()?,
+            status: command_status(true)?,
             stdout: br#"{"id":7}"#.to_vec(),
             stderr: Vec::new(),
             http_status: Some(200),
@@ -1072,10 +1076,7 @@ mod tests {
         };
         ensure!(parse_success_json(&malformed, "operation").is_err());
         let failed = HttpPostOutput {
-            status: std::process::Command::new("cmd")
-                .arg("/c")
-                .arg("exit 1")
-                .status()?,
+            status: command_status(false)?,
             stdout: Vec::new(),
             stderr: b"rejected".to_vec(),
             http_status: Some(422),
