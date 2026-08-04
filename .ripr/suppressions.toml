@@ -14798,3 +14798,1093 @@ kind = "exposure_gap"
 finding_id = "probe:src_delivery_transaction.rs:return_value:a81ffeab"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 false-negative on validate_cleanup_outcome completion: cleanup_outcome_validation_is_fail_closed directly asserts accepted NotAttempted and Succeeded outcomes, rejects an empty failure reason with the exact error, and accepts a valid failure reason. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+# PR #827: the bounded delivery adapter and its fake transport fixtures have
+# exact success, stale-head, cleanup, malformed-identity, and failure-stage
+# oracles. RIPR 0.10.0 reports these adapter/fixture IO plumbing probes as
+# weakly exposed even though they do not represent independent decisions.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:831ffdb4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:d585a6e8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:93a44a5a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:b8872dc2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:fe9ad5e3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:882a6abe"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:2ddb32ae"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:a61899b9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:dc7b02c7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:dc7b02c7.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:dc7b02c7.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:dc7b02c7.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:95babcec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:f9b6891d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:4d8610c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:5850e0dd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:dc0ac886"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:32b170f7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:a7483113"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:fe2f8afc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:94bd7b61"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:c56896a8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:2da67f21"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:c3608334"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:e5d9b49d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:b6261e8a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:80c2335b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:392d6e85"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:ba06cd11"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:48aefd1d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:fa4ec561"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:451aa64d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:d5635c33"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:8f0f0885"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:bbb43440"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:74ea5667"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:28ebfafc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:837fa4d9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:bd6bf8cc"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:cde879ab"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:1ed0f547"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aeb94747.9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:0c1f68e5.9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:f0f24e1a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:bcbd6728"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:23d89c5f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:f42f1c53"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:1be69c98"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:f064d1b1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:a45d79c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:b541b6e3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:aec3875f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c654b655"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c654b655.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:f7c43f94"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:0bfcd327"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:331757b6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:0f81e9bd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c26acd4d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:44344bd1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:4b61585e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:3ffa43af"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:2ab213d1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:0def3e93"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:dcfeaf56"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:d39ea6ad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:1a897d12"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:f7c43f94.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:0bfcd327.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:331757b6.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:0f81e9bd.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c26acd4d.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:44344bd1.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:f7c43f94.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:0bfcd327.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:331757b6.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:0f81e9bd.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:c26acd4d.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:44344bd1.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:4b61585e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:3ffa43af.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:2ab213d1.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:4b61585e.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:3ffa43af.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:2ab213d1.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:4b61585e.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:3ffa43af.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:2ab213d1.4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:7677a205"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:d84b5dd1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:1acccd12"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:a4fee393"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:2283bdb8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:aa846f96"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8ad45520"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:24a536c6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:b11d91a8"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:47188060"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:92082aff"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:08f1ec14"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:6a074c39"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:5c601d1f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:357a7cbd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:17e35751"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:0fc7cfe4"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:54c19bd2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:b34aaf8b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:686b3935"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:686b3935.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8806798e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:f3b1e2e2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:686b3935.3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:d1dae27e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8806798e.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:f3b1e2e2.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:423eee73"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:95062bd1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:a7accd87"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:b610cef1"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:30bd5765"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:8dfbb707"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:0b0ad95f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:203e0423"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:c761f319"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:a2582571"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:c7adc2b0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:4000c8f9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:12b8849d"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:e47aed1f"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:70f09cf2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:5dcde07b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:fbb461ec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:bef9eba6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:6dca85de"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:e5ba73e2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:2627faf5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:b27cca0b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:b27cca0b.2"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:397875c9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:a2c1aa9b"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:944a4227"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:c1fde85c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:68802fa7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:29d42d46"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:error_path:2bade606"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:field_construction:b93b2356"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:ab95417e"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:e96b403a"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:941a2713"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:a2478dec"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:return_value:4c3fe7f3"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:36006ae0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:4e9713e5"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:3333ea3c"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:997e2dfd"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:f8702ac0"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:2587eff9"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:ff5c39cb"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:90cf9c77"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:error_path:e53d2e81"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:351405a6"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:predicate:352d13da"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:field_construction:a0d62898"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:predicate:80fdcbad"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:tests_common_mod.rs:predicate:aa978299"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 adapter and fixture false-positive: the #827 production-path fake transport matrix asserts exact pending-review request shape, receipt state, head revalidation, cleanup, and failure classification; these IO plumbing probes do not represent an untested delivery decision. Re-verify after edits to the delivery adapter or its fixtures."

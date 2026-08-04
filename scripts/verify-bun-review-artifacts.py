@@ -8499,6 +8499,8 @@ def require_delivery_transaction_artifacts(root: pathlib.Path) -> None:
         if receipts_path.exists():
             fail("failed delivery transaction must not emit standalone receipts")
         return
+    if state != "receipts_persisted":
+        fail("delivery reconciliation requires a receipts_persisted transaction")
     reconciliation = load_json(reconciliation_path)
     if reconciliation.get("schema") != "ub-review.delivery_reconciliation.v1":
         fail("delivery reconciliation has the wrong schema")
@@ -8557,9 +8559,8 @@ def require_delivery_transaction_artifacts(root: pathlib.Path) -> None:
         if identity in identities:
             fail("delivery reconciliation contains duplicate identities")
         identities.add(identity)
-    if receipts_path.exists():
-        if load_json(receipts_path) != receipts:
-            fail("delivery-receipts.json does not match reconciliation receipts")
+    if load_json(receipts_path) != receipts:
+        fail("delivery-receipts.json does not match reconciliation receipts")
 
 
 def self_test_delivery_transaction_contract() -> None:
@@ -8619,6 +8620,7 @@ def self_test_delivery_transaction_contract() -> None:
         write_self_test_json(root / "review/delivery-receipts.json", [receipt])
         require_delivery_transaction_artifacts(root)
         receipt["confirmed_head_sha"] = "another-head"
+        write_self_test_json(root / "review/delivery-receipts.json", [receipt])
         write_self_test_json(
             root / "review/delivery-reconciliation.json",
             {

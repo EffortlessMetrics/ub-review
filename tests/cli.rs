@@ -5489,15 +5489,14 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     let requests = join_fake_provider(handle)?;
     assert_eq!(requests.len(), 5);
     let request_text = &requests[4];
-    assert!(
-        request_text
-            .starts_with("PUT /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987 HTTP/1.1")
-    );
+    assert!(request_text.starts_with(
+        "POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events HTTP/1.1"
+    ));
     assert!(request_text.contains("Authorization: Bearer test-token-redacted"));
     assert!(request_text.contains("\"event\": \"COMMENT\""));
     assert!(request_text.contains("\"body\": \"## Test proof"));
     assert!(requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 "));
-    assert!(requests[1].contains("\"event\": \"PENDING\""));
+    assert!(!requests[1].contains("\"event\": \"PENDING\""));
     assert!(
         requests[2]
             .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
@@ -5683,20 +5682,23 @@ fn post_failure_attempts_cleanup_and_receipts_cleanup_success() -> Result<()> {
     )?;
     let requests = join_fake_provider(handle)?;
     assert!(
-        requests[4].starts_with("PUT /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+        requests[4]
+            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/events")
     );
     assert!(
         requests[5].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
     );
     assert!(stderr.contains("pending-review delivery transaction"));
     let transaction: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/delivery-transaction.json"))?)?;
+        serde_json::from_slice(&fs::read(out.join("delivery-transaction.json"))?)?;
     assert_eq!(
         transaction["state"], "cleaned_up",
         "transaction={transaction}"
     );
     assert_eq!(transaction["cleanup"]["status"], "succeeded");
     assert!(transaction["failure"]["reason"].as_str().is_some());
+    assert!(!out.join("delivery-reconciliation.json").exists());
+    assert!(!out.join("delivery-receipts.json").exists());
     Ok(())
 }
 
@@ -5714,7 +5716,7 @@ fn post_failure_receipts_cleanup_failure() -> Result<()> {
         }))?,
     )?;
     let (github_api_url, handle) = spawn_fake_github_api_submit_failure(false)?;
-    let _stderr = run_expect_failure(
+    let stderr = run_expect_failure(
         temp.path(),
         env!("CARGO_BIN_EXE_ub-review"),
         &[
@@ -5739,10 +5741,13 @@ fn post_failure_receipts_cleanup_failure() -> Result<()> {
         requests[5].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
     );
     let transaction: serde_json::Value =
-        serde_json::from_slice(&fs::read(out.join("review/delivery-transaction.json"))?)?;
+        serde_json::from_slice(&fs::read(out.join("delivery-transaction.json"))?)?;
     assert_eq!(transaction["state"], "failed");
     assert_eq!(transaction["cleanup"]["status"], "failed");
     assert!(transaction["cleanup"]["reason"].as_str().is_some());
+    assert!(stderr.contains("pending-review delivery transaction"));
+    assert!(!out.join("delivery-reconciliation.json").exists());
+    assert!(!out.join("delivery-receipts.json").exists());
     Ok(())
 }
 

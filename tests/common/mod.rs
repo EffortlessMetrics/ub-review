@@ -306,15 +306,15 @@ fn handle_fake_github_request_at(
             serde_json::json!([])
         };
         ("HTTP/1.1 200 OK", comments)
-    } else if request_line.starts_with("PUT ")
-        && request_line.contains("/reviews/987 ")
+    } else if request_line.starts_with("POST ")
+        && request_line.contains("/reviews/987/events ")
         && fail_submission
     {
         (
             "HTTP/1.1 500 Internal Server Error",
             serde_json::json!({"message": "submit failed"}),
         )
-    } else if request_line.starts_with("PUT ") && request_line.contains("/reviews/987 ") {
+    } else if request_line.starts_with("POST ") && request_line.contains("/reviews/987/events ") {
         (
             "HTTP/1.1 200 OK",
             serde_json::json!({"id": 988, "state": "COMMENTED", "body": "fake review posted"}),
@@ -335,11 +335,15 @@ fn handle_fake_github_request_at(
         )
     };
     let response_body = serde_json::to_vec(&response)?;
-    write!(
-        stream,
-        "{status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        response_body.len()
-    )?;
+    if status == "HTTP/1.1 204 No Content" {
+        write!(stream, "{status}\r\nConnection: close\r\n\r\n")?;
+    } else {
+        write!(
+            stream,
+            "{status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+            response_body.len()
+        )?;
+    }
     stream.write_all(&response_body)?;
     Ok(request_text)
 }
