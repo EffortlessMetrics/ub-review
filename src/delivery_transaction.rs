@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 pub const DELIVERY_TRANSACTION_SCHEMA: &str = "ub-review.delivery_transaction.v1";
 pub const DELIVERY_RECEIPT_SCHEMA: &str = "ub-review.delivery_receipt.v1";
+pub const DELIVERY_RECONCILIATION_SCHEMA: &str = "ub-review.delivery_reconciliation.v1";
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,6 +38,7 @@ impl DeliveryLocation {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(try_from = "RawPlannedDelivery")]
 pub struct PlannedDelivery {
     exact_head_sha: String,
     claim_id: String,
@@ -73,6 +75,7 @@ impl PlannedDelivery {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "RawObservedDelivery")]
 pub struct ObservedDelivery {
     comment_id: String,
     delivery: PlannedDelivery,
@@ -90,6 +93,7 @@ impl ObservedDelivery {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "RawDeliveryReceipt")]
 pub struct DeliveryReceipt {
     schema: String,
     exact_head_sha: String,
@@ -106,6 +110,7 @@ pub struct DeliveryReceipt {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "RawDeliveryReconciliation")]
 pub struct DeliveryReconciliation {
     schema: String,
     exact_head_sha: String,
@@ -156,6 +161,7 @@ pub struct DeliveryFailure {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(try_from = "RawDeliveryTransaction")]
 pub struct DeliveryTransaction {
     schema: String,
     exact_head_sha: String,
@@ -163,6 +169,150 @@ pub struct DeliveryTransaction {
     state: DeliveryTransactionState,
     failure: Option<DeliveryFailure>,
     cleanup: CleanupOutcome,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawPlannedDelivery {
+    exact_head_sha: String,
+    claim_id: String,
+    action: DeliveryAction,
+    path: String,
+    line: u32,
+    side: String,
+    source_thread_id: Option<String>,
+    expected_body_digest: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawObservedDelivery {
+    comment_id: String,
+    delivery: RawPlannedDelivery,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawDeliveryReceipt {
+    schema: String,
+    exact_head_sha: String,
+    claim_id: String,
+    action: DeliveryAction,
+    path: String,
+    line: u32,
+    side: String,
+    source_thread_id: Option<String>,
+    expected_body_digest: String,
+    review_id: String,
+    comment_id: String,
+    confirmed_head_sha: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawDeliveryReconciliation {
+    schema: String,
+    exact_head_sha: String,
+    planned_count: usize,
+    observed_count: usize,
+    receipts: Vec<RawDeliveryReceipt>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RawDeliveryTransaction {
+    schema: String,
+    exact_head_sha: String,
+    planned: Vec<RawPlannedDelivery>,
+    state: DeliveryTransactionState,
+    failure: Option<DeliveryFailure>,
+    cleanup: CleanupOutcome,
+}
+
+impl TryFrom<RawPlannedDelivery> for PlannedDelivery {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: RawPlannedDelivery) -> Result<Self> {
+        Self::new(
+            raw.exact_head_sha,
+            raw.claim_id,
+            raw.action,
+            DeliveryLocation::new(raw.path, raw.line, raw.side),
+            raw.source_thread_id,
+            raw.expected_body_digest,
+        )
+    }
+}
+
+impl TryFrom<RawObservedDelivery> for ObservedDelivery {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: RawObservedDelivery) -> Result<Self> {
+        Self::new(raw.comment_id, PlannedDelivery::try_from(raw.delivery)?)
+    }
+}
+
+impl TryFrom<RawDeliveryReceipt> for DeliveryReceipt {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: RawDeliveryReceipt) -> Result<Self> {
+        let receipt = Self {
+            schema: raw.schema,
+            exact_head_sha: raw.exact_head_sha,
+            claim_id: raw.claim_id,
+            action: raw.action,
+            path: raw.path,
+            line: raw.line,
+            side: raw.side,
+            source_thread_id: raw.source_thread_id,
+            expected_body_digest: raw.expected_body_digest,
+            review_id: raw.review_id,
+            comment_id: raw.comment_id,
+            confirmed_head_sha: raw.confirmed_head_sha,
+        };
+        validate_delivery_receipt(&receipt)?;
+        Ok(receipt)
+    }
+}
+
+impl TryFrom<RawDeliveryReconciliation> for DeliveryReconciliation {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: RawDeliveryReconciliation) -> Result<Self> {
+        let reconciliation = Self {
+            schema: raw.schema,
+            exact_head_sha: raw.exact_head_sha,
+            planned_count: raw.planned_count,
+            observed_count: raw.observed_count,
+            receipts: raw
+                .receipts
+                .into_iter()
+                .map(DeliveryReceipt::try_from)
+                .collect::<Result<Vec<_>>>()?,
+        };
+        validate_delivery_reconciliation(&reconciliation)?;
+        Ok(reconciliation)
+    }
+}
+
+impl TryFrom<RawDeliveryTransaction> for DeliveryTransaction {
+    type Error = anyhow::Error;
+
+    fn try_from(raw: RawDeliveryTransaction) -> Result<Self> {
+        ensure!(
+            raw.schema == DELIVERY_TRANSACTION_SCHEMA,
+            "delivery transaction schema must be {DELIVERY_TRANSACTION_SCHEMA}"
+        );
+        let transaction = Self {
+            schema: raw.schema,
+            exact_head_sha: raw.exact_head_sha,
+            planned: raw
+                .planned
+                .into_iter()
+                .map(PlannedDelivery::try_from)
+                .collect::<Result<Vec<_>>>()?,
+            state: raw.state,
+            failure: raw.failure,
+            cleanup: raw.cleanup,
+        };
+        validate_delivery_transaction(&transaction)?;
+        Ok(transaction)
+    }
 }
 
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -195,6 +345,21 @@ impl From<&PlannedDelivery> for DeliveryIdentity {
 impl From<&ObservedDelivery> for DeliveryIdentity {
     fn from(delivery: &ObservedDelivery) -> Self {
         DeliveryIdentity::from(&delivery.delivery)
+    }
+}
+
+impl From<&DeliveryReceipt> for DeliveryIdentity {
+    fn from(receipt: &DeliveryReceipt) -> Self {
+        Self {
+            exact_head_sha: receipt.exact_head_sha.clone(),
+            claim_id: receipt.claim_id.clone(),
+            action: receipt.action.clone(),
+            path: receipt.path.clone(),
+            line: receipt.line,
+            side: receipt.side.clone(),
+            source_thread_id: receipt.source_thread_id.clone(),
+            expected_body_digest: receipt.expected_body_digest.clone(),
+        }
     }
 }
 
@@ -245,15 +410,21 @@ impl DeliveryTransaction {
             "cannot record failure after transaction is terminal: {:?}",
             self.state
         );
-        self.failure = Some(DeliveryFailure {
-            stage,
-            reason: reason.into(),
-        });
-        if cleanup_attempted {
-            self.transition(DeliveryTransactionState::CleanupAttempted)?;
+        let reason = reason.into();
+        validate_identifier(&reason, "failure reason")?;
+        let next = if cleanup_attempted {
+            DeliveryTransactionState::CleanupAttempted
         } else {
-            self.state = DeliveryTransactionState::Failed;
-        }
+            DeliveryTransactionState::Failed
+        };
+        ensure!(
+            legal_transition(&self.state, &next),
+            "illegal delivery transaction failure transition: {:?} -> {:?}",
+            self.state,
+            next
+        );
+        self.failure = Some(DeliveryFailure { stage, reason });
+        self.state = next;
         Ok(())
     }
 
@@ -267,12 +438,19 @@ impl DeliveryTransaction {
             !matches!(outcome, CleanupOutcome::NotAttempted),
             "cleanup attempt must record success or failure"
         );
-        self.cleanup = outcome;
-        self.state = if matches!(self.cleanup, CleanupOutcome::Succeeded) {
+        let next = if matches!(outcome, CleanupOutcome::Succeeded) {
             DeliveryTransactionState::CleanedUp
         } else {
             DeliveryTransactionState::Failed
         };
+        ensure!(
+            legal_transition(&self.state, &next),
+            "illegal delivery transaction cleanup transition: {:?} -> {:?}",
+            self.state,
+            next
+        );
+        self.cleanup = outcome;
+        self.state = next;
         Ok(())
     }
 }
@@ -332,12 +510,157 @@ pub fn reconcile_deliveries(
         })
         .collect::<Result<Vec<_>>>()?;
     Ok(DeliveryReconciliation {
-        schema: DELIVERY_RECEIPT_SCHEMA.to_owned(),
+        schema: DELIVERY_RECONCILIATION_SCHEMA.to_owned(),
         exact_head_sha: exact_head_sha.to_owned(),
         planned_count: planned.len(),
         observed_count: observed.len(),
         receipts,
     })
+}
+
+fn validate_delivery_receipt(receipt: &DeliveryReceipt) -> Result<()> {
+    ensure!(
+        receipt.schema == DELIVERY_RECEIPT_SCHEMA,
+        "delivery receipt schema must be {DELIVERY_RECEIPT_SCHEMA}"
+    );
+    validate_head_sha(&receipt.exact_head_sha)?;
+    validate_identifier(&receipt.claim_id, "claim id")?;
+    validate_identifier(&receipt.path, "comment path")?;
+    ensure!(receipt.line > 0, "comment line must be positive");
+    ensure!(
+        matches!(receipt.side.as_str(), "LEFT" | "RIGHT"),
+        "comment side must be LEFT or RIGHT, got {}",
+        receipt.side
+    );
+    validate_identifier(&receipt.expected_body_digest, "expected body digest")?;
+    validate_identifier(&receipt.review_id, "review id")?;
+    validate_identifier(&receipt.comment_id, "GitHub comment id")?;
+    ensure!(
+        receipt.confirmed_head_sha == receipt.exact_head_sha,
+        "confirmed delivery head must match exact delivery head"
+    );
+    match receipt.action {
+        DeliveryAction::Inline => ensure!(
+            receipt.source_thread_id.is_none(),
+            "inline receipt must not carry a source thread id"
+        ),
+        DeliveryAction::Reply => {
+            let thread = receipt
+                .source_thread_id
+                .as_deref()
+                .ok_or_else(|| anyhow::anyhow!("reply receipt requires a source thread id"))?;
+            validate_identifier(thread, "source thread id")?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_delivery_reconciliation(reconciliation: &DeliveryReconciliation) -> Result<()> {
+    ensure!(
+        reconciliation.schema == DELIVERY_RECONCILIATION_SCHEMA,
+        "delivery reconciliation schema must be {DELIVERY_RECONCILIATION_SCHEMA}"
+    );
+    validate_head_sha(&reconciliation.exact_head_sha)?;
+    ensure!(
+        reconciliation.planned_count == reconciliation.observed_count,
+        "planned and observed delivery counts must match"
+    );
+    ensure!(
+        reconciliation.receipts.len() == reconciliation.observed_count,
+        "receipt count must match observed delivery count"
+    );
+    let mut identities = BTreeSet::new();
+    let mut comment_ids = BTreeSet::new();
+    let mut previous_identity = None;
+    for receipt in &reconciliation.receipts {
+        validate_delivery_receipt(receipt)?;
+        ensure!(
+            receipt.exact_head_sha == reconciliation.exact_head_sha,
+            "reconciliation receipt is bound to another head"
+        );
+        ensure!(
+            identities.insert(DeliveryIdentity::from(receipt)),
+            "reconciliation contains duplicate delivery identities"
+        );
+        ensure!(
+            comment_ids.insert(receipt.comment_id.clone()),
+            "reconciliation contains duplicate GitHub comment ids"
+        );
+        let identity = DeliveryIdentity::from(receipt);
+        if let Some(previous) = previous_identity {
+            ensure!(
+                previous < identity,
+                "reconciliation receipts must be in canonical order"
+            );
+        }
+        previous_identity = Some(identity);
+    }
+    Ok(())
+}
+
+fn validate_delivery_transaction(transaction: &DeliveryTransaction) -> Result<()> {
+    ensure!(
+        transaction.schema == DELIVERY_TRANSACTION_SCHEMA,
+        "delivery transaction schema must be {DELIVERY_TRANSACTION_SCHEMA}"
+    );
+    validate_head_sha(&transaction.exact_head_sha)?;
+    ensure!(
+        canonical_planned_deliveries(&transaction.exact_head_sha, transaction.planned.clone())?
+            == transaction.planned,
+        "deserialized delivery transaction planned items are not in canonical order"
+    );
+    if let Some(failure) = &transaction.failure {
+        validate_identifier(&failure.reason, "failure reason")?;
+    }
+    match transaction.state {
+        DeliveryTransactionState::Planned
+        | DeliveryTransactionState::PendingReviewCreated
+        | DeliveryTransactionState::CommentsCreated
+        | DeliveryTransactionState::CommentsReconciled
+        | DeliveryTransactionState::HeadRevalidated
+        | DeliveryTransactionState::Submitted
+        | DeliveryTransactionState::ReceiptsPersisted => {
+            ensure!(
+                transaction.failure.is_none(),
+                "active delivery transaction state cannot carry a failure"
+            );
+            ensure!(
+                transaction.cleanup == CleanupOutcome::NotAttempted,
+                "active delivery transaction state cannot carry cleanup outcome"
+            );
+        }
+        DeliveryTransactionState::CleanupAttempted => {
+            ensure!(
+                transaction.failure.is_some(),
+                "cleanup-attempted delivery transaction must carry a failure"
+            );
+            ensure!(
+                transaction.cleanup == CleanupOutcome::NotAttempted,
+                "cleanup-attempted delivery transaction cannot carry a finished cleanup outcome"
+            );
+        }
+        DeliveryTransactionState::CleanedUp => {
+            ensure!(
+                transaction.failure.is_some(),
+                "cleaned-up delivery transaction must carry a failure"
+            );
+            ensure!(
+                transaction.cleanup == CleanupOutcome::Succeeded,
+                "cleaned-up delivery transaction must carry successful cleanup"
+            );
+        }
+        DeliveryTransactionState::Failed => {
+            ensure!(
+                transaction.failure.is_some(),
+                "failed delivery transaction must carry a failure"
+            );
+            ensure!(
+                !matches!(transaction.cleanup, CleanupOutcome::Succeeded),
+                "failed delivery transaction cannot carry successful cleanup"
+            );
+        }
+    }
+    Ok(())
 }
 
 fn delivery_receipt(
@@ -434,13 +757,14 @@ fn validate_identifier(value: &str, label: &str) -> Result<()> {
 
 fn identity_label(identity: &DeliveryIdentity) -> String {
     format!(
-        "{}:{}:{}:{}:{}:{}",
+        "{}:{}:{}:{}:{}:{}:{}",
         identity.claim_id,
         identity.action.as_str(),
         identity.path,
         identity.line,
         identity.side,
-        identity.source_thread_id.as_deref().unwrap_or("-")
+        identity.source_thread_id.as_deref().unwrap_or("-"),
+        identity.expected_body_digest
     )
 }
 
@@ -475,6 +799,9 @@ fn legal_transition(current: &DeliveryTransactionState, next: &DeliveryTransacti
             DeliveryTransactionState::Submitted,
             DeliveryTransactionState::ReceiptsPersisted
         ) | (
+            DeliveryTransactionState::Planned,
+            DeliveryTransactionState::Failed
+        ) | (
             DeliveryTransactionState::PendingReviewCreated,
             DeliveryTransactionState::CleanupAttempted
         ) | (
@@ -489,6 +816,12 @@ fn legal_transition(current: &DeliveryTransactionState, next: &DeliveryTransacti
         ) | (
             DeliveryTransactionState::Submitted,
             DeliveryTransactionState::CleanupAttempted
+        ) | (
+            DeliveryTransactionState::CleanupAttempted,
+            DeliveryTransactionState::CleanedUp
+        ) | (
+            DeliveryTransactionState::CleanupAttempted,
+            DeliveryTransactionState::Failed
         )
     )
 }
@@ -577,16 +910,113 @@ mod tests {
     }
 
     #[test]
+    fn deserialization_reapplies_invariants_for_each_receipt_shape() -> Result<()> {
+        let planned_value = serde_json::to_value(inline("claim-a", "src/a.rs", 4))?;
+        let mut invalid_planned = planned_value.clone();
+        invalid_planned["line"] = 0.into();
+        let error = require_error(
+            serde_json::from_value::<PlannedDelivery>(invalid_planned),
+            "invalid planned delivery must fail on deserialization",
+        );
+        assert_eq!(error.to_string(), "comment line must be positive");
+
+        let observed_value =
+            serde_json::to_value(observed("comment-a", inline("claim-a", "src/a.rs", 4)))?;
+        let mut invalid_observed = observed_value;
+        invalid_observed["comment_id"] = "".into();
+        let error = require_error(
+            serde_json::from_value::<ObservedDelivery>(invalid_observed),
+            "invalid observed delivery must fail on deserialization",
+        );
+        assert_eq!(error.to_string(), "GitHub comment id must be non-empty");
+
+        let transaction_value = serde_json::to_value(DeliveryTransaction::new(
+            HEAD,
+            vec![inline("claim-a", "src/a.rs", 4)],
+        )?)?;
+        let mut invalid_transaction = transaction_value;
+        invalid_transaction["schema"] = "wrong.schema".into();
+        let error = require_error(
+            serde_json::from_value::<DeliveryTransaction>(invalid_transaction),
+            "invalid transaction schema must fail on deserialization",
+        );
+        assert!(error.to_string().contains("delivery transaction schema"));
+
+        let receipt = reconcile_deliveries(
+            HEAD,
+            "review-42",
+            &[inline("claim-a", "src/a.rs", 4)],
+            &[observed("comment-a", inline("claim-a", "src/a.rs", 4))],
+        )?
+        .receipts
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("expected one receipt"))?;
+        let mut invalid_receipt = serde_json::to_value(receipt)?;
+        invalid_receipt["confirmed_head_sha"] = "other-head".into();
+        let error = require_error(
+            serde_json::from_value::<DeliveryReceipt>(invalid_receipt),
+            "wrong confirmed head must fail on deserialization",
+        );
+        assert_eq!(
+            error.to_string(),
+            "confirmed delivery head must match exact delivery head"
+        );
+
+        let reconciliation = reconcile_deliveries(
+            HEAD,
+            "review-42",
+            &[inline("claim-a", "src/a.rs", 4)],
+            &[observed("comment-a", inline("claim-a", "src/a.rs", 4))],
+        )?;
+        let mut invalid_reconciliation = serde_json::to_value(reconciliation)?;
+        invalid_reconciliation["schema"] = DELIVERY_RECEIPT_SCHEMA.into();
+        let error = require_error(
+            serde_json::from_value::<DeliveryReconciliation>(invalid_reconciliation),
+            "receipt schema must not deserialize as reconciliation schema",
+        );
+        assert!(error.to_string().contains("delivery reconciliation schema"));
+
+        let valid_reconciliation = reconcile_deliveries(
+            HEAD,
+            "review-42",
+            &[inline("claim-a", "src/a.rs", 4)],
+            &[observed("comment-a", inline("claim-a", "src/a.rs", 4))],
+        )?;
+        let mut duplicate_reconciliation = serde_json::to_value(valid_reconciliation)?;
+        duplicate_reconciliation["planned_count"] = 2.into();
+        duplicate_reconciliation["observed_count"] = 2.into();
+        duplicate_reconciliation["receipts"] = serde_json::json!([
+            duplicate_reconciliation["receipts"][0].clone(),
+            duplicate_reconciliation["receipts"][0].clone()
+        ]);
+        let error = require_error(
+            serde_json::from_value::<DeliveryReconciliation>(duplicate_reconciliation),
+            "duplicate reconciliation receipts must fail on deserialization",
+        );
+        assert!(error.to_string().contains("duplicate delivery identities"));
+
+        let mut invalid_state = serde_json::to_value(DeliveryTransaction::new(HEAD, vec![])?)?;
+        invalid_state["state"] = "failed".into();
+        let error = require_error(
+            serde_json::from_value::<DeliveryTransaction>(invalid_state),
+            "inconsistent transaction state must fail on deserialization",
+        );
+        assert!(error.to_string().contains("must carry a failure"));
+        Ok(())
+    }
+
+    #[test]
     fn delivery_identity_labels_are_stable_for_inline_and_reply() {
         let inline_identity = DeliveryIdentity::from(&inline("claim-a", "src/a.rs", 4));
         assert_eq!(
             identity_label(&inline_identity),
-            "claim-a:inline:src/a.rs:4:RIGHT:-"
+            "claim-a:inline:src/a.rs:4:RIGHT:-:digest-claim-a"
         );
         let reply_identity = DeliveryIdentity::from(&reply("claim-b", "thread-7"));
         assert_eq!(
             identity_label(&reply_identity),
-            "claim-b:reply:src/lib.rs:12:RIGHT:thread-7"
+            "claim-b:reply:src/lib.rs:12:RIGHT:thread-7:digest-claim-b"
         );
     }
 
@@ -668,8 +1098,14 @@ mod tests {
         }
     }
 
-    fn require_error<T>(result: Result<T>, context: &str) -> anyhow::Error {
-        result.err().unwrap_or_else(|| anyhow::anyhow!("{context}"))
+    fn require_error<T, E>(result: std::result::Result<T, E>, context: &str) -> anyhow::Error
+    where
+        E: Into<anyhow::Error>,
+    {
+        result
+            .err()
+            .map(Into::into)
+            .unwrap_or_else(|| anyhow::anyhow!("{context}"))
     }
 
     #[test]
@@ -683,7 +1119,7 @@ mod tests {
             &[observed("comment-b", first), observed("comment-a", second)],
         )?;
 
-        assert_eq!(result.schema, DELIVERY_RECEIPT_SCHEMA);
+        assert_eq!(result.schema, DELIVERY_RECONCILIATION_SCHEMA);
         assert_eq!(result.planned_count, 2);
         assert_eq!(result.observed_count, 2);
         assert_eq!(
@@ -711,7 +1147,7 @@ mod tests {
         assert_eq!(
             result,
             DeliveryReconciliation {
-                schema: DELIVERY_RECEIPT_SCHEMA.to_owned(),
+                schema: DELIVERY_RECONCILIATION_SCHEMA.to_owned(),
                 exact_head_sha: HEAD.to_owned(),
                 planned_count: 2,
                 observed_count: 2,
@@ -750,7 +1186,7 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&result)?,
             serde_json::json!({
-                "schema": DELIVERY_RECEIPT_SCHEMA,
+                "schema": DELIVERY_RECONCILIATION_SCHEMA,
                 "exact_head_sha": HEAD,
                 "planned_count": 2,
                 "observed_count": 2,
@@ -792,7 +1228,7 @@ mod tests {
     #[test]
     fn empty_reconciliation_is_a_deterministic_empty_receipt_set() -> Result<()> {
         let result = reconcile_deliveries(HEAD, "review-42", &[], &[])?;
-        assert_eq!(result.schema, DELIVERY_RECEIPT_SCHEMA);
+        assert_eq!(result.schema, DELIVERY_RECONCILIATION_SCHEMA);
         assert_eq!(result.exact_head_sha, HEAD);
         assert_eq!(result.planned_count, 0);
         assert_eq!(result.observed_count, 0);
@@ -815,13 +1251,31 @@ mod tests {
         );
         assert_eq!(
             error.to_string(),
-            "GitHub delivery set mismatch; missing=[\"claim-b:inline:src/b.rs:5:RIGHT:-\"], unexpected=[]"
+            "GitHub delivery set mismatch; missing=[\"claim-b:inline:src/b.rs:5:RIGHT:-:digest-claim-b\"], unexpected=[]"
         );
     }
 
     #[test]
     fn reconciliation_rejects_duplicate_or_malformed_comment_ids() {
         let first = inline("claim-a", "src/a.rs", 4);
+        let second = inline("claim-b", "src/b.rs", 5);
+        let error = require_error(
+            reconcile_deliveries(
+                HEAD,
+                "review-42",
+                &[first.clone(), second.clone()],
+                &[
+                    observed("comment-a", first.clone()),
+                    observed("comment-a", second),
+                ],
+            ),
+            "duplicate returned comment IDs must fail",
+        );
+        assert_eq!(
+            error.to_string(),
+            "duplicate GitHub comment id in returned delivery set: comment-a"
+        );
+
         let duplicate = observed("comment-a", first.clone());
         let error = require_error(
             reconcile_deliveries(
@@ -862,7 +1316,7 @@ mod tests {
         );
         assert_eq!(
             error.to_string(),
-            "GitHub delivery set mismatch; missing=[\"claim-a:inline:src/a.rs:4:RIGHT:-\"], unexpected=[\"claim-other:inline:src/a.rs:4:RIGHT:-\"]"
+            "GitHub delivery set mismatch; missing=[\"claim-a:inline:src/a.rs:4:RIGHT:-:digest-claim-a\"], unexpected=[\"claim-other:inline:src/a.rs:4:RIGHT:-:digest-claim-a\"]"
         );
 
         let mut wrong_head = planned.clone();
@@ -992,6 +1446,10 @@ mod tests {
                 DeliveryTransactionState::ReceiptsPersisted,
             ),
             (
+                DeliveryTransactionState::Planned,
+                DeliveryTransactionState::Failed,
+            ),
+            (
                 DeliveryTransactionState::PendingReviewCreated,
                 DeliveryTransactionState::CleanupAttempted,
             ),
@@ -1010,6 +1468,14 @@ mod tests {
             (
                 DeliveryTransactionState::Submitted,
                 DeliveryTransactionState::CleanupAttempted,
+            ),
+            (
+                DeliveryTransactionState::CleanupAttempted,
+                DeliveryTransactionState::CleanedUp,
+            ),
+            (
+                DeliveryTransactionState::CleanupAttempted,
+                DeliveryTransactionState::Failed,
             ),
         ];
         for (current, next) in legal {
@@ -1104,6 +1570,18 @@ mod tests {
     #[test]
     fn failure_and_cleanup_guards_reject_terminal_or_unstarted_states() -> Result<()> {
         let mut planned = DeliveryTransaction::new(HEAD, vec![])?;
+        let error = require_error(
+            planned.record_failure(DeliveryFailureStage::Submission, "too early", true),
+            "cleanup from planned state must fail atomically",
+        );
+        assert!(
+            error
+                .to_string()
+                .contains("illegal delivery transaction failure transition")
+        );
+        assert_eq!(planned.state, DeliveryTransactionState::Planned);
+        assert_eq!(planned.failure, None);
+
         let error = require_error(
             planned.finish_cleanup(CleanupOutcome::Succeeded),
             "cleanup before an attempt must fail",

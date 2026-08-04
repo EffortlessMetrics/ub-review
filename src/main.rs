@@ -26,38 +26,6 @@ mod config;
 use config::*;
 mod builtin;
 pub mod delivery_transaction;
-
-#[cfg(test)]
-mod delivery_transaction_contract_tests {
-    use super::delivery_transaction::{
-        DELIVERY_TRANSACTION_SCHEMA, DeliveryAction, DeliveryLocation, DeliveryTransaction,
-    };
-
-    #[test]
-    fn public_delivery_contract_serializes_exact_initial_state() -> anyhow::Result<()> {
-        let planned = super::delivery_transaction::PlannedDelivery::new(
-            "0123456789abcdef0123456789abcdef01234567",
-            "claim-a",
-            DeliveryAction::Inline,
-            DeliveryLocation::new("src/lib.rs", 12, "RIGHT"),
-            None,
-            "digest-a",
-        )?;
-        let value = serde_json::to_value(DeliveryTransaction::new(
-            "0123456789abcdef0123456789abcdef01234567",
-            vec![planned],
-        )?)?;
-        assert_eq!(value["schema"], DELIVERY_TRANSACTION_SCHEMA);
-        assert_eq!(value["state"], "planned");
-        assert_eq!(value["planned"][0]["claim_id"], "claim-a");
-        assert_eq!(value["planned"][0]["action"], "inline");
-        assert_eq!(
-            value["planned"][0]["source_thread_id"],
-            serde_json::Value::Null
-        );
-        Ok(())
-    }
-}
 use builtin::*;
 mod gate;
 use gate::*;
