@@ -670,9 +670,70 @@ mod tests {
             final_summary_only_findings: &[],
             graph: &build_shadow_claim_graph("HEAD"),
         })?;
+        anyhow::ensure!(receipt.input_surfaces.len() == 2);
+        anyhow::ensure!(receipt.retained_surfaces.len() == 1);
         anyhow::ensure!(receipt.removed_surfaces.len() == 1);
+        anyhow::ensure!(receipt.retained_surfaces[0].kind == "inline");
+        anyhow::ensure!(receipt.retained_surfaces[0].source_artifact == "review/review.json");
+        anyhow::ensure!(receipt.retained_surfaces[0].source_index == 0);
+        anyhow::ensure!(receipt.removed_surfaces[0].surface.kind == "summary");
+        anyhow::ensure!(
+            receipt.removed_surfaces[0].surface.source_artifact == "review/review.json"
+        );
+        anyhow::ensure!(receipt.removed_surfaces[0].surface.source_index == 0);
+        anyhow::ensure!(
+            receipt.removed_surfaces[0].surface.adjudicating_claim_ids
+                == vec![receipt.retained_surfaces[0].claim_id.clone()]
+        );
         anyhow::ensure!(receipt.removed_surfaces[0].disposition == "duplicate_cross_surface");
-        anyhow::ensure!(receipt.removed_surfaces[0].evidence_receipts.len() == 1);
+        anyhow::ensure!(
+            receipt.removed_surfaces[0].evidence_receipts
+                == vec![format!(
+                    "review/claim_graph.json#claims/{}",
+                    receipt.retained_surfaces[0].claim_id
+                )]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn ambiguous_cross_surface_match_is_not_explained() -> Result<()> {
+        let first = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[tests] Parser drops the later subscript".to_owned(),
+            evidence: "focused receipt".to_owned(),
+            suggestion: None,
+        };
+        let second = ReviewInlineComment {
+            path: "src/lowering.rs".to_owned(),
+            line: 21,
+            ..first.clone()
+        };
+        let finding = summary("Parser drops the later subscript");
+        let result = build_compiler_reconciliation_receipt(CompilerReconciliationInput {
+            head_sha: "HEAD",
+            observations: &[],
+            review_inline_comments: &[first.clone(), second.clone()],
+            review_summary_only_findings: std::slice::from_ref(&finding),
+            follow_up_summary_only_findings: &[],
+            resolved_away_candidates: &[],
+            final_inline_comments: &[first, second],
+            final_summary_only_findings: &[],
+            graph: &build_shadow_claim_graph("HEAD"),
+        });
+        let error = result
+            .err()
+            .ok_or_else(|| anyhow::anyhow!("ambiguous cross-surface match unexpectedly passed"))?;
+        anyhow::ensure!(
+            error
+                .to_string()
+                .contains("removed without an adjudication")
+        );
         Ok(())
     }
 
