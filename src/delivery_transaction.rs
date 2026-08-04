@@ -72,6 +72,14 @@ impl PlannedDelivery {
         validate_planned_delivery(&delivery.exact_head_sha, &delivery)?;
         Ok(delivery)
     }
+
+    pub(crate) fn location(&self) -> (&str, u32, &str) {
+        (&self.path, self.line, &self.side)
+    }
+
+    pub(crate) fn expected_body_digest(&self) -> &str {
+        &self.expected_body_digest
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -397,6 +405,10 @@ impl DeliveryTransaction {
         );
         self.state = next;
         Ok(())
+    }
+
+    pub(crate) fn state(&self) -> &DeliveryTransactionState {
+        &self.state
     }
 
     pub fn record_failure(

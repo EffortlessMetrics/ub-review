@@ -5487,15 +5487,22 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 1);
-    let request_text = &requests[0];
+    assert_eq!(requests.len(), 5);
+    let request_text = &requests[4];
     assert!(
         request_text
-            .starts_with("POST /repos/EffortlessMetrics/ub-review/pulls/123/reviews HTTP/1.1")
+            .starts_with("PUT /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987 HTTP/1.1")
     );
     assert!(request_text.contains("Authorization: Bearer test-token-redacted"));
     assert!(request_text.contains("\"event\": \"COMMENT\""));
-    assert!(request_text.contains("\"comments\": []"));
+    assert!(request_text.contains("\"body\": \"## Test proof"));
+    assert!(requests[0].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 "));
+    assert!(requests[1].contains("\"event\": \"PENDING\""));
+    assert!(
+        requests[2]
+            .starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987/comments")
+    );
+    assert!(requests[3].starts_with("GET /repos/EffortlessMetrics/ub-review/pulls/123 "));
 
     let post_result_path = out.join("post-result.json");
     assert!(post_result_path.exists());
@@ -5517,12 +5524,12 @@ fn post_receipt_writes_success_receipt_with_fake_github_api() -> Result<()> {
     assert_eq!(post_result["review_event"], "COMMENT");
     assert_eq!(post_result["review_comment_count"], 0);
     assert_eq!(post_result["diff_patch_exists"], false);
-    assert_eq!(post_result["http_status"], 201);
+    assert_eq!(post_result["http_status"], 200);
     assert_eq!(post_result["token_present"], true);
     assert_eq!(post_result["payload_written"], true);
     assert_eq!(post_result["post_stdout_written"], true);
     assert_eq!(post_result["post_stderr_written"], true);
-    assert_eq!(post_result["response"]["id"], 987);
+    assert_eq!(post_result["response"]["id"], 988);
     assert_eq!(post_result["response"]["state"], "COMMENTED");
 
     for path in [
@@ -5578,7 +5585,21 @@ index 1111111..2222222 100644
         }))?,
     )
     .with_context(|| format!("write {}", review_json.display()))?;
-    let (github_api_url, handle) = spawn_fake_github_api()?;
+    fs::write(
+        temp.path().join("claim_graph.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": "test-head",
+            "topics": [{
+                "claim_id": "claim-inline-1",
+                "head_sha": "test-head",
+                "path": "src/lib.rs",
+                "anchor": 2,
+                "planned_action": "inline"
+            }]
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_api_with_inline_comment(true)?;
 
     run(
         temp.path(),
@@ -5603,8 +5624,8 @@ index 1111111..2222222 100644
     )?;
 
     let requests = join_fake_provider(handle)?;
-    assert_eq!(requests.len(), 1);
-    let request_text = &requests[0];
+    assert_eq!(requests.len(), 5);
+    let request_text = &requests[1];
     assert!(request_text.contains("```suggestion\\nlet header = guarded_header_read(ptr)?;\\n```"));
     assert!(
         !request_text.contains("\"suggestion\""),
@@ -5623,6 +5644,105 @@ index 1111111..2222222 100644
         serde_json::from_str(&fs::read_to_string(out.join("post-result.json"))?)?;
     assert_eq!(post_result["status"], "ok");
     assert_eq!(post_result["comments"], 1);
+    Ok(())
+}
+
+#[test]
+fn post_failure_attempts_cleanup_and_receipts_cleanup_success() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- Submit failure must clean up the pending review.",
+            "comments": []
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_api_submit_failure(true)?;
+    let stderr = run_expect_failure(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+            "--fail-on-post-error",
+        ],
+    )?;
+    let requests = join_fake_provider(handle)?;
+    assert!(
+        requests[4].starts_with("PUT /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+    );
+    assert!(
+        requests[5].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+    );
+    assert!(stderr.contains("pending-review delivery transaction"));
+    let transaction: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/delivery-transaction.json"))?)?;
+    assert_eq!(
+        transaction["state"], "cleaned_up",
+        "transaction={transaction}"
+    );
+    assert_eq!(transaction["cleanup"]["status"], "succeeded");
+    assert!(transaction["failure"]["reason"].as_str().is_some());
+    Ok(())
+}
+
+#[test]
+fn post_failure_receipts_cleanup_failure() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let review_json = temp.path().join("github-review.json");
+    let out = temp.path().join("post");
+    fs::write(
+        &review_json,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "event": "COMMENT",
+            "body": "## Test proof\n\n- Cleanup failure remains explicit.",
+            "comments": []
+        }))?,
+    )?;
+    let (github_api_url, handle) = spawn_fake_github_api_submit_failure(false)?;
+    let _stderr = run_expect_failure(
+        temp.path(),
+        env!("CARGO_BIN_EXE_ub-review"),
+        &[
+            "post",
+            "--review-json",
+            path_str(&review_json)?,
+            "--out",
+            path_str(&out)?,
+            "--repo",
+            "EffortlessMetrics/ub-review",
+            "--pull-number",
+            "123",
+            "--github-token",
+            "test-token-redacted",
+            "--github-api-url",
+            &github_api_url,
+            "--fail-on-post-error",
+        ],
+    )?;
+    let requests = join_fake_provider(handle)?;
+    assert!(
+        requests[5].starts_with("DELETE /repos/EffortlessMetrics/ub-review/pulls/123/reviews/987")
+    );
+    let transaction: serde_json::Value =
+        serde_json::from_slice(&fs::read(out.join("review/delivery-transaction.json"))?)?;
+    assert_eq!(transaction["state"], "failed");
+    assert_eq!(transaction["cleanup"]["status"], "failed");
+    assert!(transaction["cleanup"]["reason"].as_str().is_some());
     Ok(())
 }
 

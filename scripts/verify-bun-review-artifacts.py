@@ -8434,6 +8434,209 @@ def require_post_receipt(root: pathlib.Path) -> None:
             fail("post-error.json failure_tolerated is not true")
 
 
+def require_delivery_transaction_artifacts(root: pathlib.Path) -> None:
+    """Validate the optional #827 producer/transport receipt packet.
+
+    Review runs that do not post have no delivery transaction files. When the
+    posting command emits them, this mirror checks the durable identity and
+    exact-set contract without attempting to reproduce Rust reconciliation.
+    """
+    transaction_path = root / "review/delivery-transaction.json"
+    reconciliation_path = root / "review/delivery-reconciliation.json"
+    receipts_path = root / "review/delivery-receipts.json"
+    present = [path.exists() for path in (transaction_path, reconciliation_path)]
+    if not any(present):
+        return
+    if reconciliation_path.exists() and not transaction_path.exists():
+        fail("delivery reconciliation requires delivery transaction")
+    transaction = load_json(transaction_path)
+    if transaction.get("schema") != "ub-review.delivery_transaction.v1":
+        fail("delivery transaction has the wrong schema")
+    head_sha = transaction.get("exact_head_sha")
+    if not isinstance(head_sha, str) or not head_sha:
+        fail("delivery transaction exact_head_sha is missing")
+    state = transaction.get("state")
+    if state not in {
+        "planned",
+        "pending_review_created",
+        "comments_created",
+        "comments_reconciled",
+        "head_revalidated",
+        "submitted",
+        "receipts_persisted",
+        "cleanup_attempted",
+        "cleaned_up",
+        "failed",
+    }:
+        fail(f"delivery transaction state is unsupported: {state!r}")
+    planned = transaction.get("planned")
+    if not isinstance(planned, list):
+        fail("delivery transaction planned must be an array")
+    identity_fields = (
+        "exact_head_sha",
+        "claim_id",
+        "action",
+        "path",
+        "line",
+        "side",
+        "source_thread_id",
+        "expected_body_digest",
+    )
+    for index, item in enumerate(planned):
+        if not isinstance(item, dict):
+            fail(f"delivery transaction planned item {index} is not an object")
+        missing = [field for field in identity_fields if field not in item]
+        if missing:
+            fail(
+                f"delivery transaction planned item {index} is missing "
+                f"identity fields: {', '.join(missing)}"
+            )
+    if not reconciliation_path.exists():
+        if state not in {"failed", "cleaned_up"} or not isinstance(
+            transaction.get("failure"), dict
+        ):
+            fail("incomplete delivery transaction lacks terminal failure receipt")
+        if receipts_path.exists():
+            fail("failed delivery transaction must not emit standalone receipts")
+        return
+    reconciliation = load_json(reconciliation_path)
+    if reconciliation.get("schema") != "ub-review.delivery_reconciliation.v1":
+        fail("delivery reconciliation has the wrong schema")
+    if reconciliation.get("exact_head_sha") != head_sha:
+        fail("delivery reconciliation exact_head_sha does not match transaction")
+    receipts = reconciliation.get("receipts")
+    if not isinstance(receipts, list):
+        fail("delivery reconciliation receipts must be an array")
+    if reconciliation.get("planned_count") != reconciliation.get("observed_count"):
+        fail("delivery reconciliation planned and observed counts differ")
+    if reconciliation.get("observed_count") != len(receipts):
+        fail("delivery reconciliation receipt count does not match observed count")
+    if reconciliation.get("planned_count") != len(planned):
+        fail("delivery reconciliation planned count does not match transaction")
+    if reconciliation.get("observed_count") != len(planned):
+        fail("delivery reconciliation does not confirm every planned delivery")
+    if not receipts_path.exists():
+        fail("delivery reconciliation requires standalone delivery receipts")
+    planned_identities = {
+        tuple(
+            item.get(field)
+            for field in identity_fields
+        )
+        for item in planned
+    }
+    if len(planned_identities) != len(planned):
+        fail("delivery transaction planned identities are duplicated or malformed")
+    review_id = reconciliation.get("review_id")
+    if not isinstance(review_id, str) or not review_id:
+        fail("delivery reconciliation review_id is missing")
+    comment_ids = set()
+    identities = set()
+    for index, receipt in enumerate(receipts):
+        if not isinstance(receipt, dict):
+            fail(f"delivery receipt {index} is not an object")
+        if receipt.get("schema") != "ub-review.delivery_receipt.v1":
+            fail(f"delivery receipt {index} has the wrong schema")
+        if receipt.get("exact_head_sha") != head_sha:
+            fail(f"delivery receipt {index} is bound to another head")
+        if receipt.get("confirmed_head_sha") != head_sha:
+            fail(f"delivery receipt {index} confirmation head is wrong")
+        if receipt.get("review_id") != review_id:
+            fail(f"delivery receipt {index} is bound to another review")
+        comment_id = receipt.get("comment_id")
+        if not isinstance(comment_id, str) or not comment_id:
+            fail(f"delivery receipt {index} has no comment id")
+        if comment_id in comment_ids:
+            fail("delivery reconciliation contains duplicate comment ids")
+        comment_ids.add(comment_id)
+        identity = tuple(
+            receipt.get(field)
+            for field in identity_fields
+        )
+        if identity not in planned_identities:
+            fail(f"delivery receipt {index} does not match a planned identity")
+        if identity in identities:
+            fail("delivery reconciliation contains duplicate identities")
+        identities.add(identity)
+    if receipts_path.exists():
+        if load_json(receipts_path) != receipts:
+            fail("delivery-receipts.json does not match reconciliation receipts")
+
+
+def self_test_delivery_transaction_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        head = "0123456789abcdef0123456789abcdef01234567"
+        receipt = {
+            "schema": "ub-review.delivery_receipt.v1",
+            "exact_head_sha": head,
+            "claim_id": "claim-1",
+            "action": "inline",
+            "path": "src/lib.rs",
+            "line": 12,
+            "side": "RIGHT",
+            "source_thread_id": None,
+            "expected_body_digest": "digest-1",
+            "review_id": "review-1",
+            "comment_id": "comment-1",
+            "confirmed_head_sha": head,
+        }
+        write_self_test_json(
+            root / "review/delivery-transaction.json",
+            {
+                "schema": "ub-review.delivery_transaction.v1",
+                "exact_head_sha": head,
+                "planned": [
+                    {
+                        key: receipt[key]
+                        for key in (
+                            "exact_head_sha",
+                            "claim_id",
+                            "action",
+                            "path",
+                            "line",
+                            "side",
+                            "source_thread_id",
+                            "expected_body_digest",
+                        )
+                    }
+                ],
+                "state": "receipts_persisted",
+                "failure": None,
+                "cleanup": {"status": "not_attempted"},
+            },
+        )
+        write_self_test_json(
+            root / "review/delivery-reconciliation.json",
+            {
+                "schema": "ub-review.delivery_reconciliation.v1",
+                "exact_head_sha": head,
+                "review_id": "review-1",
+                "planned_count": 1,
+                "observed_count": 1,
+                "receipts": [receipt],
+            },
+        )
+        write_self_test_json(root / "review/delivery-receipts.json", [receipt])
+        require_delivery_transaction_artifacts(root)
+        receipt["confirmed_head_sha"] = "another-head"
+        write_self_test_json(
+            root / "review/delivery-reconciliation.json",
+            {
+                "schema": "ub-review.delivery_reconciliation.v1",
+                "exact_head_sha": head,
+                "review_id": "review-1",
+                "planned_count": 1,
+                "observed_count": 1,
+                "receipts": [receipt],
+            },
+        )
+        expect_self_test_failure(
+            "delivery transaction wrong confirmation head",
+            "confirmation head is wrong",
+            lambda: require_delivery_transaction_artifacts(root),
+        )
+
+
 def require_no_secret_markers(root: pathlib.Path) -> None:
     paths = [
         root / "running-summary.md",
@@ -8454,6 +8657,15 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/post-error.json",
         root / "review/post-stdout.json",
         root / "review/post-stderr.txt",
+        root / "review/pending-review-stdout.json",
+        root / "review/pending-review-stderr.txt",
+        root / "review/delivery-pending-review-payload.json",
+        root / "review/delivery-pending-review-comments.json",
+        root / "review/delivery-submit-review-payload.json",
+        root / "review/delivery-cleanup-payload.json",
+        root / "review/delivery-transaction.json",
+        root / "review/delivery-reconciliation.json",
+        root / "review/delivery-receipts.json",
         root / "review/resource_leases.json",
         root / "review/resource_plan.md",
         root / "review/tool-gate-outcomes.json",
@@ -12103,6 +12315,7 @@ def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
     self_test_claim_graph_contract()
+    self_test_delivery_transaction_contract()
     if secret_leak_marker("OPENCODE=opencodeSecret123456") != "OPENCODE":
         fail("self-test OPENCODE secret assignment was not detected")
     if secret_leak_marker("OPENCODE=${{ secrets.OPENCODE }}") is not None:
@@ -13000,6 +13213,7 @@ def main(argv: list[str]) -> int:
     if args.require_no_model_evidence_failures:
         require_no_model_evidence_failures(review)
     require_post_receipt(root)
+    require_delivery_transaction_artifacts(root)
     require_no_secret_markers(root)
 
     usable_lanes = [

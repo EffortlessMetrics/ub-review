@@ -1,8 +1,8 @@
 //! Box-aware evidence packet runner for UB-focused PR review.
 //!
 //! The binary prepares deterministic receipts, model-review artifacts, and lane
-//! packets. Posting is a separate command that submits one grouped pull request
-//! review when explicitly configured.
+//! packets. Posting is a separate command that executes one bounded pending
+//! pull-request review transaction when explicitly configured.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs::{self, File, OpenOptions};
@@ -153,6 +153,8 @@ mod run_args;
 pub(crate) use run_args::*;
 mod post_command;
 pub(crate) use post_command::*;
+mod github_delivery;
+pub(crate) use github_delivery::*;
 mod plan_artifacts;
 use plan_artifacts::{
     PlanArtifactSelectors, RepairQueueEntry, RepairQueueFile, prepare_plan, write_plan_artifacts,

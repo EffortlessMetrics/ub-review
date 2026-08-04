@@ -104,16 +104,44 @@ pub fn serve_fake_http(
 }
 
 pub fn spawn_fake_github_api() -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_github_api_with_options(false, false, true)
+}
+
+pub fn spawn_fake_github_api_with_inline_comment(
+    include_inline_comment: bool,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_github_api_with_options(include_inline_comment, false, true)
+}
+
+pub fn spawn_fake_github_api_submit_failure(
+    cleanup_success: bool,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
+    spawn_fake_github_api_with_options(false, true, cleanup_success)
+}
+
+fn spawn_fake_github_api_with_options(
+    include_inline_comment: bool,
+    fail_submission: bool,
+    cleanup_success: bool,
+) -> Result<(String, thread::JoinHandle<Result<Vec<String>>>)> {
     let listener = TcpListener::bind("127.0.0.1:0")?;
     listener.set_nonblocking(true)?;
     let url = format!("http://{}", listener.local_addr()?);
     let handle = thread::spawn(move || {
         serve_fake_http(
             listener,
-            1,
+            if fail_submission { 6 } else { 5 },
             "GitHub",
             Duration::from_secs(20),
-            |_idx, stream| handle_fake_github_request(stream),
+            move |idx, stream| {
+                handle_fake_github_request_at(
+                    idx,
+                    stream,
+                    include_inline_comment,
+                    fail_submission,
+                    cleanup_success,
+                )
+            },
         )
     });
     Ok((url, handle))
@@ -214,7 +242,13 @@ pub fn handle_fake_setup_ci_request(mut stream: TcpStream, config_exists: bool) 
     ))
 }
 
-pub fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
+fn handle_fake_github_request_at(
+    _idx: usize,
+    mut stream: TcpStream,
+    include_inline_comment: bool,
+    fail_submission: bool,
+    cleanup_success: bool,
+) -> Result<String> {
     stream.set_nonblocking(false)?;
     stream.set_read_timeout(Some(Duration::from_secs(5)))?;
     stream.set_write_timeout(Some(Duration::from_secs(5)))?;
@@ -243,14 +277,67 @@ pub fn handle_fake_github_request(mut stream: TcpStream) -> Result<String> {
     let mut body = vec![0; content_length];
     reader.read_exact(&mut body)?;
     let request_text = format!("{headers}{}", String::from_utf8_lossy(&body));
-    let response_body = serde_json::to_vec(&serde_json::json!({
-        "id": 987,
-        "state": "COMMENTED",
-        "body": "fake review posted"
-    }))?;
+    let request_line = headers.lines().next().unwrap_or_default();
+    let is_comment_listing = request_line.contains("/reviews/987/comments");
+    let has_inline_comment = include_inline_comment;
+    let (status, response) = if request_line.starts_with("GET /repos/")
+        && request_line.contains("/pulls/123 ")
+    {
+        (
+            "HTTP/1.1 200 OK",
+            serde_json::json!({"head": {"sha": "test-head"}}),
+        )
+    } else if request_line.starts_with("POST ") && request_line.contains("/reviews ") {
+        (
+            "HTTP/1.1 201 Created",
+            serde_json::json!({"id": 987, "state": "PENDING"}),
+        )
+    } else if is_comment_listing {
+        let comments = if has_inline_comment {
+            serde_json::json!([{
+                "id": 1001,
+                "path": "src/lib.rs",
+                "line": 2,
+                "side": "RIGHT",
+                "commit_id": "test-head",
+                "body": "[unsafe-review] Guard evidence is missing.\n\n```suggestion\nlet header = guarded_header_read(ptr)?;\n```"
+            }])
+        } else {
+            serde_json::json!([])
+        };
+        ("HTTP/1.1 200 OK", comments)
+    } else if request_line.starts_with("PUT ")
+        && request_line.contains("/reviews/987 ")
+        && fail_submission
+    {
+        (
+            "HTTP/1.1 500 Internal Server Error",
+            serde_json::json!({"message": "submit failed"}),
+        )
+    } else if request_line.starts_with("PUT ") && request_line.contains("/reviews/987 ") {
+        (
+            "HTTP/1.1 200 OK",
+            serde_json::json!({"id": 988, "state": "COMMENTED", "body": "fake review posted"}),
+        )
+    } else if request_line.starts_with("DELETE ") && request_line.contains("/reviews/987 ") {
+        if cleanup_success {
+            ("HTTP/1.1 204 No Content", serde_json::json!({}))
+        } else {
+            (
+                "HTTP/1.1 500 Internal Server Error",
+                serde_json::json!({"message": "cleanup failed"}),
+            )
+        }
+    } else {
+        (
+            "HTTP/1.1 404 Not Found",
+            serde_json::json!({"message": "unexpected fake request"}),
+        )
+    };
+    let response_body = serde_json::to_vec(&response)?;
     write!(
         stream,
-        "HTTP/1.1 201 Created\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "{status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
         response_body.len()
     )?;
     stream.write_all(&response_body)?;
