@@ -14792,3 +14792,9 @@ kind = "exposure_gap"
 finding_id = "probe:src_delivery_transaction.rs:return_value:c6beccf6"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 test-fixture false-positive on require_error's error conversion: deserialization_reapplies_invariants_for_each_receipt_shape asserts the exact invalid JSON error for every fixture, so the helper path has a complete failing-input oracle. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_delivery_transaction.rs:return_value:a81ffeab"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 false-negative on validate_cleanup_outcome completion: cleanup_outcome_validation_is_fail_closed directly asserts accepted NotAttempted and Succeeded outcomes, rejects an empty failure reason with the exact error, and accepts a valid failure reason. Zero reachable-unrevealed findings; re-verify after edits to delivery_transaction.rs."
