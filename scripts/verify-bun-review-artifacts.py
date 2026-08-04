@@ -8619,6 +8619,61 @@ def self_test_delivery_transaction_contract() -> None:
         )
         write_self_test_json(root / "review/delivery-receipts.json", [receipt])
         require_delivery_transaction_artifacts(root)
+        write_self_test_json(
+            root / "review/delivery-transaction.json",
+            {
+                "schema": "ub-review.delivery_transaction.v1",
+                "exact_head_sha": head,
+                "planned": [
+                    {
+                        key: receipt[key]
+                        for key in (
+                            "exact_head_sha",
+                            "claim_id",
+                            "action",
+                            "path",
+                            "line",
+                            "side",
+                            "source_thread_id",
+                            "expected_body_digest",
+                        )
+                    }
+                ],
+                "state": "cleaned_up",
+                "failure": {"stage": "submission", "reason": "submit rejected"},
+                "cleanup": {"status": "succeeded"},
+            },
+        )
+        expect_self_test_failure(
+            "delivery reconciliation beside a cleaned-up transaction",
+            "requires a receipts_persisted transaction",
+            lambda: require_delivery_transaction_artifacts(root),
+        )
+        write_self_test_json(
+            root / "review/delivery-transaction.json",
+            {
+                "schema": "ub-review.delivery_transaction.v1",
+                "exact_head_sha": head,
+                "planned": [
+                    {
+                        key: receipt[key]
+                        for key in (
+                            "exact_head_sha",
+                            "claim_id",
+                            "action",
+                            "path",
+                            "line",
+                            "side",
+                            "source_thread_id",
+                            "expected_body_digest",
+                        )
+                    }
+                ],
+                "state": "receipts_persisted",
+                "failure": None,
+                "cleanup": {"status": "not_attempted"},
+            },
+        )
         receipt["confirmed_head_sha"] = "another-head"
         write_self_test_json(root / "review/delivery-receipts.json", [receipt])
         write_self_test_json(
