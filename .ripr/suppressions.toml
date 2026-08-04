@@ -13554,6 +13554,11 @@ owner = "ub-review/core"
 reason = "RIPR 0.10.0 discriminator false-negative for the intentional default planned_thread_id field in the loser-graph fixture: loser_graph asserts planned_action=none and planned_thread_id=None, while production reply serialization is asserted separately; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_compiler_reconciliation.rs:return_value:d549add7"
+owner = "ub-review/core"
+reason = "RIPR 0.10.0 discriminator false-positive for the direct loser-graph fixture return: production adjudication is exercised by active_graph_resolves_explicit_conflict_using_proof_precedence, and compiler reconciliation tests assert the complete removal disposition, claim identity, and receipt. This exact finding is weakly_exposed with zero reachable-unrevealed findings. Re-verify after edits to compiler_reconciliation.rs or an RIPR upgrade."
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_review_topics.rs:return_value:aba759dd"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 discriminator false-negative for the non-reply planned_thread_id=None branch: current-head, stale-head, fixed-head, tradeoff, novel-inline, and novel-summary production tests assert the exact field; the current ready scan has zero reachable-unrevealed findings. Re-verify after edits to review_topics.rs or an RIPR upgrade."
