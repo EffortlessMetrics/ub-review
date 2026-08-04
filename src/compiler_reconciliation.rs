@@ -474,7 +474,7 @@ mod tests {
 
     fn loser_graph(finding: &SummaryOnlyFinding) -> ClaimGraph {
         let claim_id = topic_claim_id_for_summary(finding);
-        ClaimGraph {
+        let graph = ClaimGraph {
             schema: crate::artifacts::CLAIM_GRAPH_SCHEMA,
             head_sha: "HEAD".to_owned(),
             claims: Vec::new(),
@@ -509,7 +509,10 @@ mod tests {
             }],
             evidence_gaps: Vec::new(),
             mode: "active",
-        }
+        };
+        assert_eq!(graph.topics[0].planned_action, "none");
+        assert_eq!(graph.topics[0].planned_thread_id, None);
+        graph
     }
 
     #[test]
@@ -670,28 +673,100 @@ mod tests {
             final_summary_only_findings: &[],
             graph: &build_shadow_claim_graph("HEAD"),
         })?;
-        anyhow::ensure!(receipt.input_surfaces.len() == 2);
-        anyhow::ensure!(receipt.retained_surfaces.len() == 1);
-        anyhow::ensure!(receipt.removed_surfaces.len() == 1);
-        anyhow::ensure!(receipt.retained_surfaces[0].kind == "inline");
-        anyhow::ensure!(receipt.retained_surfaces[0].source_artifact == "review/review.json");
-        anyhow::ensure!(receipt.retained_surfaces[0].source_index == 0);
-        anyhow::ensure!(receipt.removed_surfaces[0].surface.kind == "summary");
-        anyhow::ensure!(
-            receipt.removed_surfaces[0].surface.source_artifact == "review/review.json"
+        assert_eq!(receipt.input_surfaces.len(), 2);
+        assert_eq!(receipt.retained_surfaces.len(), 1);
+        assert_eq!(receipt.removed_surfaces.len(), 1);
+        assert_eq!(receipt.retained_surfaces[0].kind, "inline");
+        assert_eq!(
+            receipt.retained_surfaces[0].source_artifact,
+            "review/review.json"
         );
-        anyhow::ensure!(receipt.removed_surfaces[0].surface.source_index == 0);
-        anyhow::ensure!(
-            receipt.removed_surfaces[0].surface.adjudicating_claim_ids
-                == vec![receipt.retained_surfaces[0].claim_id.clone()]
+        assert_eq!(receipt.retained_surfaces[0].source_index, 0);
+        assert_eq!(receipt.removed_surfaces[0].surface.kind, "summary");
+        assert_eq!(
+            receipt.removed_surfaces[0].surface.source_artifact,
+            "review/review.json"
         );
-        anyhow::ensure!(receipt.removed_surfaces[0].disposition == "duplicate_cross_surface");
-        anyhow::ensure!(
-            receipt.removed_surfaces[0].evidence_receipts
-                == vec![format!(
+        assert_eq!(receipt.removed_surfaces[0].surface.source_index, 0);
+        assert_eq!(
+            receipt.removed_surfaces[0].surface.adjudicating_claim_ids,
+            vec![receipt.retained_surfaces[0].claim_id.clone()]
+        );
+        assert_eq!(
+            receipt.removed_surfaces[0].disposition,
+            "duplicate_cross_surface"
+        );
+        assert_eq!(
+            receipt.removed_surfaces[0].evidence_receipts,
+            vec![format!(
+                "review/claim_graph.json#claims/{}",
+                receipt.retained_surfaces[0].claim_id
+            )]
+        );
+        assert_eq!(
+            (
+                receipt.retained_surfaces[0].kind,
+                receipt.retained_surfaces[0].source_artifact,
+                receipt.retained_surfaces[0].source_index,
+                receipt.removed_surfaces[0].surface.kind,
+                receipt.removed_surfaces[0].surface.source_artifact,
+                receipt.removed_surfaces[0].surface.source_index,
+                receipt.removed_surfaces[0].disposition,
+            ),
+            (
+                "inline",
+                "review/review.json",
+                0,
+                "summary",
+                "review/review.json",
+                0,
+                "duplicate_cross_surface",
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn removal_explanation_returns_exact_cross_surface_receipt() -> Result<()> {
+        let comment = ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 12,
+            side: "RIGHT".to_owned(),
+            body: "[tests] Parser drops the later subscript".to_owned(),
+            evidence: "focused receipt".to_owned(),
+            suggestion: None,
+        };
+        let summary_finding = summary("Parser drops the later subscript");
+        let retained = inline_surface_receipt(&comment, &[], "review/review.json", 0);
+        let removed = summary_surface_receipt(&summary_finding, "review/review.json", 0);
+        let explanation = removal_explanation(
+            &SurfaceIdentity { receipt: removed },
+            &[],
+            std::slice::from_ref(&retained),
+            &build_shadow_claim_graph("HEAD"),
+        )?;
+        assert_eq!(
+            explanation,
+            (
+                "duplicate_cross_surface",
+                vec![retained.claim_id.clone()],
+                vec![format!(
                     "review/claim_graph.json#claims/{}",
-                    receipt.retained_surfaces[0].claim_id
+                    retained.claim_id
                 )]
+            )
+        );
+        assert_eq!(explanation.0, "duplicate_cross_surface");
+        assert_eq!(explanation.1, vec![retained.claim_id.clone()]);
+        assert_eq!(
+            explanation.2,
+            vec![format!(
+                "review/claim_graph.json#claims/{}",
+                retained.claim_id
+            )]
         );
         Ok(())
     }
@@ -729,7 +804,7 @@ mod tests {
         let error = result
             .err()
             .ok_or_else(|| anyhow::anyhow!("ambiguous cross-surface match unexpectedly passed"))?;
-        anyhow::ensure!(
+        assert!(
             error
                 .to_string()
                 .contains("removed without an adjudication")

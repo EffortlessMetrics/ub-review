@@ -973,8 +973,8 @@ mod tests {
         ensure!(graph.topics[0].existing_threads == ["current-thread"]);
         ensure!(graph.topics[0].stale_threads == ["stale-thread"]);
         ensure!(graph.topics[0].thread_disposition == "already_covered");
-        ensure!(graph.topics[0].planned_action == "none");
-        ensure!(graph.topics[0].planned_thread_id.is_none());
+        assert_eq!(graph.topics[0].planned_action, "none");
+        assert_eq!(graph.topics[0].planned_thread_id, None);
         ensure!(graph.claims[0].state == ClaimState::Confirmed);
         Ok(())
     }
@@ -1130,9 +1130,15 @@ mod tests {
             std::slice::from_ref(&receipt),
             &context(head),
         );
-        ensure!(corroborated.topics[0].thread_disposition == "corroborated_with_new_evidence");
-        ensure!(corroborated.topics[0].planned_action == "reply");
-        ensure!(corroborated.topics[0].planned_thread_id == Some("current-thread".to_owned()));
+        assert_eq!(
+            corroborated.topics[0].thread_disposition,
+            "corroborated_with_new_evidence"
+        );
+        assert_eq!(corroborated.topics[0].planned_action, "reply");
+        assert_eq!(
+            corroborated.topics[0].planned_thread_id,
+            Some("current-thread".to_owned())
+        );
 
         let mut refuted_observation = observation.clone();
         refuted_observation.status = "refuted".to_owned();
@@ -1145,9 +1151,34 @@ mod tests {
             &[],
             &context(head),
         );
-        ensure!(refuted.topics[0].thread_disposition == "refuted_by_new_evidence");
-        ensure!(refuted.topics[0].planned_action == "reply");
-        ensure!(refuted.topics[0].planned_thread_id == Some("current-thread".to_owned()));
+        assert_eq!(
+            refuted.topics[0].thread_disposition,
+            "refuted_by_new_evidence"
+        );
+        assert_eq!(refuted.topics[0].planned_action, "reply");
+        assert_eq!(
+            refuted.topics[0].planned_thread_id,
+            Some("current-thread".to_owned())
+        );
+
+        let mut unanchored_observation = observation.clone();
+        unanchored_observation.path = None;
+        unanchored_observation.line = None;
+        let novel_summary = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&unanchored_observation),
+            &[],
+            &[],
+            &[],
+            &[],
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        );
+        assert_eq!(novel_summary.topics[0].thread_disposition, "novel");
+        assert_eq!(novel_summary.topics[0].planned_action, "summary");
+        assert_eq!(novel_summary.topics[0].planned_thread_id, None);
 
         let mut tradeoff_context = context(head);
         tradeoff_context.threads[0].state = Some("resolved".to_owned());
@@ -1162,9 +1193,9 @@ mod tests {
             &[],
             &tradeoff_context,
         );
-        ensure!(tradeoff.topics[0].thread_disposition == "accepted_tradeoff");
-        ensure!(tradeoff.topics[0].planned_action == "none");
-        ensure!(tradeoff.topics[0].planned_thread_id.is_none());
+        assert_eq!(tradeoff.topics[0].thread_disposition, "accepted_tradeoff");
+        assert_eq!(tradeoff.topics[0].planned_action, "none");
+        assert_eq!(tradeoff.topics[0].planned_thread_id, None);
 
         let stale = build_active_claim_graph(
             head,
@@ -1175,9 +1206,12 @@ mod tests {
             &[],
             &context("dddddddddddddddddddddddddddddddddddddddd"),
         );
-        ensure!(stale.topics[0].thread_disposition == "superseded_by_head_change");
-        ensure!(stale.topics[0].planned_action == "none");
-        ensure!(stale.topics[0].planned_thread_id.is_none());
+        assert_eq!(
+            stale.topics[0].thread_disposition,
+            "superseded_by_head_change"
+        );
+        assert_eq!(stale.topics[0].planned_action, "none");
+        assert_eq!(stale.topics[0].planned_thread_id, None);
         Ok(())
     }
 
@@ -1228,8 +1262,8 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].proof_receipts.is_empty());
         ensure!(graph.topics[0].evidence.is_empty());
-        ensure!(graph.topics[0].planned_action == "none");
-        ensure!(graph.topics[0].planned_thread_id.is_none());
+        assert_eq!(graph.topics[0].planned_action, "none");
+        assert_eq!(graph.topics[0].planned_thread_id, None);
         ensure!(graph.evidence_gaps.len() == 1);
         Ok(())
     }
@@ -1270,8 +1304,8 @@ mod tests {
         ensure!(graph.topics.len() == 1);
         ensure!(graph.claims.len() == 1);
         ensure!(graph.topics[0].thread_disposition == "fixed_on_current_head");
-        ensure!(graph.topics[0].planned_action == "none");
-        ensure!(graph.topics[0].planned_thread_id.is_none());
+        assert_eq!(graph.topics[0].planned_action, "none");
+        assert_eq!(graph.topics[0].planned_thread_id, None);
         ensure!(graph.topics[0].stale_threads == ["current-thread", "stale-thread"]);
         ensure!(graph.claims[0].state == ClaimState::Refuted);
         Ok(())
@@ -1332,8 +1366,8 @@ mod tests {
         );
         ensure!(graph.topics.len() == 1);
         ensure!(graph.topics[0].delivery == "inline-candidate");
-        ensure!(graph.topics[0].planned_action == "inline");
-        ensure!(graph.topics[0].planned_thread_id.is_none());
+        assert_eq!(graph.topics[0].planned_action, "inline");
+        assert_eq!(graph.topics[0].planned_thread_id, None);
         ensure!(graph.topics[0].proof_requests == ["proof-1"]);
         Ok(())
     }
@@ -1401,8 +1435,8 @@ mod tests {
         ];
         let graph = build_active_claim_graph(head, &[], &comments, &[], &[], &[], &context(head));
         let reconciled = reconcile_inline_comments(&graph, &comments);
-        ensure!(reconciled.len() == 1);
-        ensure!(reconciled[0].body == "attribute lowering finding");
+        assert_eq!(reconciled.len(), 1);
+        assert_eq!(reconciled[0].body, "attribute lowering finding");
         Ok(())
     }
 
@@ -1448,14 +1482,18 @@ mod tests {
             std::slice::from_ref(&comment),
             &[duplicate.clone(), distinct.clone()],
         );
-        ensure!(comments.len() == 1);
-        ensure!(findings.len() == 1);
-        ensure!(findings[0].reason == distinct.reason);
-        ensure!(
+        assert_eq!(comments.len(), 1);
+        assert_eq!(comments[0].path, comment.path);
+        assert_eq!(comments[0].line, comment.line);
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].reason, distinct.reason);
+        assert_eq!(
             graph
                 .topics
                 .iter()
-                .any(|topic| { topic.path.is_none() && topic.planned_action == "summary" })
+                .find(|topic| topic.path.is_none())
+                .map(|topic| topic.planned_action.as_str()),
+            Some("summary")
         );
 
         let second_comment = ReviewInlineComment {
@@ -1486,7 +1524,7 @@ mod tests {
     }
 
     #[test]
-    fn public_surface_matrix_is_exact_and_ambiguous_safe() -> Result<()> {
+    fn reconcile_public_surfaces_exact_matrix() -> Result<()> {
         let graph = build_shadow_claim_graph("HEAD");
         let comment = |path: &str, line: u32, body: &str| ReviewInlineComment {
             lane: "tests".to_owned(),
@@ -1513,9 +1551,12 @@ mod tests {
             std::slice::from_ref(&exact),
             std::slice::from_ref(&exact_summary),
         );
-        ensure!(inline.len() == 1);
-        ensure!(inline[0].path == exact.path && inline[0].line == exact.line);
-        ensure!(summary.is_empty());
+        assert_eq!(inline.len(), 1);
+        assert_eq!(
+            (inline[0].path.as_str(), inline[0].line),
+            (exact.path.as_str(), exact.line)
+        );
+        assert_eq!(summary.len(), 0);
 
         let similar_summary = finding("Parser drops the later subscript in lowering");
         let (_, similar) = reconcile_public_surfaces(
@@ -1523,7 +1564,8 @@ mod tests {
             std::slice::from_ref(&exact),
             std::slice::from_ref(&similar_summary),
         );
-        ensure!(similar.len() == 1 && similar[0].reason == similar_summary.reason);
+        assert_eq!(similar.len(), 1);
+        assert_eq!(similar[0].reason, similar_summary.reason);
 
         let other_anchor = comment(
             "src/other_parser.rs",
@@ -1535,7 +1577,8 @@ mod tests {
             &[exact.clone(), other_anchor.clone()],
             std::slice::from_ref(&exact_summary),
         );
-        ensure!(ambiguous.len() == 1 && ambiguous[0].reason == exact_summary.reason);
+        assert_eq!(ambiguous.len(), 1);
+        assert_eq!(ambiguous[0].reason, exact_summary.reason);
 
         let distinct_summary = finding("Parser drops the later percent sigil");
         let (mixed_inline, mixed_summary) = reconcile_public_surfaces(
@@ -1543,18 +1586,36 @@ mod tests {
             std::slice::from_ref(&exact),
             &[exact_summary.clone(), distinct_summary.clone()],
         );
-        ensure!(mixed_inline.len() == 1 && mixed_inline[0].body == exact.body);
-        ensure!(mixed_summary.len() == 1 && mixed_summary[0].reason == distinct_summary.reason);
+        assert_eq!(mixed_inline.len(), 1);
+        assert_eq!(mixed_inline[0].body, exact.body);
+        assert_eq!(mixed_summary.len(), 1);
+        assert_eq!(mixed_summary[0].reason, distinct_summary.reason);
 
         let (summary_only_inline, summary_only) =
             reconcile_public_surfaces(&graph, &[], std::slice::from_ref(&distinct_summary));
-        ensure!(summary_only_inline.is_empty());
-        ensure!(summary_only.len() == 1 && summary_only[0].reason == distinct_summary.reason);
+        assert_eq!(summary_only_inline.len(), 0);
+        assert_eq!(summary_only.len(), 1);
+        assert_eq!(summary_only[0].reason, distinct_summary.reason);
 
         let (inline_only, inline_only_summary) =
             reconcile_public_surfaces(&graph, std::slice::from_ref(&exact), &[]);
-        ensure!(inline_only.len() == 1 && inline_only[0].body == exact.body);
-        ensure!(inline_only_summary.is_empty());
+        assert_eq!(inline_only.len(), 1);
+        assert_eq!(inline_only[0].body, exact.body);
+        assert_eq!(inline_only_summary.len(), 0);
+
+        let inline_identity = inline_only
+            .iter()
+            .map(|comment| (comment.path.as_str(), comment.line, comment.body.as_str()))
+            .collect::<Vec<_>>();
+        let summary_identity = inline_only_summary
+            .iter()
+            .map(|finding| (finding.lane.as_str(), finding.reason.as_str()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            inline_identity,
+            vec![("src/parser.rs", 12, "Parser drops the later subscript")]
+        );
+        assert_eq!(summary_identity, Vec::<(&str, &str)>::new());
 
         let mixed_second = comment("src/lowering.rs", 21, "Lowering drops the later sigil");
         let mixed_second_summary = finding("Lowering drops the later sigil");
@@ -1563,9 +1624,81 @@ mod tests {
             &[exact.clone(), mixed_second.clone()],
             &[exact_summary, mixed_second_summary],
         );
-        ensure!(all_inline.len() == 2);
-        ensure!(all_inline[0].path == exact.path && all_inline[1].path == mixed_second.path);
-        ensure!(all_summary.is_empty());
+        assert_eq!(all_inline.len(), 2);
+        assert_eq!(all_inline[0].path, exact.path);
+        assert_eq!(all_inline[1].path, mixed_second.path);
+        assert_eq!(all_summary.len(), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn planned_action_exact_matrix_is_fail_closed() -> Result<()> {
+        let head = "1212121212121212121212121212121212121212";
+        let observation = Observation {
+            schema: "observation".to_owned(),
+            id: "planned-action-matrix".to_owned(),
+            lane: "tests".to_owned(),
+            question: "answer".to_owned(),
+            claim: "later subscript is dropped".to_owned(),
+            kind: "bug".to_owned(),
+            status: "confirmed".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: Some("src/parser.rs".to_owned()),
+            line: Some(12),
+            fingerprint: "planned-action-matrix".to_owned(),
+            evidence: vec!["focused receipt".to_owned()],
+            dedupe_key: "planned-action-matrix".to_owned(),
+            source: "tests".to_owned(),
+        };
+        let mut topic = build_active_claim_graph(
+            head,
+            std::slice::from_ref(&observation),
+            &[],
+            &[],
+            &[],
+            &[],
+            &PrThreadContext {
+                threads: Vec::new(),
+                ..context(head)
+            },
+        )
+        .topics[0]
+            .clone();
+        topic.thread_disposition = "novel".to_owned();
+        topic.path = Some("src/parser.rs".to_owned());
+        topic.anchor = Some(12);
+        topic.existing_threads.clear();
+        assert_eq!(planned_action(&topic), "inline".to_owned());
+
+        topic.path = None;
+        topic.anchor = None;
+        assert_eq!(planned_action(&topic), "summary".to_owned());
+
+        topic.thread_disposition = "already_covered".to_owned();
+        topic.existing_threads = vec!["current-thread".to_owned()];
+        assert_eq!(planned_action(&topic), "none".to_owned());
+
+        topic.thread_disposition = "corroborated_with_new_evidence".to_owned();
+        assert_eq!(planned_action(&topic), "reply".to_owned());
+
+        topic.thread_disposition = "refuted_by_new_evidence".to_owned();
+        assert_eq!(planned_action(&topic), "reply".to_owned());
+
+        topic.thread_disposition = "accepted_tradeoff".to_owned();
+        assert_eq!(planned_action(&topic), "none".to_owned());
+
+        topic.thread_disposition = "superseded_by_head_change".to_owned();
+        topic.existing_threads = vec!["stale-thread".to_owned()];
+        assert_eq!(planned_action(&topic), "none".to_owned());
+
+        topic.thread_disposition = "fixed_on_current_head".to_owned();
+        topic.existing_threads.clear();
+        assert_eq!(planned_action(&topic), "none".to_owned());
+
+        topic.thread_disposition = "unknown-disposition".to_owned();
+        topic.existing_threads = vec!["current-thread".to_owned()];
+        assert_eq!(planned_action(&topic), "none".to_owned());
         Ok(())
     }
 
@@ -1612,11 +1745,14 @@ mod tests {
             &context(head),
         );
         ensure!(graph.topics[0].thread_disposition == "corroborated_with_new_evidence");
-        ensure!(graph.topics[0].planned_action == "reply");
-        ensure!(graph.topics[0].planned_thread_id == Some("current-thread".to_owned()));
+        assert_eq!(graph.topics[0].planned_action, "reply");
+        assert_eq!(
+            graph.topics[0].planned_thread_id,
+            Some("current-thread".to_owned())
+        );
         let serialized = serde_json::to_value(&graph.topics[0])?;
-        ensure!(serialized["planned_action"] == "reply");
-        ensure!(serialized["planned_thread_id"] == "current-thread");
+        assert_eq!(serialized["planned_action"], "reply");
+        assert_eq!(serialized["planned_thread_id"], "current-thread");
 
         let mut multiple_threads = context(head);
         multiple_threads.threads.push(ReviewThreadRecord {
@@ -1640,11 +1776,14 @@ mod tests {
             &multiple_threads,
         );
         ensure!(stable.topics[0].existing_threads == ["another-current", "current-thread"]);
-        ensure!(stable.topics[0].planned_thread_id == Some("another-current".to_owned()));
+        assert_eq!(
+            stable.topics[0].planned_thread_id,
+            Some("another-current".to_owned())
+        );
 
         let mut unknown = stable.topics[0].clone();
         unknown.thread_disposition = "unknown-disposition".to_owned();
-        ensure!(planned_action(&unknown) == "none");
+        assert_eq!(planned_action(&unknown), "none");
         Ok(())
     }
 }
