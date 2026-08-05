@@ -876,12 +876,10 @@ fn merge_focused_test_candidates(
     additional: Vec<FocusedTestTask>,
 ) {
     for mut task in additional {
-        if let Some(existing) = candidates.iter_mut().find(|candidate| {
-            candidate.id == task.id
-                || (candidate.file == task.file
-                    && candidate.test_name == task.test_name
-                    && candidate.mode == task.mode)
-        }) {
+        if let Some(existing) = candidates
+            .iter_mut()
+            .find(|candidate| candidate.id == task.id)
+        {
             if existing.timeout_sec < task.timeout_sec {
                 existing.timeout_sec = task.timeout_sec;
             }
@@ -1611,6 +1609,35 @@ mod tests {
         );
         assert!(
             unreceipted_focused_build_tasks(vec![build], &all_current_receipts, "head").is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn broker_keeps_same_named_tests_with_distinct_commands_separate() -> Result<()> {
+        let binary = ProofRequest {
+            command: "cargo test --locked --package ub-review --bin ub-review same_test".to_owned(),
+            ..proof_request("binary", false)
+        };
+        let library = ProofRequest {
+            command: "cargo test --locked --package ub-review --lib same_test".to_owned(),
+            ..proof_request("library", false)
+        };
+        let mut candidates = focused_test_candidates_from_requests(std::slice::from_ref(&binary));
+        let additional = focused_test_candidates_from_requests(std::slice::from_ref(&library));
+        ensure!(candidates.len() == 1);
+        ensure!(additional.len() == 1);
+
+        merge_focused_test_candidates(&mut candidates, additional);
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(
+            candidates
+                .iter()
+                .flat_map(|task| task.request_ids.iter())
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([binary.id, library.id])
         );
         Ok(())
     }
