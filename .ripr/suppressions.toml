@@ -12156,6 +12156,18 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_compiler.rs:return_value:3bf2e48e"
 owner = "ub-review/core"
 reason = "Covered by reporter_claim_duplicate_matching_obeys_identity_and_length_bounds and reporter_admission_keeps_novel_connective_judgment; RIPR 0.10.0 weakly exposes the review-claim match return despite duplicate and distinct-claim assertions. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:969b9236"
+owner = "ub-review/core"
+reason = "Covered by unexecuted_proof_homework_is_artifact_only, including exact clause-vector assertions for mixed substantive and homework text; RIPR 0.10.0 weakly exposes the clause iterator return. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:7ef388b1"
+owner = "ub-review/core"
+reason = "Covered by unexecuted_proof_homework_is_artifact_only, including exact pure-homework and substantive-clause classifications; RIPR 0.10.0 weakly exposes the clause admission boolean. Re-verify after edits or RIPR upgrades."
 # RIPR 0.10.0 weakly exposes the terminal proof-request status mapping and
 # grouped disposition branches. The focused planner tests exercise every
 # receipt outcome, duplicate group, and terminal status; these are analyzer

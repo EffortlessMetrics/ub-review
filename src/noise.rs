@@ -207,7 +207,7 @@ fn proof_homework_context(text: &str) -> Option<bool> {
         return None;
     }
     let has_proof_or_check = command_reference || text.contains("check") || text.contains("proof");
-    has_proof_or_check.then_some(has_proof_or_check)
+    if has_proof_or_check { Some(true) } else { None }
 }
 
 fn proof_homework_clauses(text: &str) -> Vec<&str> {
@@ -1006,6 +1006,31 @@ mod human_output_admission_tests {
                 "unexpected homework classification for {text:?}"
             );
         }
+        assert_eq!(
+            proof_homework_context("Please run `cargo test --locked` before merging."),
+            Some(true)
+        );
+        assert_eq!(
+            proof_homework_context("The parser drops postfix subscripts."),
+            None
+        );
+        assert_eq!(
+            proof_homework_clauses(
+                "The parser drops postfix subscripts. Please run `cargo test --locked` before merging."
+            ),
+            vec![
+                "The parser drops postfix subscripts.",
+                "Please run `cargo test --locked` before merging."
+            ]
+        );
+        assert!(proof_homework_clause_is_homework(
+            "Please run `cargo test --locked` before merging.",
+            true
+        ));
+        assert!(!proof_homework_clause_is_homework(
+            "The parser drops postfix subscripts.",
+            true
+        ));
     }
 
     #[test]
