@@ -158,6 +158,33 @@ pub(crate) fn is_internal_review_machinery_text(text: &str) -> bool {
 /// in artifacts; only a receipt-backed result or a decision-changing evidence
 /// gap belongs in the PR-facing compiler input.
 pub(crate) fn is_unexecuted_proof_homework_text(text: &str) -> bool {
+    let Some(has_proof_or_check) = proof_homework_context(text) else {
+        return false;
+    };
+    proof_homework_clauses(text)
+        .into_iter()
+        .all(|clause| proof_homework_clause_is_homework(clause, has_proof_or_check))
+}
+
+/// Remove only homework-shaped clauses while retaining a substantive finding
+/// that happens to mention an unexecuted request. Pure homework becomes empty.
+pub(crate) fn strip_unexecuted_proof_homework_text(text: &str) -> String {
+    let Some(has_proof_or_check) = proof_homework_context(text) else {
+        return text.trim().to_owned();
+    };
+    let clauses = proof_homework_clauses(text);
+    let original_len = clauses.len();
+    let retained = clauses
+        .into_iter()
+        .filter(|clause| !proof_homework_clause_is_homework(clause, has_proof_or_check))
+        .collect::<Vec<_>>();
+    if retained.len() == original_len {
+        return text.trim().to_owned();
+    }
+    retained.join(" ")
+}
+
+fn proof_homework_context(text: &str) -> Option<bool> {
     let text = text.to_ascii_lowercase();
     let request_language = text.contains("please run")
         || text.contains("you should run")
@@ -176,18 +203,66 @@ pub(crate) fn is_unexecuted_proof_homework_text(text: &str) -> bool {
         || text.contains("npm test")
         || text.contains("bun test")
         || text.contains("pytest");
-    let terminal_disposition = text.contains("skipped")
-        || text.contains("declined")
-        || text.contains("deferred")
-        || text.contains("unsupported")
-        || text.contains("timed out")
-        || text.contains("timeout")
-        || text.contains("no proof receipt")
-        || text.contains("not executed")
-        || text.contains("unexecuted");
+    if !(request_language || command_reference) {
+        return None;
+    }
+    let has_proof_or_check = command_reference || text.contains("check") || text.contains("proof");
+    has_proof_or_check.then_some(has_proof_or_check)
+}
 
-    (request_language && (command_reference || text.contains("check") || text.contains("proof")))
-        || (command_reference && terminal_disposition)
+fn proof_homework_clauses(text: &str) -> Vec<&str> {
+    let mut clauses = Vec::new();
+    let mut start = 0;
+    for (index, character) in text.char_indices() {
+        let next = text[index + character.len_utf8()..].chars().next();
+        let boundary = matches!(character, '.' | '!' | '?' | ';' | '\n')
+            && (matches!(character, ';' | '\n')
+                || next.is_none()
+                || next.is_some_and(char::is_whitespace));
+        if boundary {
+            let end = index + character.len_utf8();
+            let clause = text[start..end].trim();
+            if !clause.is_empty() {
+                clauses.push(clause);
+            }
+            start = end;
+        }
+    }
+    let tail = text[start..].trim();
+    if !tail.is_empty() {
+        clauses.push(tail);
+    }
+    clauses
+}
+
+fn proof_homework_clause_is_homework(clause: &str, has_proof_or_check: bool) -> bool {
+    let clause = clause.to_ascii_lowercase();
+    let clause_request = clause.contains("please run")
+        || clause.contains("you should run")
+        || clause.contains("maintainer should run")
+        || clause.contains("maintainer must run")
+        || clause.contains("run this locally")
+        || clause.contains("run locally")
+        || clause.contains("execute this")
+        || clause.contains("execute the following")
+        || clause.contains("add a test by running")
+        || clause.contains("confirm by running");
+    let clause_command = clause.contains("cargo test")
+        || clause.contains("cargo check")
+        || clause.contains("cargo build")
+        || clause.contains("cargo clippy")
+        || clause.contains("npm test")
+        || clause.contains("bun test")
+        || clause.contains("pytest");
+    let clause_terminal = clause.contains("skipped")
+        || clause.contains("declined")
+        || clause.contains("deferred")
+        || clause.contains("unsupported")
+        || clause.contains("no proof receipt")
+        || clause.contains("not executed")
+        || clause.contains("unexecuted");
+    (clause_request && has_proof_or_check)
+        || ((clause_command || clause.contains("proof")) && clause_terminal)
 }
 
 pub(crate) fn is_checkout_persistence_no_change_noise(text: &str) -> bool {
@@ -913,6 +988,14 @@ mod human_output_admission_tests {
             ),
             (
                 "The `cargo test` receipt already passed and is attached.",
+                false,
+            ),
+            (
+                "The parser drops postfix subscripts. Please run `cargo test --locked` before merging.",
+                false,
+            ),
+            (
+                "cargo test timed out while reproducing the parser hang.",
                 false,
             ),
         ];

@@ -148,11 +148,21 @@ pub(crate) fn compile_review_surface(
     let public_inline_comments = input
         .inline_comments
         .iter()
-        .filter(|comment| {
-            !is_internal_review_machinery_text(&comment.body)
-                && !is_unexecuted_proof_homework_text(&comment.body)
+        .filter(|comment| !is_internal_review_machinery_text(&comment.body))
+        .filter_map(|comment| {
+            let mut public = comment.clone();
+            public.body = strip_unexecuted_proof_homework_text(&comment.body);
+            (!public.body.trim().is_empty()).then_some(public)
         })
-        .cloned()
+        .collect::<Vec<_>>();
+    let public_summary_only_findings = input
+        .summary_only_findings
+        .iter()
+        .filter_map(|finding| {
+            let mut public = finding.clone();
+            public.reason = strip_unexecuted_proof_homework_text(&finding.reason);
+            (!public.reason.trim().is_empty()).then_some(public)
+        })
         .collect::<Vec<_>>();
     let ranked_public_inline_comments = ranked_inline_comments(&public_inline_comments);
     let pr_inline_candidates = ranked_public_inline_comments
@@ -182,7 +192,7 @@ pub(crate) fn compile_review_surface(
         input.missing_or_failed_sensor_evidence,
         input.missing_or_failed_model_evidence,
         &pr_inline_candidates,
-        input.summary_only_findings,
+        &public_summary_only_findings,
         input.observations,
         input.proof_receipts,
         input.args.review_body_max_bytes,
@@ -197,7 +207,7 @@ pub(crate) fn compile_review_surface(
         admit_reporter_distillation(
             input.reporter_distillation,
             &public_inline_comments,
-            input.summary_only_findings,
+            &public_summary_only_findings,
             input.observations,
         ),
     ) {

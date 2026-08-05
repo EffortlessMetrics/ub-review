@@ -21799,7 +21799,7 @@ index 1111111..2222222 100644
             body.contains("The parser drops postfix subscripts"),
             "retained finding must remain public: {body}"
         );
-        assert!(!body.contains("2 findings"), "{body}");
+        assert!(!body.contains("cross-lane conflict"), "{body}");
     }
 
     #[test]
@@ -21908,6 +21908,51 @@ index 1111111..2222222 100644
 
         assert_eq!(surface.github_review.comments.len(), 1);
         assert!(surface.github_review.body.contains("postfix subscripts"));
+        assert!(surface.should_prepare_github_review);
+        Ok(())
+    }
+
+    #[test]
+    fn compiler_surface_strips_homework_but_keeps_substantive_inline() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let inline = [ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/main.rs".to_owned(),
+            line: 100,
+            side: "RIGHT".to_owned(),
+            body: "The parser drops postfix subscripts. Please run `cargo test --locked` before merging."
+                .to_owned(),
+            evidence: "model finding".to_owned(),
+            suggestion: None,
+        }];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &test_plan(Vec::new()),
+            diff: &test_diff(),
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+            reporter_distillation: None,
+        })?;
+
+        assert_eq!(surface.github_review.comments.len(), 1);
+        assert_eq!(
+            surface.github_review.comments[0].body,
+            "The parser drops postfix subscripts."
+        );
+        assert!(!surface.github_review.body.contains("Please run"));
         assert!(surface.should_prepare_github_review);
         Ok(())
     }
