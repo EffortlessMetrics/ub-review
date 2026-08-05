@@ -876,10 +876,10 @@ fn merge_focused_test_candidates(
     additional: Vec<FocusedTestTask>,
 ) {
     for mut task in additional {
-        if let Some(existing) = candidates
-            .iter_mut()
-            .find(|candidate| candidate.id == task.id)
-        {
+        let matching_index = candidates
+            .iter()
+            .position(|candidate| candidate.id == task.id);
+        if let Some(existing) = matching_index.and_then(|index| candidates.get_mut(index)) {
             if existing.timeout_sec < task.timeout_sec {
                 existing.timeout_sec = task.timeout_sec;
             }
