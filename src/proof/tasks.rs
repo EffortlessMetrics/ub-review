@@ -229,7 +229,9 @@ pub(crate) fn focused_test_candidates_from_requests(
 /// The v2 request is normalized to a v1 `ProofRequest` and run through the
 /// existing v1 extractor so the candidate output is byte-identical to a v1
 /// request with the same command — pinned by `v2_focused_test_candidates_*
-/// match_v1` in tests.
+/// match_v1` in tests. The v2 broker receives already-approved v1 commands,
+/// so identity canonicalization must not rewrite Cargo passthrough arguments
+/// between the two artifact producers.
 pub(crate) fn focused_test_candidates_from_v2(
     v2_requests: &[ProofRequestV2],
 ) -> Vec<FocusedTestTask> {
@@ -289,7 +291,7 @@ fn proof_request_v2_to_v1(req: &ProofRequestV2, cost: &str) -> ProofRequest {
             .cloned()
             .unwrap_or_else(|| "proof-planner".to_owned()),
         requested_by: req.requested_by.clone(),
-        command: crate::normalize_proof_command(&req.target),
+        command: req.target.clone(),
         reason: req.expected_interpretation.clone(),
         cost: cost.to_owned(),
         timeout_sec: req.timeout_sec,
@@ -688,7 +690,7 @@ mod tests {
     /// (allowlist) is preserved byte-for-byte.
     #[test]
     fn v2_focused_test_candidates_match_v1() {
-        let command = "cargo test --locked --test config_tests";
+        let command = "cargo test --locked --test config_tests -- --nocapture";
         let v1 = vec![ProofRequest {
             schema: "ub-review.proof_request.v1".to_owned(),
             id: "req-1".to_owned(),
