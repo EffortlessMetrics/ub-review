@@ -8570,6 +8570,84 @@ def require_reply_delivery_artifacts(root: pathlib.Path) -> None:
     decisions_path = root / "review/delivery-retry-decisions.json"
     if not receipts_path.exists() and not decisions_path.exists():
         return
+
+    graph = load_json(root / "review/claim_graph.json")
+    if not isinstance(graph, dict):
+        fail("claim_graph.json is required for reply delivery receipts")
+    graph_head = graph.get("head_sha")
+    if not isinstance(graph_head, str) or not graph_head:
+        fail("claim_graph.json head_sha is required for reply delivery receipts")
+    topics = graph.get("topics")
+    if not isinstance(topics, list):
+        fail("claim_graph.json topics is required for reply delivery receipts")
+    topics_by_claim = {
+        topic.get("claim_id"): topic
+        for topic in topics
+        if isinstance(topic, dict) and isinstance(topic.get("claim_id"), str)
+    }
+
+    def require_identity(identity: dict, label: str) -> tuple:
+        required = (
+            "exact_head_sha",
+            "claim_id",
+            "action",
+            "path",
+            "line",
+            "side",
+            "source_thread_id",
+            "expected_body_digest",
+        )
+        missing = [field for field in required if field not in identity]
+        if missing:
+            fail(f"{label} is missing identity fields: {', '.join(missing)}")
+        head = identity["exact_head_sha"]
+        if head != graph_head:
+            fail(f"{label} is bound to another head")
+        claim_id = identity["claim_id"]
+        if not isinstance(claim_id, str) or not claim_id:
+            fail(f"{label} claim id is missing")
+        action = identity["action"]
+        if action not in {"inline", "reply"}:
+            fail(f"{label} action is invalid")
+        path = identity["path"]
+        if not isinstance(path, str) or not path.strip():
+            fail(f"{label} path is missing")
+        line = identity["line"]
+        if isinstance(line, bool) or not isinstance(line, int) or line <= 0:
+            fail(f"{label} line is invalid")
+        if identity["side"] not in {"LEFT", "RIGHT"}:
+            fail(f"{label} side is invalid")
+        digest = identity["expected_body_digest"]
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            fail(f"{label} body digest is invalid")
+        thread = identity["source_thread_id"]
+        if action == "reply":
+            if not isinstance(thread, str) or not thread.isdigit() or not thread:
+                fail(f"{label} reply source thread is invalid")
+        elif thread is not None:
+            fail(f"{label} inline delivery has a source thread")
+        topic = topics_by_claim.get(claim_id)
+        if not isinstance(topic, dict):
+            fail(f"{label} claim is absent from claim_graph.json")
+        if topic.get("head_sha") != graph_head:
+            fail(f"{label} claim graph topic is bound to another head")
+        if topic.get("planned_action") != action:
+            fail(f"{label} action does not match claim_graph.json")
+        topic_thread = topic.get("planned_thread_id")
+        if action == "reply" and topic_thread != thread:
+            fail(f"{label} source thread does not match claim_graph.json")
+        if action != "reply" and topic_thread is not None:
+            fail(f"{label} non-reply claim graph topic has a source thread")
+        if normalize_repo_path(path) != normalize_repo_path(str(topic.get("path", ""))):
+            fail(f"{label} path does not match claim_graph.json")
+        if topic.get("anchor") != line:
+            fail(f"{label} line does not match claim_graph.json")
+        return tuple(identity[field] for field in required)
+
     if receipts_path.exists():
         receipts = load_json(receipts_path)
         if not isinstance(receipts, list):
@@ -8584,7 +8662,7 @@ def require_reply_delivery_artifacts(root: pathlib.Path) -> None:
             if receipt.get("action") != "reply":
                 fail(f"reply delivery receipt {index} action is not reply")
             head = receipt.get("exact_head_sha")
-            if not isinstance(head, str) or not head:
+            if not isinstance(head, str) or not head or head != graph_head:
                 fail(f"reply delivery receipt {index} exact head is missing")
             if receipt.get("confirmed_head_sha") != head:
                 fail(f"reply delivery receipt {index} confirmation head is wrong")
@@ -8597,19 +8675,7 @@ def require_reply_delivery_artifacts(root: pathlib.Path) -> None:
             if comment_id in comment_ids:
                 fail("reply delivery receipts contain duplicate comment ids")
             comment_ids.add(comment_id)
-            identity = tuple(
-                receipt.get(field)
-                for field in (
-                    "exact_head_sha",
-                    "claim_id",
-                    "action",
-                    "path",
-                    "line",
-                    "side",
-                    "source_thread_id",
-                    "expected_body_digest",
-                )
-            )
+            identity = require_identity(receipt, f"reply delivery receipt {index}")
             if identity in identities:
                 fail("reply delivery receipts contain duplicate identities")
             identities.add(identity)
@@ -8622,8 +8688,10 @@ def require_reply_delivery_artifacts(root: pathlib.Path) -> None:
                 fail(f"delivery retry decision {index} is not an object")
             if decision.get("status") not in {"confirmed_current_head", "unconfirmed"}:
                 fail(f"delivery retry decision {index} has an invalid status")
-            if not isinstance(decision.get("identity"), dict):
+            identity = decision.get("identity")
+            if not isinstance(identity, dict):
                 fail(f"delivery retry decision {index} identity is missing")
+            require_identity(identity, f"delivery retry decision {index} identity")
 
 
 def self_test_delivery_transaction_contract() -> None:
@@ -8754,6 +8822,61 @@ def self_test_delivery_transaction_contract() -> None:
             "delivery transaction wrong confirmation head",
             "confirmation head is wrong",
             lambda: require_delivery_transaction_artifacts(root),
+        )
+
+        reply_identity = {
+            "exact_head_sha": head,
+            "claim_id": "claim-reply",
+            "action": "reply",
+            "path": "src/lib.rs",
+            "line": 12,
+            "side": "RIGHT",
+            "source_thread_id": "123",
+            "expected_body_digest": "a" * 64,
+        }
+        write_self_test_json(
+            root / "review/claim_graph.json",
+            {
+                "schema": CLAIM_GRAPH_SCHEMA,
+                "head_sha": head,
+                "topics": [
+                    {
+                        "claim_id": "claim-reply",
+                        "planned_action": "reply",
+                        "planned_thread_id": "123",
+                        "head_sha": head,
+                        "path": "src/lib.rs",
+                        "anchor": 12,
+                    }
+                ],
+            },
+        )
+        write_self_test_json(
+            root / "review/delivery-reply-receipts.json",
+            [
+                {
+                    "schema": "ub-review.reply_delivery_receipt.v1",
+                    **reply_identity,
+                    "review_id": None,
+                    "comment_id": "456",
+                    "confirmed_head_sha": head,
+                }
+            ],
+        )
+        write_self_test_json(
+            root / "review/delivery-retry-decisions.json",
+            [{"identity": reply_identity, "status": "confirmed_current_head"}],
+        )
+        require_reply_delivery_artifacts(root)
+        invalid_reply = dict(reply_identity, claim_id="wrong-claim")
+        write_self_test_json(
+            root / "review/delivery-retry-decisions.json",
+            [{"identity": invalid_reply, "status": "confirmed_current_head"}],
+        )
+        expect_self_test_failure(
+            "reply retry wrong claim",
+            "claim is absent from claim_graph.json",
+            lambda: require_reply_delivery_artifacts(root),
         )
 
 
