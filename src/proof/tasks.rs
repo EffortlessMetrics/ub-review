@@ -108,34 +108,79 @@ pub(crate) fn focused_proof_plans_from_diff(
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
-            let timeout_sec = focused_test_task_command_timeout(&task, budget);
-            let head_command = proof_task_plan_command(&task, "head", "head");
-            let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
-                proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
-            } else {
-                "not planned for head-only proof".to_owned()
-            };
-            FocusedProofPlan {
-                id: task.id,
-                test_file: task.file,
-                test_name: task.test_name,
-                mode: task.mode,
-                timeout_sec,
-                head_command,
-                base_plus_tests_command,
-                requested_by: task.requested_by,
-                request_ids: task.request_ids,
-                status: "planned".to_owned(),
-                reason: format!(
+            focused_proof_plan_for_task(
+                task,
+                budget,
+                "planned",
+                format!(
                     "planner-only focused test target under budget: max {} file(s), {} test(s), {}s per command, {}s total",
                     budget.max_focused_test_files,
                     budget.max_focused_tests,
                     budget.per_command_timeout_sec,
                     budget.max_total_seconds
                 ),
-            }
+            )
         })
         .collect()
+}
+
+pub(crate) fn focused_proof_candidate_plans_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedProofPlan> {
+    let planned_ids = focused_test_tasks_from_diff(diff, proof_requests, budget)
+        .into_iter()
+        .map(|task| task.id)
+        .collect::<BTreeSet<_>>();
+    let candidate_tasks = focused_test_candidates_from_diff(diff, proof_requests);
+    let mut plans = Vec::with_capacity(candidate_tasks.len());
+    for task in candidate_tasks {
+        let status = candidate_plan_status(planned_ids.contains(&task.id));
+        plans.extend(std::iter::once(focused_proof_plan_for_task(
+            task,
+            budget,
+            status,
+            "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+        )));
+    }
+    plans
+}
+
+fn candidate_plan_status(planned: bool) -> &'static str {
+    if planned {
+        "planned"
+    } else {
+        "deferred_by_budget"
+    }
+}
+
+fn focused_proof_plan_for_task(
+    task: FocusedTestTask,
+    budget: ProofBudget,
+    status: &str,
+    reason: String,
+) -> FocusedProofPlan {
+    let timeout_sec = focused_test_task_command_timeout(&task, budget);
+    let head_command = proof_task_plan_command(&task, "head", "head");
+    let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
+        proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
+    } else {
+        "not planned for head-only proof".to_owned()
+    };
+    FocusedProofPlan {
+        id: task.id,
+        test_file: task.file,
+        test_name: task.test_name,
+        mode: task.mode,
+        timeout_sec,
+        head_command,
+        base_plus_tests_command,
+        requested_by: task.requested_by,
+        request_ids: task.request_ids,
+        status: status.to_owned(),
+        reason,
+    }
 }
 
 pub(crate) fn focused_test_tasks_from_diff(
@@ -229,7 +274,9 @@ pub(crate) fn focused_test_candidates_from_requests(
 /// The v2 request is normalized to a v1 `ProofRequest` and run through the
 /// existing v1 extractor so the candidate output is byte-identical to a v1
 /// request with the same command — pinned by `v2_focused_test_candidates_*
-/// match_v1` in tests.
+/// match_v1` in tests. The v2 broker receives already-approved v1 commands,
+/// so identity canonicalization must not rewrite Cargo passthrough arguments
+/// between the two artifact producers.
 pub(crate) fn focused_test_candidates_from_v2(
     v2_requests: &[ProofRequestV2],
 ) -> Vec<FocusedTestTask> {
@@ -289,7 +336,7 @@ fn proof_request_v2_to_v1(req: &ProofRequestV2, cost: &str) -> ProofRequest {
             .cloned()
             .unwrap_or_else(|| "proof-planner".to_owned()),
         requested_by: req.requested_by.clone(),
-        command: crate::normalize_proof_command(&req.target),
+        command: req.target.clone(),
         reason: req.expected_interpretation.clone(),
         cost: cost.to_owned(),
         timeout_sec: req.timeout_sec,
@@ -321,6 +368,28 @@ pub(crate) fn focused_build_plans_from_requests(
             }
         })
         .collect()
+}
+
+pub(crate) fn focused_build_candidate_plans_from_requests(
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedBuildPlan> {
+    let candidate_tasks = focused_build_candidates_from_requests(proof_requests);
+    let mut plans = Vec::with_capacity(candidate_tasks.len());
+    for task in candidate_tasks {
+        let timeout_sec = focused_build_task_command_timeout(&task, budget);
+        plans.extend(std::iter::once(FocusedBuildPlan {
+            id: task.id,
+            command: command_display(&task.argv),
+            timeout_sec,
+            requested_by: task.requested_by,
+            request_ids: task.request_ids,
+            status: candidate_plan_status(plans.len() < budget.max_focused_tests).to_owned(),
+            reason: "candidate recorded for portfolio accounting; execution is budget-gated"
+                .to_owned(),
+        }));
+    }
+    plans
 }
 
 pub(crate) fn focused_build_candidates_from_requests(
@@ -688,7 +757,7 @@ mod tests {
     /// (allowlist) is preserved byte-for-byte.
     #[test]
     fn v2_focused_test_candidates_match_v1() {
-        let command = "cargo test --locked --test config_tests";
+        let command = "cargo test --locked --test config_tests -- --nocapture";
         let v1 = vec![ProofRequest {
             schema: "ub-review.proof_request.v1".to_owned(),
             id: "req-1".to_owned(),
@@ -716,9 +785,294 @@ mod tests {
         assert_eq!(from_v1[0].test_name, from_v2[0].test_name);
         assert_eq!(from_v1[0].mode, from_v2[0].mode);
         assert_eq!(
-            from_v1[0].command_specs.is_some(),
-            from_v2[0].command_specs.is_some()
+            from_v1[0]
+                .command_specs
+                .as_ref()
+                .map(|specs| (&specs.head.argv, &specs.base_plus_tests.argv)),
+            from_v2[0]
+                .command_specs
+                .as_ref()
+                .map(|specs| (&specs.head.argv, &specs.base_plus_tests.argv)),
+            "v1 and v2 command specifications must preserve Cargo passthrough arguments"
         );
+    }
+
+    #[test]
+    fn candidate_plan_artifacts_preserve_identity_and_budget_status() -> Result<()> {
+        assert_eq!(
+            candidate_plan_status(true),
+            "planned",
+            "candidate_plan_status must mark budget-fitting work planned"
+        );
+        assert_eq!(
+            candidate_plan_status(false),
+            "deferred_by_budget",
+            "candidate_plan_status must mark overflow work deferred"
+        );
+        let budget = ProofBudget {
+            max_focused_test_files: 1,
+            max_focused_tests: 1,
+            per_command_timeout_sec: 120,
+            max_total_seconds: 240,
+        };
+        let task = FocusedTestTask {
+            id: "proof-red-green-direct".to_owned(),
+            file: "cargo-package:ub-review".to_owned(),
+            test_name: Some("head_binding".to_owned()),
+            mode: FocusedProofMode::RedGreen,
+            command_specs: None,
+            timeout_sec: Some(30),
+            requested_by: vec!["tests-oracle".to_owned()],
+            request_ids: vec!["request-1".to_owned()],
+        };
+        let direct = focused_proof_plan_for_task(
+            task.clone(),
+            budget,
+            "deferred_by_budget",
+            "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+        );
+        assert_eq!(
+            focused_proof_plan_for_task(
+                task,
+                budget,
+                "deferred_by_budget",
+                "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+            )
+            .status,
+            "deferred_by_budget",
+            "focused_proof_plan_for_task must preserve candidate status"
+        );
+        assert_eq!(direct.id, "proof-red-green-direct");
+        assert_eq!(direct.test_file, "cargo-package:ub-review");
+        assert_eq!(direct.test_name.as_deref(), Some("head_binding"));
+        assert_eq!(direct.mode, FocusedProofMode::RedGreen);
+        assert_eq!(direct.timeout_sec, 30);
+        assert_eq!(direct.status, "deferred_by_budget");
+        assert!(direct.head_command.contains("head"));
+        assert!(direct.base_plus_tests_command.contains("base-plus-tests"));
+        assert_eq!(direct.requested_by, vec!["tests-oracle"]);
+        assert_eq!(direct.request_ids, vec!["request-1"]);
+        assert!(direct.reason.contains("portfolio accounting"));
+
+        let diff = DiffContext {
+            base: "base".to_owned(),
+            head: "head".to_owned(),
+            changed_files: vec!["test/js/bun/proof.test.ts".to_owned()],
+            patch: "diff --git a/test/js/bun/proof.test.ts b/test/js/bun/proof.test.ts\nindex 1111111..2222222 100644\n@@ -1,2 +1,4 @@\n import { test } from 'bun:test';\n+test(\"first proof\", () => {});\n+test(\"second proof\", () => {});\n".to_owned(),
+            flags: DiffFlags::default(),
+            diff_class: DiffClass::TestsOnly,
+        };
+        let planner_plans = focused_proof_plans_from_diff(&diff, &[], budget);
+        let planner_plan = planner_plans
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing focused planner plan"))?;
+        assert_eq!(planner_plans.len(), 1);
+        assert_eq!(planner_plan.test_file, "test/js/bun/proof.test.ts");
+        assert_eq!(planner_plan.test_name, None);
+        assert_eq!(planner_plan.mode, FocusedProofMode::RedGreen);
+        assert_eq!(planner_plan.timeout_sec, 120);
+        assert!(planner_plan.head_command.contains("bun bd test"));
+        assert!(planner_plan.base_plus_tests_command.contains("bun test"));
+        assert_eq!(planner_plan.requested_by, vec!["proof-broker"]);
+        assert!(planner_plan.request_ids.is_empty());
+        assert_eq!(planner_plan.status, "planned");
+        assert!(
+            planner_plan
+                .reason
+                .contains("planner-only focused test target")
+        );
+
+        let candidate_plans = focused_proof_candidate_plans_from_diff(&diff, &[], budget);
+        assert_eq!(
+            focused_proof_candidate_plans_from_diff(&diff, &[], budget).len(),
+            1,
+            "focused_proof_candidate_plans_from_diff must record the candidate"
+        );
+        assert_eq!(candidate_plans.len(), 1);
+        assert_eq!(
+            focused_proof_candidate_plans_from_diff(&diff, &[], budget)
+                .iter()
+                .filter(|plan| plan.status == "planned")
+                .count(),
+            1
+        );
+        assert_eq!(
+            candidate_plans
+                .iter()
+                .map(|plan| {
+                    (
+                        plan.id.as_str(),
+                        plan.test_file.as_str(),
+                        plan.test_name.as_deref(),
+                        plan.mode.key(),
+                        plan.status.as_str(),
+                        plan.timeout_sec,
+                        plan.head_command.as_str(),
+                        plan.base_plus_tests_command.as_str(),
+                        plan.requested_by.as_slice(),
+                        plan.request_ids.as_slice(),
+                        plan.reason.as_str(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            planner_plans
+                .iter()
+                .map(|plan| {
+                    (
+                        plan.id.as_str(),
+                        plan.test_file.as_str(),
+                        plan.test_name.as_deref(),
+                        plan.mode.key(),
+                        "planned",
+                        plan.timeout_sec,
+                        plan.head_command.as_str(),
+                        plan.base_plus_tests_command.as_str(),
+                        plan.requested_by.as_slice(),
+                        plan.request_ids.as_slice(),
+                        "candidate recorded for portfolio accounting; execution is budget-gated",
+                    )
+                })
+                .collect::<Vec<_>>(),
+            "focused_proof_candidate_plans_from_diff must preserve the complete candidate"
+        );
+        let zero_test_budget = ProofBudget {
+            max_focused_tests: 0,
+            ..budget
+        };
+        let deferred_candidates =
+            focused_proof_candidate_plans_from_diff(&diff, &[], zero_test_budget);
+        assert_eq!(deferred_candidates.len(), 1);
+        assert_eq!(
+            deferred_candidates
+                .iter()
+                .filter(|plan| plan.status == "deferred_by_budget")
+                .count(),
+            1
+        );
+
+        let build_requests = [
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "build-1".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo check --workspace --all-targets --locked".to_owned(),
+                reason: "check".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            },
+            ProofRequest {
+                schema: "ub-review.proof_request.v1".to_owned(),
+                id: "build-2".to_owned(),
+                lane: "architecture".to_owned(),
+                requested_by: vec!["architecture".to_owned()],
+                command: "cargo doc --workspace --no-deps --locked".to_owned(),
+                reason: "docs".to_owned(),
+                cost: "focused-build".to_owned(),
+                timeout_sec: 60,
+                required: false,
+                status: "requested".to_owned(),
+            },
+        ];
+        let build_plans = focused_build_candidate_plans_from_requests(&build_requests, budget);
+        assert_eq!(
+            focused_build_candidate_plans_from_requests(&build_requests, budget).len(),
+            2,
+            "focused_build_candidate_plans_from_requests must retain all candidates"
+        );
+        assert_eq!(build_plans.len(), 2);
+        assert_eq!(
+            focused_build_candidate_plans_from_requests(&build_requests, budget)
+                .iter()
+                .filter(|plan| plan.status == "planned")
+                .count(),
+            1
+        );
+        assert_eq!(
+            build_plans
+                .iter()
+                .filter(|plan| plan.status == "deferred_by_budget")
+                .count(),
+            1
+        );
+        assert!(build_plans.iter().all(|plan| plan.timeout_sec == 60));
+        assert_eq!(
+            build_plans
+                .iter()
+                .map(|plan| {
+                    (
+                        plan.id.as_str(),
+                        plan.command.as_str(),
+                        plan.timeout_sec,
+                        plan.requested_by.as_slice(),
+                        plan.request_ids.as_slice(),
+                        plan.status.as_str(),
+                        plan.reason.as_str(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "proof-build-81dee1e1dd1f",
+                    "cargo check --workspace --all-targets --locked",
+                    60,
+                    ["architecture".to_owned()].as_slice(),
+                    ["build-1".to_owned()].as_slice(),
+                    "planned",
+                    "candidate recorded for portfolio accounting; execution is budget-gated",
+                ),
+                (
+                    "proof-build-f5e93291b352",
+                    "cargo doc --workspace --no-deps --locked",
+                    60,
+                    ["architecture".to_owned()].as_slice(),
+                    ["build-2".to_owned()].as_slice(),
+                    "deferred_by_budget",
+                    "candidate recorded for portfolio accounting; execution is budget-gated",
+                ),
+            ],
+            "focused_build_candidate_plans_from_requests must preserve every candidate field"
+        );
+        let first_build = build_plans
+            .first()
+            .ok_or_else(|| anyhow::anyhow!("missing first build candidate"))?;
+        let second_build = build_plans
+            .get(1)
+            .ok_or_else(|| anyhow::anyhow!("missing second build candidate"))?;
+        assert_eq!(
+            first_build.command, "cargo check --workspace --all-targets --locked",
+            "focused_build_candidate_plans_from_requests must preserve the first command"
+        );
+        assert_eq!(
+            first_build.status, "planned",
+            "focused_build_candidate_plans_from_requests must preserve planned status"
+        );
+        assert_eq!(
+            first_build.requested_by,
+            vec!["architecture"],
+            "focused_build_candidate_plans_from_requests must preserve the first lane"
+        );
+        assert_eq!(
+            first_build.request_ids,
+            vec!["build-1"],
+            "focused_build_candidate_plans_from_requests must preserve the first request"
+        );
+        assert_eq!(
+            second_build.command, "cargo doc --workspace --no-deps --locked",
+            "focused_build_candidate_plans_from_requests must preserve the second command"
+        );
+        assert_eq!(
+            second_build.status, "deferred_by_budget",
+            "focused_build_candidate_plans_from_requests must defer overflow"
+        );
+        assert_eq!(
+            second_build.request_ids,
+            vec!["build-2"],
+            "focused_build_candidate_plans_from_requests must preserve the second request"
+        );
+        Ok(())
     }
 
     /// v2 build candidates match v1 for the same command.

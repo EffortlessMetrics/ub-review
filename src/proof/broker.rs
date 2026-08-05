@@ -46,6 +46,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         build_tasks: &[],
         proof_requests: &[],
         proof_receipts: &[],
+        head: &diff.head,
         budget,
         runtime,
     });
@@ -65,6 +66,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         build_tasks: &[],
         proof_requests: &[],
         proof_receipts: &result.proof_receipts,
+        head: &diff.head,
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -104,7 +106,11 @@ pub(crate) fn run_seeded_proof_stream_v0(
     )?);
     let mut proof_result = initial_result?;
 
-    if has_unreceipted_proof_request_tasks(seeded_proof_requests, &proof_result.proof_receipts) {
+    if has_unreceipted_proof_request_tasks(
+        seeded_proof_requests,
+        &proof_result.proof_receipts,
+        &diff.head,
+    ) {
         let seeded_request_loop = start_run_loop(
             event_log,
             run_started,
@@ -175,6 +181,7 @@ pub(crate) struct ProofPortfolioInput<'a> {
     pub(crate) build_tasks: &'a [FocusedBuildTask],
     pub(crate) proof_requests: &'a [ProofRequest],
     pub(crate) proof_receipts: &'a [ProofReceipt],
+    pub(crate) head: &'a str,
     pub(crate) budget: ProofBudget,
     pub(crate) runtime: ProofPortfolioRuntime,
 }
@@ -239,18 +246,14 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         let exact_receipts = input
             .proof_receipts
             .iter()
-            .filter(|receipt| receipt.id == task_id)
+            .filter(|receipt| receipt_matches_task_on_head(receipt, &task_id, input.head))
             .collect::<Vec<_>>();
         let shared_receipts = if exact_receipts.is_empty() {
             input
                 .proof_receipts
                 .iter()
                 .filter(|receipt| {
-                    receipt_can_answer_shared_request(receipt)
-                        && receipt
-                            .request_ids
-                            .iter()
-                            .any(|id| request_ids.contains(id))
+                    receipt_matches_shared_request_on_head(receipt, &request_ids, input.head)
                 })
                 .collect::<Vec<_>>()
         } else {
@@ -649,6 +652,7 @@ where
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: existing_receipts,
+        head: &diff.head,
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -676,6 +680,7 @@ where
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &existing_and_new_receipts,
+        head: &diff.head,
         budget: remaining_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -706,6 +711,7 @@ where
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &final_receipts,
+        head: &diff.head,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -748,6 +754,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: existing_receipts,
+        head: &diff.head,
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -775,6 +782,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &existing_and_new_receipts,
+        head: &diff.head,
         budget: remaining_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -805,6 +813,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &final_receipts,
+        head: &diff.head,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -867,12 +876,10 @@ fn merge_focused_test_candidates(
     additional: Vec<FocusedTestTask>,
 ) {
     for mut task in additional {
-        if let Some(existing) = candidates.iter_mut().find(|candidate| {
-            candidate.id == task.id
-                || (candidate.file == task.file
-                    && candidate.test_name == task.test_name
-                    && candidate.mode == task.mode)
-        }) {
+        let matching_index = candidates
+            .iter()
+            .position(|candidate| candidate.id == task.id);
+        if let Some(existing) = matching_index.and_then(|index| candidates.get_mut(index)) {
             if existing.timeout_sec < task.timeout_sec {
                 existing.timeout_sec = task.timeout_sec;
             }
@@ -956,11 +963,9 @@ pub(crate) fn attach_request_metadata_to_focused_receipts(
 pub(crate) fn unreceipted_focused_test_tasks(
     tasks: Vec<FocusedTestTask>,
     existing_receipts: &[ProofReceipt],
+    head: &str,
 ) -> Vec<FocusedTestTask> {
-    let existing_ids = existing_receipts
-        .iter()
-        .map(|receipt| receipt.id.clone())
-        .collect::<BTreeSet<_>>();
+    let existing_ids = current_head_receipt_ids(existing_receipts, head);
     tasks
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
@@ -970,11 +975,9 @@ pub(crate) fn unreceipted_focused_test_tasks(
 pub(crate) fn unreceipted_focused_build_tasks(
     tasks: Vec<FocusedBuildTask>,
     existing_receipts: &[ProofReceipt],
+    head: &str,
 ) -> Vec<FocusedBuildTask> {
-    let existing_ids = existing_receipts
-        .iter()
-        .map(|receipt| receipt.id.clone())
-        .collect::<BTreeSet<_>>();
+    let existing_ids = current_head_receipt_ids(existing_receipts, head);
     tasks
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
@@ -984,17 +987,45 @@ pub(crate) fn unreceipted_focused_build_tasks(
 pub(crate) fn has_unreceipted_proof_request_tasks(
     proof_requests: &[ProofRequest],
     existing_receipts: &[ProofReceipt],
+    head: &str,
 ) -> bool {
     !unreceipted_focused_test_tasks(
         focused_test_candidates_from_requests(proof_requests),
         existing_receipts,
+        head,
     )
     .is_empty()
         || !unreceipted_focused_build_tasks(
             focused_build_candidates_from_requests(proof_requests),
             existing_receipts,
+            head,
         )
         .is_empty()
+}
+
+fn current_head_receipt_ids(receipts: &[ProofReceipt], head: &str) -> BTreeSet<String> {
+    receipts
+        .iter()
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(head))
+        .map(|receipt| receipt.id.clone())
+        .collect()
+}
+
+fn receipt_matches_task_on_head(receipt: &ProofReceipt, task_id: &str, head: &str) -> bool {
+    receipt.id == task_id && receipt.head.eq_ignore_ascii_case(head)
+}
+
+fn receipt_matches_shared_request_on_head(
+    receipt: &ProofReceipt,
+    request_ids: &[String],
+    head: &str,
+) -> bool {
+    receipt.head.eq_ignore_ascii_case(head)
+        && receipt_can_answer_shared_request(receipt)
+        && receipt
+            .request_ids
+            .iter()
+            .any(|id| request_ids.contains(id))
 }
 
 pub(crate) fn focused_test_resource_lease(
@@ -1412,6 +1443,7 @@ mod tests {
             build_tasks: std::slice::from_ref(&build),
             proof_requests: &requests,
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
         });
@@ -1443,6 +1475,7 @@ mod tests {
             build_tasks: std::slice::from_ref(&build),
             proof_requests: &requests,
             proof_receipts: std::slice::from_ref(&receipt),
+            head: "head",
             budget: proof_budget_for_test(2, 60),
             runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
         });
@@ -1455,6 +1488,272 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing build portfolio decision"))?;
         ensure!(build_decision.status == "satisfied_by_existing_evidence");
         ensure!(build_decision.receipt_ids == vec!["parser".to_owned()]);
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_does_not_reuse_receipt_from_another_head() -> Result<()> {
+        let test = focused_test_task("parser", vec!["shared".to_owned()], 30);
+        let request = proof_request("shared", true);
+        let mut stale_receipt = test_receipt(&test.id, vec![request.id.clone()], "head_passed");
+        stale_receipt.head = "previous-head".to_owned();
+        let mut current_receipt = test_receipt(&test.id, vec![request.id.clone()], "head_passed");
+        current_receipt.head = "CURRENT-HEAD".to_owned();
+        assert!(current_receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(!stale_receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(receipt_matches_task_on_head(
+            &current_receipt,
+            &test.id,
+            "current-head",
+        ));
+        assert!(!receipt_matches_task_on_head(
+            &stale_receipt,
+            &test.id,
+            "current-head",
+        ));
+        assert!(receipt_matches_shared_request_on_head(
+            &current_receipt,
+            std::slice::from_ref(&request.id),
+            "current-head",
+        ));
+
+        let stale_only_selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&test),
+            build_tasks: &[],
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&stale_receipt),
+            head: "current-head",
+            budget: proof_budget_for_test(1, 60),
+            runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+        });
+        assert_eq!(stale_only_selection.test_tasks.len(), 1);
+
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&test),
+            build_tasks: &[],
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: &[stale_receipt.clone(), current_receipt.clone()],
+            head: "current-head",
+            budget: proof_budget_for_test(1, 60),
+            runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+        });
+
+        assert_eq!(selection.test_tasks.len(), 0);
+        let decision = selection
+            .decisions
+            .iter()
+            .find(|decision| decision.task_id == current_receipt.id)
+            .ok_or_else(|| anyhow::anyhow!("missing stale-receipt decision"))?;
+        assert_eq!(decision.status, "answered_by_existing_receipt");
+        assert_eq!(decision.receipt_ids, vec![current_receipt.id]);
+        Ok(())
+    }
+
+    #[test]
+    fn seeded_request_check_ignores_receipts_from_another_head() -> Result<()> {
+        let request = proof_request("shared", true);
+        let task = focused_test_candidates_from_requests(std::slice::from_ref(&request))
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
+        let mut stale_receipt = test_receipt(&task.id, task.request_ids.clone(), "head_passed");
+        stale_receipt.head = "previous-head".to_owned();
+        let current_head = "current-head";
+        assert!(!stale_receipt.head.eq_ignore_ascii_case(current_head));
+
+        assert!(has_unreceipted_proof_request_tasks(
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&stale_receipt),
+            current_head,
+        ));
+        assert!(!has_unreceipted_proof_request_tasks(
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&test_receipt(&task.id, task.request_ids, "head_passed")),
+            "head",
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn current_head_receipts_filter_stale_entries_without_reordering() -> Result<()> {
+        let current = test_receipt("current", Vec::new(), "head_passed");
+        let mut stale = test_receipt("stale", Vec::new(), "head_passed");
+        stale.head = "previous-head".to_owned();
+        assert!(current.head.eq_ignore_ascii_case("HEAD"));
+        assert!(!stale.head.eq_ignore_ascii_case("HEAD"));
+
+        let receipts = [stale, current.clone()];
+        let filtered = current_head_receipt_ids(&receipts, "HEAD");
+        assert_eq!(filtered, BTreeSet::from([current.id]));
+        Ok(())
+    }
+
+    #[test]
+    fn current_head_receipt_ids_drive_both_unreceipted_task_filters() -> Result<()> {
+        let test = focused_test_task("parser", vec!["parser".to_owned()], 30);
+        let build = focused_build_task("build", vec!["build".to_owned()], 10);
+        let current_test = test_receipt(&test.id, test.request_ids.clone(), "head_passed");
+        let mut stale_build = test_receipt(&build.id, build.request_ids.clone(), "head_passed");
+        stale_build.head = "previous-head".to_owned();
+        let receipts = [current_test, stale_build];
+
+        let remaining_tests = unreceipted_focused_test_tasks(vec![test.clone()], &receipts, "head");
+        assert!(remaining_tests.is_empty());
+
+        let remaining_builds =
+            unreceipted_focused_build_tasks(vec![build.clone()], &receipts, "head");
+        assert_eq!(
+            remaining_builds
+                .iter()
+                .map(|task| task.id.clone())
+                .collect::<Vec<_>>(),
+            vec![build.id.clone()]
+        );
+
+        let current_build = test_receipt(&build.id, build.request_ids.clone(), "head_passed");
+        let all_current_receipts = [
+            test_receipt(&test.id, test.request_ids.clone(), "head_passed"),
+            current_build,
+        ];
+        assert!(
+            unreceipted_focused_test_tasks(vec![test], &all_current_receipts, "head").is_empty()
+        );
+        assert!(
+            unreceipted_focused_build_tasks(vec![build], &all_current_receipts, "head").is_empty()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn broker_keeps_same_named_tests_with_distinct_commands_separate() -> Result<()> {
+        let binary = ProofRequest {
+            command: "cargo test --locked --package ub-review --bin ub-review same_test".to_owned(),
+            ..proof_request("binary", false)
+        };
+        let library = ProofRequest {
+            command: "cargo test --locked --package ub-review --lib same_test".to_owned(),
+            ..proof_request("library", false)
+        };
+        let mut candidates = focused_test_candidates_from_requests(std::slice::from_ref(&binary));
+        let additional = focused_test_candidates_from_requests(std::slice::from_ref(&library));
+        ensure!(candidates.len() == 1);
+        ensure!(additional.len() == 1);
+
+        merge_focused_test_candidates(&mut candidates, additional);
+
+        assert_eq!(candidates.len(), 2);
+        assert_eq!(
+            candidates
+                .iter()
+                .flat_map(|task| task.request_ids.iter())
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([binary.id, library.id])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn broker_merges_equivalent_focused_test_commands_and_request_ids() -> Result<()> {
+        let first = ProofRequest {
+            command: "cargo test --locked --package ub-review --bin ub-review same_test".to_owned(),
+            ..proof_request("first", false)
+        };
+        let second = ProofRequest {
+            command: first.command.clone(),
+            ..proof_request("second", false)
+        };
+        let mut candidates = focused_test_candidates_from_requests(std::slice::from_ref(&first));
+        let additional = focused_test_candidates_from_requests(std::slice::from_ref(&second));
+        ensure!(candidates.len() == 1);
+        ensure!(additional.len() == 1);
+
+        merge_focused_test_candidates(&mut candidates, additional);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0]
+                .request_ids
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([first.id, second.id])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn seeded_proof_requests_require_a_receipt_for_the_current_head() -> Result<()> {
+        let seeded_proof_requests = vec![proof_request("seeded", true)];
+        let task = focused_test_candidates_from_requests(&seeded_proof_requests)
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("seeded request should produce a focused task"))?;
+        let mut current_receipt = test_receipt(&task.id, task.request_ids.clone(), "head_passed");
+        current_receipt.head = "CURRENT-HEAD".to_owned();
+
+        assert!(!has_unreceipted_proof_request_tasks(
+            &seeded_proof_requests,
+            std::slice::from_ref(&current_receipt),
+            "current-head",
+        ));
+
+        current_receipt.head = "PREVIOUS-HEAD".to_owned();
+        assert!(has_unreceipted_proof_request_tasks(
+            &seeded_proof_requests,
+            std::slice::from_ref(&current_receipt),
+            "current-head",
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn seeded_stream_starts_current_head_request_broker_when_receipt_is_missing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut diff = test_diff();
+        diff.head = "CURRENT-HEAD".to_owned();
+        let mut profile = Profile::default();
+        profile.budgets.proof_max_focused_test_files = 0;
+        profile.budgets.proof_max_focused_tests = 0;
+        profile.budgets.proof_total_timeout_sec = 0;
+        let args = test_run_args(out.clone());
+        let event_log = crate::EventLog::open(&temp.path().join("events.ndjson"))?;
+        let run_started = Instant::now();
+        let initial_loop = crate::start_run_loop(
+            &event_log,
+            &run_started,
+            "proof",
+            "proof",
+            "initial-diff-broker",
+        )?;
+
+        let (_, phases) = run_seeded_proof_stream_v0(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &args,
+            std::slice::from_ref(&proof_request("seeded", true)),
+            initial_loop,
+            &event_log,
+            &run_started,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_192),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.25),
+                github_actions: false,
+            },
+        )?;
+
+        assert!(
+            phases
+                .iter()
+                .any(|phase| phase.stage == "seeded-request-broker")
+        );
+        let portfolio = fs::read_to_string(out.join("review/proof_portfolio.json"))?;
+        assert!(portfolio.contains("seeded"));
         Ok(())
     }
 
@@ -1790,6 +2089,7 @@ mod tests {
             build_tasks: &[],
             proof_requests: &[],
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 0),
             runtime: portfolio_runtime_for_test(0, 4, Some(8_192), Some(20_000)),
         });
@@ -1874,6 +2174,7 @@ mod tests {
             build_tasks: &[],
             proof_requests: &[],
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(60, 0, Some(128), Some(32)),
         });
@@ -1895,6 +2196,7 @@ mod tests {
             build_tasks: &[],
             proof_requests: &[],
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(5, 4, Some(8_192), Some(20_000)),
         });

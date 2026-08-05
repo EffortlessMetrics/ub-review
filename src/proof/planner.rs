@@ -159,8 +159,8 @@ pub(crate) fn build_proof_planner_output(
 ) -> Result<ProofPlannerOutput> {
     let budget = proof_budget(profile)?;
     let lease_budget = proof_lease_budget(profile)?;
-    let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
-    let build_plans = focused_build_plans_from_requests(proof_requests, budget);
+    let plans = focused_proof_candidate_plans_from_diff(diff, proof_requests, budget);
+    let build_plans = focused_build_candidate_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
         .into_iter()
         .map(|plan| proof_task_artifact(plan, budget, lease_budget))
@@ -281,7 +281,7 @@ pub(crate) fn write_proof_request_artifacts(
 ) -> Result<()> {
     let review_dir = out.join("review");
     fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
-    let terminal_requests = terminalize_proof_requests(proof_requests, proof_receipts);
+    let terminal_requests = terminalize_proof_requests(&diff.head, proof_requests, proof_receipts);
     ensure_terminal_proof_requests(&terminal_requests)?;
     let proof_groups = proof_request_groups(&terminal_requests);
     let focused_plans = focused_proof_plans_from_diff(diff, proof_requests, proof_budget(profile)?);
@@ -427,6 +427,7 @@ pub(crate) fn write_proof_request_artifacts(
             build_tasks: &build_candidates,
             proof_requests,
             proof_receipts,
+            head: &diff.head,
             budget: remaining_budget,
             runtime: ProofPortfolioRuntime::from_box_state(
                 &BoxState::detect()?,
@@ -640,6 +641,7 @@ pub(crate) fn proof_request_groups(proof_requests: &[ProofRequest]) -> Vec<Proof
 }
 
 pub(crate) fn terminalize_proof_requests(
+    head: &str,
     requests: &[ProofRequest],
     receipts: &[ProofReceipt],
 ) -> Vec<ProofRequest> {
@@ -651,7 +653,7 @@ pub(crate) fn terminalize_proof_requests(
             }
             let matching = receipts
                 .iter()
-                .filter(|receipt| receipt.request_ids.iter().any(|id| id == &request.id))
+                .filter(|receipt| receipt_matches_request_on_head(receipt, &request.id, head))
                 .collect::<Vec<_>>();
             let mut terminal = request.clone();
             if matching.is_empty() {
@@ -681,6 +683,10 @@ pub(crate) fn terminalize_proof_requests(
             terminal
         })
         .collect()
+}
+
+fn receipt_matches_request_on_head(receipt: &ProofReceipt, request_id: &str, head: &str) -> bool {
+    receipt.head.eq_ignore_ascii_case(head) && receipt.request_ids.iter().any(|id| id == request_id)
 }
 
 fn proof_request_terminal_status(result: &str) -> &'static str {
@@ -844,6 +850,7 @@ pub(crate) fn proof_request_allowed_v0(command: &str, cost: &str) -> bool {
 mod tests {
     use anyhow::{Result, ensure};
 
+    use super::receipt_matches_request_on_head;
     use crate::test_parse::extract_focused_test_name;
     use crate::tests::test_diff;
     use crate::*;
@@ -1583,7 +1590,7 @@ index 1111111..2222222 100644
             result: "head_passed".to_owned(),
             reason: "changed parser test passed".to_owned(),
         };
-        let terminal = terminalize_proof_requests(&requests, &[receipt]);
+        let terminal = terminalize_proof_requests("head", &requests, &[receipt]);
         assert_eq!(terminal[0].status, "satisfied");
         assert_eq!(terminal[1].status, "deduplicated");
         assert_eq!(terminal[2].status, "deferred");
@@ -1670,7 +1677,7 @@ index 1111111..2222222 100644
                 result: result.to_owned(),
                 reason: "terminal outcome fixture".to_owned(),
             };
-            let terminal = terminalize_proof_requests(&[request], &[receipt]);
+            let terminal = terminalize_proof_requests("head", &[request], &[receipt]);
             assert_eq!(terminal[0].status, expected, "result={result}");
         }
         assert_eq!(
@@ -1680,6 +1687,71 @@ index 1111111..2222222 100644
         assert_eq!(super::proof_request_terminal_status("timed_out"), "failed");
         assert_eq!(super::proof_request_status_rank("failed"), 7);
         assert_eq!(super::proof_request_status_rank("invalid"), 0);
+    }
+
+    #[test]
+    fn terminalization_does_not_use_receipt_from_another_head() {
+        let request = ProofRequest {
+            schema: PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "request-current-head".to_owned(),
+            lane: "tests-oracle".to_owned(),
+            requested_by: vec!["tests-oracle".to_owned()],
+            command: "cargo test -p parser".to_owned(),
+            reason: "current-head proof".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 60,
+            required: true,
+            status: "requested".to_owned(),
+        };
+        let receipt = ProofReceipt {
+            schema: PROOF_RECEIPT_SCHEMA.to_owned(),
+            id: "receipt-previous-head".to_owned(),
+            kind: "focused-head".to_owned(),
+            base: "base".to_owned(),
+            head: "previous-head".to_owned(),
+            test_patch_mode: "head-only".to_owned(),
+            requested_by: vec!["proof-broker".to_owned()],
+            request_ids: vec![request.id.clone()],
+            commands: Vec::new(),
+            result: "head_passed".to_owned(),
+            reason: "stale receipt".to_owned(),
+        };
+
+        let mut current_receipt = receipt.clone();
+        current_receipt.id = "receipt-current-head".to_owned();
+        current_receipt.head = "CURRENT-HEAD".to_owned();
+        assert!(current_receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(!receipt.head.eq_ignore_ascii_case("current-head"));
+        assert!(receipt_matches_request_on_head(
+            &current_receipt,
+            "request-current-head",
+            "current-head",
+        ));
+        assert!(!receipt_matches_request_on_head(
+            &receipt,
+            "request-current-head",
+            "current-head",
+        ));
+        let stale_only = terminalize_proof_requests(
+            "current-head",
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&receipt),
+        );
+        assert_eq!(
+            stale_only
+                .iter()
+                .map(|request| (
+                    request.status.as_str(),
+                    request.reason.contains("current-head")
+                ))
+                .collect::<Vec<_>>(),
+            vec![("deferred", true)]
+        );
+        let terminal =
+            terminalize_proof_requests("current-head", &[request], &[receipt, current_receipt]);
+        assert_eq!(terminal[0].status, "satisfied");
+        assert!(terminal[0].reason.contains("receipt-current-head"));
+        assert!(!terminal[0].reason.contains("receipt-previous-head"));
     }
 
     #[test]
