@@ -14623,6 +14623,11 @@ required_proof_unprooven = true
         assert_eq!(surface.terminal_state.final_follow_up_tasks, 2);
         assert!(surface.github_review.body.is_empty());
         assert!(surface.github_review.comments.is_empty());
+        assert_eq!(
+            surface.output_degradation.schema,
+            crate::OUTPUT_DEGRADATION_SCHEMA
+        );
+        assert_eq!(surface.output_degradation.selected_mode, "full");
         Ok(())
     }
 

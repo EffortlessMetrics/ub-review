@@ -1006,4 +1006,58 @@ mod output_degradation_tests {
         assert_eq!(receipt.final_bytes, body.len());
         assert!(receipt.final_bytes <= receipt.max_bytes);
     }
+
+    #[test]
+    fn topic_ranking_and_order_cover_evidence_and_materiality_precedence() {
+        assert_eq!(output_topic_rank("## Confirmed findings", "finding"), 5);
+        assert_eq!(output_topic_rank("## Test proof", "executed receipt"), 7);
+        assert_eq!(output_topic_rank("## Evidence gaps", "medium gap"), 5);
+        assert_eq!(output_topic_rank("## Summary-only findings", "finding"), 3);
+        assert_eq!(output_topic_rank("## Parked follow-ups", "finding"), 2);
+        assert_eq!(output_topic_rank("## Custom", "high confirmed finding"), 5);
+
+        let low = OutputTopic {
+            id: "topic-b".to_owned(),
+            section: "## Custom".to_owned(),
+            text: "low".to_owned(),
+            rank: 1,
+        };
+        let high = OutputTopic {
+            id: "topic-a".to_owned(),
+            section: "## Custom".to_owned(),
+            text: "high".to_owned(),
+            rank: 2,
+        };
+        assert_eq!(output_topic_order(&high, &low), std::cmp::Ordering::Less);
+        assert_eq!(output_topic_order(&low, &high), std::cmp::Ordering::Greater);
+    }
+
+    #[test]
+    fn topic_parser_normalizes_empty_lines_and_punctuation() {
+        let topics = output_topics(
+            "## Confirmed findings\n\n- Parser, concern!\n\n## Reporter summary\n\nA useful synthesis.\n",
+        );
+
+        assert_eq!(topics.len(), 2);
+        assert_eq!(normalize_output_topic("Parser, concern!"), "parser concern");
+        assert!(
+            topics
+                .iter()
+                .any(|topic| topic.section == "## Reporter summary")
+        );
+        assert!(topics.iter().all(|topic| topic.id.starts_with("topic-")));
+    }
+
+    #[test]
+    fn recompressed_mode_is_selected_when_only_section_order_changes() {
+        let input = "## Custom evidence\n\n\n- Executed receipt confirms the result.\n";
+        let (body, receipt) = degrade_review_body(input.to_owned(), 60, 12, "head-recompress");
+
+        assert_eq!(
+            body,
+            "## Custom evidence\n\n- Executed receipt confirms the result.\n"
+        );
+        assert_eq!(receipt.selected_mode, "recompressed");
+        assert_eq!(receipt.original_item_count, receipt.final_item_count);
+    }
 }
