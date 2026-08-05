@@ -30,6 +30,36 @@ pub(crate) struct PendingReviewPostOutcome {
     pub(crate) http_status: Option<u16>,
 }
 
+const REPLY_DELIVERY_RECEIPT_SCHEMA: &str = "ub-review.reply_delivery_receipt.v1";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct ReplyDeliveryReceipt {
+    schema: &'static str,
+    exact_head_sha: String,
+    claim_id: String,
+    action: &'static str,
+    path: String,
+    line: u32,
+    side: String,
+    source_thread_id: String,
+    expected_body_digest: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    review_id: Option<String>,
+    comment_id: String,
+    confirmed_head_sha: String,
+}
+
+struct ReplyDeliveryContext<'a> {
+    args: &'a PostArgs,
+    api: &'a str,
+    repo: &'a str,
+    pull_number: u64,
+    token: &'a str,
+    exact_head_sha: &'a str,
+    review: &'a GitHubReview,
+    all_planned: &'a [PlannedDelivery],
+}
+
 trait DeliveryTransport {
     fn fetch_json(&mut self, url: &str, token: &str) -> Result<serde_json::Value>;
 
@@ -113,13 +143,111 @@ fn execute_pending_review_delivery_with_transport(
         &expected_head,
         &current_head,
     )?;
-    let planned = build_planned_inline_deliveries(review, &expected_head, claim_graph.as_ref())?;
-    let mut transaction = DeliveryTransaction::new(expected_head.clone(), planned.clone())?;
+    let all_planned = build_planned_deliveries(review, &expected_head, claim_graph.as_ref())?;
+    let needs_existing_state = all_planned
+        .iter()
+        .any(|item| item.action() == DeliveryAction::Reply)
+        || args.out.join("delivery-reconciliation.json").exists()
+        || args.out.join("delivery-reply-receipts.json").exists();
+    let existing_comments = if needs_existing_state {
+        Some(fetch_pull_review_comments(
+            transport,
+            api,
+            repo,
+            pull_number,
+            token,
+        )?)
+    } else {
+        None
+    };
+    let prior_confirmed = prior_confirmed_deliveries(
+        args,
+        &all_planned,
+        existing_comments.as_ref(),
+        &expected_head,
+    )?;
+    let remaining = all_planned
+        .iter()
+        .filter(|item| !prior_confirmed.iter().any(|confirmed| confirmed == *item))
+        .cloned()
+        .collect::<Vec<_>>();
+    let remaining_inline = remaining
+        .iter()
+        .filter(|item| item.action() == DeliveryAction::Inline)
+        .cloned()
+        .collect::<Vec<_>>();
+    let remaining_replies = remaining
+        .iter()
+        .filter(|item| item.action() == DeliveryAction::Reply)
+        .cloned()
+        .collect::<Vec<_>>();
+    let mut confirmed_for_body = prior_confirmed;
+
+    // A reply has no pending-review container in the REST API. When a review
+    // has no new inline comments, deliver the replies directly and retain the
+    // exact current-head receipt packet without manufacturing a review id.
+    if !review.comments.is_empty() && remaining_inline.is_empty() {
+        let replies = execute_reply_deliveries(
+            ReplyDeliveryContext {
+                args,
+                api,
+                repo,
+                pull_number,
+                token,
+                exact_head_sha: &expected_head,
+                review,
+                all_planned: &all_planned,
+            },
+            &remaining_replies,
+            existing_comments.as_ref(),
+            transport,
+        )?;
+        let rechecked_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
+        ensure_heads_match(
+            "after direct reply delivery",
+            &expected_head,
+            &rechecked_head,
+        )?;
+        confirmed_for_body.extend(
+            replies
+                .iter()
+                .filter_map(|receipt| {
+                    all_planned.iter().find(|planned| {
+                        planned.claim_id() == receipt.claim_id
+                            && planned.source_thread_id() == Some(receipt.source_thread_id.as_str())
+                    })
+                })
+                .cloned(),
+        );
+        write_retry_decisions(args, &all_planned, &confirmed_for_body)?;
+        let response = replies
+            .last()
+            .map(|receipt| serde_json::json!({"id": receipt.comment_id, "state": "commented"}))
+            .unwrap_or_else(|| serde_json::json!({"state": "already_delivered"}));
+        return Ok(PendingReviewPostOutcome {
+            response,
+            http_status: Some(200),
+        });
+    }
+
+    let mut transaction =
+        DeliveryTransaction::new(expected_head.clone(), remaining_inline.clone())?;
+
+    let pending_comments = api_payload
+        .comments
+        .iter()
+        .zip(all_planned.iter())
+        .filter(|(_, planned)| {
+            planned.action() == DeliveryAction::Inline
+                && remaining_inline.iter().any(|item| item == *planned)
+        })
+        .map(|(_, comment)| comment)
+        .collect::<Vec<_>>();
 
     let pending_payload = serde_json::json!({
         "commit_id": expected_head,
         "body": api_payload.body,
-        "comments": api_payload.comments,
+        "comments": pending_comments,
     });
     let pending_payload_path = args.out.join("delivery-pending-review-payload.json");
     write_json(&pending_payload_path, &pending_payload)?;
@@ -151,9 +279,13 @@ fn execute_pending_review_delivery_with_transport(
             &args.out.join("delivery-pending-review-comments.json"),
             &listed,
         )?;
-        let observed = observed_deliveries(&listed, &planned, &expected_head)?;
-        let reconciliation =
-            reconcile_deliveries(&expected_head, &created_review_id, &planned, &observed)?;
+        let observed = observed_deliveries(&listed, &remaining_inline, &expected_head)?;
+        let reconciliation = reconcile_deliveries(
+            &expected_head,
+            &created_review_id,
+            &remaining_inline,
+            &observed,
+        )?;
         transaction.transition(DeliveryTransactionState::CommentsReconciled)?;
         let reconciliation_value = serde_json::to_value(&reconciliation)?;
         write_json(
@@ -166,6 +298,37 @@ fn execute_pending_review_delivery_with_transport(
         )?;
         write_transaction(&args.out, &transaction)?;
 
+        let replies = execute_reply_deliveries(
+            ReplyDeliveryContext {
+                args,
+                api,
+                repo,
+                pull_number,
+                token,
+                exact_head_sha: &expected_head,
+                review,
+                all_planned: &all_planned,
+            },
+            &remaining_replies,
+            existing_comments.as_ref(),
+            transport,
+        )?;
+        confirmed_for_body.extend(
+            remaining_inline.iter().cloned().chain(
+                replies
+                    .iter()
+                    .filter_map(|receipt| {
+                        all_planned.iter().find(|planned| {
+                            planned.claim_id() == receipt.claim_id
+                                && planned.source_thread_id()
+                                    == Some(receipt.source_thread_id.as_str())
+                        })
+                    })
+                    .cloned(),
+            ),
+        );
+        write_retry_decisions(args, &all_planned, &confirmed_for_body)?;
+
         let rechecked_head = fetch_pull_head(transport, api, repo, pull_number, token)?;
         ensure_heads_match(
             "before pending-review submission",
@@ -175,9 +338,15 @@ fn execute_pending_review_delivery_with_transport(
         transaction.transition(DeliveryTransactionState::HeadRevalidated)?;
         write_transaction(&args.out, &transaction)?;
 
+        let submitted_body = body_after_confirmed_delivery(
+            review,
+            api_payload.body.as_str(),
+            &confirmed_for_body,
+            &all_planned,
+        )?;
         let submit_payload = serde_json::json!({
             "event": "COMMENT",
-            "body": api_payload.body,
+            "body": submitted_body,
         });
         let submit_payload_path = args.out.join("delivery-submit-review-payload.json");
         write_json(&submit_payload_path, &submit_payload)?;
@@ -285,7 +454,7 @@ fn read_expected_delivery_head(
     Ok(None)
 }
 
-fn build_planned_inline_deliveries(
+fn build_planned_deliveries(
     review: &GitHubReview,
     exact_head_sha: &str,
     claim_graph: Option<&serde_json::Value>,
@@ -306,12 +475,13 @@ fn build_planned_inline_deliveries(
             let matches = topics
                 .iter()
                 .filter(|topic| {
-                    topic
-                        .get("planned_action")
-                        .and_then(serde_json::Value::as_str)
-                        == Some("inline")
-                        && topic.get("head_sha").and_then(serde_json::Value::as_str)
-                            == Some(exact_head_sha)
+                    matches!(
+                        topic
+                            .get("planned_action")
+                            .and_then(serde_json::Value::as_str),
+                        Some("inline") | Some("reply")
+                    ) && topic.get("head_sha").and_then(serde_json::Value::as_str)
+                        == Some(exact_head_sha)
                         && topic
                             .get("path")
                             .and_then(serde_json::Value::as_str)
@@ -335,6 +505,24 @@ fn build_planned_inline_deliveries(
                     comment.line
                 )
             })?;
+            let action = topic
+                .get("planned_action")
+                .and_then(serde_json::Value::as_str)
+                .ok_or_else(|| anyhow::anyhow!("delivery plan has no action"))?;
+            let (action, source_thread_id) = match action {
+                "inline" => (DeliveryAction::Inline, None),
+                "reply" => {
+                    let thread_id = topic
+                        .get("planned_thread_id")
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|value| !value.trim().is_empty())
+                        .ok_or_else(|| {
+                            anyhow::anyhow!("reply delivery plan has no current source thread")
+                        })?;
+                    (DeliveryAction::Reply, Some(thread_id.to_owned()))
+                }
+                other => bail!("unsupported delivery action {other:?}"),
+            };
             let claim_id = topic
                 .get("claim_id")
                 .and_then(serde_json::Value::as_str)
@@ -343,13 +531,323 @@ fn build_planned_inline_deliveries(
             PlannedDelivery::new(
                 exact_head_sha,
                 claim_id,
-                DeliveryAction::Inline,
+                action,
                 DeliveryLocation::new(path, comment.line, comment.side.clone()),
-                None,
+                source_thread_id,
                 sha256_hex(body.as_bytes()),
             )
         })
         .collect()
+}
+
+#[cfg(test)]
+fn build_planned_inline_deliveries(
+    review: &GitHubReview,
+    exact_head_sha: &str,
+    claim_graph: Option<&serde_json::Value>,
+) -> Result<Vec<PlannedDelivery>> {
+    build_planned_deliveries(review, exact_head_sha, claim_graph).map(|planned| {
+        planned
+            .into_iter()
+            .filter(|item| item.action() == DeliveryAction::Inline)
+            .collect()
+    })
+}
+
+fn fetch_pull_review_comments(
+    transport: &mut impl DeliveryTransport,
+    api: &str,
+    repo: &str,
+    pull_number: u64,
+    token: &str,
+) -> Result<serde_json::Value> {
+    let value = transport.fetch_json(
+        &format!("{api}/repos/{repo}/pulls/{pull_number}/comments?per_page=100"),
+        token,
+    )?;
+    ensure!(
+        value.is_array(),
+        "GitHub pull review comments response must be an array"
+    );
+    Ok(value)
+}
+
+fn prior_confirmed_deliveries(
+    args: &PostArgs,
+    planned: &[PlannedDelivery],
+    current_comments: Option<&serde_json::Value>,
+    exact_head_sha: &str,
+) -> Result<Vec<PlannedDelivery>> {
+    let Some(current_comments) = current_comments else {
+        return Ok(Vec::new());
+    };
+    let items = current_comments
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("current GitHub review comments must be an array"))?;
+    let mut receipts = Vec::new();
+    for path in [
+        args.out.join("delivery-reconciliation.json"),
+        args.out.join("delivery-reply-receipts.json"),
+    ] {
+        if !path.exists() {
+            continue;
+        }
+        let value: serde_json::Value = serde_json::from_slice(
+            &fs::read(&path).with_context(|| format!("read {}", path.display()))?,
+        )?;
+        if let Some(array) = value.as_array() {
+            receipts.extend(array.iter().cloned());
+        } else if let Some(array) = value.get("receipts").and_then(serde_json::Value::as_array) {
+            receipts.extend(array.iter().cloned());
+        }
+    }
+    let mut confirmed = Vec::new();
+    for item in planned {
+        let identity = serde_json::to_value(item)?;
+        let current = items.iter().find(|comment| {
+            comment_matches_delivery(comment, item, exact_head_sha).unwrap_or(false)
+        });
+        let receipt_match = receipts.iter().any(|receipt| {
+            receipt.get("exact_head_sha") == identity.get("exact_head_sha")
+                && receipt.get("claim_id") == identity.get("claim_id")
+                && receipt.get("action") == identity.get("action")
+                && receipt.get("path") == identity.get("path")
+                && receipt.get("line") == identity.get("line")
+                && receipt.get("side") == identity.get("side")
+                && receipt.get("source_thread_id") == identity.get("source_thread_id")
+                && receipt.get("expected_body_digest") == identity.get("expected_body_digest")
+                && receipt.get("confirmed_head_sha")
+                    == Some(&serde_json::Value::String(exact_head_sha.to_owned()))
+                && receipt.get("comment_id").is_some()
+        });
+        if current.is_some() && (receipt_match || item.action() == DeliveryAction::Reply) {
+            confirmed.push(item.clone());
+        }
+    }
+    Ok(confirmed)
+}
+
+fn comment_matches_delivery(
+    comment: &serde_json::Value,
+    planned: &PlannedDelivery,
+    exact_head_sha: &str,
+) -> Result<bool> {
+    let id = comment.get("id").and_then(|value| {
+        value
+            .as_u64()
+            .map(|id| id.to_string())
+            .or_else(|| value.as_str().map(str::to_owned))
+    });
+    let path = comment
+        .get("path")
+        .and_then(serde_json::Value::as_str)
+        .map(normalize_repo_path);
+    let line = comment
+        .get("line")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|line| u32::try_from(line).ok());
+    let side = comment.get("side").and_then(serde_json::Value::as_str);
+    let head = comment.get("commit_id").and_then(serde_json::Value::as_str);
+    let body = comment.get("body").and_then(serde_json::Value::as_str);
+    let (planned_path, planned_line, planned_side) = planned.location();
+    let shape_matches = id.is_some()
+        && path.as_deref() == Some(planned_path)
+        && line == Some(planned_line)
+        && side == Some(planned_side)
+        && head == Some(exact_head_sha)
+        && body.is_some_and(|body| sha256_hex(body.as_bytes()) == planned.expected_body_digest());
+    if !shape_matches {
+        return Ok(false);
+    }
+    if planned.action() == DeliveryAction::Reply {
+        Ok(comment
+            .get("in_reply_to_id")
+            .and_then(|value| {
+                value
+                    .as_u64()
+                    .map(|id| id.to_string())
+                    .or_else(|| value.as_str().map(str::to_owned))
+            })
+            .as_deref()
+            == planned.source_thread_id())
+    } else {
+        Ok(comment
+            .get("in_reply_to_id")
+            .is_none_or(serde_json::Value::is_null))
+    }
+}
+
+fn comment_for_planned<'a>(
+    review: &'a GitHubReview,
+    all_planned: &[PlannedDelivery],
+    planned: &PlannedDelivery,
+) -> Result<&'a GitHubReviewComment> {
+    review
+        .comments
+        .iter()
+        .zip(all_planned.iter())
+        .find(|(_, candidate)| *candidate == planned)
+        .map(|(comment, _)| comment)
+        .ok_or_else(|| anyhow::anyhow!("delivery plan has no matching review comment"))
+}
+
+fn execute_reply_deliveries(
+    context: ReplyDeliveryContext<'_>,
+    planned_replies: &[PlannedDelivery],
+    current_comments: Option<&serde_json::Value>,
+    transport: &mut impl DeliveryTransport,
+) -> Result<Vec<ReplyDeliveryReceipt>> {
+    if planned_replies.is_empty() {
+        return Ok(Vec::new());
+    }
+    let current_comments = current_comments
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| anyhow::anyhow!("current review comments are required for replies"))?;
+    let mut receipts = Vec::new();
+    for planned in planned_replies {
+        let source_thread_id = planned
+            .source_thread_id()
+            .ok_or_else(|| anyhow::anyhow!("reply delivery has no source thread"))?;
+        let source = current_comments
+            .iter()
+            .filter(|comment| {
+                let id = comment.get("id").and_then(|value| {
+                    value
+                        .as_u64()
+                        .map(|id| id.to_string())
+                        .or_else(|| value.as_str().map(str::to_owned))
+                });
+                id.as_deref() == Some(source_thread_id)
+                    && comment.get("commit_id").and_then(serde_json::Value::as_str)
+                        == Some(context.exact_head_sha)
+                    && comment.get("path").and_then(serde_json::Value::as_str)
+                        == Some(planned.location().0)
+                    && comment.get("line").and_then(serde_json::Value::as_u64)
+                        == Some(u64::from(planned.location().1))
+                    && comment.get("side").and_then(serde_json::Value::as_str)
+                        == Some(planned.location().2)
+            })
+            .collect::<Vec<_>>();
+        ensure!(
+            source.len() == 1,
+            "reply source thread {} is missing, stale, or ambiguous",
+            source_thread_id
+        );
+        let comment = comment_for_planned(context.review, context.all_planned, planned)?;
+        let body = github_review_post_comment_body(comment)?;
+        let source_id = source_thread_id.parse::<u64>().with_context(|| {
+            format!("reply source thread {source_thread_id} is not a numeric GitHub comment id")
+        })?;
+        let payload = serde_json::json!({
+            "body": body,
+            "in_reply_to": source_id,
+        });
+        let payload_path = context.args.out.join("delivery-reply-payload.json");
+        write_json(&payload_path, &payload)?;
+        let output = transport.send_json(
+            "POST",
+            &format!(
+                "{}/repos/{}/pulls/{}/comments",
+                context.api, context.repo, context.pull_number
+            ),
+            context.token,
+            &payload_path,
+            &[
+                "Accept: application/vnd.github+json",
+                "Content-Type: application/json",
+                "X-GitHub-Api-Version: 2022-11-28",
+            ],
+        )?;
+        let response = parse_success_json(&output, "review comment reply")?;
+        let comment_id = json_identifier(&response, "id", "review comment reply")?;
+        ensure!(
+            response
+                .get("commit_id")
+                .and_then(serde_json::Value::as_str)
+                == Some(context.exact_head_sha),
+            "review comment reply {} was returned for another head",
+            comment_id
+        );
+        ensure!(
+            response.get("body").and_then(serde_json::Value::as_str)
+                .is_some_and(|value| sha256_hex(value.as_bytes()) == planned.expected_body_digest()),
+            "review comment reply {} body does not match the planned digest",
+            comment_id
+        );
+        let receipt = ReplyDeliveryReceipt {
+            schema: REPLY_DELIVERY_RECEIPT_SCHEMA,
+            exact_head_sha: context.exact_head_sha.to_owned(),
+            claim_id: planned.claim_id().to_owned(),
+            action: "reply",
+            path: planned.location().0.to_owned(),
+            line: planned.location().1,
+            side: planned.location().2.to_owned(),
+            source_thread_id: source_thread_id.to_owned(),
+            expected_body_digest: planned.expected_body_digest().to_owned(),
+            review_id: response.get("pull_request_review_id").and_then(|value| {
+                value
+                    .as_u64()
+                    .map(|id| id.to_string())
+                    .or_else(|| value.as_str().map(str::to_owned))
+            }),
+            comment_id,
+            confirmed_head_sha: context.exact_head_sha.to_owned(),
+        };
+        receipts.push(receipt);
+        write_json(
+            &context.args.out.join("delivery-reply-receipts.json"),
+            &serde_json::to_value(&receipts)?,
+        )?;
+    }
+    Ok(receipts)
+}
+
+fn write_retry_decisions(
+    args: &PostArgs,
+    planned: &[PlannedDelivery],
+    confirmed: &[PlannedDelivery],
+) -> Result<()> {
+    let decisions = planned
+        .iter()
+        .map(|item| {
+            serde_json::json!({
+                "identity": item,
+                "status": if confirmed.iter().any(|candidate| candidate == item) { "confirmed_current_head" } else { "unconfirmed" },
+            })
+        })
+        .collect::<Vec<_>>();
+    write_json(
+        &args.out.join("delivery-retry-decisions.json"),
+        &serde_json::Value::Array(decisions),
+    )
+}
+
+fn body_after_confirmed_delivery(
+    review: &GitHubReview,
+    body: &str,
+    confirmed: &[PlannedDelivery],
+    all_planned: &[PlannedDelivery],
+) -> Result<String> {
+    let confirmed_comments = review
+        .comments
+        .iter()
+        .zip(all_planned.iter())
+        .filter(|(_, planned)| confirmed.iter().any(|candidate| candidate == *planned))
+        .map(|(comment, _)| github_review_post_comment_body(comment))
+        .collect::<Result<Vec<_>>>()?;
+    if confirmed_comments.is_empty() {
+        return Ok(body.to_owned());
+    }
+    let filtered = body
+        .lines()
+        .filter(|line| {
+            !confirmed_comments
+                .iter()
+                .any(|comment| !comment.is_empty() && line.contains(comment))
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    Ok(filtered)
 }
 
 fn fetch_pull_head(
@@ -990,6 +1488,117 @@ mod tests {
             build_planned_inline_deliveries(&review, HEAD, Some(&ambiguous)).is_err(),
             "ambiguous claim plan was accepted"
         );
+        Ok(())
+    }
+
+    #[test]
+    fn reply_delivery_posts_to_exact_current_source_and_receipts_it() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": HEAD,
+            "topics": [{
+                "claim_id": "claim-1",
+                "planned_action": "reply",
+                "planned_thread_id": "123",
+                "head_sha": HEAD,
+                "path": "src/lib.rs",
+                "anchor": 12
+            }]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (review, payload) = delivery_review();
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([{
+                    "id": 123,
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "commit_id": HEAD,
+                    "body": "prior finding"
+                }]),
+                serde_json::json!({"head": {"sha": HEAD}}),
+            ]),
+            sends: VecDeque::from([scripted_output(
+                &format!(
+                    r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":123}}"#
+                ),
+                true,
+            )?]),
+        };
+        let outcome = execute_pending_review_delivery_with_transport(
+            &delivery_args(temp.path(), "http://scripted"),
+            &review,
+            &payload,
+            &mut transport,
+        )?;
+        ensure!(outcome.response["id"] == "456");
+        let receipts: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/delivery-reply-receipts.json"),
+        )?)?;
+        ensure!(receipts[0]["claim_id"] == "claim-1");
+        ensure!(receipts[0]["source_thread_id"] == "123");
+        ensure!(receipts[0]["comment_id"] == "456");
+        ensure!(
+            transport.gets.is_empty() && transport.sends.is_empty(),
+            "reply path left scripted transport work"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn reply_delivery_rejects_stale_source_without_posting() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let graph = serde_json::json!({
+            "schema": "ub-review.claim_graph.v1",
+            "head_sha": HEAD,
+            "topics": [{
+                "claim_id": "claim-1",
+                "planned_action": "reply",
+                "planned_thread_id": "123",
+                "head_sha": HEAD,
+                "path": "src/lib.rs",
+                "anchor": 12
+            }]
+        });
+        fs::write(
+            temp.path().join("claim_graph.json"),
+            serde_json::to_vec(&graph)?,
+        )?;
+        let (review, payload) = delivery_review();
+        let mut transport = ScriptedTransport {
+            gets: VecDeque::from([
+                serde_json::json!({"head": {"sha": HEAD}}),
+                serde_json::json!([{
+                    "id": 123,
+                    "path": "src/lib.rs",
+                    "line": 12,
+                    "side": "RIGHT",
+                    "commit_id": "fedcba9876543210fedcba9876543210fedcba98",
+                    "body": "prior finding"
+                }]),
+            ]),
+            sends: VecDeque::new(),
+        };
+        let error = match execute_pending_review_delivery_with_transport(
+            &delivery_args(temp.path(), "http://scripted"),
+            &review,
+            &payload,
+            &mut transport,
+        ) {
+            Ok(_) => return Err(anyhow::anyhow!("stale source thread was accepted")),
+            Err(error) => error,
+        };
+        ensure!(
+            format!("{error:#}").contains("missing, stale, or ambiguous"),
+            "stale source diagnostic lost its actionable classification: {error:#}"
+        );
+        ensure!(transport.sends.is_empty(), "stale source triggered a POST");
         Ok(())
     }
 

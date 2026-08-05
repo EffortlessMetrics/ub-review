@@ -8441,6 +8441,7 @@ def require_delivery_transaction_artifacts(root: pathlib.Path) -> None:
     posting command emits them, this mirror checks the durable identity and
     exact-set contract without attempting to reproduce Rust reconciliation.
     """
+    require_reply_delivery_artifacts(root)
     transaction_path = root / "review/delivery-transaction.json"
     reconciliation_path = root / "review/delivery-reconciliation.json"
     receipts_path = root / "review/delivery-receipts.json"
@@ -8561,6 +8562,68 @@ def require_delivery_transaction_artifacts(root: pathlib.Path) -> None:
         identities.add(identity)
     if load_json(receipts_path) != receipts:
         fail("delivery-receipts.json does not match reconciliation receipts")
+
+
+def require_reply_delivery_artifacts(root: pathlib.Path) -> None:
+    """Validate direct current-head reply receipts produced by #828."""
+    receipts_path = root / "review/delivery-reply-receipts.json"
+    decisions_path = root / "review/delivery-retry-decisions.json"
+    if not receipts_path.exists() and not decisions_path.exists():
+        return
+    if receipts_path.exists():
+        receipts = load_json(receipts_path)
+        if not isinstance(receipts, list):
+            fail("delivery-reply-receipts.json must be an array")
+        identities = set()
+        comment_ids = set()
+        for index, receipt in enumerate(receipts):
+            if not isinstance(receipt, dict):
+                fail(f"reply delivery receipt {index} is not an object")
+            if receipt.get("schema") != "ub-review.reply_delivery_receipt.v1":
+                fail(f"reply delivery receipt {index} has the wrong schema")
+            if receipt.get("action") != "reply":
+                fail(f"reply delivery receipt {index} action is not reply")
+            head = receipt.get("exact_head_sha")
+            if not isinstance(head, str) or not head:
+                fail(f"reply delivery receipt {index} exact head is missing")
+            if receipt.get("confirmed_head_sha") != head:
+                fail(f"reply delivery receipt {index} confirmation head is wrong")
+            thread = receipt.get("source_thread_id")
+            if not isinstance(thread, str) or not thread:
+                fail(f"reply delivery receipt {index} source thread is missing")
+            comment_id = receipt.get("comment_id")
+            if not isinstance(comment_id, str) or not comment_id:
+                fail(f"reply delivery receipt {index} comment id is missing")
+            if comment_id in comment_ids:
+                fail("reply delivery receipts contain duplicate comment ids")
+            comment_ids.add(comment_id)
+            identity = tuple(
+                receipt.get(field)
+                for field in (
+                    "exact_head_sha",
+                    "claim_id",
+                    "action",
+                    "path",
+                    "line",
+                    "side",
+                    "source_thread_id",
+                    "expected_body_digest",
+                )
+            )
+            if identity in identities:
+                fail("reply delivery receipts contain duplicate identities")
+            identities.add(identity)
+    if decisions_path.exists():
+        decisions = load_json(decisions_path)
+        if not isinstance(decisions, list):
+            fail("delivery-retry-decisions.json must be an array")
+        for index, decision in enumerate(decisions):
+            if not isinstance(decision, dict):
+                fail(f"delivery retry decision {index} is not an object")
+            if decision.get("status") not in {"confirmed_current_head", "unconfirmed"}:
+                fail(f"delivery retry decision {index} has an invalid status")
+            if not isinstance(decision.get("identity"), dict):
+                fail(f"delivery retry decision {index} identity is missing")
 
 
 def self_test_delivery_transaction_contract() -> None:
@@ -8720,9 +8783,12 @@ def require_no_secret_markers(root: pathlib.Path) -> None:
         root / "review/delivery-pending-review-comments.json",
         root / "review/delivery-submit-review-payload.json",
         root / "review/delivery-cleanup-payload.json",
+        root / "review/delivery-reply-payload.json",
         root / "review/delivery-transaction.json",
         root / "review/delivery-reconciliation.json",
         root / "review/delivery-receipts.json",
+        root / "review/delivery-reply-receipts.json",
+        root / "review/delivery-retry-decisions.json",
         root / "review/resource_leases.json",
         root / "review/resource_plan.md",
         root / "review/tool-gate-outcomes.json",
