@@ -4396,7 +4396,7 @@ PROOF_INTENT_TERMINAL_STATUSES = {
     "unsupported_kind",
     "unsupported_target",
 }
-PROOF_INTENT_RESOLVED_STATUSES = {"deduplicated", "requested", "resolved"}
+PROOF_INTENT_RESOLVED_STATUSES = {"deduplicated", "resolved"}
 
 
 def require_proof_intent_timeout(intent: dict, index: int) -> None:
@@ -4489,6 +4489,15 @@ def require_proof_resolution_invariants(
                 )
             if not resolution_reason:
                 fail(f"proof intent {index} terminal status {status!r} has no resolution reason")
+            continue
+        if status == "requested":
+            if not resolved_request_ids:
+                fail(f"proof intent {index} status {status!r} has no resolved request ids")
+            for request_id in resolved_request_ids:
+                if request_id not in request_ids:
+                    fail(
+                        f"proof intent {index} references unknown resolved request {request_id!r}"
+                    )
             continue
         if status not in PROOF_INTENT_RESOLVED_STATUSES:
             fail(f"proof intent {index} has unknown resolution status {status!r}")
@@ -12835,6 +12844,13 @@ def self_test_proof_planner_resolution_contract() -> None:
     portfolio = {"selected_task_ids": ["proof-task-1"]}
     require_proof_resolution_invariants(
         [request], [intent], [task], [decision], portfolio
+    )
+    require_proof_resolution_invariants(
+        [request],
+        [{"status": "requested", "resolved_request_ids": ["proof-request-1"]}],
+        [],
+        [],
+        {"selected_task_ids": []},
     )
 
     expect_self_test_failure(
