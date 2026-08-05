@@ -614,6 +614,35 @@ mod tests {
     }
 
     #[test]
+    fn legacy_request_with_different_requiredness_keeps_distinct_identity() -> Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let existing = ProofRequest {
+            schema: crate::artifacts::PROOF_REQUEST_SCHEMA.to_owned(),
+            id: "legacy-optional-request".to_owned(),
+            lane: "legacy".to_owned(),
+            requested_by: vec!["legacy".to_owned()],
+            command: "cargo test --locked --package ub-review --test cli".to_owned(),
+            reason: "legacy optional equivalent".to_owned(),
+            cost: "focused-test".to_owned(),
+            timeout_sec: 300,
+            required: false,
+            status: "requested".to_owned(),
+        };
+        let result = resolve_model_proof_intents(
+            root,
+            &diff(&[]),
+            &[intent(ProofKind::FocusedTest, "cli")],
+            &[existing],
+            budget(),
+        )?;
+        assert_eq!(result.proof_requests.len(), 1);
+        assert!(result.proof_requests[0].required);
+        assert_ne!(result.proof_requests[0].id, "legacy-optional-request");
+        assert_eq!(result.intents[0].status, "resolved");
+        Ok(())
+    }
+
+    #[test]
     fn semantic_target_grammar_and_target_selectors_are_exact() -> Result<()> {
         assert!(safe_semantic_target("cli"));
         assert!(safe_semantic_target("cargo-test:cli"));
