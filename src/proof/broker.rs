@@ -1558,6 +1558,54 @@ mod tests {
     }
 
     #[test]
+    fn seeded_stream_starts_current_head_request_broker_when_receipt_is_missing() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let out = temp.path().join("out");
+        let mut diff = test_diff();
+        diff.head = "CURRENT-HEAD".to_owned();
+        let mut profile = Profile::default();
+        profile.budgets.proof_max_focused_test_files = 0;
+        profile.budgets.proof_max_focused_tests = 0;
+        profile.budgets.proof_total_timeout_sec = 0;
+        let args = test_run_args(out.clone());
+        let event_log = crate::EventLog::open(&temp.path().join("events.ndjson"))?;
+        let run_started = Instant::now();
+        let initial_loop = crate::start_run_loop(
+            &event_log,
+            &run_started,
+            "proof",
+            "proof",
+            "initial-diff-broker",
+        )?;
+
+        let (_, phases) = run_seeded_proof_stream_v0(
+            temp.path(),
+            &out,
+            &diff,
+            &profile,
+            &args,
+            std::slice::from_ref(&proof_request("seeded", true)),
+            initial_loop,
+            &event_log,
+            &run_started,
+            &BoxState {
+                cpus: 4,
+                free_mem_mb: Some(8_192),
+                free_disk_mb: Some(20_000),
+                load_1m: Some(0.25),
+                github_actions: false,
+            },
+        )?;
+
+        assert!(
+            phases
+                .iter()
+                .any(|phase| phase.stage == "seeded-request-broker")
+        );
+        Ok(())
+    }
+
+    #[test]
     fn broker_replans_after_discriminating_test_receipt_before_build_wind_down() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
