@@ -895,3 +895,115 @@ pub(crate) fn github_review_post_comment_body(comment: &GitHubReviewComment) -> 
         suggestion.trim()
     ))
 }
+
+#[cfg(test)]
+mod output_degradation_tests {
+    use super::*;
+
+    #[test]
+    fn full_output_receipt_preserves_exact_input() {
+        let input = "## Confirmed findings\n\n- Executed proof confirms the changed path.\n";
+        let (body, receipt) = degrade_review_body(input.to_owned(), 500, 12, "head-full");
+
+        assert_eq!(body, input);
+        assert_eq!(receipt.schema, OUTPUT_DEGRADATION_SCHEMA);
+        assert_eq!(receipt.exact_head_sha, "head-full");
+        assert_eq!(receipt.selected_mode, "full");
+        assert_eq!(receipt.original_item_count, 1);
+        assert_eq!(receipt.final_item_count, 1);
+        assert_eq!(receipt.original_bytes, receipt.final_bytes);
+        assert_eq!(receipt.retained_topic_ids.len(), 1);
+        assert!(receipt.dropped_topics.is_empty());
+    }
+
+    #[test]
+    fn degradation_folds_duplicates_and_keeps_stronger_evidence() {
+        let input = concat!(
+            "## Summary-only findings\n\n",
+            "- Parser concern remains.\n",
+            "\n## Confirmed findings\n\n",
+            "- Executed receipt confirms the parser concern remains.\n",
+            "- Executed receipt confirms the parser concern remains.\n",
+        );
+        let (body, receipt) = degrade_review_body(input.to_owned(), 500, 2, "head-fold");
+
+        assert!(body.contains("Executed receipt confirms"));
+        assert_eq!(receipt.final_item_count, 2);
+        assert_eq!(receipt.retained_topic_ids.len(), 2);
+        assert_eq!(
+            receipt
+                .dropped_topics
+                .iter()
+                .filter(|topic| topic.reason.contains("duplicate_evidence"))
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn degradation_drops_lowest_ranked_topics_deterministically() {
+        let input = concat!(
+            "## Confirmed findings\n\n",
+            "- High severity executed receipt confirms the parser failure.\n",
+            "\n## Verification questions\n\n",
+            "- Confirm the unrelated fallback behavior.\n",
+            "\n## Parked follow-ups\n\n",
+            "- Revisit documentation wording later.\n",
+        );
+        let (body, receipt) = degrade_review_body(input.to_owned(), 500, 2, "head-rank");
+
+        assert!(body.contains("High severity executed receipt"));
+        assert!(!body.contains("Revisit documentation"));
+        assert_eq!(receipt.selected_mode, "concise_summary");
+        assert_eq!(receipt.final_item_count, 2);
+        assert!(receipt.dropped_topics.iter().any(|topic| {
+            topic.topic_id.starts_with("topic-")
+                && topic.reason == "lower_evidence_value_or_bullet_budget"
+        }));
+    }
+
+    #[test]
+    fn degradation_handles_reporter_sections_and_unknown_sections() {
+        let input = concat!(
+            "## Reporter summary\n\n",
+            "A material parser interaction changes the review decision.\n",
+            "\n## Custom evidence\n\n",
+            "- Executed receipt confirms the custom evidence.\n",
+        );
+        let (body, receipt) = degrade_review_body(input.to_owned(), 500, 12, "head-sections");
+
+        assert!(body.contains("## Reporter summary"));
+        assert!(body.contains("material parser interaction"));
+        assert!(body.contains("## Custom evidence"));
+        assert_eq!(receipt.selected_mode, "full");
+        assert_eq!(receipt.final_item_count, 2);
+    }
+
+    #[test]
+    fn degradation_uses_artifact_only_when_no_public_topic_exists() {
+        let (body, receipt) = degrade_review_body(
+            "ceremonial prose without an admitted topic".to_owned(),
+            8,
+            0,
+            "head-artifact",
+        );
+
+        assert!(body.is_empty());
+        assert_eq!(receipt.selected_mode, "artifact_only");
+        assert_eq!(receipt.original_item_count, 0);
+        assert_eq!(receipt.final_item_count, 0);
+        assert_eq!(receipt.final_bytes, 0);
+        assert!(receipt.retained_topic_ids.is_empty());
+    }
+
+    #[test]
+    fn degradation_is_byte_bounded_and_utf8_safe() {
+        let input = "## Confirmed findings\n\n- Executed proof confirms 🙂.\n";
+        let (body, receipt) = degrade_review_body(input.to_owned(), 32, 12, "head-utf8");
+
+        assert!(body.len() <= 32);
+        assert!(body.is_char_boundary(body.len()));
+        assert_eq!(receipt.final_bytes, body.len());
+        assert!(receipt.final_bytes <= receipt.max_bytes);
+    }
+}

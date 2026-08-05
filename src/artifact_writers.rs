@@ -205,3 +205,44 @@ pub(crate) fn model_lane_stage_metadata(lane: &str) -> (&'static str, &'static s
         ),
     }
 }
+
+#[cfg(test)]
+mod output_degradation_artifact_tests {
+    use super::*;
+
+    #[test]
+    fn output_degradation_artifact_round_trips_exact_head_and_receipt_fields() -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let receipt = ReviewOutputDegradationReceipt {
+            schema: OUTPUT_DEGRADATION_SCHEMA,
+            exact_head_sha: "head-artifact".to_owned(),
+            original_bytes: 100,
+            final_bytes: 80,
+            original_item_count: 3,
+            final_item_count: 2,
+            selected_mode: "concise_summary".to_owned(),
+            retained_topic_ids: vec!["topic-a".to_owned(), "topic-b".to_owned()],
+            dropped_topics: vec![ReviewOutputDroppedTopic {
+                topic_id: "topic-c".to_owned(),
+                reason: "lower_evidence_value_or_bullet_budget".to_owned(),
+            }],
+            max_bytes: 6_000,
+            max_bullets: 12,
+        };
+
+        write_output_degradation_artifact(temp.path(), &receipt)?;
+        let written: serde_json::Value = serde_json::from_slice(&fs::read(
+            temp.path().join("review/output_degradation.json"),
+        )?)?;
+
+        assert_eq!(written["schema"], "ub-review.output_degradation.v1");
+        assert_eq!(written["exact_head_sha"], "head-artifact");
+        assert_eq!(written["selected_mode"], "concise_summary");
+        assert_eq!(
+            written["retained_topic_ids"].as_array().map(Vec::len),
+            Some(2)
+        );
+        assert_eq!(written["dropped_topics"].as_array().map(Vec::len), Some(1));
+        Ok(())
+    }
+}
