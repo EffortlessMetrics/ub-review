@@ -159,8 +159,8 @@ pub(crate) fn build_proof_planner_output(
 ) -> Result<ProofPlannerOutput> {
     let budget = proof_budget(profile)?;
     let lease_budget = proof_lease_budget(profile)?;
-    let plans = focused_proof_plans_from_diff(diff, proof_requests, budget);
-    let build_plans = focused_build_plans_from_requests(proof_requests, budget);
+    let plans = focused_proof_candidate_plans_from_diff(diff, proof_requests, budget);
+    let build_plans = focused_build_candidate_plans_from_requests(proof_requests, budget);
     let proof_tasks = plans
         .into_iter()
         .map(|plan| proof_task_artifact(plan, budget, lease_budget))

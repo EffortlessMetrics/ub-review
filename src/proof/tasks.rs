@@ -108,34 +108,75 @@ pub(crate) fn focused_proof_plans_from_diff(
     focused_test_tasks_from_diff(diff, proof_requests, budget)
         .into_iter()
         .map(|task| {
-            let timeout_sec = focused_test_task_command_timeout(&task, budget);
-            let head_command = proof_task_plan_command(&task, "head", "head");
-            let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
-                proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
-            } else {
-                "not planned for head-only proof".to_owned()
-            };
-            FocusedProofPlan {
-                id: task.id,
-                test_file: task.file,
-                test_name: task.test_name,
-                mode: task.mode,
-                timeout_sec,
-                head_command,
-                base_plus_tests_command,
-                requested_by: task.requested_by,
-                request_ids: task.request_ids,
-                status: "planned".to_owned(),
-                reason: format!(
+            focused_proof_plan_for_task(
+                task,
+                budget,
+                "planned",
+                format!(
                     "planner-only focused test target under budget: max {} file(s), {} test(s), {}s per command, {}s total",
                     budget.max_focused_test_files,
                     budget.max_focused_tests,
                     budget.per_command_timeout_sec,
                     budget.max_total_seconds
                 ),
-            }
+            )
         })
         .collect()
+}
+
+pub(crate) fn focused_proof_candidate_plans_from_diff(
+    diff: &DiffContext,
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedProofPlan> {
+    let planned_ids = focused_test_tasks_from_diff(diff, proof_requests, budget)
+        .into_iter()
+        .map(|task| task.id)
+        .collect::<BTreeSet<_>>();
+    focused_test_candidates_from_diff(diff, proof_requests)
+        .into_iter()
+        .map(|task| {
+            let status = if planned_ids.contains(&task.id) {
+                "planned"
+            } else {
+                "deferred_by_budget"
+            };
+            focused_proof_plan_for_task(
+                task,
+                budget,
+                status,
+                "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn focused_proof_plan_for_task(
+    task: FocusedTestTask,
+    budget: ProofBudget,
+    status: &str,
+    reason: String,
+) -> FocusedProofPlan {
+    let timeout_sec = focused_test_task_command_timeout(&task, budget);
+    let head_command = proof_task_plan_command(&task, "head", "head");
+    let base_plus_tests_command = if task.mode == FocusedProofMode::RedGreen {
+        proof_task_plan_command(&task, "base-plus-tests", "base-plus-tests")
+    } else {
+        "not planned for head-only proof".to_owned()
+    };
+    FocusedProofPlan {
+        id: task.id,
+        test_file: task.file,
+        test_name: task.test_name,
+        mode: task.mode,
+        timeout_sec,
+        head_command,
+        base_plus_tests_command,
+        requested_by: task.requested_by,
+        request_ids: task.request_ids,
+        status: status.to_owned(),
+        reason,
+    }
 }
 
 pub(crate) fn focused_test_tasks_from_diff(
@@ -320,6 +361,33 @@ pub(crate) fn focused_build_plans_from_requests(
                     "planner-only focused build target under budget: max {} command(s), {}s per command, {}s total",
                     budget.max_focused_tests, budget.per_command_timeout_sec, budget.max_total_seconds
                 ),
+            }
+        })
+        .collect()
+}
+
+pub(crate) fn focused_build_candidate_plans_from_requests(
+    proof_requests: &[ProofRequest],
+    budget: ProofBudget,
+) -> Vec<FocusedBuildPlan> {
+    focused_build_candidates_from_requests(proof_requests)
+        .into_iter()
+        .enumerate()
+        .map(|(index, task)| {
+            let timeout_sec = focused_build_task_command_timeout(&task, budget);
+            FocusedBuildPlan {
+                id: task.id,
+                command: command_display(&task.argv),
+                timeout_sec,
+                requested_by: task.requested_by,
+                request_ids: task.request_ids,
+                status: if index < budget.max_focused_tests {
+                    "planned".to_owned()
+                } else {
+                    "deferred_by_budget".to_owned()
+                },
+                reason: "candidate recorded for portfolio accounting; execution is budget-gated"
+                    .to_owned(),
             }
         })
         .collect()
