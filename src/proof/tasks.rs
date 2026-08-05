@@ -137,12 +137,12 @@ pub(crate) fn focused_proof_candidate_plans_from_diff(
     let mut plans = Vec::with_capacity(candidate_tasks.len());
     for task in candidate_tasks {
         let status = candidate_plan_status(planned_ids.contains(&task.id));
-        plans.push(focused_proof_plan_for_task(
+        plans.extend(std::iter::once(focused_proof_plan_for_task(
             task,
             budget,
             status,
             "candidate recorded for portfolio accounting; execution is budget-gated".to_owned(),
-        ));
+        )));
     }
     plans
 }
@@ -379,7 +379,7 @@ pub(crate) fn focused_build_candidate_plans_from_requests(
     let mut planned_count = 0;
     for task in candidate_tasks {
         let timeout_sec = focused_build_task_command_timeout(&task, budget);
-        plans.push(FocusedBuildPlan {
+        plans.extend(std::iter::once(FocusedBuildPlan {
             id: task.id,
             command: command_display(&task.argv),
             timeout_sec,
@@ -388,7 +388,7 @@ pub(crate) fn focused_build_candidate_plans_from_requests(
             status: candidate_plan_status(planned_count < budget.max_focused_tests).to_owned(),
             reason: "candidate recorded for portfolio accounting; execution is budget-gated"
                 .to_owned(),
-        });
+        }));
         planned_count += 1;
     }
     plans
