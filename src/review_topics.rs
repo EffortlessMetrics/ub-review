@@ -292,6 +292,11 @@ pub(crate) fn reconcile_inline_comments(
                     || subject_tokens_overlap(&topic.subject, &comment.body))
                     && topic.path.as_deref() == Some(comment.path.as_str())
                     && topic.anchor == Some(comment.line)
+                    // A current thread suppresses a duplicate, but a claim
+                    // with new exact evidence is a reply delivery candidate.
+                    // The transport owns confirmation; keeping the candidate
+                    // here is what lets it reach the reply adapter.
+                    && topic.planned_action == "none"
                     && !topic.existing_threads.is_empty()
             });
             if covered_by_current_thread {

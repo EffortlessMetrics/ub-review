@@ -80,6 +80,18 @@ impl PlannedDelivery {
     pub(crate) fn expected_body_digest(&self) -> &str {
         &self.expected_body_digest
     }
+
+    pub(crate) fn action(&self) -> DeliveryAction {
+        self.action.clone()
+    }
+
+    pub(crate) fn source_thread_id(&self) -> Option<&str> {
+        self.source_thread_id.as_deref()
+    }
+
+    pub(crate) fn claim_id(&self) -> &str {
+        &self.claim_id
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
