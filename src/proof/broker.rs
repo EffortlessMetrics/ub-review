@@ -1643,6 +1643,35 @@ mod tests {
     }
 
     #[test]
+    fn broker_merges_equivalent_focused_test_commands_and_request_ids() -> Result<()> {
+        let first = ProofRequest {
+            command: "cargo test --locked --package ub-review --bin ub-review same_test".to_owned(),
+            ..proof_request("first", false)
+        };
+        let second = ProofRequest {
+            command: first.command.clone(),
+            ..proof_request("second", false)
+        };
+        let mut candidates = focused_test_candidates_from_requests(std::slice::from_ref(&first));
+        let additional = focused_test_candidates_from_requests(std::slice::from_ref(&second));
+        ensure!(candidates.len() == 1);
+        ensure!(additional.len() == 1);
+
+        merge_focused_test_candidates(&mut candidates, additional);
+
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(
+            candidates[0]
+                .request_ids
+                .iter()
+                .cloned()
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([first.id, second.id])
+        );
+        Ok(())
+    }
+
+    #[test]
     fn seeded_proof_requests_require_a_receipt_for_the_current_head() -> Result<()> {
         let seeded_proof_requests = vec![proof_request("seeded", true)];
         let task = focused_test_candidates_from_requests(&seeded_proof_requests)
