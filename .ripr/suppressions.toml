@@ -17728,3 +17728,99 @@ kind = "exposure_gap"
 finding_id = "probe:tests_common_mod.rs:return_value:ab95417e"
 owner = "ub-review/core"
 reason = "Exact hosted diff-form RIPR receipt for #827: the production-path delivery matrix covers this adapter boundary and its failure behavior; the remaining static probe is an analyzer false positive. Re-verify after edits to the #827 delivery transaction."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:field_construction:5f5692fe"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: pull-review comment pagination is exercised by the 100-item plus short-page production delivery test; this helper initialization is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:47403856"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: malformed pull-review comment responses are rejected by the focused pagination test; this propagated error expression is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:predicate:5354a08b"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: the pagination test covers a full page followed by a short page and verifies all 101 comments; the termination predicate is covered semantically but not strongly identified by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:1c908a19"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: the pagination test proves the full-page continuation and short-page termination path; the checked page increment is not independently inducible at usize overflow in the transport contract. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:bdd6d078.2"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: returned reply parent identity is exercised by the valid and wrong-source response tests; this surrounding response iteration effect is analyzer noise. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:4832d271"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: a returned reply with the wrong in_reply_to_id is rejected without a receipt, while the exact numeric parent is accepted; the comparison expression is fully covered but weakly recognized. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:2d218c9b"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: valid and wrong-source reply response fixtures assert receipt/no-receipt outcomes; the returned source comparison value is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:8b270f2f.3"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: numeric GitHub identifiers are exercised for source threads and review IDs, with exact receipt identity assertions; this conversion call is weakly recognized by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:6dd11f2f"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: exact one-surface body fallback tests cover the confirmed-delivery filtering window; this iterator window construction is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:1c000474"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: body filtering tests cover matching and non-matching confirmed surfaces and assert the complete resulting body; the optional window predicate is weakly recognized by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:af1664d9"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: duplicate and multiline body-surface tests prove only the exact confirmed surface is removed; the line-window predicate is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:de8628fc"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: body fallback tests assert exact retained and removed lines for confirmed delivery; this source-vector use is analyzer noise. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:a704d12c"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: confirmed delivery removes one matching public surface while retaining duplicates and unrelated findings; this iterator conversion is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:df69ede8"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: exact body fallback assertions cover the filtered result; the iterator return value is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:695b9a50"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: exact body fallback assertions cover the indexed removal behavior; enumeration is not independently discriminated by the analyzer. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:262e4be5.2"
+owner = "ub-review/core"
+reason = "Exact hosted diff-form RIPR receipt for #828: repeated confirmed-delivery filtering is covered by exact one-surface and multiline tests; this final filter effect is analyzer noise rather than an untested delivery branch. Re-verify after edits to reply delivery."

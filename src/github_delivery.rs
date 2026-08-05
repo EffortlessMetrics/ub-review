@@ -1575,7 +1575,7 @@ mod tests {
             ]),
             sends: VecDeque::from([scripted_output(
                 &format!(
-                    r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":123}}"#
+                    r#"{{"id":456,"path":"src/lib.rs","line":12,"side":"RIGHT","commit_id":"{HEAD}","body":"[tests] exact body","in_reply_to_id":123,"pull_request_review_id":987}}"#
                 ),
                 true,
             )?]),
@@ -1593,6 +1593,7 @@ mod tests {
         ensure!(receipts[0]["claim_id"] == "claim-1");
         ensure!(receipts[0]["source_thread_id"] == "123");
         ensure!(receipts[0]["comment_id"] == "456");
+        ensure!(receipts[0]["review_id"] == "987");
         ensure!(
             transport.gets.is_empty() && transport.sends.is_empty(),
             "reply path left scripted transport work"
@@ -1903,8 +1904,10 @@ mod tests {
         let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
         let body = "## Confirmed findings\n\n- [tests] exact body\n- [tests] exact body\n- [tests] unrelated finding\n";
         let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
-        ensure!(filtered.matches("exact body").count() == 1);
-        ensure!(filtered.contains("unrelated finding"));
+        ensure!(
+            filtered
+                == "## Confirmed findings\n\n- [tests] exact body\n- [tests] unrelated finding"
+        );
         Ok(())
     }
 
@@ -1953,6 +1956,20 @@ mod tests {
         )?;
         ensure!(comments.as_array().is_some_and(|items| items.len() == 101));
         ensure!(transport.gets.is_empty());
+        let mut malformed = ScriptedTransport {
+            gets: VecDeque::from([serde_json::json!({"not": "an array"})]),
+            sends: VecDeque::new(),
+        };
+        let error = fetch_pull_review_comments(
+            &mut malformed,
+            "http://scripted",
+            "owner/repo",
+            42,
+            "token",
+        )
+        .err()
+        .ok_or_else(|| anyhow::anyhow!("malformed comments response was accepted"))?;
+        ensure!(format!("{error:#}").contains("must be an array"));
         Ok(())
     }
 
