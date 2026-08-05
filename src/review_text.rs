@@ -939,12 +939,18 @@ mod output_degradation_tests {
         assert_eq!(receipt.max_bytes, 500);
         assert_eq!(receipt.max_bullets, 2);
         assert_eq!(receipt.dropped_topics.len(), 2);
-        assert!(receipt.dropped_topics.iter().any(|topic| {
-            topic.reason == "duplicate_evidence_folded_into_stronger_topic"
-        }));
-        assert!(receipt.dropped_topics.iter().any(|topic| {
-            topic.reason == "duplicate_evidence_folded_into_existing_topic"
-        }));
+        assert!(
+            receipt
+                .dropped_topics
+                .iter()
+                .any(|topic| { topic.reason == "duplicate_evidence_folded_into_stronger_topic" })
+        );
+        assert!(
+            receipt
+                .dropped_topics
+                .iter()
+                .any(|topic| { topic.reason == "duplicate_evidence_folded_into_existing_topic" })
+        );
     }
 
     #[test]
@@ -1020,6 +1026,39 @@ mod output_degradation_tests {
         assert!(receipt.final_bytes <= receipt.max_bytes);
         assert_eq!(receipt.max_bytes, 32);
         assert_eq!(receipt.max_bullets, 12);
+    }
+
+    #[test]
+    fn body_budget_drops_topics_and_preserves_inline_fallback_receipt() {
+        let input = "## Confirmed findings\n\n- Executed proof confirms the changed path.\n";
+        let (body, receipt) = degrade_review_body(input.to_owned(), 10, 12, "head-body");
+
+        assert!(body.is_empty());
+        assert_eq!(receipt.selected_mode, "inline_only");
+        assert_eq!(receipt.original_item_count, 1);
+        assert_eq!(receipt.final_item_count, 0);
+        assert_eq!(receipt.final_bytes, 0);
+        assert_eq!(receipt.dropped_topics.len(), 1);
+        assert_eq!(
+            receipt.dropped_topics[0].reason,
+            "lower_evidence_value_or_body_budget"
+        );
+    }
+
+    #[test]
+    fn bullet_budget_drops_all_topics_as_inline_only() {
+        let input = "## Confirmed findings\n\n- Executed proof confirms the changed path.\n";
+        let (body, receipt) = degrade_review_body(input.to_owned(), 500, 0, "head-bullets");
+
+        assert!(body.is_empty());
+        assert_eq!(receipt.selected_mode, "inline_only");
+        assert_eq!(receipt.original_item_count, 1);
+        assert_eq!(receipt.final_item_count, 0);
+        assert_eq!(receipt.dropped_topics.len(), 1);
+        assert_eq!(
+            receipt.dropped_topics[0].reason,
+            "lower_evidence_value_or_bullet_budget"
+        );
     }
 
     #[test]
