@@ -144,8 +144,18 @@ pub(crate) fn pass_policy_permits_review_post(
 pub(crate) fn compile_review_surface(
     input: ReviewCompilerInput<'_>,
 ) -> Result<CompiledReviewSurface> {
-    let ranked_inline_comments = ranked_inline_comments(input.inline_comments);
-    let pr_inline_candidates = ranked_inline_comments
+    let ranked_artifact_inline_comments = ranked_inline_comments(input.inline_comments);
+    let public_inline_comments = input
+        .inline_comments
+        .iter()
+        .filter(|comment| {
+            let text = format!("{} {}", comment.body, comment.evidence);
+            !is_internal_review_machinery_text(&text) && !is_unexecuted_proof_homework_text(&text)
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let ranked_public_inline_comments = ranked_inline_comments(&public_inline_comments);
+    let pr_inline_candidates = ranked_public_inline_comments
         .iter()
         .take(input.args.max_inline_comments)
         .cloned()
@@ -157,7 +167,7 @@ pub(crate) fn compile_review_surface(
         input.model_lanes,
         input.missing_or_failed_sensor_evidence,
         input.missing_or_failed_model_evidence,
-        &ranked_inline_comments,
+        &ranked_artifact_inline_comments,
         input.summary_only_findings,
         input.observations,
         input.proof_receipts,
@@ -180,14 +190,18 @@ pub(crate) fn compile_review_surface(
     );
     // Order 10 (#678): the live reporter's editorial distillation renders at
     // the TOP of the PR review body, before any finding sections. The compiler
-    // passes it through verbatim — it is the reporter's editorial judgment,
-    // not a deterministic finding the compiler ranks or suppresses (firewall,
-    // not truth reducer). Subject only to the existing body-size limit.
-    if let (true, Some(distillation)) = (pr_body.is_empty(), input.reporter_distillation) {
-        let trimmed = distillation.trim();
-        if !trimmed.is_empty() {
-            pr_body = format!("{REPORTER_SUMMARY_HEADING}\n\n{trimmed}");
-        }
+    // admits only novel, reviewer-valued sentences; raw reporter output stays
+    // in the thread artifact and cannot bypass the public-item boundary.
+    if let (true, Some(distillation)) = (
+        pr_body.is_empty(),
+        admit_reporter_distillation(
+            input.reporter_distillation,
+            &public_inline_comments,
+            input.summary_only_findings,
+            input.observations,
+        ),
+    ) {
+        pr_body = format!("{REPORTER_SUMMARY_HEADING}\n\n{distillation}");
     }
     // Release lane step 5: suggested follow-ups render last - they explain
     // why the PR's scope was not broadened, never block, and only appear
@@ -320,6 +334,72 @@ pub(crate) fn compile_review_surface(
         review_payload_status,
         terminal_state,
     })
+}
+
+/// Admit only the reporter sentences that add human value beyond the
+/// deterministic topic set. The reporter remains free-form internally, but
+/// the public compiler must not turn a duplicate finding, lane/status wall,
+/// or unexecuted command into a reviewer-facing item.
+fn admit_reporter_distillation(
+    distillation: Option<&str>,
+    inline_comments: &[ReviewInlineComment],
+    summary_only_findings: &[SummaryOnlyFinding],
+    observations: &[Observation],
+) -> Option<String> {
+    let text = distillation?.trim();
+    if text.is_empty() {
+        return None;
+    }
+
+    let mut admitted = Vec::new();
+    for fragment in text
+        .split(['.', '!', '?', '\n'])
+        .map(str::trim)
+        .filter(|fragment| !fragment.is_empty())
+    {
+        let lower = fragment.to_ascii_lowercase();
+        let generic = matches!(
+            lower.as_str(),
+            "safe to merge"
+                | "looks good"
+                | "no issues found"
+                | "no blocking issues found"
+                | "no findings"
+                | "nothing to report"
+        ) || lower.contains("residual risk remains for human review")
+            || (lower.contains("all lanes") && lower.contains("status"))
+            || (lower.contains("provider") && lower.contains("model"));
+        let internal = is_internal_review_machinery_text(fragment)
+            || is_unexecuted_proof_homework_text(fragment);
+        let duplicate = inline_comments
+            .iter()
+            .any(|comment| reporter_claim_is_duplicate(fragment, &comment.body))
+            || summary_only_findings
+                .iter()
+                .any(|finding| reporter_claim_is_duplicate(fragment, &finding.reason))
+            || observations
+                .iter()
+                .any(|observation| reporter_claim_is_duplicate(fragment, &observation.claim));
+
+        if !(generic || internal || duplicate) {
+            admitted.push(format!("{}.", fragment.trim_end_matches(['.', '!', '?'])));
+        }
+    }
+
+    (!admitted.is_empty()).then(|| admitted.join(" "))
+}
+
+fn reporter_claim_is_duplicate(reporter_text: &str, existing_text: &str) -> bool {
+    let reporter = normalized_review_text(reporter_text);
+    let existing = normalized_review_text(existing_text);
+    if reporter == existing {
+        return true;
+    }
+    let shorter = reporter.chars().count().min(existing.chars().count());
+    let longer = reporter.chars().count().max(existing.chars().count());
+    shorter > 0
+        && longer <= shorter.saturating_mul(3) / 2
+        && review_claims_match(reporter_text, existing_text)
 }
 
 /// A summary-only finding is substantive when it carries reviewer-relevant
@@ -734,5 +814,81 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("machinery unexpectedly passed"))?;
         assert!(is_review_output_quality_error(&machinery_error));
         Ok(())
+    }
+
+    #[test]
+    fn reporter_admission_drops_duplicate_boilerplate_and_homework() {
+        let inline = [ReviewInlineComment {
+            lane: "tests".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/parser.rs".to_owned(),
+            line: 10,
+            side: "RIGHT".to_owned(),
+            body: "The parser drops postfix subscripts from later variables".to_owned(),
+            evidence: "executed focused test receipt".to_owned(),
+            suggestion: None,
+        }];
+        let admitted = admit_reporter_distillation(
+            Some(
+                "The parser drops postfix subscripts from later variables. Safe to merge. Please run `cargo test --locked` before merging. The changed error path now returns a typed error.",
+            ),
+            &inline,
+            &[],
+            &[],
+        );
+        assert_eq!(
+            admitted.as_deref(),
+            Some("The changed error path now returns a typed error.")
+        );
+    }
+
+    #[test]
+    fn reporter_admission_keeps_novel_connective_judgment() {
+        let summary = [SummaryOnlyFinding {
+            lane: "parser".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium".to_owned(),
+            reason: "The parser accepts the new declaration form".to_owned(),
+            evidence: "source diff".to_owned(),
+        }];
+        let admitted = admit_reporter_distillation(
+            Some(
+                "The parser accepts the new declaration form, but the fallback path still changes the caller-visible error contract.",
+            ),
+            &[],
+            &summary,
+            &[],
+        );
+        assert_eq!(
+            admitted.as_deref(),
+            Some(
+                "The parser accepts the new declaration form, but the fallback path still changes the caller-visible error contract."
+            )
+        );
+    }
+
+    #[test]
+    fn reporter_claim_duplicate_matching_obeys_identity_and_length_bounds() {
+        assert!(reporter_claim_is_duplicate(
+            "Parser drops postfix subscripts.",
+            "Parser drops postfix subscripts."
+        ));
+        assert!(reporter_claim_is_duplicate(
+            "Parser drops postfix subscripts from later variables.",
+            "Postfix subscripts are dropped from later variables in declaration lists."
+        ));
+        assert!(!reporter_claim_is_duplicate(
+            "Parser drops postfix subscripts.",
+            "Parser preserves default values for later variables."
+        ));
+        assert!(!reporter_claim_is_duplicate(
+            "",
+            "Parser drops postfix subscripts."
+        ));
+        assert!(!reporter_claim_is_duplicate(
+            "Parser drops postfix subscripts from later variables and changes recovery.",
+            "Parser drops postfix subscripts."
+        ));
     }
 }

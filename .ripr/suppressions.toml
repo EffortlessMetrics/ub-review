@@ -12104,6 +12104,58 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:call_deletion:5962d6b7"
 owner = "ub-review/core"
 reason = "RIPR 0.10.0 weakly exposes bullet classification despite review_body_cap_drops_excess_bullets_without_failing_compilation. Content-addressed current #746 receipt; re-verify after edits or RIPR upgrades."
+
+# PR #829 public-output admission: these exact weakly-exposed probes have
+# colocated semantic matrix tests, but RIPR 0.10.0 cannot connect the direct
+# helper or field-oracle assertions to the changed expressions. Keep the
+# receipts content-addressed and narrow; re-verify after edits or RIPR upgrades.
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_noise.rs:return_value:829c2dc9"
+owner = "ub-review/core"
+reason = "Covered by unexecuted_proof_homework_is_artifact_only, including command-plus-terminal-disposition and negative controls; RIPR 0.10.0 does not discriminate the terminal-disposition return branch. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_render.rs:field_construction:c85c0327"
+owner = "ub-review/core"
+reason = "Covered by cross_lane_conflict_does_not_inflate_public_finding_count and cross_lane_conflict_receipt_suppresses_standalone_summary_finding; RIPR 0.10.0 weakly exposes the retained public finding-count field. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:field_construction:ff8dcea8"
+owner = "ub-review/core"
+reason = "Covered by reporter_admission_keeps_novel_connective_judgment and reporter_admission_drops_duplicate_boilerplate_and_homework; RIPR 0.10.0 cannot connect the summary-finding input field to the reporter admission matrix. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:predicate:38f6cbec"
+owner = "ub-review/core"
+reason = "Covered by reporter_claim_duplicate_matching_obeys_identity_and_length_bounds, including the empty-input control; RIPR 0.10.0 reports no detected boundary input for the shorter > 0 guard. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:return_value:0dac7551"
+owner = "ub-review/core"
+reason = "Covered by reporter_claim_duplicate_matching_obeys_identity_and_length_bounds; RIPR 0.10.0 weakly exposes the empty-claim return guard despite exact true/false assertions. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:predicate:e553950d"
+owner = "ub-review/core"
+reason = "Covered by reporter_claim_duplicate_matching_obeys_identity_and_length_bounds with both within-bound and over-bound length cases; RIPR 0.10.0 reports no detected boundary input for the 3/2 bound. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:return_value:597cf0a7"
+owner = "ub-review/core"
+reason = "Covered by reporter_claim_duplicate_matching_obeys_identity_and_length_bounds; RIPR 0.10.0 weakly exposes the length-bound return despite exact matching and non-matching assertions. Re-verify after edits or RIPR upgrades."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:return_value:3bf2e48e"
+owner = "ub-review/core"
+reason = "Covered by reporter_claim_duplicate_matching_obeys_identity_and_length_bounds and reporter_admission_keeps_novel_connective_judgment; RIPR 0.10.0 weakly exposes the review-claim match return despite duplicate and distinct-claim assertions. Re-verify after edits or RIPR upgrades."
 # RIPR 0.10.0 weakly exposes the terminal proof-request status mapping and
 # grouped disposition branches. The focused planner tests exercise every
 # receipt outcome, duplicate group, and terminal status; these are analyzer

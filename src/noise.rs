@@ -153,6 +153,43 @@ pub(crate) fn is_internal_review_machinery_text(text: &str) -> bool {
     .any(|needle| text.contains(needle))
 }
 
+/// Return true for prose that turns an unexecuted proof request into human
+/// homework. Proof requests and their terminal dispositions remain available
+/// in artifacts; only a receipt-backed result or a decision-changing evidence
+/// gap belongs in the PR-facing compiler input.
+pub(crate) fn is_unexecuted_proof_homework_text(text: &str) -> bool {
+    let text = text.to_ascii_lowercase();
+    let request_language = text.contains("please run")
+        || text.contains("you should run")
+        || text.contains("maintainer should run")
+        || text.contains("maintainer must run")
+        || text.contains("run this locally")
+        || text.contains("run locally")
+        || text.contains("execute this")
+        || text.contains("execute the following")
+        || text.contains("add a test by running")
+        || text.contains("confirm by running");
+    let command_reference = text.contains("cargo test")
+        || text.contains("cargo check")
+        || text.contains("cargo build")
+        || text.contains("cargo clippy")
+        || text.contains("npm test")
+        || text.contains("bun test")
+        || text.contains("pytest");
+    let terminal_disposition = text.contains("skipped")
+        || text.contains("declined")
+        || text.contains("deferred")
+        || text.contains("unsupported")
+        || text.contains("timed out")
+        || text.contains("timeout")
+        || text.contains("no proof receipt")
+        || text.contains("not executed")
+        || text.contains("unexecuted");
+
+    (request_language && (command_reference || text.contains("check") || text.contains("proof")))
+        || (command_reference && terminal_disposition)
+}
+
 pub(crate) fn is_checkout_persistence_no_change_noise(text: &str) -> bool {
     (text.contains("checkout credential persistence")
         || text.contains("checkout config")
@@ -855,6 +892,33 @@ mod human_output_admission_tests {
             "An inline candidate is worth review."
         ));
         Ok(())
+    }
+
+    #[test]
+    fn unexecuted_proof_homework_is_artifact_only() {
+        let cases = [
+            ("Please run `cargo test --locked` before merging.", true),
+            (
+                "The focused proof was skipped by budget; maintainer should run it locally.",
+                true,
+            ),
+            ("cargo test was skipped by the budget.", true),
+            (
+                "The focused proof receipt passed and narrowed the parser finding.",
+                false,
+            ),
+            (
+                "The parser has a proof-shaped explanation but no command or request.",
+                false,
+            ),
+        ];
+        for (text, expected) in cases {
+            assert_eq!(
+                is_unexecuted_proof_homework_text(text),
+                expected,
+                "unexpected homework classification for {text:?}"
+            );
+        }
     }
 
     #[test]

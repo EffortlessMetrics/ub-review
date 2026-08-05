@@ -1,7 +1,5 @@
-//! Review body rendering: render_review_body and
-//! render_pull_request_review_body (cleanup train step 22, pure code motion).
-//! These compose the structured review body and the GitHub PR review body
-//! from findings, observations, proof receipts, and shared context.
+//! Review body rendering: compose the structured review body and the GitHub PR
+//! review body from findings, observations, proof receipts, and shared context.
 
 use crate::*;
 
@@ -203,21 +201,21 @@ pub(crate) fn render_pull_request_review_body(
         .iter()
         .filter(|observation| {
             !is_pr_body_artifact_only_observation(observation)
+                && !observation
+                    .sources
+                    .iter()
+                    .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
+                && !is_unexecuted_proof_homework_text(&format!(
+                    "{} {}",
+                    observation.claim,
+                    observation.evidence.join(" ")
+                ))
                 && !is_pr_body_stale_for_current_diff_observation(observation, diff)
                 && !proof_receipts_answer_observation_test_witness_question(
                     proof_receipts,
                     observation,
                 )
                 && !diff_structurally_answers_observation_test_witness_question(diff, observation)
-        })
-        .collect::<Vec<_>>();
-    let cross_lane_conflict_observations = observation_items
-        .iter()
-        .filter(|observation| {
-            observation
-                .sources
-                .iter()
-                .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
         })
         .collect::<Vec<_>>();
     let refuted_observations = pr_observation_items
@@ -280,6 +278,10 @@ pub(crate) fn render_pull_request_review_body(
     let summary_concerns =
         unique_summary_review_findings(summary_only_findings.iter().filter(|finding| {
             !is_pr_body_artifact_only_finding(finding)
+                && !is_unexecuted_proof_homework_text(&format!(
+                    "{} {}",
+                    finding.reason, finding.evidence
+                ))
                 && !is_pr_body_stale_for_current_diff(finding, diff)
                 && !summary_finding_has_cross_lane_conflict(finding, &observation_items)
                 && !proof_receipts_answer_summary_test_witness_question(proof_receipts, finding)
@@ -319,7 +321,7 @@ pub(crate) fn render_pull_request_review_body(
             .iter()
             .any(observation_is_test_proof_decision_question);
     let decision_sentence = pr_decision_sentence(PrDecisionContext {
-        finding_count: finding_count + cross_lane_conflict_observations.len(),
+        finding_count,
         verification_count,
         has_test_proof_verification,
         current_proof_failure,
@@ -330,8 +332,7 @@ pub(crate) fn render_pull_request_review_body(
         || !proof_result_receipts.is_empty()
         || !parked.is_empty()
         || !parked_observations.is_empty()
-        || has_specific_missing_evidence
-        || !cross_lane_conflict_observations.is_empty();
+        || has_specific_missing_evidence;
     if !has_reviewer_value_item {
         return String::new();
     }
@@ -387,20 +388,6 @@ pub(crate) fn render_pull_request_review_body(
     } else if !verification_observations.is_empty() {
         text.push_str("\n## Verification questions\n\n");
         for observation in &verification_observations {
-            render_review_observation(&mut text, observation, PrObservationTone::Verification);
-        }
-    }
-
-    if !cross_lane_conflict_observations.is_empty()
-        && !verification_observations.iter().any(|observation| {
-            observation
-                .sources
-                .iter()
-                .any(|source| source == CROSS_LANE_CONFLICT_SOURCE)
-        })
-    {
-        text.push_str("\n## Verification questions\n\n");
-        for observation in &cross_lane_conflict_observations {
             render_review_observation(&mut text, observation, PrObservationTone::Verification);
         }
     }

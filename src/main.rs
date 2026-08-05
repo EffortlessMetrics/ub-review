@@ -21739,11 +21739,135 @@ index 1111111..2222222 100644
             ReviewBodyAudience::PullRequest,
         );
 
-        assert!(body.contains("## Decision"));
-        assert!(body.contains("## Verification questions"));
-        assert!(body.contains("cross-lane conflict"));
+        assert!(body.is_empty());
+        assert!(!body.contains("## Decision"));
+        assert!(!body.contains("## Verification questions"));
+        assert!(!body.contains("cross-lane conflict"));
         assert!(!body.contains("## Confirmed findings"));
         assert!(!has_standalone_approval_line(&body));
+    }
+
+    #[test]
+    fn cross_lane_conflict_does_not_inflate_public_finding_count() {
+        let conflict_finding = SummaryOnlyFinding {
+            lane: "correctness".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "medium-high".to_owned(),
+            reason: "Remove the `?? options[key]` fallback; otherwise top-level symbol specs can silently merge into undefined args.".to_owned(),
+            evidence: "Changed TypeScript fallback branch in ffi symbol option handling.".to_owned(),
+        };
+        let retained_finding = SummaryOnlyFinding {
+            lane: "parser".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "The parser drops postfix subscripts from later declaration variables."
+                .to_owned(),
+            evidence: "Executed focused parser receipt.".to_owned(),
+        };
+        let mut observations = vec![test_observation(
+            "source-route",
+            "The `?? options[key]` fallback is not a valid top-level symbol route; refuted because the cc signature requires symbols nested under the `symbols` key.",
+            "false-premise",
+            "refuted",
+            "low",
+            "high",
+            "fallback-route-refuted",
+        )];
+        super::append_cross_lane_conflict_observations(
+            &[],
+            std::slice::from_ref(&conflict_finding),
+            &mut observations,
+        );
+
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[conflict_finding, retained_finding],
+            &observations,
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(
+            body.contains("The parser drops postfix subscripts"),
+            "retained finding must remain public: {body}"
+        );
+        assert!(!body.contains("2 findings"), "{body}");
+    }
+
+    #[test]
+    fn pr_review_body_keeps_unexecuted_proof_homework_artifact_only() {
+        let finding = SummaryOnlyFinding {
+            lane: "tests-oracle".to_owned(),
+            severity: "medium".to_owned(),
+            confidence: "high".to_owned(),
+            reason: "Please run `cargo test --locked --test parser` before merging.".to_owned(),
+            evidence: "focused proof request was not executed".to_owned(),
+        };
+        let body = render_review_body(
+            "abc123",
+            &test_plan(Vec::new()),
+            &test_diff(),
+            &[],
+            &[] as &[SensorEvidenceIssue],
+            &[] as &[ModelEvidenceIssue],
+            &[] as &[ReviewInlineComment],
+            &[finding],
+            &[] as &[Observation],
+            &[] as &[ProofReceipt],
+            60_000,
+            ReviewBodyAudience::PullRequest,
+        );
+
+        assert!(body.is_empty());
+        assert!(!body.contains("Please run"));
+        assert!(!body.contains("cargo test"));
+    }
+
+    #[test]
+    fn compiler_surface_keeps_unexecuted_inline_homework_artifact_only() -> Result<()> {
+        let args = test_run_args(Path::new("target/ub-review").to_path_buf());
+        let inline = [ReviewInlineComment {
+            lane: "tests-oracle".to_owned(),
+            severity: "high".to_owned(),
+            confidence: "high".to_owned(),
+            path: "src/main.rs".to_owned(),
+            line: 100,
+            side: "RIGHT".to_owned(),
+            body: "Please run `cargo test --locked --test parser` before merging.".to_owned(),
+            evidence: "proof request was not executed".to_owned(),
+            suggestion: None,
+        }];
+        let surface = compile_review_surface(ReviewCompilerInput {
+            shared_context_id: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+            review_body_policy: &ReviewBodyPolicy::default(),
+            run_pass: super::RunPass::Manual,
+            post_review_on: &[],
+            args: &args,
+            plan: &test_plan(Vec::new()),
+            diff: &test_diff(),
+            model_lanes: &[],
+            missing_or_failed_sensor_evidence: &[],
+            missing_or_failed_model_evidence: &[],
+            inline_comments: &inline,
+            summary_only_findings: &[],
+            observations: &[],
+            proof_receipts: &[],
+            final_follow_up_tasks: 0,
+            suggested_issues: &[],
+            reporter_distillation: None,
+        })?;
+
+        assert!(surface.github_review.comments.is_empty());
+        assert!(surface.github_review.body.is_empty());
+        assert!(!surface.should_prepare_github_review);
+        Ok(())
     }
 
     #[test]
