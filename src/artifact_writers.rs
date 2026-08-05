@@ -234,7 +234,7 @@ mod output_degradation_artifact_tests {
         let artifact_path = temp.path().join("review/output_degradation.json");
         assert!(artifact_path.is_file());
         let artifact_text = fs::read_to_string(&artifact_path)?;
-        assert!(artifact_text.contains(""ub-review.output_degradation.v1""));
+        assert!(artifact_text.contains("\"schema\": \"ub-review.output_degradation.v1\""));
         let written: serde_json::Value = serde_json::from_str(&artifact_text)?;
 
         assert_eq!(written["schema"], "ub-review.output_degradation.v1");
