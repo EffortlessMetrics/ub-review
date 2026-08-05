@@ -4397,6 +4397,7 @@ PROOF_INTENT_TERMINAL_STATUSES = {
     "unsupported_target",
 }
 PROOF_INTENT_RESOLVED_STATUSES = {"deduplicated", "resolved"}
+PROOF_INTENT_LEGACY_STATUSES = {"requested", "unsupported"}
 
 
 def require_proof_intent_timeout(intent: dict, index: int) -> None:
@@ -4465,7 +4466,7 @@ def require_proof_resolution_invariants(
             fail(
                 f"proof portfolio decision request_ids do not match task {task_id!r}"
             )
-        if decision.get("kind") != task.get("kind"):
+        if not proof_task_kind_matches_decision(task.get("kind"), decision.get("kind")):
             fail(f"proof portfolio decision kind does not match task {task_id!r}")
         decision_by_task[task_id] = decision
 
@@ -4490,7 +4491,7 @@ def require_proof_resolution_invariants(
             if not resolution_reason:
                 fail(f"proof intent {index} terminal status {status!r} has no resolution reason")
             continue
-        if status == "requested":
+        if status in PROOF_INTENT_LEGACY_STATUSES:
             if not resolved_request_ids:
                 fail(f"proof intent {index} status {status!r} has no resolved request ids")
             for request_id in resolved_request_ids:
@@ -4517,6 +4518,16 @@ def require_proof_resolution_invariants(
                 fail(
                     f"proof intent {index} resolved request {request_id!r} has no portfolio decision"
                 )
+
+
+def proof_task_kind_matches_decision(task_kind: object, decision_kind: object) -> bool:
+    """Match task-family kinds to the portfolio's more specific execution mode."""
+    if task_kind == decision_kind:
+        return True
+    return task_kind == "focused-test" and decision_kind in {
+        "focused-head",
+        "focused-red-green",
+    }
 
 
 def require_proof_task_schema(task: dict) -> None:
@@ -12847,7 +12858,21 @@ def self_test_proof_planner_resolution_contract() -> None:
     )
     require_proof_resolution_invariants(
         [request],
+        [intent],
+        [task],
+        [{**decision, "kind": "focused-red-green"}],
+        portfolio,
+    )
+    require_proof_resolution_invariants(
+        [request],
         [{"status": "requested", "resolved_request_ids": ["proof-request-1"]}],
+        [],
+        [],
+        {"selected_task_ids": []},
+    )
+    require_proof_resolution_invariants(
+        [request],
+        [{"status": "unsupported", "resolved_request_ids": ["proof-request-1"]}],
         [],
         [],
         {"selected_task_ids": []},
@@ -12879,6 +12904,17 @@ def self_test_proof_planner_resolution_contract() -> None:
         "proof planner explicit null timeout",
         "timeout_sec is not a non-negative integer",
         lambda: require_proof_intent_timeout({"timeout_sec": None}, 0),
+    )
+    expect_self_test_failure(
+        "proof planner mismatched task family",
+        "decision kind does not match task",
+        lambda: require_proof_resolution_invariants(
+            [request],
+            [intent],
+            [task],
+            [{**decision, "kind": "focused-build"}],
+            portfolio,
+        ),
     )
 
 
