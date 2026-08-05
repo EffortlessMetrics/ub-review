@@ -964,8 +964,10 @@ pub(crate) fn attach_request_metadata_to_focused_receipts(
 
 pub(crate) fn unreceipted_focused_test_tasks(
     tasks: Vec<FocusedTestTask>,
-    existing_ids: &BTreeSet<String>,
+    existing_receipts: &[ProofReceipt],
+    head: &str,
 ) -> Vec<FocusedTestTask> {
+    let existing_ids = current_head_receipt_ids(existing_receipts, head);
     tasks
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
@@ -974,8 +976,10 @@ pub(crate) fn unreceipted_focused_test_tasks(
 
 pub(crate) fn unreceipted_focused_build_tasks(
     tasks: Vec<FocusedBuildTask>,
-    existing_ids: &BTreeSet<String>,
+    existing_receipts: &[ProofReceipt],
+    head: &str,
 ) -> Vec<FocusedBuildTask> {
+    let existing_ids = current_head_receipt_ids(existing_receipts, head);
     tasks
         .into_iter()
         .filter(|task| !existing_ids.contains(&task.id))
@@ -987,15 +991,16 @@ pub(crate) fn has_unreceipted_proof_request_tasks(
     existing_receipts: &[ProofReceipt],
     head: &str,
 ) -> bool {
-    let current_receipt_ids = current_head_receipt_ids(existing_receipts, head);
     !unreceipted_focused_test_tasks(
         focused_test_candidates_from_requests(proof_requests),
-        &current_receipt_ids,
+        existing_receipts,
+        head,
     )
     .is_empty()
         || !unreceipted_focused_build_tasks(
             focused_build_candidates_from_requests(proof_requests),
-            &current_receipt_ids,
+            existing_receipts,
+            head,
         )
         .is_empty()
 }
@@ -1578,14 +1583,16 @@ mod tests {
     fn current_head_receipt_ids_drive_both_unreceipted_task_filters() -> Result<()> {
         let test = focused_test_task("parser", vec!["parser".to_owned()], 30);
         let build = focused_build_task("build", vec!["build".to_owned()], 10);
-        let current_receipt_ids = BTreeSet::from([test.id.clone()]);
+        let current_test = test_receipt(&test.id, test.request_ids.clone(), "head_passed");
+        let mut stale_build = test_receipt(&build.id, build.request_ids.clone(), "head_passed");
+        stale_build.head = "previous-head".to_owned();
+        let receipts = [current_test, stale_build];
 
-        let remaining_tests =
-            unreceipted_focused_test_tasks(vec![test.clone()], &current_receipt_ids);
+        let remaining_tests = unreceipted_focused_test_tasks(vec![test.clone()], &receipts, "head");
         assert!(remaining_tests.is_empty());
 
         let remaining_builds =
-            unreceipted_focused_build_tasks(vec![build.clone()], &current_receipt_ids);
+            unreceipted_focused_build_tasks(vec![build.clone()], &receipts, "head");
         assert_eq!(
             remaining_builds
                 .iter()
@@ -1594,11 +1601,17 @@ mod tests {
             vec![build.id.clone()]
         );
 
-        let all_current_receipt_ids = BTreeSet::from([test.id.clone(), build.id.clone()]);
+        let current_build = test_receipt(&build.id, build.request_ids.clone(), "head_passed");
+        let all_current_receipts = [
+            test_receipt(&test.id, test.request_ids.clone(), "head_passed"),
+            current_build,
+        ];
         assert!(
-            unreceipted_focused_test_tasks(vec![test.clone()], &all_current_receipt_ids).is_empty()
+            unreceipted_focused_test_tasks(vec![test], &all_current_receipts, "head").is_empty()
         );
-        assert!(unreceipted_focused_build_tasks(vec![build], &all_current_receipt_ids).is_empty());
+        assert!(
+            unreceipted_focused_build_tasks(vec![build], &all_current_receipts, "head").is_empty()
+        );
         Ok(())
     }
 

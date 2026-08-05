@@ -9421,13 +9421,10 @@ index 1111111..2222222 100644
             ]
         );
         assert_eq!(receipts[0].request_ids, vec!["proof-md-001"]);
-        let receipt_ids = receipts
-            .iter()
-            .map(|receipt| receipt.id.clone())
-            .collect::<BTreeSet<_>>();
         let remaining_tasks = super::unreceipted_focused_test_tasks(
             super::focused_test_candidates_from_requests(&proof_requests),
-            &receipt_ids,
+            &receipts,
+            &test_diff().head,
         );
         assert!(
             remaining_tasks.is_empty(),
