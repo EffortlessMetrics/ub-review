@@ -1575,6 +1575,59 @@ mod tests {
     }
 
     #[test]
+    fn current_head_receipt_ids_drive_both_unreceipted_task_filters() -> Result<()> {
+        let test = focused_test_task("parser", vec!["parser".to_owned()], 30);
+        let build = focused_build_task("build", vec!["build".to_owned()], 10);
+        let current_receipt_ids = BTreeSet::from([test.id.clone()]);
+
+        let remaining_tests =
+            unreceipted_focused_test_tasks(vec![test.clone()], &current_receipt_ids);
+        assert!(remaining_tests.is_empty());
+
+        let remaining_builds =
+            unreceipted_focused_build_tasks(vec![build.clone()], &current_receipt_ids);
+        assert_eq!(
+            remaining_builds
+                .iter()
+                .map(|task| task.id.clone())
+                .collect::<Vec<_>>(),
+            vec![build.id.clone()]
+        );
+
+        let all_current_receipt_ids = BTreeSet::from([test.id.clone(), build.id.clone()]);
+        assert!(
+            unreceipted_focused_test_tasks(vec![test.clone()], &all_current_receipt_ids).is_empty()
+        );
+        assert!(unreceipted_focused_build_tasks(vec![build], &all_current_receipt_ids).is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn seeded_proof_requests_require_a_receipt_for_the_current_head() -> Result<()> {
+        let seeded_proof_requests = vec![proof_request("seeded", true)];
+        let task = focused_test_candidates_from_requests(&seeded_proof_requests)
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("seeded request should produce a focused task"))?;
+        let mut current_receipt = test_receipt(&task.id, task.request_ids.clone(), "head_passed");
+        current_receipt.head = "CURRENT-HEAD".to_owned();
+
+        assert!(!has_unreceipted_proof_request_tasks(
+            &seeded_proof_requests,
+            std::slice::from_ref(&current_receipt),
+            "current-head",
+        ));
+
+        current_receipt.head = "PREVIOUS-HEAD".to_owned();
+        assert!(has_unreceipted_proof_request_tasks(
+            &seeded_proof_requests,
+            std::slice::from_ref(&current_receipt),
+            "current-head",
+        ));
+        Ok(())
+    }
+
+    #[test]
     fn seeded_stream_starts_current_head_request_broker_when_receipt_is_missing() -> Result<()> {
         let temp = tempfile::tempdir()?;
         let out = temp.path().join("out");
