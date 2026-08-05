@@ -376,7 +376,6 @@ pub(crate) fn focused_build_candidate_plans_from_requests(
 ) -> Vec<FocusedBuildPlan> {
     let candidate_tasks = focused_build_candidates_from_requests(proof_requests);
     let mut plans = Vec::with_capacity(candidate_tasks.len());
-    let mut planned_count = 0;
     for task in candidate_tasks {
         let timeout_sec = focused_build_task_command_timeout(&task, budget);
         plans.extend(std::iter::once(FocusedBuildPlan {
@@ -385,11 +384,10 @@ pub(crate) fn focused_build_candidate_plans_from_requests(
             timeout_sec,
             requested_by: task.requested_by,
             request_ids: task.request_ids,
-            status: candidate_plan_status(planned_count < budget.max_focused_tests).to_owned(),
+            status: candidate_plan_status(plans.len() < budget.max_focused_tests).to_owned(),
             reason: "candidate recorded for portfolio accounting; execution is budget-gated"
                 .to_owned(),
         }));
-        planned_count += 1;
     }
     plans
 }
