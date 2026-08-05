@@ -1501,6 +1501,7 @@ def require_common_tree(root: pathlib.Path) -> None:
     ]:
         require_file(root / path)
     require_cache_artifacts(root)
+    require_output_degradation_artifact(root)
     require_events(root)
     if not (root / "review/github-review.json").exists() and not (
         root / "review/github-review-skip.json"
@@ -1542,6 +1543,52 @@ def require_common_tree(root: pathlib.Path) -> None:
             "lane packet files do not match effective_model_lanes: "
             f"expected {sorted(expected_lane_packets)!r}, got {sorted(actual_lane_packets)!r}"
         )
+
+
+def require_output_degradation_artifact(root: pathlib.Path) -> None:
+    path = root / "review" / "output_degradation.json"
+    if not path.exists():
+        return
+    artifact = load_json(path)
+    if not isinstance(artifact, dict):
+        fail("output_degradation.json is not an object")
+    if artifact.get("schema") != "ub-review.output_degradation.v1":
+        fail("output_degradation.json has an unsupported schema")
+    require_string(artifact, "output_degradation", "exact_head_sha", nonempty=True)
+    original_bytes = require_non_negative_int(artifact, "output_degradation", "original_bytes")
+    final_bytes = require_non_negative_int(artifact, "output_degradation", "final_bytes")
+    original_items = require_non_negative_int(
+        artifact, "output_degradation", "original_item_count"
+    )
+    final_items = require_non_negative_int(artifact, "output_degradation", "final_item_count")
+    max_bytes = require_non_negative_int(artifact, "output_degradation", "max_bytes")
+    max_bullets = require_non_negative_int(artifact, "output_degradation", "max_bullets")
+    mode = require_string(artifact, "output_degradation", "selected_mode", nonempty=True)
+    if mode not in {"full", "recompressed", "concise_summary", "inline_only", "artifact_only"}:
+        fail(f"output_degradation.selected_mode is unsupported: {mode!r}")
+    if final_bytes > original_bytes:
+        fail("output_degradation.final_bytes exceeds original_bytes")
+    if final_items > original_items:
+        fail("output_degradation.final_item_count exceeds original_item_count")
+    if final_bytes > max_bytes or final_items > max_bullets:
+        fail("output_degradation final output exceeds configured limits")
+    retained = require_string_list(artifact, "output_degradation", "retained_topic_ids")
+    if len(retained) != final_items or len(set(retained)) != len(retained):
+        fail("output_degradation retained topic identities do not match final item count")
+    dropped = artifact.get("dropped_topics")
+    if not isinstance(dropped, list):
+        fail("output_degradation.dropped_topics is not an array")
+    retained_ids = set(retained)
+    dropped_ids = set()
+    for index, topic in enumerate(dropped):
+        label = f"output_degradation.dropped_topics[{index}]"
+        if not isinstance(topic, dict):
+            fail(f"{label} is not an object")
+        topic_id = require_string(topic, label, "topic_id", nonempty=True)
+        require_string(topic, label, "reason", nonempty=True)
+        if topic_id in dropped_ids or topic_id in retained_ids:
+            fail(f"{label}.topic_id is duplicated or retained")
+        dropped_ids.add(topic_id)
 
 
 def require_lane_packet_pr_thread_seed(lane_path: pathlib.Path, lane_text: str) -> None:
@@ -11467,6 +11514,37 @@ def self_test_gate_outcome_contract() -> None:
     )
 
 
+def self_test_output_degradation_contract() -> None:
+    with tempfile.TemporaryDirectory() as temp:
+        root = pathlib.Path(temp)
+        valid = {
+            "schema": "ub-review.output_degradation.v1",
+            "exact_head_sha": "a" * 40,
+            "original_bytes": 400,
+            "final_bytes": 180,
+            "original_item_count": 3,
+            "final_item_count": 2,
+            "selected_mode": "concise_summary",
+            "retained_topic_ids": ["topic-a", "topic-b"],
+            "dropped_topics": [
+                {"topic_id": "topic-c", "reason": "lower_evidence_value_or_body_budget"}
+            ],
+            "max_bytes": 6000,
+            "max_bullets": 12,
+        }
+        path = root / "review" / "output_degradation.json"
+        write_self_test_json(path, valid)
+        require_output_degradation_artifact(root)
+        broken = dict(valid)
+        broken["final_item_count"] = 1
+        write_self_test_json(path, broken)
+        expect_self_test_failure(
+            "output degradation retained count",
+            "retained topic identities do not match final item count",
+            lambda: require_output_degradation_artifact(root),
+        )
+
+
 def self_test_leaked_refuted_surface_fails_final_compiler_input() -> None:
     """Loop-closure pin for #314: a refuted candidate's surface reaching the
     final compiler input must redden the verifier, end to end - not just the
@@ -13209,6 +13287,7 @@ def run_self_tests() -> None:
     self_test_follow_up_resolved_away_filter_matches_rust_contract()
     self_test_routed_receipt_excerpt_matches_rust_contract()
     self_test_proof_command_stream_bound_contract()
+    self_test_output_degradation_contract()
     self_test_leaked_refuted_surface_fails_final_compiler_input()
     self_test_compiler_reconciliation_contract()
     self_test_gate_outcome_contract()

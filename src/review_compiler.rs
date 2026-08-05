@@ -108,6 +108,7 @@ pub(crate) struct FinalCompilerInputArtifact<'a> {
 pub(crate) struct CompiledReviewSurface {
     pub(crate) artifact_body: String,
     pub(crate) github_review: GitHubReview,
+    pub(crate) output_degradation: ReviewOutputDegradationReceipt,
     pub(crate) should_prepare_github_review: bool,
     /// True when the PR body was suppressed as no-value or internal
     /// machinery; independently validated inline findings may still be
@@ -243,10 +244,15 @@ pub(crate) fn compile_review_surface(
         pr_body = cap_review_body(pr_body.clone(), input.args.review_body_max_bytes);
     }
     // The renderer may honor a larger artifact/configuration budget, but the
-    // human-facing contract is always bounded by the hard PR body wall.
-    pr_body = cap_review_body(pr_body, MAX_PR_REVIEW_BODY_BYTES);
-    pr_body = cap_review_body_bullets(pr_body, MAX_PR_REVIEW_BODY_BULLETS);
-    pr_body = cap_review_body(pr_body, MAX_PR_REVIEW_BODY_BYTES);
+    // human-facing contract is always bounded by the hard PR body wall. The
+    // degradation receipt records every topic removed by this boundary.
+    let (degraded_pr_body, output_degradation) = degrade_review_body(
+        pr_body,
+        MAX_PR_REVIEW_BODY_BYTES,
+        MAX_PR_REVIEW_BODY_BULLETS,
+        &input.diff.head,
+    );
+    pr_body = degraded_pr_body;
     let substantive_summary_only_findings =
         count_substantive_summary_only_findings(input.summary_only_findings);
     let mut suppressed_artifact_only_pr_body = false;
@@ -339,6 +345,7 @@ pub(crate) fn compile_review_surface(
     Ok(CompiledReviewSurface {
         artifact_body,
         github_review,
+        output_degradation,
         should_prepare_github_review,
         summary_only_policy_posted,
         review_payload_status,

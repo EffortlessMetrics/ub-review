@@ -2,6 +2,8 @@
 //! proof receipt summaries, body section helpers, diff line parsing,
 //! and hashing utilities (cleanup train step 51, pure code motion).
 
+use std::collections::BTreeMap;
+
 use crate::*;
 
 pub(crate) fn render_review_observation(
@@ -287,6 +289,312 @@ pub(crate) fn is_parked_follow_up(finding: &SummaryOnlyFinding) -> bool {
 
 pub(crate) const REVIEW_BODY_TRUNCATED_SUFFIX: &str =
     "\n\n[review body truncated; see review artifacts]\n";
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ReviewOutputDegradationReceipt {
+    pub(crate) schema: &'static str,
+    pub(crate) exact_head_sha: String,
+    pub(crate) original_bytes: usize,
+    pub(crate) final_bytes: usize,
+    pub(crate) original_item_count: usize,
+    pub(crate) final_item_count: usize,
+    pub(crate) selected_mode: String,
+    pub(crate) retained_topic_ids: Vec<String>,
+    pub(crate) dropped_topics: Vec<ReviewOutputDroppedTopic>,
+    pub(crate) max_bytes: usize,
+    pub(crate) max_bullets: usize,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ReviewOutputDroppedTopic {
+    pub(crate) topic_id: String,
+    pub(crate) reason: String,
+}
+
+#[derive(Clone, Debug)]
+struct OutputTopic {
+    id: String,
+    section: String,
+    text: String,
+    rank: u8,
+}
+
+/// Apply the human-facing output budget after admission and claim
+/// reconciliation. Topic identity and ranking are content-derived, so
+/// reversing arrival order cannot change the retained set. The lossless
+/// artifact body is produced separately by the compiler and is not reduced by
+/// this function.
+pub(crate) fn degrade_review_body(
+    text: String,
+    max_bytes: usize,
+    max_bullets: usize,
+    exact_head_sha: &str,
+) -> (String, ReviewOutputDegradationReceipt) {
+    let original_bytes = text.len();
+    let all_topics = output_topics(&text);
+    let original_item_count = all_topics.len();
+    if original_bytes <= max_bytes && original_item_count <= max_bullets {
+        let retained_topic_ids = all_topics.iter().map(|topic| topic.id.clone()).collect();
+        return (
+            text.clone(),
+            output_degradation_receipt(
+                exact_head_sha,
+                original_bytes,
+                original_bytes,
+                original_item_count,
+                original_item_count,
+                "full",
+                retained_topic_ids,
+                Vec::new(),
+                max_bytes,
+                max_bullets,
+            ),
+        );
+    }
+
+    let mut dropped_topics = Vec::new();
+    let mut unique = Vec::new();
+    for topic in all_topics {
+        if let Some(existing) = unique.iter_mut().find(|existing: &&mut OutputTopic| {
+            normalize_output_topic(&existing.text) == normalize_output_topic(&topic.text)
+        }) {
+            let existing = existing as &mut OutputTopic;
+            let replace = (topic.rank, topic.section.as_str(), topic.id.as_str())
+                > (
+                    existing.rank,
+                    existing.section.as_str(),
+                    existing.id.as_str(),
+                );
+            if replace {
+                dropped_topics.push(ReviewOutputDroppedTopic {
+                    topic_id: existing.id.clone(),
+                    reason: "duplicate_evidence_folded_into_stronger_topic".to_owned(),
+                });
+                *existing = topic;
+            } else {
+                dropped_topics.push(ReviewOutputDroppedTopic {
+                    topic_id: topic.id,
+                    reason: "duplicate_evidence_folded_into_existing_topic".to_owned(),
+                });
+            }
+        } else {
+            unique.push(topic);
+        }
+    }
+    unique.sort_by(output_topic_order);
+
+    let had_unique_topics = !unique.is_empty();
+    let mut retained = unique;
+    while retained.len() > max_bullets {
+        if let Some(topic) = retained.pop() {
+            dropped_topics.push(ReviewOutputDroppedTopic {
+                topic_id: topic.id,
+                reason: "lower_evidence_value_or_bullet_budget".to_owned(),
+            });
+        }
+    }
+    let mut candidate = render_output_topics(&retained);
+    while candidate.len() > max_bytes {
+        let Some(topic) = retained.pop() else {
+            break;
+        };
+        dropped_topics.push(ReviewOutputDroppedTopic {
+            topic_id: topic.id,
+            reason: "lower_evidence_value_or_body_budget".to_owned(),
+        });
+        candidate = render_output_topics(&retained);
+    }
+
+    let (final_body, selected_mode) = if candidate.is_empty() {
+        (
+            String::new(),
+            if had_unique_topics {
+                "inline_only"
+            } else {
+                "artifact_only"
+            },
+        )
+    } else if retained.len() < original_item_count {
+        (candidate, "concise_summary")
+    } else {
+        (candidate, "recompressed")
+    };
+    retained.sort_by(|left, right| left.id.cmp(&right.id));
+    dropped_topics.sort_by(|left, right| left.topic_id.cmp(&right.topic_id));
+    let retained_topic_ids = retained
+        .into_iter()
+        .map(|topic| topic.id)
+        .collect::<Vec<_>>();
+    let final_item_count = retained_topic_ids.len();
+    let final_bytes = final_body.len();
+    let receipt = output_degradation_receipt(
+        exact_head_sha,
+        original_bytes,
+        final_bytes,
+        original_item_count,
+        final_item_count,
+        selected_mode,
+        retained_topic_ids,
+        dropped_topics,
+        max_bytes,
+        max_bullets,
+    );
+    (final_body, receipt)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the degradation receipt fields are the persisted output contract"
+)]
+fn output_degradation_receipt(
+    exact_head_sha: &str,
+    original_bytes: usize,
+    final_bytes: usize,
+    original_item_count: usize,
+    final_item_count: usize,
+    selected_mode: &str,
+    retained_topic_ids: Vec<String>,
+    dropped_topics: Vec<ReviewOutputDroppedTopic>,
+    max_bytes: usize,
+    max_bullets: usize,
+) -> ReviewOutputDegradationReceipt {
+    ReviewOutputDegradationReceipt {
+        schema: OUTPUT_DEGRADATION_SCHEMA,
+        exact_head_sha: exact_head_sha.to_owned(),
+        original_bytes,
+        final_bytes,
+        original_item_count,
+        final_item_count,
+        selected_mode: selected_mode.to_owned(),
+        retained_topic_ids,
+        dropped_topics,
+        max_bytes,
+        max_bullets,
+    }
+}
+
+fn output_topics(text: &str) -> Vec<OutputTopic> {
+    let mut section = String::new();
+    text.lines()
+        .filter_map(|line| {
+            if line.starts_with("## ") {
+                section = line.trim().to_owned();
+                return None;
+            }
+            let topic_text = line
+                .trim_start()
+                .strip_prefix("- ")
+                .or_else(|| (section == "## Reporter summary").then_some(line.trim()))?
+                .trim();
+            if topic_text.is_empty() {
+                return None;
+            }
+            let normalized = normalize_output_topic(topic_text);
+            Some(OutputTopic {
+                id: format!("topic-{}", &sha256_hex(normalized.as_bytes())[..16]),
+                section: section.clone(),
+                text: topic_text.to_owned(),
+                rank: output_topic_rank(&section, topic_text),
+            })
+        })
+        .collect()
+}
+
+fn normalize_output_topic(text: &str) -> String {
+    text.split_whitespace()
+        .map(|word| word.trim_matches(|character: char| !character.is_alphanumeric()))
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
+}
+
+fn output_topic_rank(section: &str, text: &str) -> u8 {
+    let lower = text.to_ascii_lowercase();
+    let mut rank: u8 = match section {
+        "## Confirmed findings" | "## Test proof" | "## Proof results" => 5,
+        "## Verification questions"
+        | "## Evidence gaps"
+        | "## Missing evidence"
+        | "## Missing or failed evidence" => 4,
+        "## Refuted" | "## Summary-only findings" => 3,
+        "## Parked follow-ups" | "## Suggested follow-up" => 2,
+        _ => 1,
+    };
+    if ["executed", "receipt", "confirmed", "reproduced"]
+        .iter()
+        .any(|marker| lower.contains(marker))
+    {
+        rank = rank.saturating_add(2);
+    }
+    if lower.contains("blocker") || lower.contains("high") {
+        rank = rank.saturating_add(2);
+    } else if lower.contains("medium") {
+        rank = rank.saturating_add(1);
+    }
+    rank
+}
+
+fn output_topic_order(left: &OutputTopic, right: &OutputTopic) -> std::cmp::Ordering {
+    right
+        .rank
+        .cmp(&left.rank)
+        .then_with(|| left.id.cmp(&right.id))
+}
+
+fn render_output_topics(topics: &[OutputTopic]) -> String {
+    if topics.is_empty() {
+        return String::new();
+    }
+    let mut sections = BTreeMap::<String, Vec<&OutputTopic>>::new();
+    for topic in topics {
+        sections
+            .entry(topic.section.clone())
+            .or_default()
+            .push(topic);
+    }
+    let mut output = String::new();
+    for section in [
+        "## Decision",
+        "## Reporter summary",
+        "## Confirmed findings",
+        "## Summary-only findings",
+        "## Verification questions",
+        "## Test proof",
+        "## Proof results",
+        "## Refuted",
+        "## Failed objections",
+        "## Residual risk",
+        "## Evidence gaps",
+        "## Missing evidence",
+        "## Missing or failed evidence",
+        "## Parked follow-ups",
+        "## Suggested follow-up",
+    ] {
+        let Some(mut section_topics) = sections.remove(section) else {
+            continue;
+        };
+        section_topics.sort_by(|left, right| output_topic_order(left, right));
+        output.push_str(section);
+        output.push_str("\n\n");
+        for topic in section_topics {
+            output.push_str("- ");
+            output.push_str(&topic.text);
+            output.push('\n');
+        }
+    }
+    for (section, mut section_topics) in sections {
+        section_topics.sort_by(|left, right| output_topic_order(left, right));
+        output.push_str(&section);
+        output.push_str("\n\n");
+        for topic in section_topics {
+            output.push_str("- ");
+            output.push_str(&topic.text);
+            output.push('\n');
+        }
+    }
+    output.trim_end().to_owned() + "\n"
+}
 const REVIEW_BODY_REQUIRED_HEADINGS: [&str; 7] = [
     "## Decision",
     "## Confirmed findings",
@@ -311,6 +619,7 @@ pub(crate) fn cap_review_body(text: String, max_bytes: usize) -> String {
     cap_text_prefix(text, max_bytes)
 }
 
+#[cfg(test)]
 pub(crate) fn cap_review_body_bullets(text: String, max_bullets: usize) -> String {
     let mut bullets = 0usize;
     let mut dropped = false;

@@ -21,6 +21,13 @@ Use the box intelligently while it is live:
 The runner can spend CPU, disk, memory, network, model budget, and wall time.
 The PR body spends reviewer attention.
 
+When the admitted body exceeds the byte or bullet budget, the compiler applies
+deterministic evidence/materiality ordering and writes
+`review/output_degradation.json`. That receipt binds the exact head, original
+and final sizes, retained topic identities, dropped-topic reasons, selected
+fallback mode, and configured limits. The complete admitted inputs remain in
+the review artifacts; body-size pressure alone is never a code failure.
+
 Claims compile across lanes and sections. One semantic claim receives one final
 disposition and appears once. A successfully posted inline comment is not
 repeated in the summary; failed inline delivery must render the actual concise

@@ -137,6 +137,19 @@ pub(crate) fn write_compiler_reconciliation_artifact(
     Ok(())
 }
 
+pub(crate) fn write_output_degradation_artifact(
+    out: &Path,
+    receipt: &ReviewOutputDegradationReceipt,
+) -> Result<()> {
+    let review_dir = out.join("review");
+    fs::create_dir_all(&review_dir).with_context(|| format!("create {}", review_dir.display()))?;
+    fs::write(
+        review_dir.join("output_degradation.json"),
+        serde_json::to_vec_pretty(receipt)?,
+    )?;
+    Ok(())
+}
+
 pub(crate) fn model_stage_records(
     model_lanes: &[ModelLaneReceipt],
     follow_up_results: &[FollowUpResult],

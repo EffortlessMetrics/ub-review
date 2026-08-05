@@ -116,7 +116,8 @@ mod artifact_writers;
 use artifact_writers::{
     write_final_compiler_input_artifact, write_final_orchestrator_artifact,
     write_follow_up_output_artifacts, write_follow_up_result_artifacts,
-    write_model_stage_artifacts, write_resolved_candidate_artifacts,
+    write_model_stage_artifacts, write_output_degradation_artifact,
+    write_resolved_candidate_artifacts,
 };
 mod witness;
 pub(crate) use witness::*;
@@ -4926,7 +4927,9 @@ fn write_review_artifacts(
     let should_prepare_github_review = final_surface.should_prepare_github_review;
     let summary_only_policy_posted = final_surface.summary_only_policy_posted;
     let github_review = final_surface.github_review;
+    let output_degradation = final_surface.output_degradation;
     let artifact_body = final_surface.artifact_body;
+    write_output_degradation_artifact(out, &output_degradation)?;
     // unsafe-review comment-plan candidates entered the compiler intake before
     // candidate records were built. No post-compile comment injection happens
     // here; appending here would bypass the ledger, cap, dedupe, and refuter.
@@ -5738,27 +5741,27 @@ mod tests {
         candidate_matches_summary_finding, cap_review_body, cap_review_body_bullets, classify_diff,
         classify_diff_class, classify_issue_candidates, classify_proof_cost, cmd_gate_check,
         cmd_post, collect_pr_thread_context, combined_observations, compile_review_surface,
-        dedupe_inline_comments, deep_minimax_lanes, default_lanes, direct_minimax_spec,
-        execute_issue_broker, extract_model_content, fallback_provider_spec_for_lane,
-        focused_test_tasks_from_diff, follow_up_evidence_from_outputs, follow_up_model_lane_id,
-        follow_up_output_record, follow_up_provider_assignment_with_key_state,
-        follow_up_resolved_away_candidate_ids, github_review_skip_path, http_status_from_error,
-        is_model_receipt_evidence_issue, make_observation, model_api_url, model_assignments,
-        model_assignments_with_key_state, model_auth_header, model_json_payload, model_lane,
-        model_request_payload, model_response_shape, normalize_run_args,
-        observation_summary_artifacts, opencode_canary_spec, pr_decision_sentence,
-        proof_planner_assignment_with_key_state, provider_concurrency_limits,
-        provider_spec_for_lane_with_key_state, read_candidate_review_surfaces,
-        read_github_event_pr_context, render_lane_model_prompt, render_ledger_context,
-        render_pr_thread_context, render_refuter_prompt, render_review_body, render_summary,
-        resolved_candidate_records, resolved_minimax_prompt_cache, resolved_provider_policy,
-        review_lanes_for_args, right_side_diff_lines, run_available_model_lanes,
-        run_available_model_lanes_with_runner, run_refuter_pass, runtime_fallback_retry_spec,
-        runtime_profile_from_toml, runtime_profile_override, selected_provider_spec, sha256_hex,
-        split_curl_http_status, standard_minimax_lanes, terminalize_proof_requests,
-        validate_github_review_payload, validate_github_review_payload_for_post,
-        validate_pr_review_body_policy, validate_run_args, wait_for_child_output_files,
-        write_candidate_artifacts, write_final_orchestrator_artifact,
+        dedupe_inline_comments, deep_minimax_lanes, default_lanes, degrade_review_body,
+        direct_minimax_spec, execute_issue_broker, extract_model_content,
+        fallback_provider_spec_for_lane, focused_test_tasks_from_diff,
+        follow_up_evidence_from_outputs, follow_up_model_lane_id, follow_up_output_record,
+        follow_up_provider_assignment_with_key_state, follow_up_resolved_away_candidate_ids,
+        github_review_skip_path, http_status_from_error, is_model_receipt_evidence_issue,
+        make_observation, model_api_url, model_assignments, model_assignments_with_key_state,
+        model_auth_header, model_json_payload, model_lane, model_request_payload,
+        model_response_shape, normalize_run_args, observation_summary_artifacts,
+        opencode_canary_spec, pr_decision_sentence, proof_planner_assignment_with_key_state,
+        provider_concurrency_limits, provider_spec_for_lane_with_key_state,
+        read_candidate_review_surfaces, read_github_event_pr_context, render_lane_model_prompt,
+        render_ledger_context, render_pr_thread_context, render_refuter_prompt, render_review_body,
+        render_summary, resolved_candidate_records, resolved_minimax_prompt_cache,
+        resolved_provider_policy, review_lanes_for_args, right_side_diff_lines,
+        run_available_model_lanes, run_available_model_lanes_with_runner, run_refuter_pass,
+        runtime_fallback_retry_spec, runtime_profile_from_toml, runtime_profile_override,
+        selected_provider_spec, sha256_hex, split_curl_http_status, standard_minimax_lanes,
+        terminalize_proof_requests, validate_github_review_payload,
+        validate_github_review_payload_for_post, validate_pr_review_body_policy, validate_run_args,
+        wait_for_child_output_files, write_candidate_artifacts, write_final_orchestrator_artifact,
         write_follow_up_evidence_artifact, write_follow_up_output_artifacts,
         write_github_review_payload, write_issue_broker_results, write_issue_capture_artifacts,
         write_observation_artifacts, write_orchestrator_artifacts, write_proof_receipt_artifacts,
@@ -14474,6 +14477,14 @@ required_proof_unprooven = true
         assert_eq!(written["terminal_status"], "artifact-only");
         assert_eq!(written["conclusion"], gate_outcome.conclusion.as_str());
         assert_eq!(written["tool_gates"]["evaluated"], 0);
+        let output_degradation: serde_json::Value =
+            serde_json::from_slice(&fs::read(out.join("review/output_degradation.json"))?)?;
+        assert_eq!(
+            output_degradation["schema"],
+            "ub-review.output_degradation.v1"
+        );
+        assert_eq!(output_degradation["exact_head_sha"], plan.head.as_str());
+        assert!(output_degradation["final_bytes"].is_number());
         let events = fs::read_to_string(out.join("events.ndjson"))?;
         assert!(events.contains("\"kind\":\"gate_outcome\""));
         assert!(events.contains("\"conclusion\":\"pass\""));
@@ -22037,6 +22048,49 @@ index 1111111..2222222 100644
         let bullets = capped.lines().filter(|line| line.starts_with("- ")).count();
         assert_eq!(bullets, 12);
         assert!(capped.contains("review body truncated"));
+    }
+
+    #[test]
+    fn output_degradation_is_value_ranked_and_arrival_order_independent() {
+        let first = "## Confirmed findings\n\n- Low-confidence parser note.\n- Executed receipt confirms the parser preserves the changed path.\n";
+        let reversed = "## Confirmed findings\n\n- Executed receipt confirms the parser preserves the changed path.\n- Low-confidence parser note.\n";
+        let (first_body, first_receipt) = degrade_review_body(first.to_owned(), 500, 1, "head-a");
+        let (reversed_body, reversed_receipt) =
+            degrade_review_body(reversed.to_owned(), 500, 1, "head-a");
+
+        assert_eq!(first_body, reversed_body);
+        assert_eq!(
+            first_receipt.retained_topic_ids,
+            reversed_receipt.retained_topic_ids
+        );
+        assert_eq!(first_receipt.original_item_count, 2);
+        assert_eq!(first_receipt.final_item_count, 1);
+        assert_eq!(first_receipt.selected_mode, "concise_summary");
+        assert!(first_body.contains("Executed receipt"));
+        assert!(!first_body.contains("Low-confidence"));
+        assert_eq!(first_receipt.exact_head_sha, "head-a");
+        assert!(
+            first_receipt
+                .dropped_topics
+                .iter()
+                .any(|topic| topic.reason.contains("bullet_budget"))
+        );
+    }
+
+    #[test]
+    fn output_degradation_uses_inline_only_when_no_body_fits() {
+        let (body, receipt) = degrade_review_body(
+            "## Confirmed findings\n\n- Executed receipt confirms the changed path.".to_owned(),
+            10,
+            12,
+            "head-b",
+        );
+
+        assert!(body.is_empty());
+        assert_eq!(receipt.selected_mode, "inline_only");
+        assert_eq!(receipt.original_item_count, 1);
+        assert_eq!(receipt.final_item_count, 0);
+        assert_eq!(receipt.final_bytes, 0);
     }
 
     #[test]
