@@ -122,6 +122,30 @@ specs (`command_parse.rs:27, 229`).
 
 Only `"requested"` groups produce tasks.
 
+### Model-native intent resolution (#803)
+
+Model lanes submit an answer-shaped question, a `ProofKind`, and a semantic
+repository target; `target` is never a command string. Before a model intent
+can enter the broker, Rust resolves it against the current Cargo workspace
+metadata using one of these labels:
+
+* `cargo-test:<test-target>`, `<package>::<test-target>`, or an exact test
+  target/source label for `focused-test` and `base-plus-tests`;
+* `cargo-package:<package>` or `cargo-target:<package>/<target>` for
+  `focused-build`;
+* `workspace` for the approved workspace check.
+
+Resolution requires exactly one workspace-owned match. Zero matches,
+ambiguous matches, unsupported proof kinds, unsafe labels, unavailable Cargo
+metadata, and timeouts outside the profile per-command budget are terminal
+artifact dispositions and never create runnable work. A successful resolution
+creates a stable internal `ProofRequest` identity using an approved Cargo
+template plus the timeout and requiredness execution requirements. Equivalent
+model intents and equivalent legacy requests share that identity, while
+requests with different execution requirements remain distinct and
+`proof_intents.json` retains the claim, resolution status, reason, and resolved
+request IDs.
+
 ## Budget enforcement
 
 Two budget structs from the runtime profile's `[budgets]` (`proof_budget`,

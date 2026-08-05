@@ -4293,6 +4293,7 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
     planner_input = load_json(root / "review/proof_planner_input.json")
     planner_output = load_json(root / "review/proof_planner_output.json")
     proof_intents = load_json(root / "review/proof_intents.json")
+    proof_requests = load_json(root / "review/proof_requests.json")
     proof_portfolio = load_json(root / "review/proof_portfolio.json")
     if planner_input.get("schema") != "ub-review.proof_planner_input.v1":
         fail("review/proof_planner_input.json has wrong schema")
@@ -4329,6 +4330,21 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
             fail(
                 f"review/proof_intents.json entry {index} requested_by is not a string array"
             )
+        resolved_request_ids = intent.get("resolved_request_ids", [])
+        if not isinstance(resolved_request_ids, list) or not all(
+            isinstance(request_id, str) and request_id for request_id in resolved_request_ids
+        ):
+            fail(
+                f"review/proof_intents.json entry {index} resolved_request_ids is not a string array"
+            )
+        resolution_reason = intent.get("resolution_reason", "")
+        if not isinstance(resolution_reason, str):
+            fail(
+                f"review/proof_intents.json entry {index} resolution_reason is not a string"
+            )
+        require_proof_intent_timeout(intent, index)
+    if not isinstance(proof_requests, list):
+        fail("review/proof_requests.json is not an array")
     if not isinstance(proof_portfolio, dict):
         fail("review/proof_portfolio.json is not an object")
     if proof_portfolio.get("schema") != "ub-review.proof_portfolio.v1":
@@ -4356,6 +4372,9 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
                 fail(
                     f"review/proof_portfolio.json decision {index} missing string field {field}"
                 )
+    require_proof_resolution_invariants(
+        proof_requests, proof_intents, proof_tasks, decisions, proof_portfolio
+    )
     lines = [line for line in read_text(root / "proof_tasks.ndjson").splitlines() if line.strip()]
     if len(lines) != len(proof_tasks):
         fail("proof_tasks.ndjson line count does not match proof planner output")
@@ -4367,6 +4386,148 @@ def require_proof_planner_artifacts(root: pathlib.Path) -> None:
         if parsed != proof_tasks[index]:
             fail(f"proof_tasks.ndjson line {index + 1} does not match proof planner output")
     require_work_queue_artifacts(root, proof_tasks)
+
+
+PROOF_INTENT_TERMINAL_STATUSES = {
+    "ambiguous_target",
+    "invalid_timeout",
+    "rejected_target",
+    "unavailable_metadata",
+    "unsupported_kind",
+    "unsupported_target",
+}
+PROOF_INTENT_RESOLVED_STATUSES = {"deduplicated", "resolved"}
+PROOF_INTENT_LEGACY_STATUSES = {"requested", "unsupported"}
+
+
+def require_proof_intent_timeout(intent: dict, index: int) -> None:
+    missing = object()
+    timeout_sec = intent.get("timeout_sec", missing)
+    if timeout_sec is not missing and (
+        not isinstance(timeout_sec, int) or isinstance(timeout_sec, bool) or timeout_sec < 0
+    ):
+        fail(
+            f"review/proof_intents.json entry {index} timeout_sec is not a non-negative integer"
+        )
+
+
+def require_proof_resolution_invariants(
+    proof_requests: list[dict],
+    proof_intents: list[dict],
+    proof_tasks: list[dict],
+    decisions: list[dict],
+    proof_portfolio: dict,
+) -> None:
+    request_ids: set[str] = set()
+    for request in proof_requests:
+        if not isinstance(request, dict) or not isinstance(request.get("id"), str):
+            fail(f"review/proof_requests.json contains a request without a string id: {request!r}")
+        request_id = request["id"]
+        if request_id in request_ids:
+            fail(f"review/proof_requests.json contains duplicate id {request_id!r}")
+        request_ids.add(request_id)
+
+    task_by_id: dict[str, dict] = {}
+    request_task_ids: dict[str, set[str]] = {}
+    for task in proof_tasks:
+        task_id = task.get("id") if isinstance(task, dict) else None
+        if not isinstance(task_id, str) or not task_id:
+            fail(f"proof planner task has no string id: {task!r}")
+        if task_id in task_by_id:
+            fail(f"proof planner output contains duplicate task id {task_id!r}")
+        task_by_id[task_id] = task
+        task_request_ids = task.get("request_ids", [])
+        if not isinstance(task_request_ids, list) or not all(
+            isinstance(request_id, str) and request_id for request_id in task_request_ids
+        ):
+            fail(f"proof planner task request_ids is not a string array: {task!r}")
+        for request_id in task_request_ids:
+            if request_id not in request_ids:
+                fail(
+                    f"proof planner task {task_id!r} references unknown request {request_id!r}"
+                )
+            request_task_ids.setdefault(request_id, set()).add(task_id)
+
+    decision_by_task: dict[str, dict] = {}
+    for decision in decisions:
+        task_id = decision["task_id"]
+        task = task_by_id.get(task_id)
+        if task is None:
+            fail(f"proof portfolio decision references unknown task {task_id!r}")
+        if task_id in decision_by_task:
+            fail(f"proof portfolio contains duplicate decision for task {task_id!r}")
+        decision_request_ids = decision.get("request_ids", [])
+        if not isinstance(decision_request_ids, list) or not all(
+            isinstance(request_id, str) and request_id for request_id in decision_request_ids
+        ):
+            fail(f"proof portfolio decision request_ids is not a string array: {decision!r}")
+        task_request_ids = task.get("request_ids", [])
+        if decision_request_ids != task_request_ids:
+            fail(
+                f"proof portfolio decision request_ids do not match task {task_id!r}"
+            )
+        if not proof_task_kind_matches_decision(task.get("kind"), decision.get("kind")):
+            fail(f"proof portfolio decision kind does not match task {task_id!r}")
+        decision_by_task[task_id] = decision
+
+    selected_task_ids = proof_portfolio.get("selected_task_ids", [])
+    if len(selected_task_ids) != len(set(selected_task_ids)):
+        fail("review/proof_portfolio.json selected_task_ids contains duplicates")
+    for task_id in selected_task_ids:
+        if task_id not in task_by_id:
+            fail(f"review/proof_portfolio.json selects unknown task {task_id!r}")
+        if task_id not in decision_by_task:
+            fail(f"review/proof_portfolio.json selects task without a decision {task_id!r}")
+
+    for index, intent in enumerate(proof_intents):
+        status = intent["status"]
+        resolved_request_ids = intent.get("resolved_request_ids", [])
+        resolution_reason = intent.get("resolution_reason", "")
+        if status in PROOF_INTENT_TERMINAL_STATUSES:
+            if resolved_request_ids:
+                fail(
+                    f"proof intent {index} terminal status {status!r} has resolved request ids"
+                )
+            if not resolution_reason:
+                fail(f"proof intent {index} terminal status {status!r} has no resolution reason")
+            continue
+        if status in PROOF_INTENT_LEGACY_STATUSES:
+            if not resolved_request_ids:
+                fail(f"proof intent {index} status {status!r} has no resolved request ids")
+            for request_id in resolved_request_ids:
+                if request_id not in request_ids:
+                    fail(
+                        f"proof intent {index} references unknown resolved request {request_id!r}"
+                    )
+            continue
+        if status not in PROOF_INTENT_RESOLVED_STATUSES:
+            fail(f"proof intent {index} has unknown resolution status {status!r}")
+        if not resolved_request_ids:
+            fail(f"proof intent {index} status {status!r} has no resolved request ids")
+        for request_id in resolved_request_ids:
+            if request_id not in request_ids:
+                fail(
+                    f"proof intent {index} references unknown resolved request {request_id!r}"
+                )
+            task_ids = request_task_ids.get(request_id, set())
+            if not task_ids:
+                fail(
+                    f"proof intent {index} resolved request {request_id!r} has no planner task"
+                )
+            if not any(task_id in decision_by_task for task_id in task_ids):
+                fail(
+                    f"proof intent {index} resolved request {request_id!r} has no portfolio decision"
+                )
+
+
+def proof_task_kind_matches_decision(task_kind: object, decision_kind: object) -> bool:
+    """Match task-family kinds to the portfolio's more specific execution mode."""
+    if task_kind == decision_kind:
+        return True
+    return task_kind == "focused-test" and decision_kind in {
+        "focused-head",
+        "focused-red-green",
+    }
 
 
 def require_proof_task_schema(task: dict) -> None:
@@ -12674,6 +12835,89 @@ def self_test_gate_watchdog_contract() -> None:
         )
 
 
+def self_test_proof_planner_resolution_contract() -> None:
+    request = {"id": "proof-request-1"}
+    intent = {
+        "status": "resolved",
+        "resolved_request_ids": ["proof-request-1"],
+        "resolution_reason": "resolved to one approved target",
+    }
+    task = {
+        "id": "proof-task-1",
+        "kind": "focused-test",
+        "request_ids": ["proof-request-1"],
+    }
+    decision = {
+        "task_id": "proof-task-1",
+        "kind": "focused-test",
+        "request_ids": ["proof-request-1"],
+    }
+    portfolio = {"selected_task_ids": ["proof-task-1"]}
+    require_proof_resolution_invariants(
+        [request], [intent], [task], [decision], portfolio
+    )
+    require_proof_resolution_invariants(
+        [request],
+        [intent],
+        [task],
+        [{**decision, "kind": "focused-red-green"}],
+        portfolio,
+    )
+    require_proof_resolution_invariants(
+        [request],
+        [{"status": "requested", "resolved_request_ids": ["proof-request-1"]}],
+        [],
+        [],
+        {"selected_task_ids": []},
+    )
+    require_proof_resolution_invariants(
+        [request],
+        [{"status": "unsupported", "resolved_request_ids": ["proof-request-1"]}],
+        [],
+        [],
+        {"selected_task_ids": []},
+    )
+
+    expect_self_test_failure(
+        "proof planner unknown resolved request",
+        "references unknown resolved request",
+        lambda: require_proof_resolution_invariants(
+            [request],
+            [{**intent, "resolved_request_ids": ["proof-request-missing"]}],
+            [task],
+            [decision],
+            portfolio,
+        ),
+    )
+    expect_self_test_failure(
+        "proof planner terminal intent with request",
+        "terminal status",
+        lambda: require_proof_resolution_invariants(
+            [request],
+            [{**intent, "status": "unsupported_target"}],
+            [task],
+            [decision],
+            portfolio,
+        ),
+    )
+    expect_self_test_failure(
+        "proof planner explicit null timeout",
+        "timeout_sec is not a non-negative integer",
+        lambda: require_proof_intent_timeout({"timeout_sec": None}, 0),
+    )
+    expect_self_test_failure(
+        "proof planner mismatched task family",
+        "decision kind does not match task",
+        lambda: require_proof_resolution_invariants(
+            [request],
+            [intent],
+            [task],
+            [{**decision, "kind": "focused-build"}],
+            portfolio,
+        ),
+    )
+
+
 def run_self_tests() -> None:
     require_run_mode("review-byok", "self-test review-byok mode")
     require_run_mode("intelligent-ci", "self-test intelligent-ci mode")
@@ -13309,6 +13553,7 @@ def run_self_tests() -> None:
     self_test_compiler_reconciliation_contract()
     self_test_gate_outcome_contract()
     self_test_gate_watchdog_contract()
+    self_test_proof_planner_resolution_contract()
     self_test_ci_audit_core_artifact_contract()
     self_test_setup_ci_terminal_receipt_contract()
     self_test_ci_audit_runner_cancellations_contract()

@@ -1208,7 +1208,8 @@ Return only one strict JSON object:
       "expected_answer_shape": "the observable result that confirms or refutes it",
       "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
       "target": "safe repository test, package, symbol, or route target",
-      "estimated_value": "high|medium-high|medium|low"
+      "estimated_value": "high|medium-high|medium|low",
+      "timeout_sec": 300
     }}
   ]
 }}
@@ -1536,7 +1537,8 @@ Use the cached shared context. Return only one strict JSON object:
       "expected_answer_shape": "the observable result that confirms or refutes it",
       "proof_kind": "focused-test|focused-build|base-plus-tests|sanitizer-witness|mutation-witness|miri-witness|source-route-probe|external-check",
       "target": "safe repository test, package, symbol, or route target",
-      "estimated_value": "high|medium-high|medium|low"
+      "estimated_value": "high|medium-high|medium|low",
+      "timeout_sec": 300
     }}
   ]
 }}
@@ -1809,6 +1811,9 @@ fn validate_proof_intent(
         estimated_value,
         requested_by: vec![lane.id.clone()],
         status: "requested".to_owned(),
+        timeout_sec: intent.timeout_sec,
+        resolved_request_ids: Vec::new(),
+        resolution_reason: String::new(),
     })
 }
 
@@ -1817,6 +1822,117 @@ mod receipt_reconsideration_tests {
     use anyhow::Result;
 
     use super::*;
+
+    fn proof_lane() -> LanePlan {
+        LanePlan {
+            id: "tests-oracle".to_owned(),
+            role: "Test oracle".to_owned(),
+            model: "test-model".to_owned(),
+            model_display: "test-model".to_owned(),
+            receives: vec!["diff".to_owned()],
+            focus: "focused proof".to_owned(),
+        }
+    }
+
+    fn model_proof_intent(target: &str) -> ModelProofIntent {
+        ModelProofIntent {
+            claim_id: "claim-1".to_owned(),
+            question: "does the focused proof answer the claim?".to_owned(),
+            expected_answer_shape: "terminal receipt".to_owned(),
+            proof_kind: ProofKind::FocusedTest,
+            target: target.to_owned(),
+            estimated_value: Some("high".to_owned()),
+            timeout_sec: Some(180),
+        }
+    }
+
+    #[test]
+    fn proof_intent_validation_preserves_exact_safe_wire_fields() -> Result<()> {
+        let validated = match validate_proof_intent(&proof_lane(), model_proof_intent("cli"), 4, 2)
+        {
+            Ok(value) => value,
+            Err(observation) => {
+                anyhow::bail!("valid proof intent was rejected: {}", observation.id)
+            }
+        };
+        assert_eq!(validated.id.len(), "intent-model-".len() + 16 + 2);
+        assert!(validated.id.starts_with("intent-model-"));
+        assert_eq!(validated.claim_id, "claim-1");
+        assert_eq!(
+            validated.question,
+            "does the focused proof answer the claim?"
+        );
+        assert_eq!(validated.expected_answer_shape, "terminal receipt");
+        assert_eq!(validated.proof_kind, ProofKind::FocusedTest);
+        assert_eq!(validated.target, "cli");
+        assert_eq!(validated.estimated_value, "high");
+        assert_eq!(validated.requested_by, vec!["tests-oracle"]);
+        assert_eq!(validated.status, "requested");
+        assert_eq!(validated.timeout_sec, Some(180));
+        assert!(validated.resolved_request_ids.is_empty());
+        assert!(validated.resolution_reason.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn proof_intent_validation_rejects_each_invalid_required_field() -> Result<()> {
+        let cases = [
+            (
+                "",
+                "does the focused proof answer the claim?",
+                "terminal receipt",
+                "proof intent has empty claim_id",
+            ),
+            (
+                "claim-1",
+                "",
+                "terminal receipt",
+                "proof intent has empty question",
+            ),
+            (
+                "claim-1",
+                "does the focused proof answer the claim?",
+                "",
+                "proof intent has empty expected_answer_shape",
+            ),
+            (
+                "claim-1",
+                "does the focused proof answer the claim?",
+                "terminal receipt",
+                "proof intent target is not a safe repository symbol, test, package, or route label",
+            ),
+        ];
+        for (claim_id, question, expected_answer_shape, reason) in cases {
+            let mut intent = model_proof_intent(if claim_id.is_empty() {
+                "cli"
+            } else {
+                "cargo;rm"
+            });
+            intent.claim_id = claim_id.to_owned();
+            intent.question = question.to_owned();
+            intent.expected_answer_shape = expected_answer_shape.to_owned();
+            let observation = match validate_proof_intent(&proof_lane(), intent, 0, 7) {
+                Ok(value) => anyhow::bail!("invalid proof intent was accepted: {}", value.id),
+                Err(observation) => observation,
+            };
+            assert_eq!(observation.id, "proof-intent-validation-tests-oracle-7");
+            assert_eq!(observation.status, "open");
+            assert_eq!(observation.kind, "missing-evidence");
+            assert_eq!(observation.source, "proof-intent-validation");
+            assert!(observation.evidence[0].contains(reason));
+        }
+
+        let mut low_value = model_proof_intent("cli");
+        low_value.estimated_value = Some("not-a-value".to_owned());
+        let validated = match validate_proof_intent(&proof_lane(), low_value, 0, 0) {
+            Ok(value) => value,
+            Err(observation) => {
+                anyhow::bail!("valid proof intent was rejected: {}", observation.id)
+            }
+        };
+        assert_eq!(validated.estimated_value, "medium");
+        Ok(())
+    }
 
     fn observation(id: &str) -> Observation {
         Observation {
