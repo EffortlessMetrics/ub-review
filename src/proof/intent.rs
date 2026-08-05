@@ -43,7 +43,12 @@ pub(crate) fn resolve_model_proof_intents(
 
     for request in legacy_requests {
         known_requests
-            .entry(request_key(&request.command, &request.cost))
+            .entry(request_key(
+                &request.command,
+                &request.cost,
+                request.timeout_sec,
+                request.required,
+            ))
             .or_insert_with(|| request.id.clone());
     }
 
@@ -113,7 +118,8 @@ pub(crate) fn resolve_model_proof_intents(
                 continue;
             }
         };
-        let key = request_key(&target.command, cost);
+        let required = intent.estimated_value == "high";
+        let key = request_key(&target.command, cost, requested_timeout, required);
         let request_id = if let Some(existing) = known_requests.get(&key) {
             resolved.status = "deduplicated".to_owned();
             resolved.resolution_reason = format!(
@@ -140,7 +146,7 @@ pub(crate) fn resolve_model_proof_intents(
                 ),
                 cost: cost.to_owned(),
                 timeout_sec: requested_timeout,
-                required: intent.estimated_value == "high",
+                required,
                 status: "requested".to_owned(),
             };
             known_requests.insert(key, id.clone());
@@ -163,9 +169,9 @@ pub(crate) fn resolve_model_proof_intents(
     })
 }
 
-fn request_key(command: &str, cost: &str) -> String {
+fn request_key(command: &str, cost: &str, timeout_sec: u64, required: bool) -> String {
     format!(
-        "{cost}:{}",
+        "{cost}:{timeout_sec}:{required}:{}",
         normalize_proof_command(command)
             .split_whitespace()
             .collect::<Vec<_>>()
@@ -573,7 +579,7 @@ mod tests {
             reason: "legacy equivalent".to_owned(),
             cost: "focused-test".to_owned(),
             timeout_sec: 300,
-            required: false,
+            required: true,
             status: "requested".to_owned(),
         };
         let mut second = intent(ProofKind::FocusedTest, "cli");
@@ -751,9 +757,55 @@ mod tests {
         assert_eq!(
             request_key(
                 "cargo test --locked --package ub-review --test cli",
-                "focused-test"
+                "focused-test",
+                300,
+                true,
             ),
-            "focused-test:cargo test --locked --package ub-review --test cli"
+            "focused-test:300:true:cargo test --locked --package ub-review --test cli"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn execution_requirements_are_part_of_request_identity() -> Result<()> {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut defaulted = intent(ProofKind::FocusedTest, "cli");
+        defaulted.timeout_sec = Some(300);
+        defaulted.estimated_value = "medium".to_owned();
+        let mut longer = defaulted.clone();
+        longer.id = "intent-longer".to_owned();
+        longer.timeout_sec = Some(600);
+        let mut required = defaulted.clone();
+        required.id = "intent-required".to_owned();
+        required.estimated_value = "high".to_owned();
+
+        let mut test_budget = budget();
+        test_budget.per_command_timeout_sec = 900;
+        let result = resolve_model_proof_intents(
+            root,
+            &diff(&[]),
+            &[defaulted, longer, required],
+            &[],
+            test_budget,
+        )?;
+        assert_eq!(result.proof_requests.len(), 3);
+        assert_eq!(
+            result
+                .proof_requests
+                .iter()
+                .map(|request| (request.timeout_sec, request.required))
+                .collect::<Vec<_>>(),
+            vec![(300, false), (600, false), (300, true)]
+        );
+        assert!(result.intents.iter().all(|item| item.status == "resolved"));
+        assert_eq!(
+            result
+                .intents
+                .iter()
+                .map(|item| item.resolved_request_ids[0].clone())
+                .collect::<Vec<_>>()
+                .len(),
+            3
         );
         Ok(())
     }

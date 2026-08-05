@@ -140,9 +140,11 @@ ambiguous matches, unsupported proof kinds, unsafe labels, unavailable Cargo
 metadata, and timeouts outside the profile per-command budget are terminal
 artifact dispositions and never create runnable work. A successful resolution
 creates a stable internal `ProofRequest` identity using an approved Cargo
-template. Equivalent model intents and equivalent legacy requests share that
-identity, while `proof_intents.json` retains the claim, resolution status,
-reason, and resolved request IDs.
+template plus the timeout and requiredness execution requirements. Equivalent
+model intents and equivalent legacy requests share that identity, while
+requests with different execution requirements remain distinct and
+`proof_intents.json` retains the claim, resolution status, reason, and resolved
+request IDs.
 
 ## Budget enforcement
 
