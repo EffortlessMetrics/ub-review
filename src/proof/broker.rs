@@ -1602,6 +1602,8 @@ mod tests {
                 .iter()
                 .any(|phase| phase.stage == "seeded-request-broker")
         );
+        let portfolio = fs::read_to_string(out.join("review/proof_portfolio.json"))?;
+        assert!(portfolio.contains("seeded"));
         Ok(())
     }
 
