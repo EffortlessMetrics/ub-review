@@ -881,7 +881,7 @@ mod tests {
         );
         assert_eq!(candidate_plans.len(), 1);
         assert_eq!(
-            candidate_plans
+            focused_proof_candidate_plans_from_diff(&diff, &[], budget)
                 .iter()
                 .filter(|plan| plan.status == "planned")
                 .count(),
@@ -975,7 +975,7 @@ mod tests {
         );
         assert_eq!(build_plans.len(), 2);
         assert_eq!(
-            build_plans
+            focused_build_candidate_plans_from_requests(&build_requests, budget)
                 .iter()
                 .filter(|plan| plan.status == "planned")
                 .count(),
