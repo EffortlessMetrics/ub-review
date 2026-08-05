@@ -16374,6 +16374,42 @@ reason = "Exact hosted diff-form RIPR receipt for #827: the production-path deli
 
 [[suppressions]]
 kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:39d3f299"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:64d78b99"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:e9ffc39b"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:707afb97"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:25ba21f0"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:1b3f56ec.2"
+owner = "ub-review/core"
+reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery and the one-surface fallback removal; this adapter control probe is an analyzer false positive against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
+
+[[suppressions]]
+kind = "exposure_gap"
 finding_id = "probe:src_github_delivery.rs:field_construction:8392a8d6"
 owner = "ub-review/core"
 reason = "Exact diff-form RIPR receipt for #828: production-path fake transport tests cover current-head reply delivery, exact source binding, retry reuse, wrong-head rejection, receipt identity, and confirmed-versus-unconfirmed fallback; adapter IO/control probes are analyzer false positives against those semantic oracles. Re-verify after edits to src/github_delivery.rs or its delivery fixtures."
