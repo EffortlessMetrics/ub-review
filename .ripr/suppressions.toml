@@ -19229,3 +19229,263 @@ kind = "exposure_gap"
 finding_id = "probe:src_review_text.rs:side_effect:12924dcf"
 owner = "ub-review/core"
 reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:48d7c53d"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:2ac4ec4d"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:39e284de"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:1917938c"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:369b1535"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:1cface37"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:e5a71e93"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:7e0b30b4"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:66d3af47"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:89b64335"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:4383c4a1"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:f8aae84a"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:39cd5eb5"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:match_arm:50f660bb"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:8f0495f3"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:8c079d6b"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:4266fb9b"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:4ca45dd7"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:6b4794bd"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:d4309c67"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:73839b94"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:b1c38d18"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:465405c9"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:31986ba5"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:f6e5a93d"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:84329302"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:5407081e"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:47a049de"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:bd96c800"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:289892f0"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:daeb4c63"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:39667e2f"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:69b40a6d"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:267d2fe6"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:ff28ed34"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:6db0ece7"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ba1ead61"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:c92afc05"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:357162d1"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:78b32ecd"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:5993b547"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3dd4430f.4"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ffebae07.4"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:687c9e1f.4"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3dd4430f.5"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ffebae07.5"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:687c9e1f.5"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:3dd4430f.6"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:error_path:ffebae07.6"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:return_value:687c9e1f.6"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_experience.rs:call_deletion:7b9a7123"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: bounded listener, response, retry, and timeout handling are exercised by the integrated replay's exact request sequence, returned IDs, reply binding, terminal receipts, and fixed-head silence. RIPR 0.10.0 cannot connect these helper branches to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helpers or upgrading RIPR."
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_github_delivery.rs:call_deletion:a5f9a46c"
+owner = "ub-review/m1"
+reason = "PR #801 cfg(test) fake GitHub transport fixture plumbing: FakeHttpResponse is a test-only response value exercised by the integrated replay's exact request sequence and terminal receipts. RIPR 0.10.0 cannot connect this helper type to those higher-level oracles; retain this exact receipt and re-verify after edits to the named test helper or upgrading RIPR."
