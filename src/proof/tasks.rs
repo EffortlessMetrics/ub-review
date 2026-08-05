@@ -885,27 +885,38 @@ mod tests {
                 .iter()
                 .map(|plan| {
                     (
+                        plan.id.as_str(),
                         plan.test_file.as_str(),
                         plan.test_name.as_deref(),
                         plan.mode.key(),
                         plan.status.as_str(),
                         plan.timeout_sec,
+                        plan.head_command.as_str(),
+                        plan.base_plus_tests_command.as_str(),
                         plan.requested_by.as_slice(),
                         plan.request_ids.as_slice(),
                         plan.reason.as_str(),
                     )
                 })
                 .collect::<Vec<_>>(),
-            vec![(
-                "test/js/bun/proof.test.ts",
-                None,
-                "red-green",
-                "planned",
-                120,
-                ["proof-broker".to_owned()].as_slice(),
-                [].as_slice(),
-                "candidate recorded for portfolio accounting; execution is budget-gated",
-            )],
+            planner_plans
+                .iter()
+                .map(|plan| {
+                    (
+                        plan.id.as_str(),
+                        plan.test_file.as_str(),
+                        plan.test_name.as_deref(),
+                        plan.mode.key(),
+                        "planned",
+                        plan.timeout_sec,
+                        plan.head_command.as_str(),
+                        plan.base_plus_tests_command.as_str(),
+                        plan.requested_by.as_slice(),
+                        plan.request_ids.as_slice(),
+                        "candidate recorded for portfolio accounting; execution is budget-gated",
+                    )
+                })
+                .collect::<Vec<_>>(),
             "focused_proof_candidate_plans_from_diff must preserve the complete candidate"
         );
         let zero_test_budget = ProofBudget {
@@ -971,6 +982,43 @@ mod tests {
             1
         );
         assert!(build_plans.iter().all(|plan| plan.timeout_sec == 60));
+        assert_eq!(
+            build_plans
+                .iter()
+                .map(|plan| {
+                    (
+                        plan.id.as_str(),
+                        plan.command.as_str(),
+                        plan.timeout_sec,
+                        plan.requested_by.as_slice(),
+                        plan.request_ids.as_slice(),
+                        plan.status.as_str(),
+                        plan.reason.as_str(),
+                    )
+                })
+                .collect::<Vec<_>>(),
+            vec![
+                (
+                    "proof-build-81dee1e1dd1f",
+                    "cargo check --workspace --all-targets --locked",
+                    60,
+                    ["architecture".to_owned()].as_slice(),
+                    ["build-1".to_owned()].as_slice(),
+                    "planned",
+                    "candidate recorded for portfolio accounting; execution is budget-gated",
+                ),
+                (
+                    "proof-build-f5e93291b352",
+                    "cargo doc --workspace --no-deps --locked",
+                    60,
+                    ["architecture".to_owned()].as_slice(),
+                    ["build-2".to_owned()].as_slice(),
+                    "deferred_by_budget",
+                    "candidate recorded for portfolio accounting; execution is budget-gated",
+                ),
+            ],
+            "focused_build_candidate_plans_from_requests must preserve every candidate field"
+        );
         let first_build = build_plans
             .first()
             .ok_or_else(|| anyhow::anyhow!("missing first build candidate"))?;
