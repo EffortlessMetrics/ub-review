@@ -21753,8 +21753,9 @@ index 1111111..2222222 100644
             lane: "correctness".to_owned(),
             severity: "medium".to_owned(),
             confidence: "medium-high".to_owned(),
-            reason: "Remove the `?? options[key]` fallback; otherwise top-level symbol specs can silently merge into undefined args.".to_owned(),
-            evidence: "Changed TypeScript fallback branch in ffi symbol option handling.".to_owned(),
+            reason: "The parser fallback silently turns a missing field into a default value."
+                .to_owned(),
+            evidence: "Changed Rust parser fallback handling in src/parser.rs.".to_owned(),
         };
         let retained_finding = SummaryOnlyFinding {
             lane: "parser".to_owned(),
@@ -21766,7 +21767,7 @@ index 1111111..2222222 100644
         };
         let mut observations = vec![test_observation(
             "source-route",
-            "The `?? options[key]` fallback is not a valid top-level symbol route; refuted because the cc signature requires symbols nested under the `symbols` key.",
+            "The parser fallback silently turns a missing field into a default value; refuted because the Result error is required for this route.",
             "false-premise",
             "refuted",
             "low",

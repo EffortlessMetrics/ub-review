@@ -911,6 +911,10 @@ mod human_output_admission_tests {
                 "The parser has a proof-shaped explanation but no command or request.",
                 false,
             ),
+            (
+                "The `cargo test` receipt already passed and is attached.",
+                false,
+            ),
         ];
         for (text, expected) in cases {
             assert_eq!(

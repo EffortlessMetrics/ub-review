@@ -916,14 +916,14 @@ mod tests {
     #[test]
     fn reporter_admission_preserves_dotted_paths() {
         let admitted = admit_reporter_distillation(
-            Some("The regression is anchored at src/main.rs:42."),
+            Some("The regression is anchored at src/main.rs:42. Version 1.2.3 is affected."),
             &[],
             &[],
             &[],
         );
         assert_eq!(
             admitted.as_deref(),
-            Some("The regression is anchored at src/main.rs:42.")
+            Some("The regression is anchored at src/main.rs:42. Version 1.2.3 is affected.")
         );
     }
 }
