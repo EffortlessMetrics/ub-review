@@ -1491,26 +1491,63 @@ mod tests {
         let request = proof_request("shared", true);
         let mut stale_receipt = test_receipt(&test.id, vec![request.id.clone()], "head_passed");
         stale_receipt.head = "previous-head".to_owned();
+        let mut current_receipt = test_receipt(&test.id, vec![request.id.clone()], "head_passed");
+        current_receipt.head = "CURRENT-HEAD".to_owned();
 
         let selection = select_proof_portfolio(ProofPortfolioInput {
             test_tasks: std::slice::from_ref(&test),
             build_tasks: &[],
             proof_requests: std::slice::from_ref(&request),
-            proof_receipts: std::slice::from_ref(&stale_receipt),
+            proof_receipts: &[stale_receipt.clone(), current_receipt.clone()],
             head: "current-head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
         });
 
-        ensure!(selection.test_tasks.len() == 1);
-        ensure!(selection.test_tasks[0].id == test.id);
+        assert_eq!(selection.test_tasks.len(), 0);
         let decision = selection
             .decisions
             .iter()
-            .find(|decision| decision.task_id == stale_receipt.id)
+            .find(|decision| decision.task_id == current_receipt.id)
             .ok_or_else(|| anyhow::anyhow!("missing stale-receipt decision"))?;
-        ensure!(decision.status == "selected");
-        ensure!(decision.receipt_ids.is_empty());
+        assert_eq!(decision.status, "answered_by_existing_receipt");
+        assert_eq!(decision.receipt_ids, vec![current_receipt.id]);
+        Ok(())
+    }
+
+    #[test]
+    fn seeded_request_check_ignores_receipts_from_another_head() -> Result<()> {
+        let request = proof_request("shared", true);
+        let task = focused_test_candidates_from_requests(std::slice::from_ref(&request))
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
+        let mut stale_receipt = test_receipt(&task.id, task.request_ids.clone(), "head_passed");
+        stale_receipt.head = "previous-head".to_owned();
+
+        assert!(has_unreceipted_proof_request_tasks(
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&stale_receipt),
+            "current-head",
+        ));
+        assert!(!has_unreceipted_proof_request_tasks(
+            std::slice::from_ref(&request),
+            std::slice::from_ref(&test_receipt(&task.id, task.request_ids, "head_passed")),
+            "head",
+        ));
+        Ok(())
+    }
+
+    #[test]
+    fn current_head_receipts_filter_stale_entries_without_reordering() -> Result<()> {
+        let current = test_receipt("current", Vec::new(), "head_passed");
+        let mut stale = test_receipt("stale", Vec::new(), "head_passed");
+        stale.head = "previous-head".to_owned();
+
+        let filtered = current_head_receipts(&[stale, current.clone()], "HEAD");
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].id, current.id);
+        assert_eq!(filtered[0].head, "head");
         Ok(())
     }
 
