@@ -1173,9 +1173,9 @@ mod tests {
     }
 
     #[derive(Clone)]
-    struct FakeHttpResponse {
-        status: u16,
-        body: String,
+    pub(crate) struct FakeHttpResponse {
+        pub(crate) status: u16,
+        pub(crate) body: String,
     }
 
     type FakeRequest = (String, String);
@@ -1216,7 +1216,7 @@ mod tests {
         Ok(())
     }
 
-    fn spawn_fake_delivery_api(
+    pub(crate) fn spawn_fake_delivery_api(
         responses: Vec<FakeHttpResponse>,
     ) -> Result<(String, FakeApiHandle)> {
         let listener = TcpListener::bind(("127.0.0.1", 0))?;
@@ -2330,3 +2330,6 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+pub(crate) use tests::{FakeHttpResponse, spawn_fake_delivery_api};

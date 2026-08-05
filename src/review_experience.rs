@@ -184,11 +184,7 @@ mod tests {
     use anyhow::Result as AnyResult;
     use clap::Parser;
     use std::fs;
-    use std::io::{BufRead, BufReader, Read, Write};
-    use std::net::{TcpListener, TcpStream};
     use std::path::Path;
-    use std::thread;
-    use std::time::Duration;
 
     fn fixture() -> Result<ReviewExperienceFixture, String> {
         serde_json::from_str(include_str!(
@@ -372,37 +368,6 @@ mod tests {
         }
     }
 
-    fn read_fixture_request(stream: TcpStream) -> AnyResult<(String, String)> {
-        let mut reader = BufReader::new(stream);
-        let mut request_line = String::new();
-        reader.read_line(&mut request_line)?;
-        let mut content_length = 0usize;
-        loop {
-            let mut line = String::new();
-            reader.read_line(&mut line)?;
-            if line == "\r\n" || line.is_empty() {
-                break;
-            }
-            if let Some(value) = line.strip_prefix("Content-Length:") {
-                content_length = value.trim().parse()?;
-            }
-        }
-        let mut body = vec![0; content_length];
-        reader.read_exact(&mut body)?;
-        Ok((request_line.trim().to_owned(), String::from_utf8(body)?))
-    }
-
-    fn write_fixture_response(mut stream: TcpStream, status: u16, body: &str) -> AnyResult<()> {
-        let reason = if status < 300 { "OK" } else { "ERROR" };
-        write!(
-            stream,
-            "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
-            body.len()
-        )?;
-        stream.flush()?;
-        Ok(())
-    }
-
     fn spawn_fixture_delivery_api(
         exact_head: &str,
         source_thread_id: &str,
@@ -410,67 +375,62 @@ mod tests {
         source_line: u32,
         inline_comment: &GitHubReviewComment,
         reply_body: &str,
-    ) -> AnyResult<(String, thread::JoinHandle<AnyResult<Vec<String>>>)> {
-        let listener = TcpListener::bind(("127.0.0.1", 0))?;
-        let address = format!("http://{}", listener.local_addr()?);
-        let exact_head = exact_head.to_owned();
-        let source_thread_id = source_thread_id.to_owned();
-        let source_path = source_path.to_owned();
-        let inline_comment = inline_comment.clone();
-        let reply_body = reply_body.to_owned();
-        let handle = thread::spawn(move || {
-            let mut requests = Vec::new();
-            for _ in 0..7 {
-                let (stream, _) = listener.accept()?;
-                stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-                let (request_line, request_body) = read_fixture_request(stream.try_clone()?)?;
-                let response = if request_line.starts_with("GET /repos/owner/repo/pulls/42 ") {
-                    serde_json::json!({"head": {"sha": exact_head}}).to_string()
-                } else if request_line.contains("/pulls/42/comments?") {
-                    serde_json::json!([{
-                        "id": source_thread_id,
-                        "path": source_path,
-                        "line": source_line,
-                        "side": "RIGHT",
-                        "commit_id": exact_head,
-                        "body": "The existing parser thread is current on this head."
-                    }])
-                    .to_string()
-                } else if request_line.starts_with("POST /repos/owner/repo/pulls/42/reviews ") {
-                    serde_json::json!({"id": 987, "state": "PENDING"}).to_string()
-                } else if request_line.contains("/reviews/987/comments") {
-                    serde_json::json!([{
-                        "id": 2001,
-                        "path": inline_comment.path,
-                        "line": inline_comment.line,
-                        "side": inline_comment.side,
-                        "commit_id": exact_head,
-                        "body": inline_comment.body
-                    }])
-                    .to_string()
-                } else if request_line.starts_with("POST /repos/owner/repo/pulls/42/comments ") {
-                    serde_json::json!({
-                        "id": 2002,
-                        "commit_id": exact_head,
-                        "in_reply_to_id": source_thread_id,
-                        "body": reply_body
-                    })
-                    .to_string()
-                } else if request_line
-                    .starts_with("POST /repos/owner/repo/pulls/42/reviews/987/events ")
-                {
-                    serde_json::json!({"id": 987, "state": "COMMENTED"}).to_string()
-                } else {
-                    return Err(anyhow::anyhow!(
-                        "unexpected fixture GitHub request: {request_line}\n{request_body}"
-                    ));
-                };
-                write_fixture_response(stream, 200, &response)?;
-                requests.push(format!("{request_line}\n{request_body}"));
-            }
-            Ok(requests)
-        });
-        Ok((address, handle))
+    ) -> AnyResult<(
+        String,
+        std::thread::JoinHandle<anyhow::Result<Vec<(String, String)>>>,
+    )> {
+        crate::github_delivery::spawn_fake_delivery_api(vec![
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!({"head": {"sha": exact_head}}).to_string(),
+            },
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!([{
+                    "id": source_thread_id,
+                    "path": source_path,
+                    "line": source_line,
+                    "side": "RIGHT",
+                    "commit_id": exact_head,
+                    "body": "The existing parser thread is current on this head."
+                }])
+                .to_string(),
+            },
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!({"id": 987, "state": "PENDING"}).to_string(),
+            },
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!([{
+                    "id": 2001,
+                    "path": inline_comment.path,
+                    "line": inline_comment.line,
+                    "side": inline_comment.side,
+                    "commit_id": exact_head,
+                    "body": inline_comment.body
+                }])
+                .to_string(),
+            },
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!({
+                    "id": 2002,
+                    "commit_id": exact_head,
+                    "in_reply_to_id": source_thread_id,
+                    "body": reply_body
+                })
+                .to_string(),
+            },
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!({"head": {"sha": exact_head}}).to_string(),
+            },
+            crate::github_delivery::FakeHttpResponse {
+                status: 200,
+                body: serde_json::json!({"id": 987, "state": "COMMENTED"}).to_string(),
+            },
+        ])
     }
 
     #[test]
@@ -1028,14 +988,20 @@ mod tests {
             .map_err(|error| error.to_string())?;
         require(
             requests.len() == 7
-                && requests[0].starts_with("GET /repos/owner/repo/pulls/42 ")
-                && requests[1].contains("/pulls/42/comments?")
-                && requests[2].starts_with("POST /repos/owner/repo/pulls/42/reviews ")
-                && requests[3].contains("/reviews/987/comments")
-                && requests[4].starts_with("POST /repos/owner/repo/pulls/42/comments ")
-                && requests[5].starts_with("GET /repos/owner/repo/pulls/42 ")
-                && requests[6].contains("/reviews/987/events")
-                && !requests[6].contains(&surface.github_review.comments[inline_index].body),
+                && requests[0].0.starts_with("GET /repos/owner/repo/pulls/42 ")
+                && requests[1].0.contains("/pulls/42/comments?")
+                && requests[2]
+                    .0
+                    .starts_with("POST /repos/owner/repo/pulls/42/reviews ")
+                && requests[3].0.contains("/reviews/987/comments")
+                && requests[4]
+                    .0
+                    .starts_with("POST /repos/owner/repo/pulls/42/comments ")
+                && requests[5].0.starts_with("GET /repos/owner/repo/pulls/42 ")
+                && requests[6].0.contains("/reviews/987/events")
+                && !requests[6]
+                    .1
+                    .contains(&surface.github_review.comments[inline_index].body),
             format!("unexpected production delivery request sequence: {requests:?}"),
         )?;
         let transaction: serde_json::Value = serde_json::from_slice(
