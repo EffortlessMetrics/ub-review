@@ -17894,3 +17894,351 @@ kind = "exposure_gap"
 finding_id = "probe:src_github_delivery.rs:call_deletion:262e4be5.2"
 owner = "ub-review/core"
 reason = "Exact hosted diff-form RIPR receipt for #828: repeated confirmed-delivery filtering is covered by exact one-surface and multiline tests; this final filter effect is analyzer noise rather than an untested delivery branch. Re-verify after edits to reply delivery."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:field_construction:db9d9fc4"
+owner = "ub-review/core"
+reason = "Exact output-degradation artifact test covers the production writer path, schema, exact head, selected mode, retained and dropped identities; filesystem serialization plumbing is not independently traceable by RIPR. Re-verify after edits to artifact_writers.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:call_deletion:3365f1db"
+owner = "ub-review/core"
+reason = "Exact output-degradation artifact test covers the production writer path, schema, exact head, selected mode, retained and dropped identities; filesystem serialization plumbing is not independently traceable by RIPR. Re-verify after edits to artifact_writers.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:call_deletion:62bbbb12"
+owner = "ub-review/core"
+reason = "Exact output-degradation artifact test covers the production writer path, schema, exact head, selected mode, retained and dropped identities; filesystem serialization plumbing is not independently traceable by RIPR. Re-verify after edits to artifact_writers.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:call_deletion:1bd6cda6"
+owner = "ub-review/core"
+reason = "Exact output-degradation artifact test covers the production writer path, schema, exact head, selected mode, retained and dropped identities; filesystem serialization plumbing is not independently traceable by RIPR. Re-verify after edits to artifact_writers.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_artifact_writers.rs:return_value:2f2d32cb"
+owner = "ub-review/core"
+reason = "Exact output-degradation artifact test covers the production writer path, schema, exact head, selected mode, retained and dropped identities; filesystem serialization plumbing is not independently traceable by RIPR. Re-verify after edits to artifact_writers.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:dae10c59"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_compiler.rs:field_construction:39fa37f1"
+owner = "ub-review/core"
+reason = "Exact compiler-surface and summary-policy tests cover the retained/dropped receipt identity and artifact-only reconciliation; this field-construction discriminator is not independently traceable by RIPR. Re-verify after edits to review_compiler.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:048004d7"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:0d8e70bf"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:17f23f73"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:1cef9249"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:479f8d6d.3"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:479f8d6d.4"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:8e88652e"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:e7b94c60"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:f8d625cb"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:field_construction:224eddf9"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:field_construction:7301dadd"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:553a8b83"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:692521af"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact duplicate identity, fenced-content exclusion, unique occurrence IDs, normalization, ranking, ordering, and fallback; this iterator/constructor discriminator is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:bc90629e"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:19725b37"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:4ac46abf"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:7285ef10"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:3df5d004"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:dee52bf0"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:d4a9b9b7"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:ef9808a7"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a86be68d"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:1acdfadf"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a86be68d.2"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:1acdfadf.2"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a86be68d.3"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:1acdfadf.3"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a86be68d.4"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:1acdfadf.4"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:7671f12a"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:66d7427c"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:912554f9"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:479f8d6d"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a8cba262"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:811f8845"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:faf7cbac"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:479f8d6d.2"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:4e8ba5af"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:bee6b5ed"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:2f5ee68b"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:2f5ee68b.2"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:9714640a"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:d8d3bb3c"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:field_construction:e44d1ec5"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:predicate:e3736e61"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:a402b3a7"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:fb3ed6bf"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:return_value:9ef006f9"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:093f4c20"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:call_deletion:af1873b5"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."
+
+[[suppressions]]
+kind = "exposure_gap"
+finding_id = "probe:src_review_text.rs:side_effect:12924dcf"
+owner = "ub-review/core"
+reason = "Co-located output-degradation matrices cover exact body, ranking, mode, byte/item limits, retained and dropped identities, reasons, deterministic ordering, and artifact-only/inline fallback; iterator and constructor plumbing is not independently traceable by RIPR. Re-verify after edits to review_text.rs."

@@ -47,6 +47,7 @@ pub(crate) const MERGED_OBSERVATION_SCHEMA: &str = "ub-review.merged_observation
 pub(crate) const MODEL_STAGE_SCHEMA: &str = "ub-review.model_stage.v1";
 pub(crate) const OBSERVATION_GROUP_SCHEMA: &str = "ub-review.observation_group.v1";
 pub(crate) const OBSERVATION_SCHEMA: &str = "ub-review.observation.v1";
+pub(crate) const OUTPUT_DEGRADATION_SCHEMA: &str = "ub-review.output_degradation.v1";
 pub(crate) const ORCHESTRATOR_EVIDENCE_GROUP_SCHEMA: &str =
     "ub-review.orchestrator_evidence_group.v1";
 pub(crate) const ORCHESTRATOR_OBSERVATION_GROUP_SCHEMA: &str =
