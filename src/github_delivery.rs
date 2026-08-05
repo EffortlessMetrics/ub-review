@@ -838,12 +838,23 @@ fn body_after_confirmed_delivery(
     if confirmed_comments.is_empty() {
         return Ok(body.to_owned());
     }
+    let mut removable = vec![true; confirmed_comments.len()];
     let filtered = body
         .lines()
         .filter(|line| {
-            !confirmed_comments
+            let matching = confirmed_comments
                 .iter()
-                .any(|comment| !comment.is_empty() && line.contains(comment))
+                .enumerate()
+                .find(|(index, comment)| {
+                    removable[*index] && !comment.is_empty() && line.contains(comment.as_str())
+                })
+                .map(|(index, _)| index);
+            if let Some(index) = matching {
+                removable[index] = false;
+                false
+            } else {
+                true
+            }
         })
         .collect::<Vec<_>>()
         .join("\n");
@@ -1794,9 +1805,9 @@ mod tests {
         let (review, _) = delivery_review();
         let graph = graph_for("src/lib.rs", 12, "inline", HEAD);
         let planned = build_planned_deliveries(&review, HEAD, Some(&graph))?;
-        let body = "## Confirmed findings\n\n- [tests] exact body\n- [tests] unrelated finding\n";
+        let body = "## Confirmed findings\n\n- [tests] exact body\n- [tests] exact body\n- [tests] unrelated finding\n";
         let filtered = body_after_confirmed_delivery(&review, body, &planned, &planned)?;
-        ensure!(!filtered.contains("exact body"));
+        ensure!(filtered.matches("exact body").count() == 1);
         ensure!(filtered.contains("unrelated finding"));
         Ok(())
     }
