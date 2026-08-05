@@ -4479,7 +4479,11 @@ fn write_review_artifacts(
         proof_requests: &proof_requests,
         additional_intents: &proof_intents,
     })?;
-    if has_unreceipted_proof_request_tasks(&proof_requests, &proof_result.proof_receipts) {
+    if has_unreceipted_proof_request_tasks(
+        &proof_requests,
+        &proof_result.proof_receipts,
+        &diff.head,
+    ) {
         let request_proof_loop = start_run_loop(
             event_log,
             run_started,
@@ -4962,7 +4966,7 @@ fn write_review_artifacts(
     write_proof_receipt_artifacts(out, &review.proof_receipts)?;
     write_resource_lease_artifacts(out, &review.resource_leases)?;
     review.proof_requests =
-        terminalize_proof_requests(&review.proof_requests, &review.proof_receipts);
+        terminalize_proof_requests(&diff.head, &review.proof_requests, &review.proof_receipts);
     let mut active_claim_graph = build_active_claim_graph(
         &diff.head,
         &compiler_observations,
@@ -8577,7 +8581,8 @@ index 1111111..2222222 100644
 
         assert!(super::has_unreceipted_proof_request_tasks(
             &proof_requests,
-            &[]
+            &[],
+            "head"
         ));
 
         let task = super::focused_test_candidates_from_requests(&proof_requests)
@@ -8585,13 +8590,25 @@ index 1111111..2222222 100644
             .next()
             .ok_or_else(|| anyhow::anyhow!("focused request should produce a task"))?;
         let mut receipt = test_proof_receipt("head_passed", "passed");
-        receipt.id = task.id;
-        receipt.requested_by = task.requested_by;
-        receipt.request_ids = task.request_ids;
+        receipt.id = task.id.clone();
+        receipt.requested_by = task.requested_by.clone();
+        receipt.request_ids = task.request_ids.clone();
 
         assert!(!super::has_unreceipted_proof_request_tasks(
             &proof_requests,
-            &[receipt]
+            &[receipt],
+            "head"
+        ));
+
+        let mut stale_receipt = test_proof_receipt("head_passed", "passed");
+        stale_receipt.id = task.id;
+        stale_receipt.requested_by = task.requested_by;
+        stale_receipt.request_ids = task.request_ids;
+        stale_receipt.head = "previous-head".to_owned();
+        assert!(super::has_unreceipted_proof_request_tasks(
+            &proof_requests,
+            &[stale_receipt],
+            "head"
         ));
         Ok(())
     }
@@ -20285,7 +20302,11 @@ index 1111111..2222222 100644
             serde_json::from_slice(&fs::read(temp.path().join("review/proof_requests.json"))?)?;
         assert_eq!(
             serde_json::to_value(&proof_json)?,
-            serde_json::to_value(terminalize_proof_requests(&canonical_proof_requests, &[]))?
+            serde_json::to_value(terminalize_proof_requests(
+                &test_diff().head,
+                &canonical_proof_requests,
+                &[],
+            ))?
         );
         let proof_request_file: serde_json::Value = serde_json::from_slice(&fs::read(
             temp.path()

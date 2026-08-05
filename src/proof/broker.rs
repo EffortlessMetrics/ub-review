@@ -46,6 +46,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         build_tasks: &[],
         proof_requests: &[],
         proof_receipts: &[],
+        head: &diff.head,
         budget,
         runtime,
     });
@@ -65,6 +66,7 @@ pub(crate) fn run_initial_diff_proof_broker_v0(
         build_tasks: &[],
         proof_requests: &[],
         proof_receipts: &result.proof_receipts,
+        head: &diff.head,
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -104,7 +106,11 @@ pub(crate) fn run_seeded_proof_stream_v0(
     )?);
     let mut proof_result = initial_result?;
 
-    if has_unreceipted_proof_request_tasks(seeded_proof_requests, &proof_result.proof_receipts) {
+    if has_unreceipted_proof_request_tasks(
+        seeded_proof_requests,
+        &proof_result.proof_receipts,
+        &diff.head,
+    ) {
         let seeded_request_loop = start_run_loop(
             event_log,
             run_started,
@@ -175,6 +181,7 @@ pub(crate) struct ProofPortfolioInput<'a> {
     pub(crate) build_tasks: &'a [FocusedBuildTask],
     pub(crate) proof_requests: &'a [ProofRequest],
     pub(crate) proof_receipts: &'a [ProofReceipt],
+    pub(crate) head: &'a str,
     pub(crate) budget: ProofBudget,
     pub(crate) runtime: ProofPortfolioRuntime,
 }
@@ -239,14 +246,17 @@ pub(crate) fn select_proof_portfolio(input: ProofPortfolioInput<'_>) -> ProofPor
         let exact_receipts = input
             .proof_receipts
             .iter()
-            .filter(|receipt| receipt.id == task_id)
+            .filter(|receipt| {
+                receipt.id == task_id && receipt.head.eq_ignore_ascii_case(input.head)
+            })
             .collect::<Vec<_>>();
         let shared_receipts = if exact_receipts.is_empty() {
             input
                 .proof_receipts
                 .iter()
                 .filter(|receipt| {
-                    receipt_can_answer_shared_request(receipt)
+                    receipt.head.eq_ignore_ascii_case(input.head)
+                        && receipt_can_answer_shared_request(receipt)
                         && receipt
                             .request_ids
                             .iter()
@@ -649,6 +659,7 @@ where
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: existing_receipts,
+        head: &diff.head,
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -676,6 +687,7 @@ where
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &existing_and_new_receipts,
+        head: &diff.head,
         budget: remaining_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -706,6 +718,7 @@ where
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &final_receipts,
+        head: &diff.head,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -748,6 +761,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: existing_receipts,
+        head: &diff.head,
         budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -775,6 +789,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &existing_and_new_receipts,
+        head: &diff.head,
         budget: remaining_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -805,6 +820,7 @@ pub(crate) fn run_follow_up_proof_broker_v0(
         build_tasks: &build_candidates,
         proof_requests,
         proof_receipts: &final_receipts,
+        head: &diff.head,
         budget: final_budget,
         runtime: current_portfolio_runtime(profile, box_state, run_started)?,
     });
@@ -984,17 +1000,26 @@ pub(crate) fn unreceipted_focused_build_tasks(
 pub(crate) fn has_unreceipted_proof_request_tasks(
     proof_requests: &[ProofRequest],
     existing_receipts: &[ProofReceipt],
+    head: &str,
 ) -> bool {
     !unreceipted_focused_test_tasks(
         focused_test_candidates_from_requests(proof_requests),
-        existing_receipts,
+        &current_head_receipts(existing_receipts, head),
     )
     .is_empty()
         || !unreceipted_focused_build_tasks(
             focused_build_candidates_from_requests(proof_requests),
-            existing_receipts,
+            &current_head_receipts(existing_receipts, head),
         )
         .is_empty()
+}
+
+fn current_head_receipts(receipts: &[ProofReceipt], head: &str) -> Vec<ProofReceipt> {
+    receipts
+        .iter()
+        .filter(|receipt| receipt.head.eq_ignore_ascii_case(head))
+        .cloned()
+        .collect()
 }
 
 pub(crate) fn focused_test_resource_lease(
@@ -1412,6 +1437,7 @@ mod tests {
             build_tasks: std::slice::from_ref(&build),
             proof_requests: &requests,
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
         });
@@ -1443,6 +1469,7 @@ mod tests {
             build_tasks: std::slice::from_ref(&build),
             proof_requests: &requests,
             proof_receipts: std::slice::from_ref(&receipt),
+            head: "head",
             budget: proof_budget_for_test(2, 60),
             runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
         });
@@ -1455,6 +1482,35 @@ mod tests {
             .ok_or_else(|| anyhow::anyhow!("missing build portfolio decision"))?;
         ensure!(build_decision.status == "satisfied_by_existing_evidence");
         ensure!(build_decision.receipt_ids == vec!["parser".to_owned()]);
+        Ok(())
+    }
+
+    #[test]
+    fn portfolio_does_not_reuse_receipt_from_another_head() -> Result<()> {
+        let test = focused_test_task("parser", vec!["shared".to_owned()], 30);
+        let request = proof_request("shared", true);
+        let mut stale_receipt = test_receipt(&test.id, vec![request.id.clone()], "head_passed");
+        stale_receipt.head = "previous-head".to_owned();
+
+        let selection = select_proof_portfolio(ProofPortfolioInput {
+            test_tasks: std::slice::from_ref(&test),
+            build_tasks: &[],
+            proof_requests: std::slice::from_ref(&request),
+            proof_receipts: std::slice::from_ref(&stale_receipt),
+            head: "current-head",
+            budget: proof_budget_for_test(1, 60),
+            runtime: portfolio_runtime_for_test(60, 4, Some(8_192), Some(20_000)),
+        });
+
+        ensure!(selection.test_tasks.len() == 1);
+        ensure!(selection.test_tasks[0].id == test.id);
+        let decision = selection
+            .decisions
+            .iter()
+            .find(|decision| decision.task_id == stale_receipt.id)
+            .ok_or_else(|| anyhow::anyhow!("missing stale-receipt decision"))?;
+        ensure!(decision.status == "selected");
+        ensure!(decision.receipt_ids.is_empty());
         Ok(())
     }
 
@@ -1790,6 +1846,7 @@ mod tests {
             build_tasks: &[],
             proof_requests: &[],
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 0),
             runtime: portfolio_runtime_for_test(0, 4, Some(8_192), Some(20_000)),
         });
@@ -1874,6 +1931,7 @@ mod tests {
             build_tasks: &[],
             proof_requests: &[],
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(60, 0, Some(128), Some(32)),
         });
@@ -1895,6 +1953,7 @@ mod tests {
             build_tasks: &[],
             proof_requests: &[],
             proof_receipts: &[],
+            head: "head",
             budget: proof_budget_for_test(1, 60),
             runtime: portfolio_runtime_for_test(5, 4, Some(8_192), Some(20_000)),
         });
